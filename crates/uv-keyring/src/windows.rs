@@ -241,7 +241,7 @@ impl WinCredential {
     /// Write this credential into the underlying store as a Generic credential
     ///
     /// You must always have validated attributes before you call this!
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     async fn save_credential(&self, secret: &[u8]) -> Result<()> {
         let mut username = to_wstr(&self.username);
         let mut target_name = to_wstr(&self.target_name);
@@ -328,7 +328,7 @@ impl WinCredential {
         .await
     }
 
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(clippy::unnecessary_wraps)]
     fn extract_credential(w_credential: &CREDENTIALW) -> Result<Self> {
         Ok(Self {
             username: unsafe { from_wstr(w_credential.UserName.as_ptr()) },
@@ -428,7 +428,7 @@ fn extract_password(credential: &CREDENTIALW) -> Result<String> {
     result
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 fn extract_secret(credential: &CREDENTIALW) -> Result<Vec<u8>> {
     let blob_pointer: *const u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
@@ -457,7 +457,7 @@ fn to_wstr_no_null(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
 
-#[allow(clippy::maybe_infinite_iter)]
+#[expect(clippy::maybe_infinite_iter)]
 unsafe fn from_wstr(ws: *const u16) -> String {
     // null pointer case, return empty string
     if ws.is_null() {
@@ -539,7 +539,7 @@ mod tests {
         crate::tests::entry_from_constructor(WinCredential::new_with_target, service, user)
     }
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     #[test]
     fn test_bad_password() {
         fn make_platform_credential(password: &mut Vec<u8>) -> CREDENTIALW {

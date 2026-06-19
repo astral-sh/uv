@@ -1,29 +1,59 @@
+use std::fmt::{Debug, Display};
 use std::str::FromStr;
 
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde::de::IntoDeserializer;
+use tracing::instrument;
 
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 
-use crate::MetadataError;
+use crate::{LenientVersionSpecifiers, MetadataError};
 
 /// A `pyproject.toml` as specified in PEP 517.
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyProjectToml {
     pub project: Option<Project>,
-    pub(super) tool: Option<Tool>,
+    pub tool: Option<Tool>,
 }
 
 impl PyProjectToml {
-    pub fn from_toml(toml: &str) -> Result<Self, MetadataError> {
+    #[instrument(name = "toml::from_str uv pypi types", skip_all, fields(source = % _source))]
+    pub fn from_toml(toml: &str, _source: impl Display) -> Result<Self, MetadataError> {
         let pyproject_toml = toml_edit::Document::from_str(toml)
             .map_err(MetadataError::InvalidPyprojectTomlSyntax)?;
         let pyproject_toml = Self::deserialize(pyproject_toml.into_deserializer())
             .map_err(MetadataError::InvalidPyprojectTomlSchema)?;
         Ok(pyproject_toml)
+    }
+
+    /// Extract static `requires-python` metadata from a PEP 621 project.
+    ///
+    /// Unlike [`crate::ResolutionMetadata::parse_pyproject_toml`], this does not require static
+    /// project version or dependency metadata.
+    pub fn requires_python(&self) -> Result<Option<VersionSpecifiers>, MetadataError> {
+        let project = self
+            .project
+            .as_ref()
+            .ok_or(MetadataError::FieldNotFound("project"))?;
+
+        if project
+            .dynamic
+            .as_ref()
+            .is_some_and(|dynamic| dynamic.iter().any(|field| field == "requires-python"))
+        {
+            return Err(MetadataError::DynamicField("requires-python"));
+        }
+
+        Ok(project
+            .requires_python
+            .as_ref()
+            .map(|requires_python| {
+                LenientVersionSpecifiers::from_str(requires_python).map(VersionSpecifiers::from)
+            })
+            .transpose()?)
     }
 }
 
@@ -80,11 +110,55 @@ impl TryFrom<PyprojectTomlWire> for Project {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct Tool {
-    pub(super) poetry: Option<ToolPoetry>,
+pub struct Tool {
+    pub poetry: Option<ToolPoetry>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
-#[allow(clippy::empty_structs_with_brackets)]
-pub(super) struct ToolPoetry {}
+pub struct ToolPoetry {
+    pub name: Option<PackageName>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyProjectToml;
+    use crate::MetadataError;
+
+    #[test]
+    fn requires_python_allows_unrelated_dynamic_metadata() {
+        let pyproject_toml = PyProjectToml::from_toml(
+            r#"
+            [project]
+            name = "example"
+            requires-python = ">=3.11,<3.13"
+            dynamic = ["version", "dependencies"]
+            "#,
+            "pyproject.toml",
+        )
+        .unwrap();
+
+        assert_eq!(
+            pyproject_toml.requires_python().unwrap(),
+            Some(">=3.11,<3.13".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn requires_python_rejects_dynamic_field() {
+        let pyproject_toml = PyProjectToml::from_toml(
+            r#"
+            [project]
+            name = "example"
+            dynamic = ["requires-python"]
+            "#,
+            "pyproject.toml",
+        )
+        .unwrap();
+
+        assert!(matches!(
+            pyproject_toml.requires_python(),
+            Err(MetadataError::DynamicField("requires-python"))
+        ));
+    }
+}

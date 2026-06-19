@@ -179,7 +179,7 @@ struct CacheConfig {
 /// construct a `CachePolicy`. That is, you start with an HTTP request, then
 /// you get a response and finally a new `CachePolicy`.
 #[derive(Debug)]
-pub struct CachePolicyBuilder {
+pub(crate) struct CachePolicyBuilder {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
     /// A subset of information from the HTTP request that we will store. This
@@ -203,7 +203,7 @@ pub struct CachePolicyBuilder {
 
 impl CachePolicyBuilder {
     /// Create a new builder of a cache policy, starting with the request.
-    pub fn new(request: &reqwest::Request) -> Self {
+    pub(crate) fn new(request: &reqwest::Request) -> Self {
         let config = CacheConfig::default();
         let request_headers = request.headers().clone();
         let request = Request::from(request);
@@ -216,7 +216,7 @@ impl CachePolicyBuilder {
 
     /// Return a new policy given the response to the request that this builder
     /// was created with.
-    pub fn build(self, response: &reqwest::Response) -> CachePolicy {
+    pub(crate) fn build(self, response: &reqwest::Response) -> CachePolicy {
         let vary = Vary::from_request_response_headers(&self.request_headers, response.headers());
         CachePolicy {
             config: self.config,
@@ -240,7 +240,7 @@ impl CachePolicyBuilder {
 /// about it) are proxy cache semantics.
 #[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
-pub struct CachePolicy {
+pub(crate) struct CachePolicy {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
     /// A subset of information from the HTTP request that we will store. This
@@ -269,7 +269,7 @@ impl CachePolicy {
     /// you're actually performing an HTTP request. In that case, the extra
     /// cost that is done here to convert a `CachePolicy` to its archived form
     /// should be marginal.
-    pub fn to_archived(&self) -> OwnedArchive<Self> {
+    pub(crate) fn to_archived(&self) -> OwnedArchive<Self> {
         // There's no way (other than OOM) for serializing this type to fail.
         OwnedArchive::from_unarchived(self).expect("all possible values can be archived")
     }
@@ -301,7 +301,7 @@ impl ArchivedCachePolicy {
     /// it is suitable as a revalidation request.
     ///
     /// [RFC 9111 S4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4
-    pub fn before_request(&self, request: &mut reqwest::Request) -> BeforeRequest {
+    pub(crate) fn before_request(&self, request: &mut reqwest::Request) -> BeforeRequest {
         let now = SystemTime::now();
         // If the response was never storable, then we just bail out
         // completely.
@@ -390,7 +390,7 @@ impl ArchivedCachePolicy {
     ///
     /// [RFC 9111 S4.3.3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.3
     /// [RFC 9111 S4.3.4]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.3.4
-    pub fn after_response(
+    pub(crate) fn after_response(
         &self,
         cache_policy_builder: CachePolicyBuilder,
         response: &reqwest::Response,
@@ -543,7 +543,7 @@ impl ArchivedCachePolicy {
     /// [RFC 9111 S3].
     ///
     /// [RFC 9111 S3]: https://www.rfc-editor.org/rfc/rfc9111.html#section-3
-    pub fn is_storable(&self) -> bool {
+    pub(crate) fn is_storable(&self) -> bool {
         // In the absence of other signals, we are limited to caching responses
         // with a code that is heuristically cacheable as per [RFC 9110 S15.1].
         //
@@ -963,7 +963,7 @@ impl ArchivedCachePolicy {
             // Expires also works too, as above).
             //
             // [1]: https://github.com/astral-sh/uv/issues/5351#issuecomment-2260588764
-            let duration = Duration::from_secs(600);
+            let duration = Duration::from_mins(10);
             tracing::trace!(
                 "Freshness lifetime heuristically assumed \
                  because of presence of last-modified header: {duration:?}"
@@ -992,8 +992,8 @@ impl ArchivedCachePolicy {
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum BeforeRequest {
+#[expect(clippy::large_enum_variant)]
+pub(crate) enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
     /// cached response without issuing an HTTP requests.
     Fresh,
@@ -1015,7 +1015,7 @@ pub enum BeforeRequest {
 /// the server determined the cached response was truly stale and in need of
 /// updated.
 #[derive(Debug)]
-pub enum AfterResponse {
+pub(crate) enum AfterResponse {
     /// The cached response is still fresh.
     NotModified(CachePolicy),
     /// The cached response has been invalidated and needs to be updated with

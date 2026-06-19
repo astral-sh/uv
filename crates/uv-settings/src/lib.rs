@@ -1,10 +1,20 @@
+use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-
+use std::str::FromStr;
+use std::time::Duration;
+use tracing::info_span;
+use uv_client::{DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_READ_TIMEOUT_UPLOAD};
+use uv_configuration::RequiredVersion;
 use uv_dirs::{system_config_file, user_config_dir};
+use uv_distribution_types::Origin;
 use uv_flags::EnvironmentFlags;
 use uv_fs::Simplified;
-use uv_static::EnvVars;
+use uv_normalize::{GroupName, PackageName};
+use uv_pep440::Version;
+use uv_redacted::DisplaySafeUrl;
+use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
+use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
@@ -46,7 +56,7 @@ impl FilesystemOptions {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
                 validate_uv_toml(&file, &options)?;
-                Ok(Some(Self(options)))
+                Ok(Some(Self(options.with_origin(Origin::User))))
             }
             Err(Error::Io(err))
                 if matches!(
@@ -63,6 +73,10 @@ impl FilesystemOptions {
     }
 
     pub fn system() -> Result<Option<Self>, Error> {
+        if parse_boolish_environment_variable(EnvVars::UV_NO_SYSTEM_CONFIG)? == Some(true) {
+            return Ok(None);
+        }
+
         let Some(file) = system_config_file() else {
             return Ok(None);
         };
@@ -70,7 +84,7 @@ impl FilesystemOptions {
         tracing::debug!("Found system configuration in: `{}`", file.display());
         let options = read_file(&file)?;
         validate_uv_toml(&file, &options)?;
-        Ok(Some(Self(options)))
+        Ok(Some(Self(options.with_origin(Origin::System))))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.
@@ -105,31 +119,39 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
+    fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
             Ok(content) => {
-                let options = toml::from_str::<Options>(&content)
-                    .map_err(|err| Error::UvToml(path.clone(), Box::new(err)))?
-                    .relative_to(&std::path::absolute(dir)?)?;
+                let options =
+                    info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
+                        .in_scope(|| toml::from_str::<Options>(&content))
+                        .map_err(|err| {
+                            check_uv_toml_required_version(
+                                &path,
+                                &content,
+                                Error::UvToml(path.clone(), Box::new(err)),
+                            )
+                        })?
+                        .relative_to(&std::path::absolute(dir)?)?;
 
                 // If the directory also contains a `[tool.uv]` table in a `pyproject.toml` file,
                 // warn.
                 let pyproject = dir.join("pyproject.toml");
-                if let Some(pyproject) = fs_err::read_to_string(pyproject)
-                    .ok()
-                    .and_then(|content| toml::from_str::<PyProjectToml>(&content).ok())
-                {
-                    if let Some(options) = pyproject.tool.as_ref().and_then(|tool| tool.uv.as_ref())
+                if let Ok(content) = fs_err::read_to_string(&pyproject) {
+                    let result = info_span!("toml::from_str filesystem options pyproject.toml", path = %pyproject.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&content)).ok();
+                    if let Some(options) =
+                        result.and_then(|pyproject| pyproject.tool.and_then(|tool| tool.uv))
                     {
-                        warn_uv_toml_masked_fields(options);
+                        warn_uv_toml_masked_fields(&options);
                     }
                 }
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
                 validate_uv_toml(&path, &options)?;
-                return Ok(Some(Self(options)));
+                return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
@@ -140,8 +162,12 @@ impl FilesystemOptions {
         match fs_err::read_to_string(&path) {
             Ok(content) => {
                 // Parse, but skip any `pyproject.toml` that doesn't have a `[tool.uv]` section.
-                let pyproject: PyProjectToml = toml::from_str(&content)
-                    .map_err(|err| Error::PyprojectToml(path.clone(), Box::new(err)))?;
+                let pyproject =
+                    info_span!("toml::from_str filesystem options pyproject.toml", path = %path.display())
+                        .in_scope(|| toml::from_str::<PyProjectToml>(&content))
+                        .map_err(|err| {
+                            check_pyproject_required_version(&path, &content, err)
+                        })?;
                 let Some(tool) = pyproject.tool else {
                     tracing::debug!(
                         "Skipping `pyproject.toml` in `{}` (no `[tool]` section)",
@@ -189,8 +215,15 @@ impl From<Options> for FilesystemOptions {
 /// Load [`Options`] from a `uv.toml` file.
 fn read_file(path: &Path) -> Result<Options, Error> {
     let content = fs_err::read_to_string(path)?;
-    let options = toml::from_str::<Options>(&content)
-        .map_err(|err| Error::UvToml(path.to_path_buf(), Box::new(err)))?;
+    let options = info_span!("toml::from_str filesystem options uv.toml", path = %path.display())
+        .in_scope(|| toml::from_str::<Options>(&content))
+        .map_err(|err| {
+            check_uv_toml_required_version(
+                path,
+                &content,
+                Error::UvToml(path.to_path_buf(), Box::new(err)),
+            )
+        })?;
     let options = if let Some(parent) = std::path::absolute(path)?.parent() {
         options.relative_to(parent)?
     } else {
@@ -199,17 +232,71 @@ fn read_file(path: &Path) -> Result<Options, Error> {
     Ok(options)
 }
 
+/// If `required_version` is set and incompatible with the running uv, return the corresponding
+/// [`Error::RequiredVersion`].
+fn required_version_mismatch(required_version: Option<RequiredVersion>) -> Option<Error> {
+    let required_version = required_version?;
+    let package_version = Version::from_str(uv_version::version())
+        .expect("uv crate version to be a valid PEP 440 version");
+    if required_version.contains(&package_version) {
+        None
+    } else {
+        Some(Error::RequiredVersion {
+            required_version,
+            package_version,
+        })
+    }
+}
+
+/// On a `pyproject.toml` settings parse error, check whether `tool.uv.required-version` should
+/// take precedence over that error.
+fn check_pyproject_required_version(path: &Path, content: &str, source: toml::de::Error) -> Error {
+    let fallback = || Error::PyprojectToml(path.to_path_buf(), Box::new(source));
+    let Ok(pyproject) = info_span!(
+        "toml::from_str filesystem required-version pyproject.toml",
+        path = %path.display()
+    )
+    .in_scope(|| toml::from_str::<PyProjectRequiredVersionToml>(content)) else {
+        return fallback();
+    };
+
+    let required_version = pyproject
+        .tool
+        .and_then(|tool| tool.uv)
+        .and_then(|uv| uv.required_version);
+    required_version_mismatch(required_version).unwrap_or_else(fallback)
+}
+
+/// On a `uv.toml` settings parse or schema error, check whether top-level `required-version`
+/// should take precedence over that error.
+fn check_uv_toml_required_version(path: &Path, content: &str, source: Error) -> Error {
+    let Ok(uv_toml) = info_span!(
+        "toml::from_str filesystem required-version uv.toml",
+        path = %path.display()
+    )
+    .in_scope(|| toml::from_str::<UvRequiredVersionToml>(content)) else {
+        return source;
+    };
+    required_version_mismatch(uv_toml.required_version).unwrap_or(source)
+}
+
 /// Validate that an [`Options`] schema is compatible with `uv.toml`.
 fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
+    // A `required-version` mismatch takes precedence over a schema error.
+    if let Some(err) = required_version_mismatch(options.globals.required_version.clone()) {
+        return Err(err);
+    }
     let Options {
         globals: _,
         top_level: _,
         install_mirrors: _,
         publish: _,
         add: _,
+        audit: _,
         pip: _,
         cache_keys: _,
         override_dependencies: _,
+        exclude_dependencies: _,
         constraint_dependencies: _,
         build_constraint_dependencies: _,
         environments,
@@ -283,12 +370,14 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
 
 /// Validate that an [`Options`] contains no fields that `uv.toml` would mask
 ///
-/// This is essentially the inverse of [`validated_uv_toml`][].
+/// This is essentially the inverse of [`validate_uv_toml`].
+#[allow(deprecated)]
 fn warn_uv_toml_masked_fields(options: &Options) {
     let Options {
         globals:
             GlobalOptions {
                 required_version,
+                system_certs,
                 native_tls,
                 offline,
                 no_cache,
@@ -300,6 +389,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 concurrent_builds,
                 concurrent_installs,
                 allow_insecure_host,
+                http_proxy,
+                https_proxy,
+                no_proxy,
             },
         top_level:
             ResolverInstallerSchema {
@@ -325,6 +417,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 link_mode,
                 compile_bytecode,
                 no_sources,
+                no_sources_package: _,
                 upgrade,
                 upgrade_package,
                 reinstall,
@@ -333,6 +426,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 no_build_package,
                 no_binary,
                 no_binary_package,
+                torch_backend,
             },
         install_mirrors:
             PythonInstallMirrors {
@@ -347,9 +441,11 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 check_url,
             },
         add: AddOptions { add_bounds },
+        audit: _,
         pip,
         cache_keys,
         override_dependencies,
+        exclude_dependencies,
         constraint_dependencies,
         build_constraint_dependencies,
         environments: _,
@@ -370,6 +466,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if required_version.is_some() {
         masked_fields.push("required-version");
     }
+    if system_certs.is_some() {
+        masked_fields.push("system-certs");
+    }
     if native_tls.is_some() {
         masked_fields.push("native-tls");
     }
@@ -382,8 +481,10 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if cache_dir.is_some() {
         masked_fields.push("cache-dir");
     }
-    if preview.is_some() {
-        masked_fields.push("preview");
+    match preview {
+        Some(PreviewOption::Preview(_)) => masked_fields.push("preview"),
+        Some(PreviewOption::PreviewFeatures(_)) => masked_fields.push("preview-features"),
+        None => (),
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");
@@ -402,6 +503,15 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if allow_insecure_host.is_some() {
         masked_fields.push("allow-insecure-host");
+    }
+    if http_proxy.is_some() {
+        masked_fields.push("http-proxy");
+    }
+    if https_proxy.is_some() {
+        masked_fields.push("https-proxy");
+    }
+    if no_proxy.is_some() {
+        masked_fields.push("no-proxy");
     }
     if index.is_some() {
         masked_fields.push("index");
@@ -493,6 +603,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if no_binary_package.is_some() {
         masked_fields.push("no-binary-package");
     }
+    if torch_backend.is_some() {
+        masked_fields.push("torch-backend");
+    }
     if python_install_mirror.is_some() {
         masked_fields.push("python-install-mirror");
     }
@@ -523,6 +636,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if override_dependencies.is_some() {
         masked_fields.push("override-dependencies");
     }
+    if exclude_dependencies.is_some() {
+        masked_fields.push("exclude-dependencies");
+    }
     if constraint_dependencies.is_some() {
         masked_fields.push("constraint-dependencies");
     }
@@ -552,15 +668,46 @@ pub enum Error {
     #[error("Failed to parse: `{}`", _0.user_display())]
     UvToml(PathBuf, #[source] Box<toml::de::Error>),
 
-    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1)]
+    #[error("Failed to parse: `{}`. The `{}` field is not allowed in a `uv.toml` file. `{}` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.", _0.user_display(), _1, _1
+    )]
     PyprojectOnlyField(PathBuf, &'static str),
 
-    #[error("Failed to parse environment variable `{name}` with invalid value `{value}`: {err}")]
-    InvalidEnvironmentVariable {
-        name: String,
-        value: String,
-        err: String,
+    #[error(
+        "Required uv version `{required_version}` does not match the running version `{package_version}`"
+    )]
+    RequiredVersion {
+        required_version: RequiredVersion,
+        package_version: Version,
     },
+
+    #[error(transparent)]
+    InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Concurrency {
+    pub downloads: Option<NonZeroUsize>,
+    pub builds: Option<NonZeroUsize>,
+    pub installs: Option<NonZeroUsize>,
+}
+
+/// A boolean flag parsed from an environment variable.
+///
+/// Stores both the value and the environment variable name for use in error messages.
+#[derive(Debug, Clone, Copy)]
+pub struct EnvFlag {
+    pub value: Option<bool>,
+    pub env_var: &'static str,
+}
+
+impl EnvFlag {
+    /// Create a new [`EnvFlag`] by parsing the given environment variable.
+    fn new(env_var: &'static str) -> Result<Self, Error> {
+        Ok(Self {
+            value: parse_boolish_environment_variable(env_var)?,
+            env_var,
+        })
+    }
 }
 
 /// Options loaded from environment variables.
@@ -569,24 +716,104 @@ pub enum Error {
 /// the CLI level, however there are limited semantics in that context.
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
+    pub ruff_path: Option<PathBuf>,
+    pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
+    pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
     pub python_install_registry: Option<bool>,
+    pub python_no_registry: EnvFlag,
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
+    pub lfs: Option<bool>,
+    pub cuda_driver_version: Option<Version>,
+    pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    pub http_connect_timeout: Duration,
+    pub http_read_timeout: Duration,
+    /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
+    /// timeout.
+    pub http_read_timeout_upload: Duration,
+    pub http_retries: u32,
+    pub concurrency: Concurrency,
+    #[cfg(feature = "tracing-durations-export")]
+    pub tracing_durations_file: Option<PathBuf>,
+    pub frozen: EnvFlag,
+    pub locked: EnvFlag,
+    pub offline: EnvFlag,
+    pub no_sync: EnvFlag,
+    pub managed_python: EnvFlag,
+    pub no_managed_python: EnvFlag,
+    pub native_tls: EnvFlag,
+    pub system_certs: EnvFlag,
+    pub preview: EnvFlag,
+    pub isolated: EnvFlag,
+    pub no_progress: EnvFlag,
+    pub no_installer_metadata: EnvFlag,
+    pub dev: EnvFlag,
+    pub no_dev: EnvFlag,
+    pub show_resolution: EnvFlag,
+    pub no_editable: EnvFlag,
+    pub no_install_project: EnvFlag,
+    pub no_install_workspace: EnvFlag,
+    pub no_install_local: EnvFlag,
+    pub only_install_project: EnvFlag,
+    pub only_install_workspace: EnvFlag,
+    pub only_install_local: EnvFlag,
+    pub no_env_file: EnvFlag,
+    pub no_group: Option<Vec<GroupName>>,
+    pub no_binary_package: Option<Vec<PackageName>>,
+    pub no_build_package: Option<Vec<PackageName>>,
+    pub no_sources_package: Option<Vec<PackageName>>,
+    pub venv_seed: EnvFlag,
+    pub venv_clear: EnvFlag,
+    pub venv_relocatable: EnvFlag,
+    pub init_bare: EnvFlag,
+    pub malware_check: EnvFlag,
+    pub malware_check_url: Option<DisplaySafeUrl>,
 }
 
 impl EnvironmentOptions {
     /// Create a new [`EnvironmentOptions`] from environment variables.
     pub fn new() -> Result<Self, Error> {
+        // Timeout options, matching https://doc.rust-lang.org/nightly/cargo/reference/config.html#httptimeout
+        // `UV_REQUEST_TIMEOUT` is provided for backwards compatibility with v0.1.6
+        let http_read_timeout = parse_integer_environment_variable(
+            EnvVars::UV_HTTP_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?
+        .or(parse_integer_environment_variable(
+            EnvVars::UV_REQUEST_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?)
+        .or(parse_integer_environment_variable(
+            EnvVars::HTTP_TIMEOUT,
+            Some("value should be an integer number of seconds"),
+        )?)
+        .map(Duration::from_secs);
+
         Ok(Self {
+            ruff_path: parse_path_environment_variable(EnvVars::RUFF),
+            ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
+            hide_build_output: parse_boolish_environment_variable(EnvVars::UV_HIDE_BUILD_OUTPUT)?,
             python_install_bin: parse_boolish_environment_variable(EnvVars::UV_PYTHON_INSTALL_BIN)?,
             python_install_registry: parse_boolish_environment_variable(
                 EnvVars::UV_PYTHON_INSTALL_REGISTRY,
             )?,
+            python_no_registry: EnvFlag::new(EnvVars::UV_PYTHON_NO_REGISTRY)?,
+            concurrency: Concurrency {
+                downloads: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_DOWNLOADS,
+                    None,
+                )?,
+                builds: parse_integer_environment_variable(EnvVars::UV_CONCURRENT_BUILDS, None)?,
+                installs: parse_integer_environment_variable(
+                    EnvVars::UV_CONCURRENT_INSTALLS,
+                    None,
+                )?,
+            },
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror: parse_string_environment_variable(
                     EnvVars::UV_PYTHON_INSTALL_MIRROR,
@@ -599,60 +826,82 @@ impl EnvironmentOptions {
                 )?,
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
+            lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            cuda_driver_version: parse_typed_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+                None,
+            )?,
+            amd_gpu_architecture: parse_typed_environment_variable(
+                EnvVars::UV_AMD_GPU_ARCHITECTURE,
+                None,
+            )?,
+            http_read_timeout_upload: parse_integer_environment_variable(
+                EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
+                Some("value should be an integer number of seconds"),
+            )?
+            .map(Duration::from_secs)
+            .or(http_read_timeout)
+            .unwrap_or(DEFAULT_READ_TIMEOUT_UPLOAD),
+            http_read_timeout: http_read_timeout.unwrap_or(DEFAULT_READ_TIMEOUT),
+            http_connect_timeout: parse_integer_environment_variable(
+                EnvVars::UV_HTTP_CONNECT_TIMEOUT,
+                Some("value should be an integer number of seconds"),
+            )?
+            .map(Duration::from_secs)
+            .unwrap_or(DEFAULT_CONNECT_TIMEOUT),
+            http_retries: parse_integer_environment_variable(EnvVars::UV_HTTP_RETRIES, None)?
+                .unwrap_or(uv_client::DEFAULT_RETRIES),
+            #[cfg(feature = "tracing-durations-export")]
+            tracing_durations_file: parse_path_environment_variable(
+                EnvVars::TRACING_DURATIONS_FILE,
+            ),
+            frozen: EnvFlag::new(EnvVars::UV_FROZEN)?,
+            locked: EnvFlag::new(EnvVars::UV_LOCKED)?,
+            offline: EnvFlag::new(EnvVars::UV_OFFLINE)?,
+            no_sync: EnvFlag::new(EnvVars::UV_NO_SYNC)?,
+            managed_python: EnvFlag::new(EnvVars::UV_MANAGED_PYTHON)?,
+            no_managed_python: EnvFlag::new(EnvVars::UV_NO_MANAGED_PYTHON)?,
+            native_tls: EnvFlag::new(EnvVars::UV_NATIVE_TLS)?,
+            system_certs: EnvFlag::new(EnvVars::UV_SYSTEM_CERTS)?,
+            preview: EnvFlag::new(EnvVars::UV_PREVIEW)?,
+            isolated: EnvFlag::new(EnvVars::UV_ISOLATED)?,
+            no_progress: EnvFlag::new(EnvVars::UV_NO_PROGRESS)?,
+            no_installer_metadata: EnvFlag::new(EnvVars::UV_NO_INSTALLER_METADATA)?,
+            dev: EnvFlag::new(EnvVars::UV_DEV)?,
+            no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
+            show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
+            no_editable: EnvFlag::new(EnvVars::UV_NO_EDITABLE)?,
+            no_install_project: EnvFlag::new(EnvVars::UV_NO_INSTALL_PROJECT)?,
+            no_install_workspace: EnvFlag::new(EnvVars::UV_NO_INSTALL_WORKSPACE)?,
+            no_install_local: EnvFlag::new(EnvVars::UV_NO_INSTALL_LOCAL)?,
+            only_install_project: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_PROJECT)?,
+            only_install_workspace: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_WORKSPACE)?,
+            only_install_local: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_LOCAL)?,
+            no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
+            no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
+            no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
+            no_build_package: parse_name_list_environment_variable(EnvVars::UV_NO_BUILD_PACKAGE)?,
+            no_sources_package: parse_name_list_environment_variable(
+                EnvVars::UV_NO_SOURCES_PACKAGE,
+            )?,
+            venv_seed: EnvFlag::new(EnvVars::UV_VENV_SEED)?,
+            venv_clear: EnvFlag::new(EnvVars::UV_VENV_CLEAR)?,
+            venv_relocatable: EnvFlag::new(EnvVars::UV_VENV_RELOCATABLE)?,
+            init_bare: EnvFlag::new(EnvVars::UV_INIT_BARE)?,
+            malware_check: EnvFlag::new(EnvVars::UV_MALWARE_CHECK)?,
+            malware_check_url: parse_string_environment_variable(EnvVars::UV_MALWARE_CHECK_URL)?
+                .map(|value| {
+                    value.parse::<DisplaySafeUrl>().map_err(|err| {
+                        Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                            name: EnvVars::UV_MALWARE_CHECK_URL.to_string(),
+                            value,
+                            err: err.to_string(),
+                        })
+                    })
+                })
+                .transpose()?,
         })
     }
-}
-
-/// Parse a boolean environment variable.
-///
-/// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
-fn parse_boolish_environment_variable(name: &'static str) -> Result<Option<bool>, Error> {
-    // See `clap_builder/src/util/str_to_bool.rs`
-    // We want to match Clap's accepted values
-
-    // True values are `y`, `yes`, `t`, `true`, `on`, and `1`.
-    const TRUE_LITERALS: [&str; 6] = ["y", "yes", "t", "true", "on", "1"];
-
-    // False values are `n`, `no`, `f`, `false`, `off`, and `0`.
-    const FALSE_LITERALS: [&str; 6] = ["n", "no", "f", "false", "off", "0"];
-
-    // Converts a string literal representation of truth to true or false.
-    //
-    // `false` values are `n`, `no`, `f`, `false`, `off`, and `0` (case insensitive).
-    //
-    // Any other value will be considered as `true`.
-    fn str_to_bool(val: impl AsRef<str>) -> Option<bool> {
-        let pat: &str = &val.as_ref().to_lowercase();
-        if TRUE_LITERALS.contains(&pat) {
-            Some(true)
-        } else if FALSE_LITERALS.contains(&pat) {
-            Some(false)
-        } else {
-            None
-        }
-    }
-
-    let Some(value) = std::env::var_os(name) else {
-        return Ok(None);
-    };
-
-    let Some(value) = value.to_str() else {
-        return Err(Error::InvalidEnvironmentVariable {
-            name: name.to_string(),
-            value: value.to_string_lossy().to_string(),
-            err: "expected a valid UTF-8 string".to_string(),
-        });
-    };
-
-    let Some(value) = str_to_bool(value) else {
-        return Err(Error::InvalidEnvironmentVariable {
-            name: name.to_string(),
-            value: value.to_string(),
-            err: "expected a boolish value".to_string(),
-        });
-    };
-
-    Ok(Some(value))
 }
 
 /// Parse a string environment variable.
@@ -667,13 +916,142 @@ fn parse_string_environment_variable(name: &'static str) -> Result<Option<String
         }
         Err(e) => match e {
             std::env::VarError::NotPresent => Ok(None),
-            std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable {
-                name: name.to_string(),
-                value: err.to_string_lossy().to_string(),
-                err: "expected a valid UTF-8 string".to_string(),
-            }),
+            std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: err.to_string_lossy().to_string(),
+                    err: "expected a valid UTF-8 string".to_string(),
+                },
+            )),
         },
     }
+}
+
+/// Parse an environment variable containing a whitespace-delimited list of names.
+fn parse_name_list_environment_variable<T>(name: &'static str) -> Result<Option<Vec<T>>, Error>
+where
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    let Some(value) = parse_string_environment_variable(name)? else {
+        return Ok(None);
+    };
+
+    let names = value
+        .split_whitespace()
+        .map(|entry| {
+            entry.parse::<T>().map_err(|err| {
+                Error::InvalidEnvironmentVariable(InvalidEnvironmentVariable {
+                    name: name.to_string(),
+                    value: value.clone(),
+                    err: err.to_string(),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if names.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(names))
+    }
+}
+
+fn parse_typed_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    match value.parse::<T>() {
+        Ok(v) => Ok(Some(v)),
+        Err(err) => Err(Error::InvalidEnvironmentVariable(
+            InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value,
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
+            },
+        )),
+    }
+}
+
+fn parse_integer_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr + Copy,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    match value.parse::<T>() {
+        Ok(v) => Ok(Some(v)),
+        Err(err) => Err(Error::InvalidEnvironmentVariable(
+            InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value,
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
+            },
+        )),
+    }
+}
+
+/// Parse a path environment variable.
+fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
+    let value = std::env::var_os(name)?;
+
+    if value.is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(value))
 }
 
 /// Populate the [`EnvironmentFlags`] from the given [`EnvironmentOptions`].
@@ -682,6 +1060,9 @@ impl From<&EnvironmentOptions> for EnvironmentFlags {
         let mut flags = Self::empty();
         if options.skip_wheel_filename_check == Some(true) {
             flags.insert(Self::SKIP_WHEEL_FILENAME_CHECK);
+        }
+        if options.hide_build_output == Some(true) {
+            flags.insert(Self::HIDE_BUILD_OUTPUT);
         }
         flags
     }

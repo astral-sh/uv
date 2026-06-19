@@ -1,8 +1,14 @@
 [package]
 name = "uv-scripts"
-version = "0.0.1"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
-description = "Parse PEP 723-style Python scripts."
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
 
 [lib]
 doctest = false
@@ -29,4 +35,5 @@ regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }

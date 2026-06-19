@@ -33,6 +33,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
@@ -45,8 +46,9 @@ use uv_distribution_types::{
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
-use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Script};
+use uv_redacted::DisplaySafeUrl;
+use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
+use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -61,6 +63,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The excludes for the project.
+    pub excludes: Vec<PackageName>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -90,6 +94,152 @@ impl RequirementsSpecification {
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
+        Self::from_source_with_cache(source, client_builder, &mut SourceCache::default()).await
+    }
+
+    /// Create a [`RequirementsSpecification`] from PEP 723 script metadata.
+    fn from_pep723_metadata(metadata: &Pep723Metadata) -> Self {
+        let requirements = metadata
+            .dependencies
+            .as_ref()
+            .map(|dependencies| {
+                dependencies
+                    .iter()
+                    .map(|dependency| {
+                        UnresolvedRequirementSpecification::from(Requirement::from(
+                            dependency.to_owned(),
+                        ))
+                    })
+                    .collect::<Vec<UnresolvedRequirementSpecification>>()
+            })
+            .unwrap_or_default();
+
+        if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
+            let constraints = tool_uv
+                .constraint_dependencies
+                .as_ref()
+                .map(|dependencies| {
+                    dependencies
+                        .iter()
+                        .map(|dependency| {
+                            NameRequirementSpecification::from(Requirement::from(
+                                dependency.to_owned(),
+                            ))
+                        })
+                        .collect::<Vec<NameRequirementSpecification>>()
+                })
+                .unwrap_or_default();
+
+            let overrides = tool_uv
+                .override_dependencies
+                .as_ref()
+                .map(|dependencies| {
+                    dependencies
+                        .iter()
+                        .map(|dependency| {
+                            UnresolvedRequirementSpecification::from(Requirement::from(
+                                dependency.to_owned(),
+                            ))
+                        })
+                        .collect::<Vec<UnresolvedRequirementSpecification>>()
+                })
+                .unwrap_or_default();
+
+            Self {
+                requirements,
+                constraints,
+                overrides,
+                index_url: tool_uv
+                    .top_level
+                    .index_url
+                    .as_ref()
+                    .map(|index| Index::from(index.clone()).url),
+                extra_index_urls: tool_uv
+                    .top_level
+                    .extra_index_url
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|urls| urls.iter().map(|index| Index::from(index.clone()).url))
+                    .collect(),
+                no_index: tool_uv.top_level.no_index.unwrap_or_default(),
+                find_links: tool_uv
+                    .top_level
+                    .find_links
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|urls| urls.iter().map(|index| Index::from(index.clone()).url))
+                    .collect(),
+                no_binary: NoBinary::from_args(
+                    tool_uv.top_level.no_binary,
+                    tool_uv
+                        .top_level
+                        .no_binary_package
+                        .clone()
+                        .unwrap_or_default(),
+                ),
+                no_build: NoBuild::from_args(
+                    tool_uv.top_level.no_build,
+                    tool_uv
+                        .top_level
+                        .no_build_package
+                        .clone()
+                        .unwrap_or_default(),
+                ),
+                ..Self::default()
+            }
+        } else {
+            Self {
+                requirements,
+                ..Self::default()
+            }
+        }
+    }
+
+    /// Create a [`RequirementsSpecification`] from a parsed `requirements.txt` file.
+    fn from_requirements_txt(requirements_txt: RequirementsTxt) -> Self {
+        Self {
+            requirements: requirements_txt
+                .requirements
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .chain(
+                    requirements_txt
+                        .editables
+                        .into_iter()
+                        .map(UnresolvedRequirementSpecification::from),
+                )
+                .collect(),
+            constraints: requirements_txt
+                .constraints
+                .into_iter()
+                .map(Requirement::from)
+                .map(NameRequirementSpecification::from)
+                .collect(),
+            index_url: requirements_txt.index_url.map(IndexUrl::from),
+            extra_index_urls: requirements_txt
+                .extra_index_urls
+                .into_iter()
+                .map(IndexUrl::from)
+                .collect(),
+            no_index: requirements_txt.no_index,
+            find_links: requirements_txt
+                .find_links
+                .into_iter()
+                .map(IndexUrl::from)
+                .collect(),
+            no_binary: requirements_txt.no_binary,
+            no_build: requirements_txt.only_binary,
+            ..Self::default()
+        }
+    }
+
+    /// Read the requirements and constraints from a source, using a cache for file contents.
+    #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
+    async fn from_source_with_cache(
+        source: &RequirementsSource,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &mut SourceCache,
+    ) -> Result<Self> {
         Ok(match source {
             RequirementsSource::Package(requirement) => Self {
                 requirements: vec![UnresolvedRequirementSpecification::from(
@@ -104,65 +254,25 @@ impl RequirementsSpecification {
                 ..Self::default()
             },
             RequirementsSource::RequirementsTxt(path) => {
-                if !(path == Path::new("-")
-                    || path.starts_with("http://")
-                    || path.starts_with("https://")
-                    || path.exists())
-                {
+                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
-                let requirements_txt = RequirementsTxt::parse(path, &*CWD, client_builder).await?;
+                let requirements_txt =
+                    RequirementsTxt::parse_with_cache(path, &*CWD, client_builder, cache).await?;
 
                 if requirements_txt == RequirementsTxt::default() {
-                    if path == Path::new("-") {
-                        warn_user!("No dependencies found in stdin");
-                    } else {
-                        warn_user!(
-                            "Requirements file `{}` does not contain any dependencies",
-                            path.user_display()
-                        );
-                    }
+                    warn_user!(
+                        "Requirements file `{}` does not contain any dependencies",
+                        path.user_display()
+                    );
                 }
 
-                Self {
-                    requirements: requirements_txt
-                        .requirements
-                        .into_iter()
-                        .map(UnresolvedRequirementSpecification::from)
-                        .chain(
-                            requirements_txt
-                                .editables
-                                .into_iter()
-                                .map(UnresolvedRequirementSpecification::from),
-                        )
-                        .collect(),
-                    constraints: requirements_txt
-                        .constraints
-                        .into_iter()
-                        .map(Requirement::from)
-                        .map(NameRequirementSpecification::from)
-                        .collect(),
-                    index_url: requirements_txt.index_url.map(IndexUrl::from),
-                    extra_index_urls: requirements_txt
-                        .extra_index_urls
-                        .into_iter()
-                        .map(IndexUrl::from)
-                        .collect(),
-                    no_index: requirements_txt.no_index,
-                    find_links: requirements_txt
-                        .find_links
-                        .into_iter()
-                        .map(IndexUrl::from)
-                        .collect(),
-                    no_binary: requirements_txt.no_binary,
-                    no_build: requirements_txt.only_binary,
-                    ..Self::default()
-                }
+                Self::from_requirements_txt(requirements_txt)
             }
             RequirementsSource::PyprojectToml(path) => {
-                let contents = match fs_err::tokio::read_to_string(&path).await {
-                    Ok(contents) => contents,
+                let content = match fs_err::tokio::read_to_string(&path).await {
+                    Ok(content) => content,
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                         return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                     }
@@ -174,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&contents)
+                let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
@@ -183,123 +293,26 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::Pep723Script(path) => {
-                let script = match Pep723Script::read(&path).await {
-                    Ok(Some(script)) => Pep723Item::Script(script),
+                let content = if let Some(content) = cache.get(path.as_path()) {
+                    content.clone()
+                } else {
+                    let content = read_file(path, client_builder).await?;
+                    cache.insert(path.clone(), content.clone());
+                    content
+                };
+
+                let metadata = match Pep723Metadata::parse(content.as_bytes()) {
+                    Ok(Some(script)) => script,
                     Ok(None) => {
                         return Err(anyhow::anyhow!(
                             "`{}` does not contain inline script metadata",
                             path.user_display(),
                         ));
                     }
-                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to read `{}` (not found)",
-                            path.user_display(),
-                        ));
-                    }
                     Err(err) => return Err(err.into()),
                 };
 
-                let metadata = script.metadata();
-
-                let requirements = metadata
-                    .dependencies
-                    .as_ref()
-                    .map(|dependencies| {
-                        dependencies
-                            .iter()
-                            .map(|dependency| {
-                                UnresolvedRequirementSpecification::from(Requirement::from(
-                                    dependency.to_owned(),
-                                ))
-                            })
-                            .collect::<Vec<UnresolvedRequirementSpecification>>()
-                    })
-                    .unwrap_or_default();
-
-                if let Some(tool_uv) = metadata.tool.as_ref().and_then(|tool| tool.uv.as_ref()) {
-                    let constraints = tool_uv
-                        .constraint_dependencies
-                        .as_ref()
-                        .map(|dependencies| {
-                            dependencies
-                                .iter()
-                                .map(|dependency| {
-                                    NameRequirementSpecification::from(Requirement::from(
-                                        dependency.to_owned(),
-                                    ))
-                                })
-                                .collect::<Vec<NameRequirementSpecification>>()
-                        })
-                        .unwrap_or_default();
-
-                    let overrides = tool_uv
-                        .override_dependencies
-                        .as_ref()
-                        .map(|dependencies| {
-                            dependencies
-                                .iter()
-                                .map(|dependency| {
-                                    UnresolvedRequirementSpecification::from(Requirement::from(
-                                        dependency.to_owned(),
-                                    ))
-                                })
-                                .collect::<Vec<UnresolvedRequirementSpecification>>()
-                        })
-                        .unwrap_or_default();
-
-                    Self {
-                        requirements,
-                        constraints,
-                        overrides,
-                        index_url: tool_uv
-                            .top_level
-                            .index_url
-                            .as_ref()
-                            .map(|index| Index::from(index.clone()).url),
-                        extra_index_urls: tool_uv
-                            .top_level
-                            .extra_index_url
-                            .as_ref()
-                            .into_iter()
-                            .flat_map(|urls| {
-                                urls.iter().map(|index| Index::from(index.clone()).url)
-                            })
-                            .collect(),
-                        no_index: tool_uv.top_level.no_index.unwrap_or_default(),
-                        find_links: tool_uv
-                            .top_level
-                            .find_links
-                            .as_ref()
-                            .into_iter()
-                            .flat_map(|urls| {
-                                urls.iter().map(|index| Index::from(index.clone()).url)
-                            })
-                            .collect(),
-                        no_binary: NoBinary::from_args(
-                            tool_uv.top_level.no_binary,
-                            tool_uv
-                                .top_level
-                                .no_binary_package
-                                .clone()
-                                .unwrap_or_default(),
-                        ),
-                        no_build: NoBuild::from_args(
-                            tool_uv.top_level.no_build,
-                            tool_uv
-                                .top_level
-                                .no_build_package
-                                .clone()
-                                .unwrap_or_default(),
-                        ),
-                        ..Self::default()
-                    }
-                } else {
-                    Self {
-                        requirements,
-                        ..Self::default()
-                    }
-                }
+                Self::from_pep723_metadata(&metadata)
             }
             RequirementsSource::SetupPy(path) => {
                 if !path.is_file() {
@@ -322,7 +335,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PylockToml(path) => {
-                if !path.is_file() {
+                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
@@ -337,6 +350,38 @@ impl RequirementsSpecification {
                     path.user_display()
                 ));
             }
+            RequirementsSource::Extensionless(path) => {
+                let content = if let Some(content) = cache.get(path.as_path()) {
+                    content.clone()
+                } else {
+                    let content = read_file(path, client_builder).await?;
+                    cache.insert(path.clone(), content.clone());
+                    content
+                };
+
+                // Detect if it's a PEP 723 script.
+                if let Some(metadata) = Pep723Metadata::parse(content.as_bytes())? {
+                    Self::from_pep723_metadata(&metadata)
+                } else {
+                    // If it's not a PEP 723 script, assume it's a `requirements.txt` file.
+                    let requirements_txt =
+                        RequirementsTxt::parse_str(&content, &path, &*CWD, client_builder, cache)
+                            .await?;
+
+                    if requirements_txt == RequirementsTxt::default() {
+                        if path == Path::new("-") {
+                            warn_user!("No dependencies found in stdin");
+                        } else {
+                            warn_user!(
+                                "Requirements file `{}` does not contain any dependencies",
+                                path.user_display()
+                            );
+                        }
+                    }
+
+                    Self::from_requirements_txt(requirements_txt)
+                }
+            }
         })
     }
 
@@ -345,10 +390,12 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        excludes: &[RequirementsSource],
         groups: Option<&GroupsSpecification>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
+        let mut cache = SourceCache::default();
 
         // Disallow `pylock.toml` files as constraints.
         if let Some(pylock_toml) = constraints.iter().find_map(|source| {
@@ -378,6 +425,20 @@ impl RequirementsSpecification {
             ));
         }
 
+        // Disallow `pylock.toml` files as excludes.
+        if let Some(pylock_toml) = excludes.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an exclude file",
+                pylock_toml.user_display()
+            ));
+        }
+
         // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
         // overrides.
         if let Some(pylock_toml) = requirements.iter().find_map(|source| {
@@ -397,12 +458,12 @@ impl RequirementsSpecification {
             }
             if !constraints.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify additional requirements with a `pylock.toml` file"
+                    "Cannot specify constraints with a `pylock.toml` file"
                 ));
             }
             if !overrides.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify constraints with a `pylock.toml` file"
+                    "Cannot specify overrides with a `pylock.toml` file"
                 ));
             }
 
@@ -472,7 +533,7 @@ impl RequirementsSpecification {
         // Resolve sources into specifications so we know their `source_tree`.
         let mut requirement_sources = Vec::new();
         for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             requirement_sources.push(source);
         }
 
@@ -504,12 +565,12 @@ impl RequirementsSpecification {
             }
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -523,7 +584,7 @@ impl RequirementsSpecification {
         // Read all constraints, treating both requirements _and_ constraints as constraints.
         // Overrides are ignored.
         for source in constraints {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             for entry in source.requirements {
                 match entry.requirement {
                     UnresolvedRequirement::Named(requirement) => {
@@ -542,12 +603,12 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -561,17 +622,17 @@ impl RequirementsSpecification {
         // Read all overrides, treating both requirements _and_ overrides as overrides.
         // Constraints are ignored.
         for source in overrides {
-            let source = Self::from_source(source, client_builder).await?;
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -580,6 +641,24 @@ impl RequirementsSpecification {
             spec.find_links.extend(source.find_links);
             spec.no_binary.extend(source.no_binary);
             spec.no_build.extend(source.no_build);
+        }
+
+        // Collect excludes.
+        for source in excludes {
+            let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
+            for req_spec in source.requirements {
+                match req_spec.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        spec.excludes.push(requirement.name);
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        return Err(anyhow::anyhow!(
+                            "Unnamed requirements are not allowed as exclusions (found: `{requirement}`)"
+                        ));
+                    }
+                }
+            }
+            spec.excludes.extend(source.excludes);
         }
 
         Ok(spec)
@@ -597,42 +676,16 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], None, client_builder).await
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
-    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
+        Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints.
-    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            constraints: constraints
-                .into_iter()
-                .map(NameRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints and overrides.
-    pub fn from_overrides(
+    /// constraints, overrides, and excludes.
+    pub fn from_excludes(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        excludes: Vec<PackageName>,
     ) -> Self {
         Self {
             requirements: requirements
@@ -647,13 +700,9 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),
+            excludes,
             ..Self::default()
         }
-    }
-
-    /// Return true if the specification does not include any requirements to install.
-    pub fn is_empty(&self) -> bool {
-        self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
 }
 
@@ -664,4 +713,33 @@ pub struct GroupsSpecification {
     pub root: PathBuf,
     /// The enabled groups.
     pub groups: Vec<PipGroupName>,
+}
+
+/// Read the contents of a path, fetching over HTTP(S) if necessary.
+async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Result<String> {
+    // If the path is a URL, fetch it over HTTP(S).
+    if path.starts_with("http://") || path.starts_with("https://") {
+        // Only continue if we are absolutely certain no local file exists.
+        //
+        // We don't do this check on Windows since the file path would
+        // be invalid anyway, and thus couldn't refer to a local file.
+        if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
+            let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
+
+            let client = client_builder.build()?;
+            let response = client
+                .for_host(&url)
+                .get(Url::from(url.clone()))
+                .send()
+                .await?;
+
+            response.error_for_status_ref()?;
+
+            return Ok(response.text().await?);
+        }
+    }
+
+    // Read the file content.
+    let content = uv_fs::read_to_string_transcode(path).await?;
+    Ok(content)
 }

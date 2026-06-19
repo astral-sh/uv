@@ -1,10 +1,13 @@
 [package]
 name = "uv-keyring"
-version = "0.0.1"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
-
-[lib]
-doctest = false
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [lints]
 workspace = true
@@ -37,9 +40,8 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security_Cr
 zeroize = { workspace = true }
 
 [dev-dependencies]
-doc-comment = "0.3"
 env_logger = "0.11.5"
-fastrand = "2"
+fastrand = { workspace = true }
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"

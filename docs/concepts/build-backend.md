@@ -31,7 +31,7 @@ To use uv as a build backend in an existing project, add `uv_build` to the
 
 ```toml title="pyproject.toml"
 [build-system]
-requires = ["uv_build>=0.8.22,<0.9.0"]
+requires = ["uv_build>=0.11.22,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -205,7 +205,11 @@ By default, uv excludes `__pycache__`, `*.pyc`, and `*.pyo`.
 
 When building a source distribution, the following files and directories are included:
 
-- The `pyproject.toml`
+- The `pyproject.toml`. If uv detects TOML 1.1-only syntax, it issues a warning and automatically
+  enables the `toml-backwards-compatibility` preview feature: the `pyproject.toml` is reformatted
+  for backwards compatibility, and the original file is preserved as `pyproject.toml.orig`. Pass
+  `--preview-feature toml-backwards-compatibility` to enable the feature explicitly and suppress the
+  warning.
 - The [module](#modules) under
   [`tool.uv.build-backend.module-root`](../reference/settings.md#build-backend_module-root).
 - The files referenced by `project.license-files` and `project.readme`.
@@ -230,7 +234,7 @@ From these,
 [`tool.uv.build-backend.source-exclude`](../reference/settings.md#build-backend_source-exclude),
 [`tool.uv.build-backend.wheel-exclude`](../reference/settings.md#build-backend_wheel-exclude) and
 the default excludes are removed. The source dist excludes are applied to avoid source tree to wheel
-source builds including more files than source tree to source distribution to wheel build.
+builds including more files than source tree to source distribution to wheel build.
 
 There are no specific wheel includes. There must only be one top level module, and all data files
 must either be under the module root or in the appropriate

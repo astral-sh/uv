@@ -1,8 +1,7 @@
-use crate::common::{self, TestContext, get_bin};
 use anyhow::Result;
+use assert_fs::fixture::ChildPath;
 use insta::assert_snapshot;
 use std::path::Path;
-use std::process::Command;
 use uv_static::EnvVars;
 
 // These tests just run `uv lock` on an assorted of ecosystem
@@ -80,36 +79,26 @@ fn airflow() -> Result<()> {
 }
 
 /// Does a lock on the given ecosystem package for the given name. That
-/// is, there should be a directory at `./ecosystem/{name}` from the
+/// is, there should be a directory at `./test/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
-    let context = TestContext::new(python_version);
+    let mut context = uv_test::test_context!(python_version);
     context.copy_ecosystem_project(name);
 
     // Cache source distribution builds to speed up the tests.
     let cache_dir =
         std::path::absolute(Path::new("../../target/ecosystem-test-caches").join(name))?;
+    context.cache_dir = ChildPath::new(cache_dir);
 
-    // Custom command since we need to change the cache dir.
-    let mut command = Command::new(get_bin());
-    command
-        .arg("lock")
-        .arg("--cache-dir")
-        .arg(&cache_dir)
-        // When running the tests in a venv, ignore that venv, otherwise we'll capture warnings.
-        .env_remove(EnvVars::VIRTUAL_ENV)
-        .env(EnvVars::UV_NO_WRAP, "1")
-        .env(EnvVars::HOME, context.home_dir.as_os_str())
-        .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-        .env(EnvVars::UV_TEST_PYTHON_PATH, context.python_path())
-        .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
-        .current_dir(context.temp_dir.path());
+    let mut command = context.lock();
+    command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
 
-    let (snapshot, _) = common::run_and_format(
+    let (snapshot, _) = uv_test::run_and_format(
         &mut command,
         context.filters(),
         name,
-        Some(common::WindowsFilters::Platform),
+        Some(uv_test::WindowsFilters::Platform),
+        None,
     );
 
     let lock = context.read("uv.lock");

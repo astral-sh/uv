@@ -15,7 +15,7 @@ pub enum WheelCache<'a> {
     Path(&'a DisplaySafeUrl),
     /// An editable dependency, which we key by URL.
     Editable(&'a DisplaySafeUrl),
-    /// A Git dependency, which we key by URL and SHA.
+    /// A Git dependency, which we key by URL (including LFS state), SHA.
     ///
     /// Note that this variant only exists for source distributions; wheels can't be delivered
     /// through Git.
@@ -69,7 +69,7 @@ pub(crate) enum WheelCacheKind {
 }
 
 impl WheelCacheKind {
-    pub(crate) fn to_str(self) -> &'static str {
+    fn to_str(self) -> &'static str {
         match self {
             Self::Pypi => "pypi",
             Self::Index => "index",
@@ -80,7 +80,7 @@ impl WheelCacheKind {
         }
     }
 
-    pub(crate) fn root(self) -> PathBuf {
+    fn root(self) -> PathBuf {
         Path::new(self.to_str()).to_path_buf()
     }
 }

@@ -1,0 +1,15 @@
+name = "local-transitive-greater-than"
+description = "A transitive constraint on a local version should not match an exclusive ordered operator."
+
+[root]
+requires = ["a", "b==2.0.0+foo"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires = ["b>2.0.0"]
+
+[packages.b.versions."2.0.0+bar"]
+
+[packages.b.versions."2.0.0+foo"]

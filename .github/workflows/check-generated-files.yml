@@ -1,0 +1,42 @@
+on:
+  workflow_call:
+    inputs:
+      schema-changed:
+        required: true
+        type: string
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
+
+permissions: {}
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  cargo-dev-generate-all:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    name: "cargo dev generate-all"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ inputs.save-rust-cache == 'true' }}
+      - name: "Generate all"
+        run: cargo dev generate-all --mode dry-run
+      - name: "Check sysconfig mappings"
+        run: cargo dev generate-sysconfig-metadata --mode check
+      - name: "Install Rustfmt"
+        run: rustup component add rustfmt
+      - name: "Check Packse scenario tests"
+        run: cargo dev generate-scenario-tests --mode check
+      - name: "Check JSON schema"
+        if: ${{ inputs.schema-changed == 'true' }}
+        run: cargo dev generate-json-schema --mode check

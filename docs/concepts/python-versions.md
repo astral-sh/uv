@@ -34,7 +34,7 @@ The following Python version request formats are supported:
 - `<version>` (e.g., `3`, `3.12`, `3.12.3`)
 - `<version-specifier>` (e.g., `>=3.12,<3.13`)
 - `<version><short-variant>` (e.g., `3.13t`, `3.12.0d`)
-- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`)
+- `<version>+<variant>` (e.g., `3.13+freethreaded`, `3.12.0+debug`, `3.14+gil`)
 - `<implementation>` (e.g., `cpython` or `cp`)
 - `<implementation>@<version>` (e.g., `cpython@3.12`)
 - `<implementation><version>` (e.g., `cpython3.12` or `cp312`)
@@ -121,14 +121,19 @@ present, uv will install all the Python versions listed in the file.
     The available Python versions are frozen for each uv release. To install new Python versions,
     you may need upgrade uv.
 
+See the [storage documentation](../reference/storage.md#python-versions) for details about where
+installed Python versions are stored.
+
 ### Installing Python executables
 
-uv installs Python executables into your `PATH` by default, e.g., `uv python install 3.12` will
-install a Python executable into `~/.local/bin`, e.g., as `python3.12`.
+uv installs Python executables into your `PATH` by default, e.g., on Unix `uv python install 3.12`
+will install a Python executable into `~/.local/bin`, e.g., as `python3.12`. See the
+[storage documentation](../reference/storage.md#python-executables) for more details about the
+target directory.
 
 !!! tip
 
-    If `~/.local/bin` is not in your `PATH`, you can add it with `uv tool update-shell`.
+    If `~/.local/bin` is not in your `PATH`, you can add it with `uv python update-shell`.
 
 To install `python` and `python3` executables, include the experimental `--default` option:
 
@@ -153,12 +158,9 @@ $ uv python install 3.12.8  # Updates `python3.12` to point to 3.12.8
 
 !!! important
 
-    Support for upgrading Python versions is in _preview_. This means the behavior is experimental
-    and subject to change.
-
     Upgrades are only supported for uv-managed Python versions.
 
-    Upgrades are not currently supported for PyPy and GraalPy.
+    Upgrades are not currently supported for PyPy, GraalPy, and Pyodide.
 
 uv allows transparently upgrading Python versions to the latest patch release, e.g., 3.13.4 to
 3.13.5. uv does not allow transparently upgrading across minor Python versions, e.g., 3.12 to 3.13,
@@ -182,14 +184,8 @@ $ uv python upgrade
 After an upgrade, uv will prefer the new version, but will retain the existing version as it may
 still be used by virtual environments.
 
-If the Python version was installed with the `python-upgrade` [preview feature](./preview.md)
-enabled, e.g., `uv python install 3.12 --preview-features python-upgrade`, virtual environments
-using the Python version will be automatically upgraded to the new patch version.
-
-!!! note
-
-    If the virtual environment was created _before_ opting in to the preview mode, it will not be
-    included in the automatic upgrades.
+Virtual environments using the Python version will be automatically upgraded to the new patch
+version.
 
 If a virtual environment was created with an explicitly requested patch version, e.g.,
 `uv venv -p 3.10.8`, it will not be transparently upgraded to a new version.
@@ -334,8 +330,16 @@ uv supports discovering and installing
 [free-threaded](https://docs.python.org/3.14/glossary.html#term-free-threading) Python variants in
 CPython 3.13+.
 
-Free-threaded Python versions will not be selected by default. Free-threaded Python versions will
-only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
+For Python 3.13, free-threaded Python versions will not be selected by default. Free-threaded Python
+versions will only be selected when explicitly requested, e.g., with `3.13t` or `3.13+freethreaded`.
+
+For Python 3.14+, uv will allow use of free-threaded Python 3.14+ interpreters without explicit
+selection. The GIL-enabled build of Python will still be preferred, e.g., when performing an
+installation with `uv python install 3.14`. However, e.g., if a free-threaded interpreter comes
+before a GIL-enabled build on the `PATH`, it will be used.
+
+If both free-threaded and GIL-enabled Python versions are available on the system, and want to
+require the use of the GIL-enabled variant in a project, you can use the `+gil` variant specifier.
 
 ## Debug Python variants
 
@@ -444,7 +448,7 @@ As Python does not publish official distributable CPython binaries, uv instead u
 distributions from the Astral
 [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
 `python-build-standalone` is also is used in many other Python projects, like
-[Rye](https://github.com/astral-sh/rye), [Mise](https://mise.jdx.dev/lang/python.html), and
+[Mise](https://mise.jdx.dev/lang/python.html) and
 [bazelbuild/rules_python](https://github.com/bazelbuild/rules_python).
 
 The uv Python distributions are self-contained, highly-portable, and performant. While Python can be
@@ -453,10 +457,13 @@ creating optimized, performant builds (e.g., with PGO and LTO enabled) is very s
 
 These distributions have some behavior quirks, generally as a consequence of portability; see the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details. Additionally, some platforms may not be supported (e.g., distributions
-are not yet available for musl Linux on ARM).
+documentation for details.
 
 ### PyPy distributions
+
+!!! note
+
+    PyPy versions lag behind CPython and currently only supports Python versions up to 3.11
 
 PyPy distributions are provided by the [PyPy project](https://pypy.org).
 
@@ -465,6 +472,15 @@ PyPy distributions are provided by the [PyPy project](https://pypy.org).
 Pyodide distributions are provided by the [Pyodide project](https://github.com/pyodide/pyodide).
 
 Pyodide is a port of CPython for the WebAssembly / Emscripten platform.
+
+## Transparent x86_64 emulation on aarch64
+
+Both macOS and Windows support running x86_64 binaries on aarch64 through transparent emulation.
+This is called [Rosetta 2](https://support.apple.com/en-gb/102527) or
+[Windows on ARM (WoA) emulation](https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation).
+It's possible to use x86_64 uv on aarch64, and also possible to use an x86_64 Python interpreter on
+aarch64. Either uv binary can use either Python interpreter, but a Python interpreter needs packages
+for its architecture, either all x86_64 or all aarch64.
 
 ## Registration in the Windows registry
 

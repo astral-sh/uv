@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 
@@ -9,11 +10,31 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
-use uv_static::EnvVars;
+use uv_warnings::warn_user_once;
 
-use crate::Error;
+use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
+
+/// Ensure the file path is safe to use as a [`Path`].
+///
+/// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
+pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
+    if file_name.contains('\0') {
+        return None;
+    }
+    let path = PathBuf::from(file_name);
+    let mut depth = 0usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => return None,
+            Component::ParentDir => depth = depth.checked_sub(1)?,
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => (),
+        }
+    }
+    Some(path)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
@@ -39,50 +60,21 @@ struct ComputedEntry {
     compressed_size: u64,
 }
 
-/// Returns `true` if ZIP validation is disabled.
-fn insecure_no_validate() -> bool {
-    // TODO(charlie) Parse this in `EnvironmentOptions`.
-    let Some(value) = std::env::var_os(EnvVars::UV_INSECURE_NO_ZIP_VALIDATION) else {
-        return false;
-    };
-    let Some(value) = value.to_str() else {
-        return false;
-    };
-    matches!(
-        value.to_lowercase().as_str(),
-        "y" | "yes" | "t" | "true" | "on" | "1"
-    )
-}
-
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
 /// is already fully on disk, consider using `unzip_archive`, which can use multiple
 /// threads to work faster in that case.
-pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
+///
+/// `source_hint` is used for warning messages, to identify the source of the ZIP archive
+/// beneath the reader. It might be a URL, a file path, or something else.
+///
+/// Returns the list of unpacked files and their sizes.
+pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    source_hint: D,
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
-    /// Ensure the file path is safe to use as a [`Path`].
-    ///
-    /// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
-    pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
-        if file_name.contains('\0') {
-            return None;
-        }
-        let path = PathBuf::from(file_name);
-        let mut depth = 0usize;
-        for component in path.components() {
-            match component {
-                Component::Prefix(_) | Component::RootDir => return None,
-                Component::ParentDir => depth = depth.checked_sub(1)?,
-                Component::Normal(_) => depth += 1,
-                Component::CurDir => (),
-            }
-        }
-        Some(path)
-    }
-
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -92,15 +84,37 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
     let mut directories = FxHashSet::default();
     let mut local_headers = FxHashMap::default();
+    let mut files = Vec::new();
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
+        let zip_entry = entry.reader().entry();
+
+        // Check for unexpected compression methods.
+        // A future version of uv will reject instead of warning about these.
+        let compression = CompressionMethod::from(zip_entry.compression());
+        if !compression.is_well_known() {
+            warn_user_once!(
+                "One or more file entries in '{source_hint}' use the '{compression}' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the '{stored}', '{deflate}', or '{zstd}' compression methods.",
+                stored = CompressionMethod::Stored,
+                deflate = CompressionMethod::Deflated,
+                zstd = CompressionMethod::Zstd,
+            );
+        }
+
         // Construct the (expected) path to the file on-disk.
-        let path = match entry.reader().entry().filename().as_str() {
+        let path = match zip_entry.filename().as_str() {
             Ok(path) => path,
             Err(ZipError::StringNotUtf8) => return Err(Error::LocalHeaderNotUtf8 { offset }),
             Err(err) => return Err(err.into()),
         };
+
+        // Apply sanity checks to the file names in local headers.
+        if let Err(e) = validate_archive_member_name(path) {
+            if !skip_validation {
+                return Err(e);
+            }
+        }
 
         // Sanitize the file name to prevent directory traversal attacks.
         let Some(relpath) = enclosed_name(path) else {
@@ -116,14 +130,14 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             continue;
         };
 
-        let file_offset = entry.reader().entry().file_offset();
-        let expected_compressed_size = entry.reader().entry().compressed_size();
-        let expected_uncompressed_size = entry.reader().entry().uncompressed_size();
-        let expected_data_descriptor = entry.reader().entry().data_descriptor();
+        let file_offset = zip_entry.file_offset();
+        let expected_compressed_size = zip_entry.compressed_size();
+        let expected_uncompressed_size = zip_entry.uncompressed_size();
+        let expected_data_descriptor = zip_entry.data_descriptor();
 
         // Either create the directory or write the file to disk.
         let path = target.join(&relpath);
-        let is_dir = entry.reader().entry().dir()?;
+        let is_dir = zip_entry.dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
                 fs_err::tokio::create_dir_all(path)
@@ -132,23 +146,23 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             }
 
             // If this is a directory, we expect the CRC32 to be 0.
-            if entry.reader().entry().crc32() != 0 {
+            if zip_entry.crc32() != 0 {
                 if !skip_validation {
                     return Err(Error::BadCrc32 {
                         path: relpath.clone(),
                         computed: 0,
-                        expected: entry.reader().entry().crc32(),
+                        expected: zip_entry.crc32(),
                     });
                 }
             }
 
             // If this is a directory, we expect the uncompressed size to be 0.
-            if entry.reader().entry().uncompressed_size() != 0 {
+            if zip_entry.uncompressed_size() != 0 {
                 if !skip_validation {
                     return Err(Error::BadUncompressedSize {
                         path: relpath.clone(),
                         computed: 0,
-                        expected: entry.reader().entry().uncompressed_size(),
+                        expected: zip_entry.uncompressed_size(),
                     });
                 }
             }
@@ -173,7 +187,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             {
                 Ok(file) => {
                     // Write the file to disk.
-                    let size = entry.reader().entry().uncompressed_size();
+                    let size = zip_entry.uncompressed_size();
                     let mut writer = if let Ok(size) = usize::try_from(size) {
                         tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
                     } else {
@@ -260,6 +274,9 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                     }
                 }
             }
+
+            // Collect file paths (excluding directories).
+            files.push((relpath.clone(), actual_uncompressed_size));
 
             ComputedEntry {
                 crc32: actual_crc32,
@@ -372,6 +389,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                     }
                     Err(err) => return Err(err.into()),
                 };
+
+                // Apply sanity checks to the file names in CD headers.
+                if let Err(e) = validate_archive_member_name(path) {
+                    if !skip_validation {
+                        return Err(e);
+                    }
+                }
 
                 // Sanitize the file name to prevent directory traversal attacks.
                 let Some(relpath) = enclosed_name(path) else {
@@ -559,21 +583,25 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    Ok(())
+    Ok(files)
 }
 
 /// Unpack the given tar archive into the destination directory.
 ///
 /// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
+///
+/// Returns the list of unpacked files and their sizes.
 async fn untar_in(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
-) -> std::io::Result<()> {
+) -> std::io::Result<Vec<(PathBuf, u64)>> {
     // Like `tokio-tar`, canonicalize the destination prior to unpacking.
     let dst = fs_err::tokio::canonicalize(dst).await?;
 
     // Memoize filesystem calls to canonicalize paths.
     let mut memo = FxHashSet::default();
+
+    let mut files = Vec::new();
 
     let mut entries = archive.entries()?;
     let mut pinned = Pin::new(&mut entries);
@@ -591,6 +619,14 @@ async fn untar_in(
             continue;
         }
 
+        // Collect file paths (excluding directories).
+        let entry_type = file.header().entry_type();
+        if entry_type.is_file() || entry_type.is_hard_link() {
+            let relpath = file.path()?.into_owned();
+            let size = file.header().size()?;
+            files.push((relpath, size));
+        }
+
         // Unpack the file into the destination directory.
         #[cfg_attr(not(unix), allow(unused_variables))]
         let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
@@ -601,7 +637,6 @@ async fn untar_in(
             use std::fs::Permissions;
             use std::os::unix::fs::PermissionsExt;
 
-            let entry_type = file.header().entry_type();
             if entry_type.is_file() || entry_type.is_hard_link() {
                 let mode = file.header().mode()?;
                 let has_any_executable_bit = mode & 0o111;
@@ -621,16 +656,18 @@ async fn untar_in(
         }
     }
 
-    Ok(())
+    Ok(files)
 }
 
 /// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
 
@@ -649,10 +686,12 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
 
@@ -671,10 +710,12 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
 /// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
+///
+/// Returns the list of unpacked files and their sizes.
 pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
 
@@ -690,23 +731,15 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
         .map_err(Error::io_or_compression)
 }
 
-/// Unpack a `.tar.zst` archive from a file on disk into the target directory.
-pub fn untar_zst_file<R: std::io::Read>(reader: R, target: impl AsRef<Path>) -> Result<(), Error> {
-    let reader = std::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let decompressed = zstd::Decoder::new(reader).map_err(Error::Io)?;
-    let mut archive = tar::Archive::new(decompressed);
-    archive.set_preserve_mtime(false);
-    archive.unpack(target).map_err(Error::io_or_compression)?;
-    Ok(())
-}
-
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
 
@@ -719,17 +752,18 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     .build();
     untar_in(archive, target.as_ref())
         .await
-        .map_err(Error::io_or_compression)?;
-    Ok(())
+        .map_err(Error::io_or_compression)
 }
 
 /// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
-pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     let mut reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
 
     let archive =
@@ -740,40 +774,32 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
             .build();
     untar_in(archive, target.as_ref())
         .await
-        .map_err(Error::io_or_compression)?;
-    Ok(())
+        .map_err(Error::io_or_compression)
 }
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
 /// without requiring `Seek`.
-pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
+///
+/// `source_hint` is used for warning messages, to identify the source of the archive
+/// beneath the reader. It might be a URL, a file path, or something else.
+///
+/// Returns the list of unpacked files and their sizes.
+pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    source_hint: D,
     reader: R,
     ext: SourceDistExtension,
     target: impl AsRef<Path>,
-) -> Result<(), Error> {
+) -> Result<Vec<(PathBuf, u64)>, Error> {
     match ext {
-        SourceDistExtension::Zip => {
-            unzip(reader, target).await?;
-        }
-        SourceDistExtension::Tar => {
-            untar(reader, target).await?;
-        }
-        SourceDistExtension::Tgz | SourceDistExtension::TarGz => {
-            untar_gz(reader, target).await?;
-        }
-        SourceDistExtension::Tbz | SourceDistExtension::TarBz2 => {
-            untar_bz2(reader, target).await?;
-        }
+        SourceDistExtension::Zip => unzip(source_hint, reader, target).await,
+        SourceDistExtension::Tar => untar(reader, target).await,
+        SourceDistExtension::Tgz | SourceDistExtension::TarGz => untar_gz(reader, target).await,
+        SourceDistExtension::Tbz | SourceDistExtension::TarBz2 => untar_bz2(reader, target).await,
         SourceDistExtension::Txz
         | SourceDistExtension::TarXz
         | SourceDistExtension::Tlz
         | SourceDistExtension::TarLz
-        | SourceDistExtension::TarLzma => {
-            untar_xz(reader, target).await?;
-        }
-        SourceDistExtension::TarZst => {
-            untar_zst(reader, target).await?;
-        }
+        | SourceDistExtension::TarLzma => untar_xz(reader, target).await,
+        SourceDistExtension::TarZst => untar_zst(reader, target).await,
     }
-    Ok(())
 }

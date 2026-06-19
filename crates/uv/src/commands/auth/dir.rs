@@ -1,20 +1,26 @@
-use anstream::println;
 use owo_colors::OwoColorize;
+use std::fmt::Write;
 
-use uv_auth::{PyxTokenStore, Service, TextCredentialStore};
+use uv_auth::{PyxTokenStore, Service, TextCredentialStore, is_default_pyx_domain};
 use uv_fs::Simplified;
 
+use crate::printer::Printer;
+
 /// Show the credentials directory.
-pub(crate) fn dir(service: Option<&Service>) -> anyhow::Result<()> {
+pub(crate) fn dir(service: Option<&Service>, printer: Printer) -> anyhow::Result<()> {
     if let Some(service) = service {
         let pyx_store = PyxTokenStore::from_settings()?;
-        if pyx_store.is_known_domain(service.url()) {
-            println!("{}", pyx_store.root().simplified_display().cyan());
+        if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
+            writeln!(
+                printer.stdout(),
+                "{}",
+                pyx_store.root().simplified_display().cyan()
+            )?;
             return Ok(());
         }
     }
 
     let root = TextCredentialStore::directory_path()?;
-    println!("{}", root.simplified_display().cyan());
+    writeln!(printer.stdout(), "{}", root.simplified_display().cyan())?;
     Ok(())
 }

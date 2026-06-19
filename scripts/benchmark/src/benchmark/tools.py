@@ -243,7 +243,6 @@ def main():
         "--min-runs",
         type=int,
         help="The minimum number of runs to perform.",
-        default=10,
     )
     parser.add_argument(
         "--runs",
@@ -291,8 +290,11 @@ def main():
     verbose = args.verbose
     json = args.json
     warmup = args.warmup
-    min_runs = args.min_runs
     runs = args.runs
+    min_runs = args.min_runs
+    # --min-runs and --runs conflict
+    if runs is None and min_runs is None:
+        min_runs = 10
 
     # Determine the tools to benchmark, based on the user-provided arguments.
     suites = []

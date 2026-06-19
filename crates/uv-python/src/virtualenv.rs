@@ -8,6 +8,7 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
+use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -33,6 +34,8 @@ pub struct VirtualEnvironment {
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
+    /// The `PYTHONHOME` directory containing the base Python executable.
+    pub(crate) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
@@ -86,6 +89,12 @@ impl CondaEnvironmentKind {
     /// `/usr/local/conda/envs/<name>`. Note the name `CONDA_DEFAULT_ENV` is misleading, it's the
     /// active environment name, not a constant base environment name.
     fn from_prefix_path(path: &Path) -> Self {
+        // Pixi never creates true "base" envs and names project envs "default", confusing our
+        // heuristics, so treat Pixi prefixes as child envs outright.
+        if is_pixi_environment(path) {
+            return Self::Child;
+        }
+
         // If `_CONDA_ROOT` is set and matches `CONDA_PREFIX`, it's the base environment.
         if let Ok(conda_root) = env::var(EnvVars::CONDA_ROOT) {
             if path == Path::new(&conda_root) {
@@ -107,8 +116,10 @@ impl CondaEnvironmentKind {
         // If the environment name is "base" or "root", treat it as a base environment
         //
         // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but in a future breaking release we should remove this special-casing.
-        if current_env == "base" || current_env == "root" {
+        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
+        if !uv_preview::is_enabled(PreviewFeature::SpecialCondaEnvNames)
+            && (current_env == "base" || current_env == "root")
+        {
             return Self::Base;
         }
 
@@ -125,6 +136,11 @@ impl CondaEnvironmentKind {
             Self::Base
         }
     }
+}
+
+/// Detect whether the current `CONDA_PREFIX` belongs to a Pixi-managed environment.
+fn is_pixi_environment(path: &Path) -> bool {
+    path.join("conda-meta").join("pixi").is_file()
 }
 
 /// Locate an active conda environment by inspecting environment variables.
@@ -214,6 +230,7 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
 impl PyVenvConfiguration {
     /// Parse a `pyvenv.cfg` file into a [`PyVenvConfiguration`].
     pub fn parse(cfg: impl AsRef<Path>) -> Result<Self, Error> {
+        let mut home = None;
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
@@ -231,6 +248,9 @@ impl PyVenvConfiguration {
                 continue;
             };
             match key.trim() {
+                "home" => {
+                    home = Some(PathBuf::from(value.trim()));
+                }
                 "virtualenv" => {
                     virtualenv = true;
                 }
@@ -257,6 +277,7 @@ impl PyVenvConfiguration {
         }
 
         Ok(Self {
+            home,
             virtualenv,
             uv,
             relocatable,
@@ -277,7 +298,7 @@ impl PyVenvConfiguration {
     }
 
     /// Returns true if the virtual environment is relocatable.
-    pub fn is_relocatable(&self) -> bool {
+    pub(crate) fn is_relocatable(&self) -> bool {
         self.relocatable
     }
 
@@ -296,12 +317,12 @@ impl PyVenvConfiguration {
         let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
         let mut found = false;
         for line in &mut lines {
-            if let Some((lhs, _)) = line.split_once('=') {
-                if lhs.trim() == key {
-                    *line = Cow::Owned(format!("{key} = {value}"));
-                    found = true;
-                    break;
-                }
+            if let Some((lhs, _)) = line.split_once('=')
+                && lhs.trim() == key
+            {
+                *line = Cow::Owned(format!("{key} = {value}"));
+                found = true;
+                break;
             }
         }
         if !found {
@@ -317,9 +338,36 @@ impl PyVenvConfiguration {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use indoc::indoc;
+    use temp_env::with_vars;
+    use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn pixi_environment_is_treated_as_child() {
+        let tempdir = tempdir().unwrap();
+        let prefix = tempdir.path();
+        let conda_meta = prefix.join("conda-meta");
+
+        fs::create_dir_all(&conda_meta).unwrap();
+        fs::write(conda_meta.join("pixi"), []).unwrap();
+
+        let vars = [
+            (EnvVars::CONDA_ROOT, None),
+            (EnvVars::CONDA_PREFIX, Some(prefix.as_os_str())),
+            (EnvVars::CONDA_DEFAULT_ENV, Some(OsStr::new("example"))),
+        ];
+
+        with_vars(vars, || {
+            assert_eq!(
+                CondaEnvironmentKind::from_prefix_path(prefix),
+                CondaEnvironmentKind::Child
+            );
+        });
+    }
 
     #[test]
     fn test_set_existing_key() {

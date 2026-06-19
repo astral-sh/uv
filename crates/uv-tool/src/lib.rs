@@ -4,21 +4,20 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
-use uv_fs::{LockedFile, Simplified};
-use uv_install_wheel::read_record_file;
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
+use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
-use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_virtualenv::remove_virtualenv;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -26,10 +25,47 @@ pub use tool::{Tool, ToolEntrypoint};
 mod receipt;
 mod tool;
 
+/// A wrapper around [`PythonEnvironment`] for tools that provides additional functionality.
+#[derive(Debug, Clone)]
+pub struct ToolEnvironment {
+    environment: PythonEnvironment,
+    name: PackageName,
+}
+
+impl ToolEnvironment {
+    fn new(environment: PythonEnvironment, name: PackageName) -> Self {
+        Self { environment, name }
+    }
+
+    /// Return the [`Version`] of the tool package in this environment.
+    pub fn version(&self) -> Result<Version, Error> {
+        let site_packages = SitePackages::from_environment(&self.environment).map_err(|err| {
+            Error::EnvironmentRead(self.environment.root().to_path_buf(), err.to_string())
+        })?;
+        let packages = site_packages.get_packages(&self.name);
+        let package = packages
+            .first()
+            .ok_or_else(|| Error::MissingToolPackage(self.name.clone()))?;
+        Ok(package.version().clone())
+    }
+
+    /// Get the underlying [`PythonEnvironment`].
+    pub fn into_environment(self) -> PythonEnvironment {
+        self.environment
+    }
+
+    /// Get a reference to the underlying [`PythonEnvironment`].
+    pub fn environment(&self) -> &PythonEnvironment {
+        &self.environment
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
@@ -50,6 +86,29 @@ pub enum Error {
     EnvironmentRead(PathBuf, String),
     #[error("Failed find package `{0}` in tool environment")]
     MissingToolPackage(PackageName),
+    #[error("Tool `{0}` environment not found at `{1}`")]
+    ToolEnvironmentNotFound(PackageName, PathBuf),
+}
+
+impl Error {
+    pub fn as_io_error(&self) -> Option<&io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::VirtualEnvError(uv_virtualenv::Error::Io(err)) => Some(err),
+            Self::ReceiptWrite(_, _)
+            | Self::ReceiptRead(_, _)
+            | Self::VirtualEnvError(_)
+            | Self::EntrypointRead(_)
+            | Self::NoExecutableDirectory
+            | Self::ToolName(_)
+            | Self::EnvironmentError(_)
+            | Self::MissingToolReceipt(_, _)
+            | Self::EnvironmentRead(_, _)
+            | Self::MissingToolPackage(_)
+            | Self::ToolEnvironmentNotFound(_, _) => None,
+        }
+    }
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -93,7 +152,7 @@ impl InstalledTools {
     /// included with an error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
@@ -142,7 +201,12 @@ impl InstalledTools {
 
     /// Grab a file lock for the tools directory to prevent concurrent access across processes.
     pub async fn lock(&self) -> Result<LockedFile, Error> {
-        Ok(LockedFile::acquire(self.root.join(".lock"), self.root.user_display()).await?)
+        Ok(LockedFile::acquire(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.user_display(),
+        )
+        .await?)
     }
 
     /// Add a receipt for a tool.
@@ -186,7 +250,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        remove_virtualenv(environment_path.as_path())?;
+        uv_fs::remove_virtualenv(environment_path.as_path()).map_err(uv_virtualenv::Error::from)?;
 
         Ok(())
     }
@@ -201,7 +265,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         cache: &Cache,
-    ) -> Result<Option<PythonEnvironment>, Error> {
+    ) -> Result<Option<ToolEnvironment>, Error> {
         let environment_path = self.tool_dir(name);
 
         match PythonEnvironment::from_root(&environment_path, cache) {
@@ -210,7 +274,7 @@ impl InstalledTools {
                     "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
-                Ok(Some(venv))
+                Ok(Some(ToolEnvironment::new(venv, name.clone())))
             }
             Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
@@ -223,15 +287,24 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display(),
-                    target_path.user_display()
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
 
                 Ok(None)
             }
@@ -246,12 +319,11 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
-        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir_all(&environment_path) {
+        match uv_fs::remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
@@ -259,7 +331,7 @@ impl InstalledTools {
                 );
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
         }
 
         debug!(
@@ -277,30 +349,9 @@ impl InstalledTools {
             false,
             false,
             false,
-            preview,
         )?;
 
         Ok(venv)
-    }
-
-    /// Create a temporary tools directory.
-    pub fn temp() -> Result<Self, Error> {
-        Ok(Self::from_path(
-            StateStore::temp()?.bucket(StateBucket::Tools),
-        ))
-    }
-
-    /// Return the [`Version`] of an installed tool.
-    pub fn version(&self, name: &PackageName, cache: &Cache) -> Result<Version, Error> {
-        let environment_path = self.tool_dir(name);
-        let environment = PythonEnvironment::from_root(&environment_path, cache)?;
-        let site_packages = SitePackages::from_environment(&environment)
-            .map_err(|err| Error::EnvironmentRead(environment_path.clone(), err.to_string()))?;
-        let packages = site_packages.get_packages(name);
-        let package = packages
-            .first()
-            .ok_or_else(|| Error::MissingToolPackage(name.clone()))?;
-        Ok(package.version().clone())
     }
 
     /// Initialize the tools directory.
@@ -329,36 +380,6 @@ impl InstalledTools {
     /// Return the path of the tools directory.
     pub fn root(&self) -> &Path {
         &self.root
-    }
-}
-
-/// A uv-managed tool installed on the current system..
-#[derive(Debug, Clone)]
-pub struct InstalledTool {
-    /// The path to the top-level directory of the tools.
-    path: PathBuf,
-}
-
-impl InstalledTool {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
-        Ok(Self { path })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl std::fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.path
-                .file_name()
-                .unwrap_or(self.path.as_os_str())
-                .to_string_lossy()
-        )
     }
 }
 
@@ -400,7 +421,7 @@ pub fn entrypoint_paths(
     );
 
     // Read the RECORD file.
-    let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
+    let record = read_record(File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = site_packages.interpreter().layout();

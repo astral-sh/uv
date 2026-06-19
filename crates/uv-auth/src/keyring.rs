@@ -24,14 +24,14 @@ pub enum Error {
     Keyring(#[from] uv_keyring::Error),
 
     #[error("The '{0}' keyring provider does not support storing credentials")]
-    StoreUnsupported(KeyringProviderBackend),
+    StoreUnsupported(&'static str),
 
     #[error("The '{0}' keyring provider does not support removing credentials")]
-    RemoveUnsupported(KeyringProviderBackend),
+    RemoveUnsupported(&'static str),
 }
 
-#[derive(Debug, Clone)]
-pub enum KeyringProviderBackend {
+#[derive(Debug)]
+enum KeyringProviderBackend {
     /// Use a native system keyring integration for credentials.
     Native,
     /// Use the external `keyring` command for credentials.
@@ -40,20 +40,26 @@ pub enum KeyringProviderBackend {
     Dummy(Vec<(String, &'static str, &'static str)>),
 }
 
+impl KeyringProviderBackend {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Subprocess => "subprocess",
+            #[cfg(test)]
+            Self::Dummy(_) => "dummy",
+        }
+    }
+}
+
 impl std::fmt::Display for KeyringProviderBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Native => write!(f, "native"),
-            Self::Subprocess => write!(f, "subprocess"),
-            #[cfg(test)]
-            Self::Dummy(_) => write!(f, "dummy"),
-        }
+        f.write_str(self.name())
     }
 }
 
 impl KeyringProvider {
     /// Create a new [`KeyringProvider::Native`].
-    pub fn native() -> Self {
+    pub(crate) fn native() -> Self {
         Self {
             backend: KeyringProviderBackend::Native,
         }
@@ -68,7 +74,7 @@ impl KeyringProvider {
 
     /// Store credentials for the given [`DisplaySafeUrl`] to the keyring.
     ///
-    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
+    /// Only the native keyring provider is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn store(
         &self,
@@ -109,16 +115,14 @@ impl KeyringProvider {
                 self.store_native(&target, username, password).await?;
                 Ok(true)
             }
-            KeyringProviderBackend::Subprocess => {
-                Err(Error::StoreUnsupported(self.backend.clone()))
-            }
+            KeyringProviderBackend::Subprocess => Err(Error::StoreUnsupported(self.backend.name())),
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.clone())),
+            KeyringProviderBackend::Dummy(_) => Err(Error::StoreUnsupported(self.backend.name())),
         }
     }
 
     /// Store credentials to the system keyring.
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(service = ?service, username = ?username))]
     async fn store_native(
         &self,
         service: &str,
@@ -133,7 +137,7 @@ impl KeyringProvider {
 
     /// Remove credentials for the given [`DisplaySafeUrl`] and username from the keyring.
     ///
-    /// Only [`KeyringProviderBackend::Native`] is supported at this time.
+    /// Only the native keyring provider is supported at this time.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
     pub async fn remove(&self, url: &DisplaySafeUrl, username: &str) -> Result<(), Error> {
         // Ensure we strip credentials from the URL before storing
@@ -162,10 +166,10 @@ impl KeyringProvider {
                 Ok(())
             }
             KeyringProviderBackend::Subprocess => {
-                Err(Error::RemoveUnsupported(self.backend.clone()))
+                Err(Error::RemoveUnsupported(self.backend.name()))
             }
             #[cfg(test)]
-            KeyringProviderBackend::Dummy(_) => Err(Error::RemoveUnsupported(self.backend.clone())),
+            KeyringProviderBackend::Dummy(_) => Err(Error::RemoveUnsupported(self.backend.name())),
         }
     }
 
@@ -200,7 +204,7 @@ impl KeyringProvider {
             "Should only use keyring for URLs without a password"
         );
         debug_assert!(
-            !username.map(str::is_empty).unwrap_or(false),
+            username.is_none_or(|username| !username.is_empty()),
             "Should only use keyring with a non-empty username"
         );
 
@@ -233,6 +237,26 @@ impl KeyringProvider {
                     Self::fetch_dummy(store, &host, username)
                 }
             };
+
+            // For non-HTTPS URLs, `store` includes the scheme in the service name
+            // (e.g., `http://host:port`) to avoid leaking credentials across schemes.
+            // Try `scheme://host:port` as a fallback to match those entries.
+            if credentials.is_none() && url.scheme() != "https" {
+                let scheme_host = format!("{}://{host}", url.scheme());
+                trace!("Checking keyring for scheme+host {scheme_host}");
+                credentials = match self.backend {
+                    KeyringProviderBackend::Native => {
+                        self.fetch_native(&scheme_host, username).await
+                    }
+                    KeyringProviderBackend::Subprocess => {
+                        self.fetch_subprocess(&scheme_host, username).await
+                    }
+                    #[cfg(test)]
+                    KeyringProviderBackend::Dummy(ref store) => {
+                        Self::fetch_dummy(store, &scheme_host, username)
+                    }
+                };
+            }
         }
 
         credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
@@ -372,7 +396,10 @@ impl KeyringProvider {
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
     #[cfg(test)]
-    pub fn dummy<S: Into<String>, T: IntoIterator<Item = (S, &'static str, &'static str)>>(
+    pub(crate) fn dummy<
+        S: Into<String>,
+        T: IntoIterator<Item = (S, &'static str, &'static str)>,
+    >(
         iter: T,
     ) -> Self {
         Self {
@@ -386,7 +413,7 @@ impl KeyringProvider {
 
     /// Create a new provider with no credentials available.
     #[cfg(test)]
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             backend: KeyringProviderBackend::Dummy(Vec::new()),
         }
@@ -404,12 +431,13 @@ mod tests {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user")),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user"));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]
@@ -417,12 +445,13 @@ mod tests {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]
@@ -430,12 +459,13 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
-        )
-        .catch_unwind()
-        .await;
-        assert!(result.is_err());
+        let fetch = keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username()));
+        if cfg!(debug_assertions) {
+            let result = std::panic::AssertUnwindSafe(fetch).catch_unwind().await;
+            assert!(result.is_err());
+        } else {
+            assert_eq!(fetch.await, None);
+        }
     }
 
     #[tokio::test]
@@ -569,6 +599,35 @@ mod tests {
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring
             .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
+            .await;
+        assert_eq!(credentials, None);
+    }
+
+    #[tokio::test]
+    async fn fetch_http_scheme_host_fallback() {
+        // When credentials are stored with scheme included (e.g., `http://host:port`),
+        // the fetch should find them via the `scheme://host:port` fallback.
+        let url = Url::parse("http://127.0.0.1:8080/basic-auth/simple/anyio/").unwrap();
+        let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
+        let credentials = keyring
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
+            .await;
+        assert_eq!(
+            credentials,
+            Some(Credentials::basic(
+                Some("user".to_string()),
+                Some("password".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_http_scheme_host_no_cross_scheme() {
+        // Credentials stored under `http://` should not be returned for `https://` requests.
+        let url = Url::parse("https://127.0.0.1:8080/basic-auth/simple/anyio/").unwrap();
+        let keyring = KeyringProvider::dummy([("http://127.0.0.1:8080", "user", "password")]);
+        let credentials = keyring
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
             .await;
         assert_eq!(credentials, None);
     }

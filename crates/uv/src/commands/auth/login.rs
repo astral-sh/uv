@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use uv_auth::{
     AccessToken, AuthBackend, Credentials, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
-    Service, TextCredentialStore,
+    Service, TextCredentialStore, is_default_pyx_domain,
 };
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_distribution_types::IndexUrl;
@@ -17,7 +17,9 @@ use uv_preview::Preview;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
+
+// We retry no more than this many times when polling for login status.
+const STATUS_RETRY_LIMIT: u32 = 60;
 
 /// Login to a service.
 pub(crate) async fn login(
@@ -25,12 +27,12 @@ pub(crate) async fn login(
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
@@ -38,12 +40,9 @@ pub(crate) async fn login(
             bail!("Cannot specify a password when logging in to pyx");
         }
 
-        let client = BaseClientBuilder::default()
-            .connectivity(network_settings.connectivity)
-            .native_tls(network_settings.native_tls)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        let client = client_builder
             .auth_integration(AuthIntegration::NoAuthMiddleware)
-            .build();
+            .build()?;
 
         let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         let jwt = PyxJwt::decode(&access_token)?;
@@ -61,7 +60,7 @@ pub(crate) async fn login(
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
 
     // If the URL includes a known index URL suffix, strip it
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
@@ -72,7 +71,7 @@ pub(crate) async fn login(
     };
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(&url);
+    let url_credentials = Credentials::from_url(&url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
     let url_password = url_credentials.as_ref().and_then(|c| c.password());
 
@@ -211,6 +210,7 @@ pub(crate) async fn pyx_login_with_browser(
         url
     };
 
+    let mut retry = 0;
     let credentials = loop {
         let response = client
             .for_host(store.api())
@@ -221,6 +221,7 @@ pub(crate) async fn pyx_login_with_browser(
             // Retry on 404.
             reqwest::StatusCode::NOT_FOUND => {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                retry += 1;
             }
             // Parse the credentials on success.
             _ if response.status().is_success() => {
@@ -231,6 +232,12 @@ pub(crate) async fn pyx_login_with_browser(
             status => {
                 break Err(anyhow::anyhow!("Failed to login with code `{status}`"));
             }
+        }
+
+        if retry >= STATUS_RETRY_LIMIT {
+            break Err(anyhow::anyhow!(
+                "Login session timed out after {STATUS_RETRY_LIMIT} seconds"
+            ));
         }
     }?;
 

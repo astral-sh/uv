@@ -6,10 +6,8 @@ use pubgrub::Range;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
-use uv_configuration::{IndexStrategy, SourceStrategy};
-use uv_distribution_types::{
-    CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl, InstalledDistKind,
-};
+use uv_configuration::IndexStrategy;
+use uv_distribution_types::{CompatibleDist, IncompatibleDist, IncompatibleSource, IndexUrl};
 use uv_distribution_types::{DistributionMetadata, IncompatibleWheel, Name, PrioritizedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -23,12 +21,11 @@ use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
     prerelease_strategy: PrereleaseStrategy,
     index_strategy: IndexStrategy,
-    source_strategy: SourceStrategy,
 }
 
 impl CandidateSelector {
@@ -37,7 +34,6 @@ impl CandidateSelector {
         options: &Options,
         manifest: &Manifest,
         env: &ResolverEnvironment,
-        source_strategy: SourceStrategy,
     ) -> Self {
         Self {
             resolution_strategy: ResolutionStrategy::from_mode(
@@ -53,7 +49,6 @@ impl CandidateSelector {
                 options.dependency_mode,
             ),
             index_strategy: options.index_strategy,
-            source_strategy,
         }
     }
 
@@ -124,24 +119,16 @@ impl CandidateSelector {
         let installed = if reinstall {
             None
         } else {
-            Self::get_installed(
-                package_name,
-                range,
-                installed_packages,
-                tags,
-                self.source_strategy,
-            )
+            Self::get_installed(package_name, range, installed_packages, tags)
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
-        if !upgrade {
-            if let Some(installed) = installed {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+        if !upgrade && let Some(installed) = installed {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         // Otherwise, find the best candidate from the version maps.
@@ -151,21 +138,21 @@ impl CandidateSelector {
         //
         // If the already-installed version is _more_ compatible than the best candidate
         // from the version maps, use the installed version.
-        if let Some(installed) = installed {
-            if compatible.as_ref().is_none_or(|compatible| {
+        if let Some(installed) = installed
+            && compatible.as_ref().is_none_or(|compatible| {
                 let highest = self.use_highest_version(package_name, env);
                 if highest {
                     installed.version() >= compatible.version()
                 } else {
                     installed.version() <= compatible.version()
                 }
-            }) {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+            })
+        {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         compatible
@@ -380,7 +367,6 @@ impl CandidateSelector {
         range: &Range<Version>,
         installed_packages: &'a InstalledPackages,
         tags: Option<&'a Tags>,
-        source_strategy: SourceStrategy,
     ) -> Option<Candidate<'a>> {
         let installed_dists = installed_packages.get_packages(package_name);
         match installed_dists.as_slice() {
@@ -391,16 +377,6 @@ impl CandidateSelector {
                 // Respect the version range for this requirement.
                 if !range.contains(version) {
                     return None;
-                }
-
-                // When sources are disabled, only allow registry installations to be reused
-                if matches!(source_strategy, SourceStrategy::Disabled) {
-                    if !matches!(dist.kind, InstalledDistKind::Registry(_)) {
-                        debug!(
-                            "Source strategy is disabled, rejecting non-registry installed distribution: {dist}"
-                        );
-                        return None;
-                    }
                 }
 
                 // Verify that the installed distribution is compatible with the environment.

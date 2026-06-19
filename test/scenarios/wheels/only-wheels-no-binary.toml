@@ -1,0 +1,14 @@
+name = "only-wheels-no-binary"
+description = "No source distributions are available, only wheels but the user has disabled using pre-built binaries."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+sdist = false
+
+[resolver_options]
+no_binary = ["a"]

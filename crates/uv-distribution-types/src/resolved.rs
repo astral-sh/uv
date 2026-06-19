@@ -9,14 +9,13 @@ use uv_pypi_types::Yanked;
 use crate::{
     BuiltDist, Dist, DistributionId, DistributionMetadata, Identifier, IndexUrl, InstalledDist,
     Name, PrioritizedDist, RegistryBuiltWheel, RegistrySourceDist, ResourceId, SourceDist,
-    VersionOrUrlRef,
+    VersionId, VersionOrUrlRef,
 };
 
 /// A distribution that can be used for resolution and installation.
 ///
 /// Either an already-installed distribution or a distribution that can be installed.
 #[derive(Debug, Clone, Hash)]
-#[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
     Installed {
         dist: Arc<InstalledDist>,
@@ -214,6 +213,13 @@ impl DistributionMetadata for ResolvedDist {
         match self {
             Self::Installed { dist } => dist.version_or_url(),
             Self::Installable { dist, .. } => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Installed { dist } => dist.version_id(),
+            Self::Installable { dist, .. } => dist.version_id(),
         }
     }
 }

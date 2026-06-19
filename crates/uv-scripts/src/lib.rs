@@ -7,9 +7,10 @@ use std::sync::LazyLock;
 use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
+use tracing::instrument;
 use url::Url;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -38,24 +39,6 @@ impl Pep723Item {
             Self::Script(script) => &script.metadata,
             Self::Stdin(metadata) => metadata,
             Self::Remote(metadata, ..) => metadata,
-        }
-    }
-
-    /// Consume the item and return the associated [`Pep723Metadata`].
-    pub fn into_metadata(self) -> Pep723Metadata {
-        match self {
-            Self::Script(script) => script.metadata,
-            Self::Stdin(metadata) => metadata,
-            Self::Remote(metadata, ..) => metadata,
-        }
-    }
-
-    /// Return the path of the PEP 723 item, if any.
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            Self::Script(script) => Some(&script.path),
-            Self::Stdin(..) => None,
-            Self::Remote(..) => None,
         }
     }
 
@@ -110,31 +93,31 @@ impl Pep723ItemRef<'_> {
     }
 
     /// Collect any `tool.uv.index` from the script.
-    pub fn indexes(&self, source_strategy: SourceStrategy) -> &[uv_distribution_types::Index] {
+    pub fn indexes(&self, source_strategy: &NoSources) -> &[uv_distribution_types::Index] {
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.top_level.index.as_deref())
                 .unwrap_or(&[]),
-            SourceStrategy::Disabled => &[],
+            NoSources::All | NoSources::Packages(_) => &[],
         }
     }
 
     /// Collect any `tool.uv.sources` from the script.
-    pub fn sources(&self, source_strategy: SourceStrategy) -> &BTreeMap<PackageName, Sources> {
+    pub fn sources(&self, source_strategy: &NoSources) -> &BTreeMap<PackageName, Sources> {
         static EMPTY: BTreeMap<PackageName, Sources> = BTreeMap::new();
         match source_strategy {
-            SourceStrategy::Enabled => self
+            NoSources::None => self
                 .metadata()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .unwrap_or(&EMPTY),
-            SourceStrategy::Disabled => &EMPTY,
+            NoSources::All | NoSources::Packages(_) => &EMPTY,
         }
     }
 }
@@ -219,7 +202,7 @@ impl Pep723Script {
     /// Generates a default PEP 723 metadata table from the provided script contents.
     ///
     /// See: <https://peps.python.org/pep-0723/>
-    pub fn init_metadata(
+    fn init_metadata(
         contents: &[u8],
         requires_python: &VersionSpecifiers,
     ) -> Result<(String, Pep723Metadata, String), Pep723Error> {
@@ -270,6 +253,7 @@ impl Pep723Script {
         file: impl AsRef<Path>,
         requires_python: &VersionSpecifiers,
         existing_contents: Option<Vec<u8>>,
+        bare: bool,
     ) -> Result<(), Pep723Error> {
         let file = file.as_ref();
 
@@ -305,6 +289,8 @@ impl Pep723Script {
             indoc::formatdoc! {r"
             {shebang}{metadata}
             {contents}" }
+        } else if bare {
+            metadata
         } else {
             indoc::formatdoc! {r#"
             {metadata}
@@ -403,6 +389,7 @@ impl FromStr for Pep723Metadata {
     type Err = toml::de::Error;
 
     /// Parse `Pep723Metadata` from a raw TOML string.
+    #[instrument(name = "toml::from_str PEP 723 metadata", skip_all)]
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let metadata = toml::from_str(raw)?;
         Ok(Self {
@@ -426,6 +413,7 @@ pub struct ToolUv {
     #[serde(flatten)]
     pub top_level: ResolverInstallerSchema,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
@@ -438,6 +426,8 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error("The script contains multiple PEP 723 metadata blocks")]
+    DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
     MissingTag,
     #[error(transparent)]
@@ -573,15 +563,65 @@ impl ScriptTag {
         // We need to discard the last two lines.
         toml.truncate(index - 1);
 
+        // Extract the remaining content.
+        let postlude = contents.lines().skip(index + 1).collect::<Vec<_>>();
+
+        // Ensure that the remaining content doesn't include another complete `script` block.
+        // A `# /// script` line can be embedded content inside another typed block.
+        let mut lines = postlude.iter().peekable();
+        while let Some(line) = lines.next() {
+            // Capture the metadata.
+            let Some(metadata_type) = line.strip_prefix("# /// ") else {
+                continue;
+            };
+
+            // Parse the metadata type per spec
+            if metadata_type.is_empty()
+                || !metadata_type
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            {
+                continue;
+            }
+
+            let is_script_block = metadata_type == "script";
+            let mut is_closed = false;
+            while let Some(line) = lines.next() {
+                // Per e.g. # dependencies = []
+                let Some(content) = line.strip_prefix('#') else {
+                    break;
+                };
+                if !(content.is_empty() || content.starts_with(' ')) {
+                    break;
+                }
+
+                if *line == "# ///" {
+                    let Some(next_line) = lines.peek() else {
+                        is_closed = true;
+                        break;
+                    };
+
+                    let Some(next_content) = next_line.strip_prefix('#') else {
+                        is_closed = true;
+                        break;
+                    };
+
+                    if !(next_content.is_empty() || next_content.starts_with(' ')) {
+                        is_closed = true;
+                        break;
+                    }
+                }
+            }
+
+            if is_script_block && is_closed {
+                return Err(Pep723Error::DuplicateBlock);
+            }
+        }
+
         // Join the lines into a single string.
         let prelude = prelude.to_string();
         let metadata = toml.join("\n") + "\n";
-        let postlude = contents
-            .lines()
-            .skip(index + 1)
-            .collect::<Vec<_>>()
-            .join("\n")
-            + "\n";
+        let postlude = postlude.join("\n") + "\n";
 
         Ok(Some(Self {
             prelude,
@@ -847,6 +887,39 @@ mod tests {
             .metadata;
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = ["requests"]
+            # ///
+
+            print("Hello, world!")
+
+            # /// script
+        "#};
+
+        assert!(ScriptTag::parse(contents.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn other_script_block_is_ignored() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = ["requests"]
+            # ///
+
+            
+            # /// other
+            # /// script
+            # ///
+
+            print("Hello, world!")
+        "#};
+
+        assert!(ScriptTag::parse(contents.as_bytes()).is_ok());
     }
 
     #[test]

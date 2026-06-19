@@ -16,8 +16,21 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
-use crate::lock::{LockErrorKind, Package, TagPolicy};
+use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
+
+fn newly_activated_extras<'lock>(
+    dep: &'lock Dependency,
+    activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
+) -> Vec<(&'lock PackageName, &'lock ExtraName)> {
+    dep.extra
+        .iter()
+        .filter_map(|extra| {
+            let key = (&dep.package_id.name, extra);
+            (!activated_extras.contains(&key)).then_some(key)
+        })
+        .collect()
+}
 
 pub trait Installable<'lock> {
     /// Return the root install path.
@@ -107,9 +120,9 @@ pub trait Installable<'lock> {
 
             // Add the workspace package to the graph.
             let index = petgraph.add_node(if groups.prod() {
-                self.package_to_node(dist, tags, build_options, install_options)?
+                self.package_to_node(dist, tags, build_options, install_options, marker_env)?
             } else {
-                self.non_installable_node(dist, tags)?
+                self.non_installable_node(dist, tags, marker_env)?
             });
             inverse.insert(&dist.id, index);
 
@@ -143,10 +156,14 @@ pub trait Installable<'lock> {
                 })
                 .flatten()
             {
+                let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     activated_projects.iter().copied(),
-                    activated_extras.iter().copied(),
+                    activated_extras
+                        .iter()
+                        .chain(additional_activated_extras.iter())
+                        .copied(),
                     activated_groups.iter().copied(),
                 ) {
                     continue;
@@ -162,6 +179,7 @@ pub trait Installable<'lock> {
                             tags,
                             build_options,
                             install_options,
+                            marker_env,
                         )?);
                         entry.insert(index);
                         index
@@ -178,6 +196,7 @@ pub trait Installable<'lock> {
                                 tags,
                                 build_options,
                                 install_options,
+                                marker_env,
                             )?;
                         }
                         index
@@ -226,9 +245,9 @@ pub trait Installable<'lock> {
 
             // Add the package to the graph.
             let index = petgraph.add_node(if groups.prod() {
-                self.package_to_node(dist, tags, build_options, install_options)?
+                self.package_to_node(dist, tags, build_options, install_options, marker_env)?
             } else {
-                self.non_installable_node(dist, tags)?
+                self.non_installable_node(dist, tags, marker_env)?
             });
             inverse.insert(&dist.id, index);
 
@@ -247,7 +266,7 @@ pub trait Installable<'lock> {
         }
 
         // Add any dependency groups that are exclusive to the workspace root (e.g., dev
-        // dependencies in (legacy) non-project workspace roots).
+        // dependencies in non-project workspace roots).
         for (group, dependency) in self
             .lock()
             .dependency_groups()
@@ -284,6 +303,7 @@ pub trait Installable<'lock> {
                         tags,
                         build_options,
                         install_options,
+                        marker_env,
                     )?);
                     entry.insert(index);
                     index
@@ -295,7 +315,13 @@ pub trait Installable<'lock> {
                     let index = *entry.get();
                     let node = &mut petgraph[index];
                     if !groups.prod() {
-                        *node = self.package_to_node(dist, tags, build_options, install_options)?;
+                        *node = self.package_to_node(
+                            dist,
+                            tags,
+                            build_options,
+                            install_options,
+                            marker_env,
+                        )?;
                     }
                     index
                 }
@@ -361,13 +387,8 @@ pub trait Installable<'lock> {
                     Either::Right(package.dependencies.iter())
                 };
                 for dep in deps {
-                    let mut additional_activated_extras = vec![];
-                    for extra in &dep.extra {
-                        let key = (&dep.package_id.name, extra);
-                        if !activated_extras_set.contains(&key) {
-                            additional_activated_extras.push(key);
-                        }
-                    }
+                    let additional_activated_extras =
+                        newly_activated_extras(dep, &activated_extras);
                     if !dep.complexified_marker.evaluate(
                         marker_env,
                         activated_projects.iter().copied(),
@@ -475,6 +496,7 @@ pub trait Installable<'lock> {
                             tags,
                             build_options,
                             install_options,
+                            marker_env,
                         )?);
                         entry.insert(index);
                         index
@@ -514,19 +536,17 @@ pub trait Installable<'lock> {
         &self,
         package: &Package,
         tags: &Tags,
+        marker_env: &ResolverMarkerEnvironment,
         build_options: &BuildOptions,
     ) -> Result<Node, LockError> {
-        let dist = package.to_dist(
-            self.install_path(),
-            TagPolicy::Required(tags),
-            build_options,
-        )?;
+        let tag_policy = TagPolicy::Required(tags);
+        let HashedDist { dist, hashes } =
+            package.to_dist(self.install_path(), tag_policy, build_options, marker_env)?;
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
             dist: Arc::new(dist),
             version,
         };
-        let hashes = package.hashes();
         Ok(Node::Dist {
             dist,
             hashes,
@@ -535,11 +555,17 @@ pub trait Installable<'lock> {
     }
 
     /// Create a non-installable [`Node`] from a [`Package`].
-    fn non_installable_node(&self, package: &Package, tags: &Tags) -> Result<Node, LockError> {
-        let dist = package.to_dist(
+    fn non_installable_node(
+        &self,
+        package: &Package,
+        tags: &Tags,
+        marker_env: &ResolverMarkerEnvironment,
+    ) -> Result<Node, LockError> {
+        let HashedDist { dist, .. } = package.to_dist(
             self.install_path(),
             TagPolicy::Preferred(tags),
             &BuildOptions::default(),
+            marker_env,
         )?;
         let version = package.version().cloned();
         let dist = ResolvedDist::Installable {
@@ -561,15 +587,16 @@ pub trait Installable<'lock> {
         tags: &Tags,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
+        marker_env: &ResolverMarkerEnvironment,
     ) -> Result<Node, LockError> {
         if install_options.include_package(
             package.as_install_target(),
             self.project_name(),
             self.lock().members(),
         ) {
-            self.installable_node(package, tags, build_options)
+            self.installable_node(package, tags, marker_env, build_options)
         } else {
-            self.non_installable_node(package, tags)
+            self.non_installable_node(package, tags, marker_env)
         }
     }
 }

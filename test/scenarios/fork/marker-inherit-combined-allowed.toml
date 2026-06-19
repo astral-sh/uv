@@ -1,0 +1,31 @@
+name = "fork-marker-inherit-combined-allowed"
+description = '''
+This test builds on `fork-marker-inherit-combined`. Namely, we add
+`or implementation_name == 'pypy'` to the dependency on `c`. While
+`sys_platform == 'linux'` cannot be true because of the first fork,
+the second fork which includes `b==1.0.0` happens precisely when
+`implementation_name == 'pypy'`. So in this case, `c` should be
+included.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+requires = [
+  "b>=2 ; implementation_name == 'cpython'",
+  "b<2 ; implementation_name == 'pypy'",
+]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c ; sys_platform == 'linux' or implementation_name == 'pypy'"]
+[packages.b.versions."2.0.0"]
+
+[packages.c.versions."1.0.0"]

@@ -43,7 +43,7 @@ impl Middleware for OfflineMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         Err(reqwest_middleware::Error::Middleware(
             OfflineError {
-                url: DisplaySafeUrl::from(req.url().clone()),
+                url: DisplaySafeUrl::from_url(req.url().clone()),
             }
             .into(),
         ))

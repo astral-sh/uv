@@ -5,6 +5,8 @@ pub enum Origin {
     Cli,
     /// The setting was provided via a user-level configuration file.
     User,
+    /// The setting was provided via a system-level configuration file.
+    System,
     /// The setting was provided via a project-level configuration file.
     Project,
     /// The setting was provided via a `requirements.txt` file.

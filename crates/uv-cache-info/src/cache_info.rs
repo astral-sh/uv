@@ -1,10 +1,11 @@
 use std::borrow::Cow;
-use std::cmp::max;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
-use tracing::{debug, warn};
+use tracing::{debug, info_span, warn};
+
+use uv_fs::Simplified;
 
 use crate::git_info::{Commit, Tags};
 use crate::glob::cluster_globs;
@@ -63,24 +64,26 @@ impl CacheInfo {
     pub fn from_directory(directory: &Path) -> Result<Self, CacheInfoError> {
         let mut commit = None;
         let mut tags = None;
-        let mut timestamp = None;
+        let mut last_changed: Option<(PathBuf, Timestamp)> = None;
         let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
         // Read the cache keys.
-        let cache_keys =
-            if let Ok(contents) = fs_err::read_to_string(directory.join("pyproject.toml")) {
-                if let Ok(pyproject_toml) = toml::from_str::<PyProjectToml>(&contents) {
-                    pyproject_toml
-                        .tool
-                        .and_then(|tool| tool.uv)
-                        .and_then(|tool_uv| tool_uv.cache_keys)
-                } else {
-                    None
-                }
+        let pyproject_path = directory.join("pyproject.toml");
+        let cache_keys = if let Ok(contents) = fs_err::read_to_string(&pyproject_path) {
+            let result = info_span!("toml::from_str cache keys", path = %pyproject_path.display())
+                .in_scope(|| toml::from_str::<PyProjectToml>(&contents));
+            if let Ok(pyproject_toml) = result {
+                pyproject_toml
+                    .tool
+                    .and_then(|tool| tool.uv)
+                    .and_then(|tool_uv| tool_uv.cache_keys)
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
         // If no cache keys were defined, use the defaults.
         let cache_keys = cache_keys.unwrap_or_else(|| {
@@ -128,7 +131,12 @@ impl CacheInfo {
                         );
                         continue;
                     }
-                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                    let timestamp = Timestamp::from_metadata(&metadata);
+                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
+                        *prev_timestamp < Timestamp::from_metadata(&metadata)
+                    }) {
+                        last_changed = Some((path, timestamp));
+                    }
                 }
                 CacheKey::Directory { dir } => {
                     // Treat the path as a directory.
@@ -258,14 +266,25 @@ impl CacheInfo {
                         }
                         continue;
                     }
-                    timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                    let timestamp = Timestamp::from_metadata(&metadata);
+                    if last_changed.as_ref().is_none_or(|(_, prev_timestamp)| {
+                        *prev_timestamp < Timestamp::from_metadata(&metadata)
+                    }) {
+                        last_changed = Some((entry.into_path(), timestamp));
+                    }
                 }
             }
         }
 
-        debug!(
-            "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
-        );
+        let timestamp = if let Some((path, timestamp)) = last_changed {
+            debug!(
+                "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}. Most recently modified: {}",
+                path.user_display()
+            );
+            Some(timestamp)
+        } else {
+            None
+        };
 
         Ok(Self {
             timestamp,
@@ -346,11 +365,6 @@ pub enum GitPattern {
 pub struct GitSet {
     commit: Option<bool>,
     tags: Option<bool>,
-}
-
-pub enum FilePattern {
-    Glob(String),
-    Path(PathBuf),
 }
 
 /// A timestamp used to measure changes to a directory.

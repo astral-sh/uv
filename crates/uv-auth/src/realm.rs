@@ -1,6 +1,7 @@
 use std::hash::{Hash, Hasher};
 use std::{fmt::Display, fmt::Formatter};
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 /// Used to determine if authentication information should be retained on a new URL.
@@ -27,6 +28,12 @@ pub struct Realm {
     scheme: SmallString,
     host: Option<SmallString>,
     port: Option<u16>,
+}
+
+impl From<&DisplaySafeUrl> for Realm {
+    fn from(url: &DisplaySafeUrl) -> Self {
+        Self::from(&**url)
+    }
 }
 
 impl From<&Url> for Realm {
@@ -75,7 +82,7 @@ impl Hash for Realm {
 
 /// A reference to a [`Realm`] that can be used for zero-allocation comparisons.
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct RealmRef<'a> {
+pub struct RealmRef<'a> {
     scheme: &'a str,
     host: Option<&'a str>,
     port: Option<u16>,

@@ -185,14 +185,14 @@ impl InstalledDist {
             let build_info = Self::read_build_info(path)?;
 
             return if let Some(direct_url) = Self::read_direct_url(path)? {
-                match Url::try_from(&direct_url) {
+                match DisplaySafeUrl::try_from(&direct_url) {
                     Ok(url) => Ok(Some(Self::from(InstalledDistKind::Url(
                         InstalledDirectUrlDist {
                             name,
                             version,
                             editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                             direct_url: Box::new(direct_url),
-                            url: DisplaySafeUrl::from(url),
+                            url,
                             path: path.to_path_buf().into_boxed_path(),
                             cache_info,
                             build_info,
@@ -323,7 +323,7 @@ impl InstalledDist {
 
             // Normalisation comes from `pkg_resources.to_filename`.
             let egg_info = target.join(file_stem.replace('-', "_") + ".egg-info");
-            let url = Url::from_file_path(&target)
+            let url = DisplaySafeUrl::from_file_path(&target)
                 .map_err(|()| InstalledDistError::InvalidEggLinkTarget(path.to_path_buf()))?;
 
             // Mildly unfortunate that we must read metadata to get the version.
@@ -337,7 +337,7 @@ impl InstalledDist {
                     version: Version::from_str(&egg_metadata.version)?,
                     egg_link: path.to_path_buf().into_boxed_path(),
                     target: target.into_boxed_path(),
-                    target_url: DisplaySafeUrl::from(url),
+                    target_url: url,
                     egg_info: egg_info.into_boxed_path(),
                 },
             ))));
@@ -368,17 +368,6 @@ impl InstalledDist {
         }
     }
 
-    /// Return the [`CacheInfo`] of the distribution, if any.
-    pub fn cache_info(&self) -> Option<&CacheInfo> {
-        match &self.kind {
-            InstalledDistKind::Registry(dist) => dist.cache_info.as_ref(),
-            InstalledDistKind::Url(dist) => dist.cache_info.as_ref(),
-            InstalledDistKind::EggInfoDirectory(..) => None,
-            InstalledDistKind::EggInfoFile(..) => None,
-            InstalledDistKind::LegacyEditable(..) => None,
-        }
-    }
-
     /// Return the [`BuildInfo`] of the distribution, if any.
     pub fn build_info(&self) -> Option<&BuildInfo> {
         match &self.kind {
@@ -391,7 +380,7 @@ impl InstalledDist {
     }
 
     /// Read the `direct_url.json` file from a `.dist-info` directory.
-    pub fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
+    fn read_direct_url(path: &Path) -> Result<Option<DirectUrl>, InstalledDistError> {
         let path = path.join("direct_url.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -404,7 +393,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_cache.json` file from a `.dist-info` directory.
-    pub fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
+    fn read_cache_info(path: &Path) -> Result<Option<CacheInfo>, InstalledDistError> {
         let path = path.join("uv_cache.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -417,7 +406,7 @@ impl InstalledDist {
     }
 
     /// Read the `uv_build.json` file from a `.dist-info` directory.
-    pub fn read_build_info(path: &Path) -> Result<Option<BuildInfo>, InstalledDistError> {
+    fn read_build_info(path: &Path) -> Result<Option<BuildInfo>, InstalledDistError> {
         let path = path.join("uv_build.json");
         let file = match fs_err::File::open(&path) {
             Ok(file) => file,
@@ -474,16 +463,6 @@ impl InstalledDist {
         Ok(self.metadata_cache.get().expect("metadata should be set"))
     }
 
-    /// Return the `INSTALLER` of the distribution.
-    pub fn read_installer(&self) -> Result<Option<String>, InstalledDistError> {
-        let path = self.install_path().join("INSTALLER");
-        match fs::read_to_string(path) {
-            Ok(installer) => Ok(Some(installer.trim().to_owned())),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(err) => Err(err.into()),
-        }
-    }
-
     /// Return the supported wheel tags for the distribution from the `WHEEL` file, if available.
     pub fn read_tags(&self) -> Result<Option<&ExpandedTags>, InstalledDistError> {
         if let Some(tags) = self.tags_cache.get() {
@@ -534,7 +513,7 @@ impl InstalledDist {
     }
 
     /// Return true if the distribution refers to a local file or directory.
-    pub fn is_local(&self) -> bool {
+    pub(crate) fn is_local(&self) -> bool {
         match &self.kind {
             InstalledDistKind::Registry(_) => false,
             InstalledDistKind::Url(dist) => {

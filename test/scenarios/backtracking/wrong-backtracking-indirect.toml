@@ -1,0 +1,45 @@
+name = "wrong-backtracking-indirect"
+description = """There are three packages, `a`, `b` and `b-inner`. Unlike wrong-backtracking-basic, `b` depends on `b-inner` and `a` and `b-inner` conflict, to add a layer of indirection.
+
+We select `a` with `a==2.0.0` first, then `b`, and then `b-inner`, but `a==2.0.0` conflicts with all new versions of `b-inner`, so we backtrack through versions of `b-inner`.
+
+We need to detect this conflict and prioritize `b` and `b-inner` over `a` instead of backtracking down to the too old version of `b-inner==1.0.0` that doesn't depend on `a` anymore."""
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+# TODO: https://github.com/astral-sh/uv/issues/12060
+# [expected.packages]
+# a = "1.0.0"
+# b = "1.0.0"
+# b-inner = "2.0.9"
+
+[root]
+requires = ["a", "b"]
+
+[packages.a.versions]
+"1.0.0" = {}
+"2.0.0" = {}
+
+[packages.too-old.versions]
+"1.0.0" = {}
+
+[packages.b.versions]
+"1.0.0" = { requires = ["b-inner"] }
+
+[packages.b-inner.versions]
+# We must not backtrack to this very old versions
+"1.0.0" = { requires = ["too-old"] }
+"2.0.0" = { requires = ["a==1.0.0"] }
+"2.0.1" = { requires = ["a==1.0.0"] }
+"2.0.2" = { requires = ["a==1.0.0"] }
+"2.0.3" = { requires = ["a==1.0.0"] }
+"2.0.4" = { requires = ["a==1.0.0"] }
+"2.0.5" = { requires = ["a==1.0.0"] }
+"2.0.6" = { requires = ["a==1.0.0"] }
+"2.0.7" = { requires = ["a==1.0.0"] }
+"2.0.8" = { requires = ["a==1.0.0"] }
+"2.0.9" = { requires = ["a==1.0.0"] }

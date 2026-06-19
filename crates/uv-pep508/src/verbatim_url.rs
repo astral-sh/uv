@@ -9,12 +9,12 @@ use std::sync::LazyLock;
 use arcstr::ArcStr;
 use regex::Regex;
 use thiserror::Error;
-use url::{ParseError, Url};
+use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 
 use crate::Pep508Url;
 
@@ -30,6 +30,9 @@ pub struct VerbatimUrl {
     /// Even if originally set, this will be [`None`] after
     /// serialization/deserialization.
     given: Option<ArcStr>,
+    /// Given value is a [`Pep508Url`] which contained variable references which were successfully
+    /// expanded.
+    expanded: bool,
 }
 
 impl Hash for VerbatimUrl {
@@ -53,15 +56,22 @@ impl PartialEq for VerbatimUrl {
 impl VerbatimUrl {
     /// Create a [`VerbatimUrl`] from a [`Url`].
     pub fn from_url(url: DisplaySafeUrl) -> Self {
-        Self { url, given: None }
+        Self {
+            url,
+            given: None,
+            expanded: false,
+        }
     }
 
     /// Parse a URL from a string.
-    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, ParseError> {
-        let url = Url::parse(given.as_ref())?;
+    pub fn parse_url(given: impl AsRef<str>) -> Result<Self, VerbatimUrlError> {
+        let given = given.as_ref();
+        let url = DisplaySafeUrl::parse(given)?;
+
         Ok(Self {
-            url: DisplaySafeUrl::from(url),
+            url,
             given: None,
+            expanded: false,
         })
     }
 
@@ -139,7 +149,11 @@ impl VerbatimUrl {
             url.set_fragment(Some(fragment));
         }
 
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url,
+            given: None,
+            expanded: false,
+        })
     }
 
     /// Parse a URL from an absolute path.
@@ -169,7 +183,11 @@ impl VerbatimUrl {
             url.set_fragment(Some(fragment));
         }
 
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url,
+            given: None,
+            expanded: false,
+        })
     }
 
     /// Parse a URL from a normalized path.
@@ -189,17 +207,19 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(path);
 
         // Convert to a URL.
-        let mut url = DisplaySafeUrl::from(
-            Url::from_file_path(path.clone())
-                .unwrap_or_else(|()| panic!("path is absolute: {}", path.display())),
-        );
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
+            .unwrap_or_else(|()| panic!("path is absolute: {}", path.display()));
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
             url.set_fragment(Some(fragment));
         }
 
-        Ok(Self { url, given: None })
+        Ok(Self {
+            url,
+            given: None,
+            expanded: false,
+        })
     }
 
     /// Set the verbatim representation of the URL.
@@ -216,6 +236,36 @@ impl VerbatimUrl {
         self.given.as_deref()
     }
 
+    /// Returns `true` if the `given` input was an absolute path or file URL.
+    ///
+    /// If the URL was a PEP 508 URL which contained environment variable references which were
+    /// expanded. This function returns false to preserve existing usecases which may rely on
+    /// things like `${PWD}` or `${PROJECT_ROOT}`.
+    pub fn was_given_absolute(&self) -> bool {
+        let Some(given) = &self.given else {
+            return false;
+        };
+        if self.expanded {
+            return false;
+        }
+
+        if let Some((scheme, _)) = split_scheme(given)
+            && let Some(parsed_scheme) = Scheme::parse(scheme)
+        {
+            return parsed_scheme.is_file();
+        }
+
+        Path::new(given.as_str()).is_absolute()
+    }
+
+    /// Set the "given value contained variables which were expanded" flag.
+    ///
+    /// Intended to only be used by the [`Pep508Url`] impl.
+    #[must_use]
+    fn with_expanded(self, expanded: bool) -> Self {
+        Self { expanded, ..self }
+    }
+
     /// Return the underlying [`DisplaySafeUrl`].
     pub fn raw(&self) -> &DisplaySafeUrl {
         &self.url
@@ -224,11 +274,6 @@ impl VerbatimUrl {
     /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
     pub fn to_url(&self) -> DisplaySafeUrl {
         self.url.clone()
-    }
-
-    /// Convert a [`VerbatimUrl`] into a [`DisplaySafeUrl`].
-    pub fn into_url(self) -> DisplaySafeUrl {
-        self.url
     }
 
     /// Return the underlying [`Path`], if the URL is a file URL.
@@ -256,7 +301,7 @@ impl std::str::FromStr for VerbatimUrl {
     type Err = VerbatimUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::parse_url(s).map(|url| url.with_given(s))?)
+        Self::parse_url(s).map(|url| url.with_given(s))
     }
 }
 
@@ -276,7 +321,7 @@ impl Deref for VerbatimUrl {
 
 impl From<Url> for VerbatimUrl {
     fn from(url: Url) -> Self {
-        Self::from_url(DisplaySafeUrl::from(url))
+        Self::from_url(DisplaySafeUrl::from_url(url))
     }
 }
 
@@ -324,6 +369,16 @@ impl Pep508Url for VerbatimUrl {
         // Expand environment variables in the URL.
         let expanded = expand_env_vars(url);
 
+        // Since `expand_env_vars` can return `Cow::Owned` even when variables were not expanded,
+        // the check needs to fall back to comparison for that case.
+        //
+        // Note: If a variable named `FOO` expands to `${FOO}` then this will produce a false
+        // negative. This seems like too much of a corner case to justify trying to fix it.
+        let vars_expanded = match &expanded {
+            Cow::Owned(owned) => owned != url,
+            Cow::Borrowed(_) => false,
+        };
+
         if let Some((scheme, path)) = split_scheme(&expanded) {
             match Scheme::parse(scheme) {
                 // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
@@ -338,13 +393,19 @@ impl Pep508Url for VerbatimUrl {
                         let path = normalize_url_path(path);
 
                         if let Some(working_dir) = working_dir {
-                            return Ok(Self::from_path(path.as_ref(), working_dir)?.with_given(url));
+                            return Ok(Self::from_path(path.as_ref(), working_dir)?
+                                .with_given(url)
+                                .with_expanded(vars_expanded));
                         }
 
-                        Ok(Self::from_absolute_path(path.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(path.as_ref())?
+                            .with_given(url)
+                            .with_expanded(vars_expanded))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(Self::parse_url(expanded)?.with_given(url))
+                    Ok(Self::parse_url(expanded)?
+                        .with_given(url)
+                        .with_expanded(vars_expanded))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -358,12 +419,14 @@ impl Pep508Url for VerbatimUrl {
                     #[cfg(feature = "non-pep508-extensions")]
                     {
                         if let Some(working_dir) = working_dir {
-                            return Ok(
-                                Self::from_path(expanded.as_ref(), working_dir)?.with_given(url)
-                            );
+                            return Ok(Self::from_path(expanded.as_ref(), working_dir)?
+                                .with_given(url)
+                                .with_expanded(vars_expanded));
                         }
 
-                        Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
+                        Ok(Self::from_absolute_path(expanded.as_ref())?
+                            .with_given(url)
+                            .with_expanded(vars_expanded))
                     }
                     #[cfg(not(feature = "non-pep508-extensions"))]
                     Err(Self::Err::NotAUrl(expanded.to_string()))
@@ -374,10 +437,14 @@ impl Pep508Url for VerbatimUrl {
             #[cfg(feature = "non-pep508-extensions")]
             {
                 if let Some(working_dir) = working_dir {
-                    return Ok(Self::from_path(expanded.as_ref(), working_dir)?.with_given(url));
+                    return Ok(Self::from_path(expanded.as_ref(), working_dir)?
+                        .with_given(url)
+                        .with_expanded(vars_expanded));
                 }
 
-                Ok(Self::from_absolute_path(expanded.as_ref())?.with_given(url))
+                Ok(Self::from_absolute_path(expanded.as_ref())?
+                    .with_given(url)
+                    .with_expanded(vars_expanded))
             }
 
             #[cfg(not(feature = "non-pep508-extensions"))]
@@ -395,7 +462,7 @@ impl Pep508Url for VerbatimUrl {
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]
-    Url(#[from] ParseError),
+    Url(#[from] DisplaySafeUrlError),
 
     /// Received a relative path, but no working directory was provided.
     #[error("relative path without a working directory: {0}")]
@@ -490,7 +557,8 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Strip the `file://localhost/` host from a file path.
-pub fn strip_host(path: &str) -> &str {
+#[cfg(feature = "non-pep508-extensions")]
+pub(crate) fn strip_host(path: &str) -> &str {
     // Ex) `file://localhost/...`.
     if let Some(path) = path
         .strip_prefix("//localhost")
@@ -615,7 +683,7 @@ impl Scheme {
     }
 
     /// Returns `true` if the scheme is a file scheme.
-    pub fn is_file(self) -> bool {
+    fn is_file(&self) -> bool {
         matches!(self, Self::File)
     }
 }
@@ -650,6 +718,8 @@ impl std::fmt::Display for Scheme {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_snapshot;
+
     use super::*;
 
     #[test]
@@ -753,5 +823,101 @@ mod tests {
 
         let url = Url::parse("https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686").unwrap();
         assert!(!looks_like_git_repository(&url));
+    }
+
+    #[test]
+    fn parse_url_ambiguous() {
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user\\name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user#name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+
+        assert_snapshot!(
+            VerbatimUrl::parse_url("https://user.com/name:password@domain/a/b/c").unwrap_err().to_string(),
+            @"ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c"
+        );
+    }
+
+    #[test]
+    fn env_vars() {
+        temp_env::with_vars(
+            [
+                ("FOO", None),
+                ("BAR", Some("bar")),
+                ("BAZ", Some("baz")),
+                ("Not-Valid", Some("Not-Valid")),
+                ("TEST_1", Some("Test 1")),
+                ("PROJECT_ROOT", None),
+            ],
+            || {
+                // Basic
+                assert_eq!(expand_env_vars(""), Cow::Borrowed(""));
+                assert_eq!(expand_env_vars("test"), Cow::Borrowed("test"));
+                assert_eq!(expand_env_vars("$"), Cow::Borrowed("$"));
+
+                // Invalid
+                assert_eq!(expand_env_vars("$FOO"), Cow::Borrowed("$FOO"));
+                assert_eq!(expand_env_vars("$BAR"), Cow::Borrowed("$BAR"));
+                assert_eq!(expand_env_vars("${BAR"), Cow::Borrowed("${BAR"));
+                assert_eq!(expand_env_vars("$BAR}"), Cow::Borrowed("$BAR}"));
+                assert_eq!(expand_env_vars("${ BAR }"), Cow::Borrowed("${ BAR }"));
+                assert_eq!(
+                    expand_env_vars("${Not-Valid}"),
+                    Cow::Borrowed("${Not-Valid}")
+                );
+                assert_eq!(expand_env_vars("${}"), Cow::Borrowed("${}"));
+
+                // Missing
+                assert_eq!(expand_env_vars("${FOO}"), "${FOO}");
+
+                // Case sensitive
+                assert_eq!(expand_env_vars("${bar}"), "${bar}");
+
+                // One variable referenced
+                assert_eq!(expand_env_vars("${BAR}"), "bar");
+                assert_eq!(expand_env_vars("foo ${BAR}"), "foo bar");
+                assert_eq!(expand_env_vars("foo ${BAR} baz"), "foo bar baz");
+                assert_eq!(expand_env_vars("foo ${BAR} baz ${BAR}"), "foo bar baz bar");
+
+                // Two variables referenced
+                assert_eq!(expand_env_vars("${FOO} ${BAR} ${BAZ}"), "${FOO} bar baz");
+                assert_eq!(expand_env_vars("<${BAR}-${BAZ}>"), "<bar-baz>");
+                assert_eq!(
+                    expand_env_vars("${FOO}${BAR}${BAZ}${FOO}${BAR}${BAZ}"),
+                    "${FOO}barbaz${FOO}barbaz"
+                );
+
+                // Weird
+                assert_eq!(expand_env_vars("${${TEST_1}}"), "${Test 1}");
+
+                // PROJECT_ROOT
+                let cwd = std::env::current_dir().unwrap();
+                let cwd = cwd.to_string_lossy();
+
+                assert_eq!(
+                    expand_env_vars("${PROJECT_ROOT}/file"),
+                    format!("{cwd}/file")
+                );
+                assert_eq!(
+                    expand_env_vars("$PROJECT_ROOT/file.txt"),
+                    Cow::Borrowed("$PROJECT_ROOT/file.txt")
+                );
+
+                assert_eq!(
+                    expand_env_vars("${FOO} ${BAR} ${PROJECT_ROOT} ${BAZ}"),
+                    format!("${{FOO}} bar {cwd} baz")
+                );
+            },
+        );
     }
 }

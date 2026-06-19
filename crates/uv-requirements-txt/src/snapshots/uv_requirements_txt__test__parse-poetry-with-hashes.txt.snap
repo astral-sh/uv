@@ -1,7 +1,6 @@
 ---
 source: crates/uv-requirements-txt/src/lib.rs
 expression: actual
-snapshot_kind: text
 ---
 RequirementsTxt {
     requirements: [

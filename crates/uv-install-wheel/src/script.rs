@@ -1,4 +1,4 @@
-use configparser::ini::Ini;
+use configparser::ini::{Ini, IniDefault};
 use regex::Regex;
 use rustc_hash::FxHashSet;
 use serde::Serialize;
@@ -69,7 +69,16 @@ pub(crate) fn scripts_from_ini(
     python_minor: u8,
     ini: String,
 ) -> Result<(Vec<Script>, Vec<Script>), Error> {
-    let entry_points_mapping = Ini::new_cs()
+    // Per the Entry Points specification, `entry_points.txt` is a case-sensitive
+    // INI file that only uses `=` as the field delimiter.
+    // See: <https://packaging.python.org/en/latest/specifications/entry-points/#file-format>
+    let mut ini_options = IniDefault::default();
+    ini_options.case_sensitive = true;
+    ini_options.delimiters = vec!['='];
+
+    let mut parser = Ini::new_from_defaults(ini_options);
+
+    let entry_points_mapping = parser
         .read(ini)
         .map_err(|err| Error::InvalidWheel(format!("entry_points.txt is invalid: {err}")))?;
 
@@ -217,5 +226,15 @@ memray3.11 = a:b7
             }),
             console_scripts.get(5)
         );
+    }
+
+    #[test]
+    fn test_rejects_non_equals_entry_point_delimiters() {
+        let sample_ini = "
+[console_scripts]
+script: package.module:main
+";
+
+        assert!(scripts_from_ini(None, 99, sample_ini.to_string()).is_err());
     }
 }

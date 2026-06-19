@@ -89,19 +89,8 @@ impl BuildOptions {
         }
     }
 
-    pub fn no_binary_requirement(&self, package_name: Option<&PackageName>) -> bool {
-        match package_name {
-            Some(name) => self.no_binary_package(name),
-            None => self.no_binary_all(),
-        }
-    }
-
-    pub fn no_build_all(&self) -> bool {
+    fn no_build_all(&self) -> bool {
         matches!(self.no_build, NoBuild::All)
-    }
-
-    pub fn no_binary_all(&self) -> bool {
-        matches!(self.no_binary, NoBinary::All)
     }
 
     /// Return the [`NoBuild`] strategy to use.

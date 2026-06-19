@@ -45,8 +45,8 @@ def update_schemastore(schemastore: Path, *, root: Path) -> None:
         cwd=schemastore,
     )
 
-    # Run npm install
-    check_call(["npm", "install"], cwd=schemastore)
+    # Run npm ci
+    check_call(["npm", "ci", "--ignore-scripts"], cwd=schemastore)
 
     src = schemastore.joinpath("src")
 
@@ -74,11 +74,11 @@ def update_schemastore(schemastore: Path, *, root: Path) -> None:
         commit_url = f"{UV_REPOSITORY}/commit/{current_sha}"
         commit_body = f"This updates uv's JSON schema to [{current_sha}]({commit_url})"
         # https://stackoverflow.com/a/22909204/3549270
+        check_call(["git", "add", UV_JSON_PATH.as_posix()], cwd=src)
         check_call(
             [
                 "git",
                 "commit",
-                "-a",
                 "-m",
                 "Update uv's JSON schema",
                 "-m",

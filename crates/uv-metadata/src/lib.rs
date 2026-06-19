@@ -3,8 +3,9 @@
 //! This module reads all fields exhaustively. The fields are defined in the [Core metadata
 //! specification](https://packaging.python.org/en/latest/specifications/core-metadata/).
 
+use futures::executor::block_on;
+use futures::io::AllowStdIo;
 use std::io;
-use std::io::{Read, Seek};
 use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
@@ -12,7 +13,6 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::{DistInfoName, InvalidNameError};
 use uv_pypi_types::ResolutionMetadata;
-use zip::ZipArchive;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -39,8 +39,6 @@ pub enum Error {
         computed: u32,
         expected: u32,
     },
-    #[error("Failed to read from zip file")]
-    Zip(#[from] zip::result::ZipError),
     #[error("Failed to read from zip file")]
     AsyncZip(#[from] async_zip::error::ZipError),
     // No `#[from]` to enforce manual review of `io::Error` sources.
@@ -103,7 +101,7 @@ pub fn find_archive_dist_info<'a, T: Copy>(
 
 /// Returns `true` if the file is a `METADATA` file in a `.dist-info` directory that matches the
 /// wheel filename.
-pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
+fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, Error> {
     let Some((dist_info_dir, file)) = path.split_once('/') else {
         return Ok(false);
     };
@@ -133,27 +131,37 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, E
 /// Given an archive, read the `METADATA` from the `.dist-info` directory.
 pub fn read_archive_metadata(
     filename: &WheelFilename,
-    archive: &mut ZipArchive<impl Read + Seek + Sized>,
+    reader: impl std::io::BufRead + std::io::Seek + Unpin,
 ) -> Result<Vec<u8>, Error> {
-    let dist_info_prefix =
-        find_archive_dist_info(filename, archive.file_names().map(|name| (name, name)))?.1;
+    block_on(async {
+        let mut zip_reader =
+            async_zip::base::read::seek::ZipFileReader::new(AllowStdIo::new(reader)).await?;
 
-    let mut file = archive.by_name(&format!("{dist_info_prefix}.dist-info/METADATA"))?;
+        let (metadata_index, _dist_info_prefix) = find_archive_dist_info(
+            filename,
+            zip_reader
+                .file()
+                .entries()
+                .iter()
+                .enumerate()
+                .filter_map(|(index, entry)| Some((index, entry.filename().as_str().ok()?))),
+        )?;
 
-    #[allow(clippy::cast_possible_truncation)]
-    let mut buffer = Vec::with_capacity(file.size() as usize);
-    file.read_to_end(&mut buffer).map_err(Error::Io)?;
+        let mut buffer = Vec::new();
+        zip_reader
+            .reader_with_entry(metadata_index)
+            .await?
+            .read_to_end_checked(&mut buffer)
+            .await?;
 
-    Ok(buffer)
+        Ok(buffer)
+    })
 }
 
 /// Find the `.dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
-pub fn find_flat_dist_info(
-    filename: &WheelFilename,
-    path: impl AsRef<Path>,
-) -> Result<String, Error> {
+fn find_flat_dist_info(filename: &WheelFilename, path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
     let Some(dist_info_prefix) = fs_err::read_dir(path.as_ref())
         .map_err(Error::Io)?
@@ -186,7 +194,7 @@ pub fn find_flat_dist_info(
         .starts_with(filename.name.as_str())
     {
         return Err(Error::MissingDistInfoPackageName(
-            dist_info_prefix.to_string(),
+            dist_info_prefix,
             filename.name.to_string(),
         ));
     }
@@ -195,7 +203,7 @@ pub fn find_flat_dist_info(
 }
 
 /// Read the wheel `METADATA` metadata from a `.dist-info` directory.
-pub fn read_dist_info_metadata(
+fn read_dist_info_metadata(
     dist_info_prefix: &str,
     wheel: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
@@ -250,7 +258,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
         if is_metadata_entry(&path, filename)? {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
-            reader.read_to_end(&mut contents).await.unwrap();
+            reader.read_to_end(&mut contents).await.map_err(Error::Io)?;
 
             // Validate the CRC of any file we unpack
             // (It would be nice if async_zip made it harder to Not do this...)

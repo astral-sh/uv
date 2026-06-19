@@ -1,18 +1,18 @@
 [package]
 name = "uv-globfilter"
-version = "0.1.0"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 readme = "README.md"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+uv-errors = { workspace = true }
 globset = { workspace = true }
-owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 thiserror = { workspace = true }
@@ -27,3 +27,6 @@ tempfile = { workspace = true }
 
 [lints]
 workspace = true
+
+[lib]
+doctest = false

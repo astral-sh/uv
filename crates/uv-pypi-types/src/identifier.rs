@@ -1,5 +1,4 @@
 use serde::{Serialize, Serializer};
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -34,7 +33,7 @@ pub enum IdentifierParseError {
 }
 
 impl Identifier {
-    pub fn new(identifier: impl Into<Box<str>>) -> Result<Self, IdentifierParseError> {
+    pub(crate) fn new(identifier: impl Into<Box<str>>) -> Result<Self, IdentifierParseError> {
         let identifier = identifier.into();
         let mut chars = identifier.chars().enumerate();
         let (_, first_char) = chars.next().ok_or(IdentifierParseError::Empty)?;
@@ -85,7 +84,7 @@ impl<'de> serde::de::Deserialize<'de> for Identifier {
     where
         D: serde::de::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
+        let s = <Cow<'_, str>>::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

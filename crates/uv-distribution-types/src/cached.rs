@@ -7,12 +7,12 @@ use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
     BuildInfo, BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion,
-    Name, ParsedUrl, SourceDist, VersionOrUrlRef,
+    Name, ParsedUrl, SourceDist, VersionId, VersionOrUrlRef,
 };
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
     Registry(CachedRegistryDist),
@@ -79,6 +79,17 @@ impl CachedDist {
                 build_info,
                 path,
             }),
+            Dist::Built(BuiltDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
             Dist::Source(SourceDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
                 filename,
                 path,
@@ -97,7 +108,18 @@ impl CachedDist {
                 build_info,
                 path,
             }),
-            Dist::Source(SourceDist::Git(dist)) => Self::Url(CachedDirectUrlDist {
+            Dist::Source(SourceDist::GitDirectory(dist)) => Self::Url(CachedDirectUrlDist {
+                filename,
+                url: VerbatimParsedUrl {
+                    parsed_url: dist.parsed_url(),
+                    verbatim: dist.url,
+                },
+                hashes,
+                cache_info,
+                build_info,
+                path,
+            }),
+            Dist::Source(SourceDist::GitPath(dist)) => Self::Url(CachedDirectUrlDist {
                 filename,
                 url: VerbatimParsedUrl {
                     parsed_url: dist.parsed_url(),
@@ -211,6 +233,10 @@ impl DistributionMetadata for CachedDirectUrlDist {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Url(&self.url.verbatim)
     }
+
+    fn version_id(&self) -> VersionId {
+        VersionId::from_parsed_url(&self.url.parsed_url)
+    }
 }
 
 impl DistributionMetadata for CachedDist {
@@ -218,6 +244,13 @@ impl DistributionMetadata for CachedDist {
         match self {
             Self::Registry(dist) => dist.version_or_url(),
             Self::Url(dist) => dist.version_or_url(),
+        }
+    }
+
+    fn version_id(&self) -> VersionId {
+        match self {
+            Self::Registry(dist) => dist.version_id(),
+            Self::Url(dist) => dist.version_id(),
         }
     }
 }

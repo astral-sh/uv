@@ -8,8 +8,11 @@ use std::path::Path;
 
 use anyhow::Context;
 use tracing::warn;
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA};
-use windows::core::HRESULT;
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA, LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{
+    HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
+};
+use windows::core::{HRESULT, w};
 use windows_registry::{CURRENT_USER, HSTRING};
 
 use uv_static::EnvVars;
@@ -46,7 +49,33 @@ fn apply_windows_path_var(path: &HSTRING) -> anyhow::Result<()> {
         environment.set_expand_hstring(EnvVars::PATH, path)?;
     }
 
+    // Notify WM_SETTINGCHANGE listeners
+    broadcast_environment_changes();
+
     Ok(())
+}
+
+/// Broadcast `WM_SETTINGCHANGE` to notify listeners about environment changes.
+///
+/// SAFETY: `SendMessageTimeoutW` is safe to call with these set of parameters.
+/// When modifying environment variables we need to broadcast a `WM_SETTINGCHANGE`
+/// message with lparam set to the string "Environment" to allow processes such
+/// as conhost.exe to pick up the changes made on new sessions.
+///
+/// See <https://learn.microsoft.com/en-us/windows/win32/procthread/environment-variables>
+#[allow(unsafe_code)]
+fn broadcast_environment_changes() {
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            WPARAM(0),
+            LPARAM(w!("Environment").as_ptr() as isize), // null terminated
+            SMTO_ABORTIFHUNG,
+            5000,
+            None,
+        );
+    }
 }
 
 /// Retrieve the windows `PATH` variable from the registry.

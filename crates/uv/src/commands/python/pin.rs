@@ -1,16 +1,15 @@
 use std::fmt::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
+use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
-use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
     PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
@@ -25,7 +24,7 @@ use crate::commands::{
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pin(
     project_dir: &Path,
     request: Option<String>,
@@ -38,15 +37,19 @@ pub(crate) async fn pin(
     install_mirrors: PythonInstallMirrors,
     client_builder: BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(virtual_project) => Some(virtual_project),
             Err(err) => {
@@ -93,15 +96,31 @@ pub(crate) async fn pin(
     let Some(request) = request else {
         // Display the current pinned Python version
         if let Some(file) = version_file? {
-            for pin in file.versions() {
+            let mut pins = file.versions().peekable();
+            let download_list = if virtual_project.is_some() && pins.peek().is_some() {
+                let download_list_client = client_builder.build()?;
+                Some(
+                    ManagedPythonDownloadList::new(
+                        &download_list_client,
+                        install_mirrors.python_downloads_json_url.as_deref(),
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+
+            for pin in pins {
                 writeln!(printer.stdout(), "{}", pin.to_canonical_string())?;
-                if let Some(virtual_project) = &virtual_project {
+                if let Some(virtual_project) = &virtual_project
+                    && let Some(download_list) = &download_list
+                {
                     warn_if_existing_pin_incompatible_with_project(
                         pin,
                         virtual_project,
                         python_preference,
+                        download_list,
                         cache,
-                        preview,
                     );
                 }
             }
@@ -128,7 +147,6 @@ pub(crate) async fn pin(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await
     {
@@ -149,7 +167,7 @@ pub(crate) async fn pin(
     };
 
     if let Some(virtual_project) = &virtual_project {
-        if let Some(request_version) = pep440_version_from_request(&request) {
+        if let Some(request_version) = request.as_pep440_version() {
             assert_pin_compatible_with_project(
                 &Pin {
                     request: &request,
@@ -236,39 +254,16 @@ pub(crate) async fn pin(
     Ok(ExitStatus::Success)
 }
 
-fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
-    let version_request = match request {
-        PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version) => {
-            version
-        }
-        PythonRequest::Key(download_request) => download_request.version()?,
-        _ => {
-            return None;
-        }
-    };
-
-    if matches!(version_request, uv_python::VersionRequest::Range(_, _)) {
-        return None;
-    }
-
-    // SAFETY: converting `VersionRequest` to `Version` is guaranteed to succeed if not a `Range`
-    // and does not have a Python variant (e.g., freethreaded) attached.
-    Some(
-        uv_pep440::Version::from_str(&version_request.clone().without_python_variant().to_string())
-            .unwrap(),
-    )
-}
-
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.
 fn warn_if_existing_pin_incompatible_with_project(
     pin: &PythonRequest,
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
+    downloads_list: &ManagedPythonDownloadList,
     cache: &Cache,
-    preview: Preview,
 ) {
     // Check if the pinned version is compatible with the project.
-    if let Some(pin_version) = pep440_version_from_request(pin) {
+    if let Some(pin_version) = pin.as_pep440_version() {
         if let Err(err) = assert_pin_compatible_with_project(
             &Pin {
                 request: pin,
@@ -283,14 +278,14 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
-    // If there is not a version in the pinned request, attempt to resolve the pin into an
-    // interpreter to check for compatibility on the current system.
+    // If the request itself didn't prove an incompatibility, resolve the pin into an
+    // interpreter to check the concrete version on the current system.
     match PythonInstallation::find(
         pin,
         EnvironmentPreference::OnlySystem,
         python_preference,
+        downloads_list,
         cache,
-        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();

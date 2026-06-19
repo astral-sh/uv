@@ -1,21 +1,22 @@
 [package]
 name = "uv-once-map"
-version = "0.0.1"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
 
 [dependencies]
-dashmap = { workspace = true }
-tokio = { workspace = true }
 futures = { workspace = true }
+papaya = { workspace = true }
+tokio = { workspace = true }

@@ -62,7 +62,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
-    pub fn prepare_stream<'stream>(
+    fn prepare_stream<'stream>(
         &'stream self,
         distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
@@ -108,7 +108,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
     /// Download, build, and unzip a single wheel.
     #[instrument(skip_all, fields(name = % dist, size = ? dist.size(), url = dist.file().map(| file | file.url.to_string()).unwrap_or_default()))]
-    pub async fn get_wheel(
+    async fn get_wheel(
         &self,
         dist: Dist,
         in_flight: &InFlight,
@@ -133,45 +133,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
         }
 
         let id = dist.distribution_id();
-        if in_flight.downloads.register(id.clone()) {
-            let policy = self.hashes.get(&dist);
-
-            let result = self
-                .database
-                .get_or_build_wheel(&dist, self.tags, policy)
-                .boxed_local()
-                .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
-                .await
-                .and_then(|wheel: LocalWheel| {
-                    if wheel.satisfies(policy) {
-                        Ok(wheel)
-                    } else {
-                        let err = uv_distribution::Error::hash_mismatch(
-                            dist.to_string(),
-                            policy.digests(),
-                            wheel.hashes(),
-                        );
-                        Err(Error::from_dist(dist, err, resolution))
-                    }
-                })
-                .map(CachedDist::from);
-            match result {
-                Ok(cached) => {
-                    in_flight.downloads.done(id, Ok(cached.clone()));
-                    Ok(cached)
-                }
-                Err(err) => {
-                    in_flight.downloads.done(id, Err(err.to_string()));
-                    Err(err)
-                }
-            }
-        } else {
-            let result = in_flight
-                .downloads
-                .wait(&id)
-                .await
-                .expect("missing value for registered task");
-
+        if let Some(result) = in_flight.downloads.register_or_wait(&id).await {
             match result.as_ref() {
                 Ok(cached) => {
                     // Validate that the wheel is compatible with the distribution.
@@ -204,7 +166,39 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     }
                     Ok(cached.clone())
                 }
-                Err(err) => Err(Error::Thread(err.to_string())),
+                Err(err) => Err(Error::Thread(err.to_owned())),
+            }
+        } else {
+            let policy = self.hashes.get(&dist);
+
+            let result = self
+                .database
+                .get_or_build_wheel(&dist, self.tags, policy)
+                .boxed_local()
+                .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
+                .await
+                .and_then(|wheel: LocalWheel| {
+                    if wheel.satisfies(policy) {
+                        Ok(wheel)
+                    } else {
+                        let err = uv_distribution::Error::hash_mismatch(
+                            dist.to_string(),
+                            policy.digests(),
+                            wheel.hashes(),
+                        );
+                        Err(Error::from_dist(dist, err, resolution))
+                    }
+                })
+                .map(CachedDist::from);
+            match result {
+                Ok(cached) => {
+                    in_flight.downloads.done(id, Ok(cached.clone()));
+                    Ok(cached)
+                }
+                Err(err) => {
+                    in_flight.downloads.done(id, Err(err.to_string()));
+                    Err(err)
+                }
             }
         }
     }
@@ -221,7 +215,7 @@ pub enum Error {
         DistErrorKind,
         Box<Dist>,
         DerivationChain,
-        #[source] uv_distribution::Error,
+        #[source] Box<uv_distribution::Error>,
     ),
     #[error("Cyclic build dependency detected for `{0}`")]
     CyclicBuildDependency(PackageName),
@@ -238,7 +232,7 @@ impl Error {
             DistErrorKind::from_dist(&dist, &err),
             Box::new(dist),
             chain,
-            err,
+            Box::new(err),
         )
     }
 }
@@ -276,9 +270,7 @@ pub trait Reporter: Send + Sync {
 
 impl dyn Reporter {
     /// Converts this reporter to a [`uv_distribution::Reporter`].
-    pub(crate) fn into_distribution_reporter(
-        self: Arc<dyn Reporter>,
-    ) -> Arc<dyn uv_distribution::Reporter> {
+    fn into_distribution_reporter(self: Arc<dyn Reporter>) -> Arc<dyn uv_distribution::Reporter> {
         Arc::new(Facade {
             reporter: self.clone(),
         })

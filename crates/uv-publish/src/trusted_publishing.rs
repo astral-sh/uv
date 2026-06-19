@@ -8,15 +8,16 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fmt::Display;
 use thiserror::Error;
-use tracing::{debug, trace};
-use url::Url;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
+
+pub(crate) mod pypi;
+pub(crate) mod pyx;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
     #[error(transparent)]
-    Url(#[from] url::ParseError),
+    Url(#[from] DisplaySafeUrlError),
     #[error("Failed to obtain OIDC token: is the `id-token: write` permission missing?")]
     GitHubPermissions(#[source] ambient_id::Error),
     /// A hard failure during OIDC token discovery.
@@ -35,12 +36,17 @@ pub enum TrustedPublishingError {
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
-        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the PyPI configuration: {2:#?}"
+        "Server returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the publisher configuration: {2:#?}"
     )]
-    Pypi(StatusCode, String, OidcTokenClaims),
+    TokenRejected(StatusCode, String, OidcTokenClaims),
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
-    #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
+    #[error(
+        "Server returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}"
+    )]
     InvalidOidcToken(StatusCode, String),
+    /// The user gave us a malformed upload URL for trusted publishing with pyx.
+    #[error("The upload URL `{0}` does not look like a valid pyx upload URL")]
+    InvalidPyxUploadUrl(DisplaySafeUrl),
 }
 
 #[derive(Deserialize)]
@@ -74,82 +80,89 @@ struct PublishToken {
 /// The payload of the OIDC token.
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
-pub struct OidcTokenClaims {
+#[serde(untagged)]
+pub enum OidcTokenClaims {
+    GitHub(GitHubTokenClaims),
+    GitLab(GitLabTokenClaims),
+    Buildkite(BuildkiteTokenClaims),
+}
+
+/// The relevant payload of a GitHub OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct GitHubTokenClaims {
     sub: String,
     repository: String,
     repository_owner: String,
     repository_owner_id: String,
     job_workflow_ref: String,
     r#ref: String,
+    environment: Option<String>,
 }
 
-/// Returns the short-lived token to use for uploading.
+/// The relevant payload of a GitLab OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct GitLabTokenClaims {
+    sub: String,
+    project_path: String,
+    ci_config_ref_uri: String,
+    environment: Option<String>,
+}
+
+/// The relevant payload of a Buildkite OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct BuildkiteTokenClaims {
+    sub: String,
+    pipeline_slug: String,
+    organization_slug: String,
+}
+
+/// A service (i.e. uploadable index) that supports trusted publishing.
 ///
-/// Return states:
-/// - `Ok(Some(token))`: Successfully obtained a trusted publishing token.
-/// - `Ok(None)`: Not in a supported CI environment for trusted publishing.
-/// - `Err(...)`: An error occurred while trying to obtain the token.
-pub(crate) async fn get_token(
-    registry: &DisplaySafeUrl,
-    client: &ClientWithMiddleware,
-) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
-    // Get the OIDC token's audience from the registry.
-    let audience = get_audience(registry, client).await?;
+/// Interactions should go through the default [`get_token`]; implementors
+/// should implement the constituent trait methods.
+pub(crate) trait TrustedPublishingService {
+    /// Borrow an HTTP client with middleware.
+    fn client(&self) -> &ClientWithMiddleware;
 
-    // Perform ambient OIDC token discovery.
-    // Depending on the host (GitHub Actions, GitLab CI, etc.)
-    // this may perform additional network requests.
-    let oidc_token = get_oidc_token(&audience, client).await?;
+    /// Retrieve the service's expected OIDC audience.
+    async fn audience(&self) -> Result<String, TrustedPublishingError>;
 
-    // Exchange the OIDC token for a short-lived upload token,
-    // if OIDC token discovery succeeded.
-    if let Some(oidc_token) = oidc_token {
-        let publish_token = get_publish_token(registry, oidc_token, client).await?;
+    /// Exchange an ambient OIDC identity token for a short-lived upload token on the service.
+    async fn exchange_token(
+        &self,
+        oidc_token: ambient_id::IdToken,
+    ) -> Result<TrustedPublishingToken, TrustedPublishingError>;
 
-        // If we're on GitHub Actions, mask the exchanged token in logs.
-        #[allow(clippy::print_stdout)]
-        if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
-            println!("::add-mask::{publish_token}");
+    /// Perform the full trusted publishing token exchange.
+    async fn get_token(&self) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
+        // Get the OIDC token's audience from the registry.
+        let audience = self.audience().await?;
+
+        // Perform ambient OIDC token discovery.
+        // Depending on the host (GitHub Actions, GitLab CI, etc.)
+        // this may perform additional network requests.
+        let oidc_token = get_oidc_token(&audience, self.client()).await?;
+
+        // Exchange the OIDC token for a short-lived upload token,
+        // if OIDC token discovery succeeded.
+        if let Some(oidc_token) = oidc_token {
+            let publish_token = self.exchange_token(oidc_token).await?;
+
+            // If we're on GitHub Actions, mask the exchanged token in logs.
+            #[expect(clippy::print_stdout)]
+            if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
+                println!("::add-mask::{publish_token}");
+            }
+
+            Ok(Some(publish_token))
+        } else {
+            // Not in a supported CI environment for trusted publishing.
+            Ok(None)
         }
-
-        Ok(Some(publish_token))
-    } else {
-        // Not in a supported CI environment for trusted publishing.
-        Ok(None)
     }
-}
-
-async fn get_audience(
-    registry: &DisplaySafeUrl,
-    client: &ClientWithMiddleware,
-) -> Result<String, TrustedPublishingError> {
-    // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
-    // (RFC 3986).
-    // Prefer HTTPS for OIDC discovery; allow HTTP only in test builds
-    let scheme: &str = if cfg!(feature = "test") {
-        registry.scheme()
-    } else {
-        "https"
-    };
-    let audience_url = DisplaySafeUrl::parse(&format!(
-        "{}://{}/_/oidc/audience",
-        scheme,
-        registry.authority()
-    ))?;
-    debug!("Querying the trusted publishing audience from {audience_url}");
-    let response = client
-        .get(Url::from(audience_url.clone()))
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
-    let audience = response
-        .error_for_status()
-        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?
-        .json::<Audience>()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(audience_url.clone(), err))?;
-    trace!("The audience is `{}`", &audience.audience);
-    Ok(audience.audience)
 }
 
 /// Perform ambient OIDC token discovery.
@@ -182,66 +195,4 @@ fn decode_oidc_token(oidc_token: &str) -> Option<OidcTokenClaims> {
     };
     let decoded = BASE64_URL_SAFE_NO_PAD.decode(payload).ok()?;
     serde_json::from_slice(&decoded).ok()
-}
-
-async fn get_publish_token(
-    registry: &DisplaySafeUrl,
-    oidc_token: ambient_id::IdToken,
-    client: &ClientWithMiddleware,
-) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    // Prefer HTTPS for OIDC minting; allow HTTP only in test builds
-    let scheme: &str = if cfg!(feature = "test") {
-        registry.scheme()
-    } else {
-        "https"
-    };
-    let mint_token_url = DisplaySafeUrl::parse(&format!(
-        "{}://{}/_/oidc/mint-token",
-        scheme,
-        registry.authority()
-    ))?;
-    debug!("Querying the trusted publishing upload token from {mint_token_url}");
-    let mint_token_payload = MintTokenRequest {
-        token: oidc_token.reveal().to_string(),
-    };
-    let response = client
-        .post(Url::from(mint_token_url.clone()))
-        .body(serde_json::to_vec(&mint_token_payload)?)
-        .send()
-        .await
-        .map_err(|err| TrustedPublishingError::ReqwestMiddleware(mint_token_url.clone(), err))?;
-
-    // reqwest's implementation of `.json()` also goes through `.bytes()`
-    let status = response.status();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|err| TrustedPublishingError::Reqwest(mint_token_url.clone(), err))?;
-
-    if status.is_success() {
-        let publish_token: PublishToken = serde_json::from_slice(&body)?;
-        Ok(publish_token.token)
-    } else {
-        match decode_oidc_token(oidc_token.reveal()) {
-            Some(claims) => {
-                // An error here means that something is misconfigured, e.g. a typo in the PyPI
-                // configuration, so we're showing the body and the JWT claims for more context, see
-                // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
-                // for what the body can mean.
-                Err(TrustedPublishingError::Pypi(
-                    status,
-                    String::from_utf8_lossy(&body).to_string(),
-                    claims,
-                ))
-            }
-            None => {
-                // This is not a user configuration error, the OIDC token should always have a valid
-                // format.
-                Err(TrustedPublishingError::InvalidOidcToken(
-                    status,
-                    String::from_utf8_lossy(&body).to_string(),
-                ))
-            }
-        }
-    }
 }

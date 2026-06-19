@@ -17,7 +17,11 @@ pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Resul
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
-        Err(uv_tool::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+        Err(err)
+            if err
+                .as_io_error()
+                .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+        {
             if !name.is_empty() {
                 for name in name {
                     writeln!(printer.stderr(), "`{name}` is not installed")?;
@@ -110,8 +114,10 @@ async fn do_uninstall(
                         )?;
                         continue;
                     }
-                    Err(uv_tool::Error::VirtualEnvError(uv_virtualenv::Error::Io(err)))
-                        if err.kind() == std::io::ErrorKind::NotFound =>
+                    Err(err)
+                        if err
+                            .as_io_error()
+                            .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
                     {
                         bail!("`{name}` is not installed");
                     }
@@ -131,11 +137,12 @@ async fn do_uninstall(
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
                     Ok(()) => {
+                        dangling = true;
                         writeln!(
                             printer.stderr(),
                             "Removed dangling environment for `{name}`"
                         )?;
-                        return Ok(());
+                        continue;
                     }
                     Err(uv_tool::Error::VirtualEnvError(uv_virtualenv::Error::Io(err)))
                         if err.kind() == std::io::ErrorKind::NotFound =>

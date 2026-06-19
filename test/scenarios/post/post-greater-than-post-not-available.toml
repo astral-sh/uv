@@ -1,0 +1,14 @@
+name = "post-greater-than-post-not-available"
+description = "A greater-than version constraint should not match a post-release version if the post-release version is not available."
+
+[root]
+requires = ["a>1.2.3.post2"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.2.3"]
+
+[packages.a.versions."1.2.3.post0"]
+
+[packages.a.versions."1.2.3.post1"]

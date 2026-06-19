@@ -1,5 +1,5 @@
 ---
-source: crates/uv/tests/ecosystem.rs
+source: crates/uv/tests/it/ecosystem.rs
 expression: snapshot
 ---
 success: true

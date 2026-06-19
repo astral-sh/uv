@@ -1,51 +1,96 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use jiff::Timestamp;
-use tl::HTMLTag;
+use tl::{HTMLTag, Node, Parser};
 use tracing::{debug, instrument, warn};
-use url::Url;
 
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, PypiFile, Yanked};
+use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Status, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_small_str::SmallString;
+
+/// Return `true` if this tag has the given HTML element name.
+fn is_tag(tag: &HTMLTag<'_>, name: &[u8]) -> bool {
+    tag.name().as_bytes().eq_ignore_ascii_case(name)
+}
+
+/// Return the value of the attribute with the given case-insensitive HTML attribute name.
+fn attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> Option<Cow<'a, str>> {
+    tag.attributes()
+        .get(name)
+        .flatten()
+        .map(tl::Bytes::as_utf8_str)
+        .or_else(|| {
+            tag.attributes().iter().find_map(|(attribute_name, value)| {
+                attribute_name
+                    .eq_ignore_ascii_case(name)
+                    .then_some(value)
+                    .flatten()
+            })
+        })
+}
+
+/// Return `true` if the tag has the given case-insensitive HTML attribute name.
+fn has_attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> bool {
+    tag.attributes().contains(name)
+        || tag
+            .attributes()
+            .iter()
+            .any(|(attribute_name, _)| attribute_name.eq_ignore_ascii_case(name))
+}
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
-pub(crate) struct SimpleHtml {
+pub(crate) struct SimpleDetailHTML {
+    /// The PEP 792 project status information.
+    #[allow(dead_code)]
+    pub(crate) project_status: ProjectStatus,
     /// The [`BaseUrl`] to which all relative URLs should be resolved.
     pub(crate) base: BaseUrl,
     /// The list of [`PypiFile`]s available for download sorted by filename.
     pub(crate) files: Vec<PypiFile>,
 }
 
-impl SimpleHtml {
+impl SimpleDetailHTML {
     /// Parse the list of [`PypiFile`]s from the simple HTML page returned by the given URL.
     #[instrument(skip_all, fields(url = % url))]
-    pub(crate) fn parse(text: &str, url: &Url) -> Result<Self, Error> {
+    pub(crate) fn parse(text: &str, url: &DisplaySafeUrl) -> Result<Self, Error> {
         let dom = tl::parse(text, tl::ParserOptions::default())?;
+
+        // Project status information appears in the `<meta>` tags in the `<head>`.
+        // Specifically, it appears as `name="pypi:project-status"`
+        // and `name="pypi:project-status-reason"` with corresponding
+        // `content` attributes.
+        let project_status = dom
+            .nodes()
+            .iter()
+            .find(|node| node.as_tag().is_some_and(|tag| is_tag(tag, b"head")))
+            .and_then(|head| Self::parse_project_status(dom.parser(), head))
+            .unwrap_or_default();
 
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
         // appear before other tags with attribute values of URLs.
-        let base = BaseUrl::from(DisplaySafeUrl::from(
+        let base = BaseUrl::from(
             dom.nodes()
                 .iter()
                 .filter_map(|node| node.as_tag())
-                .take_while(|tag| !matches!(tag.name().as_bytes(), b"a" | b"link"))
-                .find(|tag| tag.name().as_bytes() == b"base")
+                .take_while(|tag| !is_tag(tag, b"a") && !is_tag(tag, b"link"))
+                .find(|tag| is_tag(tag, b"base"))
                 .map(|base| Self::parse_base(base))
                 .transpose()?
                 .flatten()
                 .unwrap_or_else(|| url.clone()),
-        ));
+        );
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
         let mut files: Vec<PypiFile> = dom
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
-            .filter(|link| link.name().as_bytes() == b"a")
+            .filter(|link| is_tag(link, b"a"))
             .map(|link| Self::parse_anchor(link))
             .filter_map(|result| match result {
                 Ok(None) => None,
@@ -63,36 +108,85 @@ impl SimpleHtml {
         // probably be the thing that does the sorting.)
         files.sort_unstable_by(|f1, f2| f1.filename.cmp(&f2.filename));
 
-        Ok(Self { base, files })
+        Ok(Self {
+            project_status,
+            base,
+            files,
+        })
+    }
+
+    /// Parse a [`ProjectStatus`] from the `<meta>` tags in the given `<head>`.
+    ///
+    /// Precondition: `head` is a `<head>` tag.
+    fn parse_project_status(parser: &Parser, head: &Node) -> Option<ProjectStatus> {
+        let children = head.children()?;
+
+        let mut status: Option<Status> = None;
+        let mut reason: Option<SmallString> = None;
+        for node in children.all(parser) {
+            let tag = match node.as_tag() {
+                Some(tag) if is_tag(tag, b"meta") => tag,
+                _ => continue,
+            };
+
+            let Some(name) = attribute(tag, "name") else {
+                continue;
+            };
+
+            // Per PEP 792: both `pypi:project-status` and `pypi:project-status-reason`
+            // are optional, but if present should be well-formed.
+            match name.as_ref() {
+                "pypi:project-status" => {
+                    status = {
+                        let status = attribute(tag, "content").as_deref().and_then(Status::new)?;
+                        Some(status)
+                    };
+                }
+                "pypi:project-status-reason" => {
+                    reason = {
+                        let Some(content) =
+                            attribute(tag, "content").as_deref().map(SmallString::from)
+                        else {
+                            // TODO: Make this a hard error instead?
+                            warn!("Invalid project status reason (missing)");
+                            return None;
+                        };
+                        Some(content)
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(status) = status {
+            let status = ProjectStatus { status, reason };
+            Some(status)
+        } else {
+            None
+        }
     }
 
     /// Parse the `href` from a `<base>` tag.
-    fn parse_base(base: &HTMLTag) -> Result<Option<Url>, Error> {
-        let Some(Some(href)) = base.attributes().get("href") else {
+    fn parse_base(base: &HTMLTag) -> Result<Option<DisplaySafeUrl>, Error> {
+        let Some(href) = attribute(base, "href") else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
-        let url = Url::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
+        let url =
+            DisplaySafeUrl::parse(&href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
         Ok(Some(url))
     }
 
     /// Parse a [`PypiFile`] from an `<a>` tag.
     ///
-    /// Returns `None` if the `<a>` don't doesn't have an `href` attribute.
+    /// Returns `None` if the `<a>` doesn't have an `href` attribute.
     fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
-        let Some(href) = link
-            .attributes()
-            .get("href")
-            .flatten()
-            .filter(|bytes| !bytes.as_bytes().is_empty())
-        else {
+        let Some(href) = attribute(link, "href").filter(|href| !href.is_empty()) else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
-        let decoded = html_escape::decode_html_entities(href);
+        let decoded = html_escape::decode_html_entities(&href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
             let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
@@ -144,8 +238,7 @@ impl SimpleHtml {
 
         // Extract the `requires-python` value, which should be set on the
         // `data-requires-python` attribute.
-        let requires_python = if let Some(requires_python) =
-            link.attributes().get("data-requires-python").flatten()
+        let requires_python = if let Some(requires_python) = attribute(link, "data-requires-python")
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
@@ -157,11 +250,8 @@ impl SimpleHtml {
         // Extract the `core-metadata` field, which is either set on:
         // - `data-core-metadata`, per PEP 714.
         // - `data-dist-info-metadata`, per PEP 658.
-        let core_metadata = if let Some(dist_info_metadata) = link
-            .attributes()
-            .get("data-core-metadata")
-            .flatten()
-            .or_else(|| link.attributes().get("data-dist-info-metadata").flatten())
+        let core_metadata = if let Some(dist_info_metadata) = attribute(link, "data-core-metadata")
+            .or_else(|| attribute(link, "data-dist-info-metadata"))
         {
             let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
             let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
@@ -182,10 +272,14 @@ impl SimpleHtml {
 
         // Extract the `yanked` field, which should be set on the `data-yanked`
         // attribute.
-        let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
-            let yanked = std::str::from_utf8(yanked.as_bytes())?;
-            let yanked = html_escape::decode_html_entities(yanked);
-            Some(Box::new(Yanked::Reason(yanked.into())))
+        let yanked = if has_attribute(link, "data-yanked") {
+            if let Some(yanked) = attribute(link, "data-yanked") {
+                let yanked = std::str::from_utf8(yanked.as_bytes())?;
+                let yanked = html_escape::decode_html_entities(yanked);
+                Some(Box::new(Yanked::Reason(yanked.into())))
+            } else {
+                Some(Box::new(Yanked::Bool(true)))
+            }
         } else {
             None
         };
@@ -193,24 +287,16 @@ impl SimpleHtml {
         // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let size = link
-            .attributes()
-            .get("data-size")
-            .flatten()
-            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
-            .map(|size| html_escape::decode_html_entities(size))
-            .and_then(|size| size.parse().ok());
+        let size = attribute(link, "data-size")
+            .and_then(|size| html_escape::decode_html_entities(&size).parse().ok());
 
         // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let upload_time = link
-            .attributes()
-            .get("data-upload-time")
-            .flatten()
-            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
-            .map(|upload_time| html_escape::decode_html_entities(upload_time))
-            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+        let upload_time = attribute(link, "data-upload-time").and_then(|upload_time| {
+            let upload_time = html_escape::decode_html_entities(&upload_time);
+            Timestamp::from_str(&upload_time).ok()
+        });
 
         Ok(Some(PypiFile {
             core_metadata,
@@ -225,6 +311,53 @@ impl SimpleHtml {
     }
 }
 
+/// A parsed structure from PyPI "HTML" index format listing all available packages.
+#[derive(Debug, Clone)]
+pub(crate) struct SimpleIndexHtml {
+    /// The list of project names available in the index.
+    pub(crate) projects: Vec<PackageName>,
+}
+
+impl SimpleIndexHtml {
+    /// Parse the list of project names from the Simple API index HTML page.
+    pub(crate) fn parse(text: &str) -> Result<Self, Error> {
+        let dom = tl::parse(text, tl::ParserOptions::default())?;
+
+        // Parse each `<a>` tag to extract the project name.
+        let parser = dom.parser();
+        let mut projects = dom
+            .nodes()
+            .iter()
+            .filter_map(|node| node.as_tag())
+            .filter(|link| is_tag(link, b"a"))
+            .filter_map(|link| Self::parse_anchor_project_name(link, parser))
+            .collect::<Vec<_>>();
+
+        // Sort for deterministic ordering.
+        projects.sort_unstable();
+
+        Ok(Self { projects })
+    }
+
+    /// Parse a project name from an `<a>` tag.
+    ///
+    /// Returns `None` if the `<a>` doesn't have an `href` attribute or text content.
+    fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<PackageName> {
+        // Extract the href.
+        attribute(link, "href").filter(|href| !href.is_empty())?;
+
+        // Extract the text content, which should be the project name.
+        let inner_text = link.inner_text(parser);
+        let project_name = inner_text.trim();
+
+        if project_name.is_empty() {
+            return None;
+        }
+
+        PackageName::from_str(project_name).ok()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -234,7 +367,7 @@ pub enum Error {
     FromUtf8(#[from] std::string::FromUtf8Error),
 
     #[error("Failed to parse URL: {0}")]
-    UrlParse(String, #[source] url::ParseError),
+    UrlParse(String, #[source] DisplaySafeUrlError),
 
     #[error(transparent)]
     HtmlParse(#[from] tl::ParseError),
@@ -274,10 +407,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -331,10 +468,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -391,10 +532,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -448,10 +593,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -505,10 +654,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -562,10 +715,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -617,10 +774,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -672,10 +833,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     ";
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -710,10 +875,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -748,10 +917,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -803,10 +976,14 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -858,11 +1035,15 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base);
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            SimpleHtml {
+            SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -915,11 +1096,15 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base);
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base);
         insta::assert_debug_snapshot!(result, @r#"
         Ok(
-            SimpleHtml {
+            SimpleDetailHTML {
+                project_status: ProjectStatus {
+                    status: Active,
+                    reason: None,
+                },
                 base: BaseUrl(
                     DisplaySafeUrl {
                         scheme: "https",
@@ -972,8 +1157,8 @@ mod tests {
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap_err();
         insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
 
@@ -989,11 +1174,17 @@ mod tests {
         </body>
         </html>
     "#;
-        let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
-            .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse(
+            "https://storage.googleapis.com/jax-releases/jax_cuda_releases.html",
+        )
+        .unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1071,11 +1262,15 @@ mod tests {
         </body>
         </html>
     "#;
-        let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
+        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1175,10 +1370,14 @@ mod tests {
 </body>
 </html>
     "#;
-        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let base = DisplaySafeUrl::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1247,11 +1446,15 @@ mod tests {
 </body>
 </html>
     "#;
-        let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
+        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap();
+        let result = SimpleDetailHTML::parse(text, &base).unwrap();
         insta::assert_debug_snapshot!(result, @r#"
-        SimpleHtml {
+        SimpleDetailHTML {
+            project_status: ProjectStatus {
+                status: Active,
+                reason: None,
+            },
             base: BaseUrl(
                 DisplaySafeUrl {
                     scheme: "https",
@@ -1370,6 +1573,488 @@ mod tests {
                     url: "/whl/Jinja2-3.1.6-py3-none-any.whl",
                     yanked: None,
                 },
+            ],
+        }
+        "#);
+    }
+
+    /// Test parsing with project status metadata (status, no reason).
+    #[test]
+    fn parse_simple_detail_with_project_status_no_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="archived">
+    <title>Links for pepy</title>
+</head>
+<body>
+    <h1>Links for pepy</h1>
+    <a href="https://files.pythonhosted.org/packages/48/99/fa422e3fb74e6c7a9d735222aa6fceb717c8cd528468aeae13cd22a1d40b/pepy-1.0.0rc2.tar.gz#sha256=67736757345c4dad74725c520986f82c55a7404ad1b35435474a16111d68b270">pepy-1.0.0rc2.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/pepy/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(result.project_status, @"
+        ProjectStatus {
+            status: Archived,
+            reason: None,
+        }
+        ");
+    }
+
+    /// Test parsing with project status metadata (status and reason).
+    #[test]
+    fn parse_simple_detail_with_project_status_and_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="archived">
+    <meta name="pypi:project-status-reason" content="This project is haunted.">
+    <title>Links for fakeproject</title>
+</head>
+<body>
+    <h1>Links for fakeproject</h1>
+    <a href="https://example.com/fakeproject">fakeproject-1.2.3.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(result.project_status, @r#"
+        ProjectStatus {
+            status: Archived,
+            reason: Some(
+                "This project is haunted.",
+            ),
+        }
+        "#);
+    }
+
+    /// Test that Simple API HTML element names and link `href` are ASCII case-insensitive.
+    #[test]
+    fn parse_simple_html_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<HEAD>
+    <META NAME="pypi:project-status" CONTENT="archived">
+    <META NAME="pypi:project-status-reason" CONTENT="no longer maintained">
+    <BASE HREF="https://index.python.org/">
+</HEAD>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-REQUIRES-PYTHON="&gt;=3.12" DATA-CORE-METADATA="true" DATA-YANKED="broken release">fakeproject-1.2.3.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.4.tar.gz" DATA-DIST-INFO-METADATA="false">fakeproject-1.2.4.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.5.tar.gz" DATA-YANKED>fakeproject-1.2.5.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (
+                &result.project_status,
+                result.base.as_str(),
+                &result.files,
+            ), @r#"
+        (
+            ProjectStatus {
+                status: Archived,
+                reason: Some(
+                    "no longer maintained",
+                ),
+            },
+            "https://index.python.org/",
+            [
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.3.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.12",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.3.tar.gz",
+                    yanked: Some(
+                        Reason(
+                            "broken release",
+                        ),
+                    ),
+                },
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            false,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.4.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.4.tar.gz",
+                    yanked: None,
+                },
+                PypiFile {
+                    core_metadata: None,
+                    filename: "fakeproject-1.2.5.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.5.tar.gz",
+                    yanked: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                },
+            ],
+        )
+        "#);
+
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A HREF="/simple/fakeproject/">fakeproject</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "fakeproject",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that optional Simple API HTML file attributes are ASCII case-insensitive.
+    #[test]
+    fn parse_optional_attributes_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-SIZE="15399" DATA-UPLOAD-TIME="2022-11-14T17:14:53.935145Z">fakeproject-1.2.3.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (result.files[0].size, result.files[0].upload_time.as_ref()), @r#"
+        (
+            Some(
+                15399,
+            ),
+            Some(
+                2022-11-14T17:14:53.935145Z,
+            ),
+        )
+        "#
+        );
+    }
+
+    // Test parsing project status metadata with emojis in the reason.
+    #[test]
+    fn parse_simple_detail_with_project_status_and_emoji_reason() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="deprecated">
+    <meta name="pypi:project-status-reason" content="This project is haunted 👻.">
+    <title>Links for spookyproject</title>
+</head>
+<body>
+    <h1>Links for spookyproject</h1>
+    <a href="https://example.com/spookyproject">spookyproject-0.9.9.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/spookyproject/").unwrap(),
+        );
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @r#"
+        ProjectStatus {
+            status: Deprecated,
+            reason: Some(
+                "This project is haunted 👻.",
+            ),
+        }
+        "#);
+    }
+
+    /// Test parsing project status metadata with an unknown status marker.
+    #[test]
+    fn parse_simple_detail_with_unknown_project_status() {
+        let text = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="pypi:repository-version" content="1.4">
+    <meta name="pypi:project-status" content="unknown-status">
+    <title>Links for unknownproject</title>
+</head>
+<body>
+    <h1>Links for unknownproject</h1>
+    <a href="https://example.com/unknownproject">unknownproject-0.1.0.tar.gz</a>
+    <br/>
+</body>
+</html>
+<!--SERIAL 15765070-->
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/unknownproject/").unwrap(),
+        );
+        insta::assert_debug_snapshot!(result.unwrap().project_status, @"
+        ProjectStatus {
+            status: Active,
+            reason: None,
+        }
+        ");
+    }
+
+    /// Test parsing Simple API index (root) HTML.
+    #[test]
+    fn parse_simple_index() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Index</title>
+</head>
+<body>
+    <h1>Simple Index</h1>
+    <a href="/simple/flask/">flask</a><br/>
+    <a href="/simple/jinja2/">jinja2</a><br/>
+    <a href="/simple/requests/">requests</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "jinja2",
+                ),
+                PackageName(
+                    "requests",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that project names are sorted.
+    #[test]
+    fn parse_simple_index_sorted() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/zebra/">zebra</a><br/>
+    <a href="/simple/apple/">apple</a><br/>
+    <a href="/simple/monkey/">monkey</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "apple",
+                ),
+                PackageName(
+                    "monkey",
+                ),
+                PackageName(
+                    "zebra",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links without `href` attributes are ignored.
+    #[test]
+    fn parse_simple_index_missing_href() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Simple Index</h1>
+    <a href="/simple/flask/">flask</a><br/>
+    <a>no-href-project</a><br/>
+    <a href="/simple/requests/">requests</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "requests",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links with empty `href` attributes are ignored.
+    #[test]
+    fn parse_simple_index_empty_href() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="">empty-href</a><br/>
+    <a href="/simple/flask/">flask</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "flask",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that links with empty text content are ignored.
+    #[test]
+    fn parse_simple_index_empty_text() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/empty/"></a><br/>
+    <a href="/simple/flask/">flask</a><br/>
+    <a href="/simple/whitespace/">   </a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "flask",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test parsing with case variations and normalization.
+    #[test]
+    fn parse_simple_index_case_variations() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <a href="/simple/Flask/">Flask</a><br/>
+    <a href="/simple/django/">django</a><br/>
+    <a href="/simple/PyYAML/">PyYAML</a><br/>
+</body>
+</html>
+    "#;
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        // Note: We preserve the case as returned by the server
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "django",
+                ),
+                PackageName(
+                    "flask",
+                ),
+                PackageName(
+                    "pyyaml",
+                ),
             ],
         }
         "#);

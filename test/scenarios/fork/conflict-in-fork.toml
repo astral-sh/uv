@@ -1,0 +1,26 @@
+name = "conflict-in-fork"
+description = '''
+We have a conflict after forking. This scenario exists to test the error message.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = false
+
+[root]
+requires = ["a>=2 ; sys_platform == 'os1'", "a<2 ; sys_platform == 'os2'"]
+
+[packages.a.versions."1.0.0"]
+requires = ["b", "c"]
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0"]
+requires = ["d==1"]
+
+[packages.c.versions."1.0.0"]
+requires = ["d==2"]
+
+[packages.d.versions."1.0.0"]
+[packages.d.versions."2.0.0"]
