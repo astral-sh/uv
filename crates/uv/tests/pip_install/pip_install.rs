@@ -4496,7 +4496,7 @@ fn install_constraints_transitive_conflict_hint() -> Result<()> {
       ╰─▶ Because flask==3.0.2 depends on werkzeug>=3.0.0 and werkzeug==2.0.0, we can conclude that flask==3.0.2 cannot be used.
           And because you require flask==3.0.2, we can conclude that your requirements are unsatisfiable.
 
-          hint: `werkzeug` is constrained by `-c constraints.txt`. Constraints are applied transitively, so this may appear in the resolution trace as `flask` depending on `werkzeug`.
+    hint: `werkzeug` is constrained by `-c constraints.txt`. Constraints are applied transitively, so this may appear in the resolution trace as `flask` depending on `werkzeug`.
     "
     );
 

@@ -2072,9 +2072,7 @@ impl std::fmt::Display for PubGrubHint {
                     .join(", ");
                 write!(
                     f,
-                    "{}{} `{}` is constrained by {}. Constraints are applied transitively, so this may appear in the resolution trace as `{}` depending on `{}`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
+                    "`{}` is constrained by {}. Constraints are applied transitively, so this may appear in the resolution trace as `{}` depending on `{}`.",
                     dependency.cyan(),
                     origins.cyan(),
                     package.cyan(),

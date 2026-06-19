@@ -462,6 +462,8 @@ fn compile_constraints_many_versions() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies: [LONG DERIVATION]
+
+    hint: `dependency` is constrained by `-c constraints.txt`. Constraints are applied transitively, so this may appear in the resolution trace as `package` depending on `dependency`.
     ");
 
     Ok(())
