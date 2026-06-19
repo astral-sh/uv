@@ -60,6 +60,13 @@ impl WorkspaceCache {
         match result {
             Ok(workspace) => {
                 for package in workspace.packages.values() {
+                    // Historically, upward workspace discovery stopped at an intermediate
+                    // `pyproject.toml`, so don't map this member to the outer workspace in that
+                    // case.
+                    // See: <https://github.com/astral-sh/uv/issues/19916>
+                    if has_intermediate_pyproject(&workspace.install_path, &package.root) {
+                        continue;
+                    }
                     self.workspaces
                         .done(package.root.clone(), Ok(workspace.clone()));
                 }
@@ -97,6 +104,24 @@ impl WorkspaceCache {
             }
         }
     }
+}
+
+/// Returns `true` when a `pyproject.toml` sits between the member project directory and the
+/// workspace root.
+fn has_intermediate_pyproject(workspace_root: &Path, project_dir: &Path) -> bool {
+    if project_dir == workspace_root {
+        return false;
+    }
+
+    let Ok(_) = project_dir.strip_prefix(workspace_root) else {
+        return false;
+    };
+
+    project_dir
+        .ancestors()
+        .skip(1)
+        .take_while(|ancestor| *ancestor != workspace_root)
+        .any(|ancestor| ancestor.join("pyproject.toml").is_file())
 }
 
 #[derive(Debug, Clone)]
