@@ -10228,6 +10228,180 @@ fn lock_no_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project-valued workspace root nested below another project.
+#[test]
+fn lock_no_workspace_source_nested_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let parent = context.temp_dir.child("parent");
+    parent.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    let workspace = parent.child("workspace");
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["child"]
+
+        [tool.uv.workspace]
+        members = ["child"]
+        "#,
+    )?;
+
+    let child = workspace.child("child");
+    fs_err::create_dir_all(&child)?;
+    child.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+      × Failed to build `project @ file://[TEMP_DIR]/parent/workspace`
+      ├─▶ Failed to parse entry: `child`
+      ╰─▶ `child` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `child = { workspace = true }`)
+    ");
+
+    Ok(())
+}
+
+/// Regression test for <https://github.com/astral-sh/uv/issues/19916>.
+///
+/// Lock a workspace with a member that also supports standalone installation via platform-specific
+/// path sources.
+#[test]
+fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["root/app", "root/lib"]
+
+        [tool.uv.sources]
+        lib = { workspace = true }
+        "#,
+    )?;
+
+    let root = context.temp_dir.child("root");
+    root.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+
+        [tool.uv.sources]
+        lib = { path = "lib" }
+        "#,
+    )?;
+
+    root.child("app").child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "app"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["lib"]
+
+        [tool.uv.sources]
+        lib = [
+            { path = "../lib", editable = true, marker = "sys_platform == 'darwin'" },
+            { path = "../lib", editable = true, marker = "sys_platform != 'darwin'" },
+        ]
+        "#,
+    )?;
+
+    root.child("lib").child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "lib"
+        version = "0.1.0"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "app",
+            "lib",
+        ]
+
+        [[package]]
+        name = "app"
+        version = "0.1.0"
+        source = { virtual = "root/app" }
+        dependencies = [
+            { name = "lib" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "lib", marker = "sys_platform != 'darwin'", editable = "root/lib" },
+            { name = "lib", marker = "sys_platform == 'darwin'", editable = "root/lib" },
+        ]
+
+        [[package]]
+        name = "lib"
+        version = "0.1.0"
+        source = { editable = "root/lib" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock a workspace with a member that's a peer to the root.
 #[test]
 fn lock_peer_member() -> Result<()> {

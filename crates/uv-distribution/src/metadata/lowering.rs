@@ -53,10 +53,22 @@ impl LoweredRequirement {
         editable: bool,
         credentials_cache: &'data CredentialsCache,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
+        // Handle the case where a `pyproject.toml` sits between a member and its workspace root.
+        // This unintentionally supported case regressed when adding workspace caching, which
+        // memorizes which projects are workspace members without traversing upwards, ignoring the
+        // `pyproject.toml` in the middle. Before caching, workspace discovery for this project
+        // starting from the project itself would terminate at the intermediate `pyroject.toml` and
+        // treat it as standalone project, which this hack restores.
+        // <https://github.com/astral-sh/uv/issues/19916>
+        let treat_as_standalone_project =
+            has_intermediate_pyproject(workspace.install_path(), project_dir);
+
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
-        } else if let Some(source) = workspace.sources().get(&requirement.name) {
+        } else if !treat_as_standalone_project
+            && let Some(source) = workspace.sources().get(&requirement.name)
+        {
             (Some(source), RequirementOrigin::Workspace)
         } else {
             (None, RequirementOrigin::Project)
@@ -86,7 +98,7 @@ impl LoweredRequirement {
         });
 
         // If you use a package that's part of the workspace...
-        if workspace.packages().contains_key(&requirement.name) {
+        if !treat_as_standalone_project && workspace.packages().contains_key(&requirement.name) {
             // And it's not a recursive self-inclusion (extras that activate other extras), e.g.
             // `framework[machine_learning]` depends on `framework[cuda]`.
             if project_name.is_none_or(|project_name| *project_name != requirement.name) {
@@ -564,6 +576,24 @@ impl LoweredRequirement {
     pub fn into_inner(self) -> Requirement {
         self.0
     }
+}
+
+/// Returns `true` when a `pyproject.toml` sits between the member project directory and the
+/// workspace root.
+fn has_intermediate_pyproject(workspace_root: &Path, project_dir: &Path) -> bool {
+    if project_dir == workspace_root {
+        return false;
+    }
+
+    let Ok(_) = project_dir.strip_prefix(workspace_root) else {
+        return false;
+    };
+
+    project_dir
+        .ancestors()
+        .skip(1)
+        .take_while(|ancestor| *ancestor != workspace_root)
+        .any(|ancestor| ancestor.join("pyproject.toml").is_file())
 }
 
 /// An error parsing and merging `tool.uv.sources` with
