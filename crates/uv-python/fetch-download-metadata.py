@@ -11,7 +11,7 @@ Generates the `download-metadata.json` file.
 
 Usage:
 
-    uv run -- crates/uv-python/fetch-download-metadata.py
+    uv run --locked crates/uv-python/fetch-download-metadata.py
 
 Acknowledgements:
 

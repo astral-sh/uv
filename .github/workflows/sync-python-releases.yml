@@ -28,8 +28,7 @@ jobs:
         with:
           save-if: false
       - name: Sync Python Releases
-        run: |
-          uv run -- fetch-download-metadata.py
+        run: uv run --locked --python 3.12 --no-build --script fetch-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,7 +40,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Update Python version constants"
-        run: uv run --no-project scripts/sync-python-version-constants.py
+        run: uv run --locked --python 3.12 --no-build --script scripts/sync-python-version-constants.py
 
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
