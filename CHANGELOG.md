@@ -3,6 +3,15 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.23
+
+Released on 2026-06-19.
+
+### Bug fixes
+
+- Revert "Fix transparent Python upgrades in project environments" to mitigate unintended breakage in `pre-commit-uv` ([#19925](https://github.com/astral-sh/uv/pull/19925))
+- Restore old behavior where workspace members "hidden" by an intermediate `pyproject.toml` would be treated as standalone projects ([#19926](https://github.com/astral-sh/uv/pull/19926))
+
 ## 0.11.22
 
 Released on 2026-06-18.
