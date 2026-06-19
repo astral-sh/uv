@@ -528,11 +528,7 @@ pub(crate) fn create(
         ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
-            if using_minor_version_link {
-                interpreter.python_minor_version().to_string()
-            } else {
-                interpreter.markers().python_full_version().string.clone()
-            },
+            interpreter.markers().python_full_version().string.clone(),
         ),
         (
             "include-system-site-packages".to_string(),
