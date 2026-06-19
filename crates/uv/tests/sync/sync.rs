@@ -5532,6 +5532,99 @@ fn sync_workspace_members_with_transitive_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure workspace-root sources override standalone member sources when workspace discovery is
+/// served from the cache.
+///
+/// See: <https://github.com/astral-sh/uv/issues/19916>
+#[test]
+fn sync_cached_workspace_root_source_overrides_member_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let root_pyproject_toml = context.temp_dir.child("pyproject.toml");
+    root_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "workspace"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["app", "lib"]
+
+        [tool.uv]
+        package = false
+
+        [tool.uv.workspace]
+        members = ["packages/app", "packages/lib"]
+
+        [tool.uv.sources]
+        app = { workspace = true }
+        lib = { workspace = true }
+        "#,
+    )?;
+
+    let packages = context.temp_dir.child("packages");
+    packages.create_dir_all()?;
+    let packages_pyproject_toml = packages.child("pyproject.toml");
+    packages_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "packages"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["app", "lib"]
+
+        [tool.uv.sources]
+        app = { path = "app", editable = true }
+        lib = { path = "lib", editable = true }
+        "#,
+    )?;
+
+    let app = packages.child("app");
+    app.create_dir_all()?;
+    let app_pyproject_toml = app.child("pyproject.toml");
+    app_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "app"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["lib"]
+
+        [tool.uv.sources]
+        lib = { path = "../lib", editable = true }
+        "#,
+    )?;
+
+    let lib = packages.child("lib");
+    lib.create_dir_all()?;
+    let lib_pyproject_toml = lib.child("pyproject.toml");
+    lib_pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "lib"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would use project environment at: .venv
+    Resolved 3 packages in [TIME]
+    Would create lockfile at: uv.lock
+    Would download 2 packages
+    Would install 2 packages
+     + app @ file://[TEMP_DIR]/packages/app
+     + lib @ file://[TEMP_DIR]/packages/lib
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn sync_non_existent_extra_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
