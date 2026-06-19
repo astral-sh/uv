@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::Result;
 use tracing::debug;
@@ -9,10 +10,11 @@ use uv_configuration::{
     Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
     InstallOptions,
 };
-use uv_normalize::DefaultExtras;
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
@@ -21,6 +23,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::commands::pip::loggers::{SummaryInstallLogger, SummaryResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::environment::CachedEnvironment;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
@@ -228,6 +231,7 @@ pub(crate) async fn check(
 
     // Select an environment and, if we found a project, sync it before running checks.
     let mut workspace_metadata = None;
+    let mut locked_ty_path = None;
     let venv_path = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
@@ -486,6 +490,68 @@ pub(crate) async fn check(
         target.validate_extras(&extras)?;
         target.validate_groups(&groups)?;
 
+        if ty_path.is_none()
+            && ty_version.is_none()
+            && let Some(package) = project::tool_from_lock::package_from_lock(
+                project,
+                result.lock(),
+                lock_interpreter,
+                &PackageName::from_str("ty")?,
+            )?
+        {
+            locked_ty_path = Some(if groups.contains(&DEV_DEPENDENCIES) && !no_sync {
+                // Synchronization will install the locked development dependency into the
+                // selected project or isolated environment.
+                venv.scripts()
+                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+            } else {
+                // Do not modify the selected environment when synchronization is disabled or
+                // its development group is excluded. Install only the locked `ty` subgraph.
+                let base_interpreter =
+                    CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
+                let resolution = project::tool_from_lock::resolution_from_lock(
+                    project,
+                    result.lock(),
+                    package,
+                    &base_interpreter,
+                    &settings.resolver.build_options,
+                )?;
+                project::sync::store_credentials_from_target(target, &client_builder)?;
+                let ty_state = state.fork();
+                let environment = match CachedEnvironment::from_resolution(
+                    &resolution,
+                    result
+                        .lock()
+                        .build_constraints(project.workspace().install_path()),
+                    &base_interpreter,
+                    &settings,
+                    &client_builder,
+                    &ty_state,
+                    Box::new(SummaryInstallLogger),
+                    installer_metadata,
+                    &concurrency,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await
+                {
+                    Ok(environment) => environment,
+                    Err(ProjectError::Operation(err)) => {
+                        return diagnostics::OperationDiagnostic::with_system_certs(
+                            client_builder.system_certs(),
+                        )
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+                PythonEnvironment::from(environment)
+                    .scripts()
+                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+            });
+        }
+
         if no_sync {
             debug!("Skipping environment synchronization due to `--no-sync`");
         } else {
@@ -563,7 +629,7 @@ pub(crate) async fn check(
 
     ty::run(
         ty_version,
-        ty_path,
+        ty_path.or(locked_ty_path),
         &target_dir,
         script.as_ref().map(|script| script.path.as_path()),
         venv_path.as_deref(),

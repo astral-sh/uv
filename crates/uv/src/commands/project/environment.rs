@@ -311,7 +311,7 @@ impl CachedEnvironment {
     ///
     /// When caching, always use the base interpreter, rather than that of the virtual
     /// environment.
-    fn base_interpreter(
+    pub(super) fn base_interpreter(
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {
