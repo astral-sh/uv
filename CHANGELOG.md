@@ -3,6 +3,19 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.23
+
+Released on 2026-06-19.
+
+### Bug fixes
+
+- Revert "Fix transparent Python upgrades in project environments" ([#19925](https://github.com/astral-sh/uv/pull/19925))
+
+### Other changes
+
+- Pin rooster into a dev-dependency ([#19923](https://github.com/astral-sh/uv/pull/19923))
+- Treat workspace members with an intermediate `pyproject.toml` as standalone ([#19926](https://github.com/astral-sh/uv/pull/19926))
+
 ## 0.11.22
 
 Released on 2026-06-18.
