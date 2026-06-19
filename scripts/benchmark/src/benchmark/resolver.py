@@ -1289,7 +1289,6 @@ def main():
         "--min-runs",
         type=int,
         help="The minimum number of runs to perform.",
-        default=10,
     )
     parser.add_argument(
         "--runs",
@@ -1382,8 +1381,11 @@ def main():
     json = args.json
     python = args.python
     warmup = args.warmup
-    min_runs = args.min_runs
     runs = args.runs
+    min_runs = args.min_runs
+    # --min-runs and --runs conflict
+    if runs is None and min_runs is None:
+        min_runs = 10
 
     requirements_file = os.path.abspath(args.file)
     if not os.path.exists(requirements_file):

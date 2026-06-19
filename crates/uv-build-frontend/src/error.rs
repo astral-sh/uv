@@ -9,9 +9,9 @@ use crate::PythonRunnerOutput;
 use owo_colors::OwoColorize;
 use regex::Regex;
 use thiserror::Error;
-use tracing::error;
 use uv_configuration::BuildOutput;
 use uv_distribution_types::IsBuildBackendError;
+use uv_errors::{Hint, Hints};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -69,6 +69,8 @@ pub enum Error {
         "`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty."
     )]
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
+    #[error("`backend-path` entry `{0}` does not exist or is not a directory")]
+    InvalidBackendPath(String),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -81,7 +83,7 @@ pub enum Error {
     #[error("The build backend returned an error")]
     BuildBackend(#[from] BuildBackendError),
     #[error("The build backend returned an error")]
-    MissingHeader(#[from] MissingHeaderError),
+    MissingHeader(#[from] Box<MissingHeaderError>),
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     // For the convenience of typing `setup_build` properly.
@@ -105,6 +107,7 @@ impl IsBuildBackendError for Error {
             | Self::InvalidSourceDist(_)
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidBackendPath(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
@@ -116,6 +119,20 @@ impl IsBuildBackendError for Error {
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)
             | Self::BuildScriptPath(_) => true,
+        }
+    }
+}
+
+impl Hint for Error {
+    fn hints(&self) -> Hints<'_> {
+        match self {
+            Self::BuildBackend(_) => Hints::from(
+                "Build failures usually indicate a problem with the package or the build environment",
+            ),
+            Self::MissingHeader(err) => Hints::from(err.cause.to_string()),
+            Self::Lowering(err) => err.hints(),
+            Self::RequirementsResolve(_, err) | Self::RequirementsInstall(_, err) => err.hints(),
+            _ => Hints::none(),
         }
     }
 }
@@ -323,13 +340,6 @@ impl Display for BuildBackendError {
             writeln!(f)?;
         }
 
-        write!(
-            f,
-            "\n{}{} This usually indicates a problem with the package or the build environment.",
-            "hint".bold().cyan(),
-            ":".bold()
-        )?;
-
         Ok(())
     }
 }
@@ -354,14 +364,6 @@ impl Display for MissingHeaderError {
         if self.stderr.iter().any(|line| !line.trim().is_empty()) {
             write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr.join("\n"))?;
         }
-
-        write!(
-            f,
-            "\n\n{}{} {}",
-            "hint".bold().cyan(),
-            ":".bold(),
-            self.cause
-        )?;
 
         Ok(())
     }
@@ -416,7 +418,7 @@ impl Error {
         if let Some(missing_library) = missing_library {
             return match level {
                 BuildOutput::Stderr | BuildOutput::Quiet => {
-                    Self::MissingHeader(MissingHeaderError {
+                    Self::MissingHeader(Box::new(MissingHeaderError {
                         message,
                         exit_code: output.status,
                         stdout: vec![],
@@ -427,9 +429,9 @@ impl Error {
                             package_version: version.cloned(),
                             version_id: version_id.map(ToString::to_string),
                         },
-                    })
+                    }))
                 }
-                BuildOutput::Debug => Self::MissingHeader(MissingHeaderError {
+                BuildOutput::Debug => Self::MissingHeader(Box::new(MissingHeaderError {
                     message,
                     exit_code: output.status,
                     stdout: output.stdout.clone(),
@@ -440,7 +442,7 @@ impl Error {
                         package_version: version.cloned(),
                         version_id: version_id.map(ToString::to_string),
                     },
-                }),
+                })),
             };
         }
 
@@ -468,8 +470,19 @@ mod test {
     use std::process::ExitStatus;
     use std::str::FromStr;
     use uv_configuration::BuildOutput;
+    use uv_errors::{ErrorWithHints, Hint};
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+
+    fn format_error_with_hints(err: &Error) -> String {
+        // Unix uses exit status, Windows uses exit code.
+        let formatted = std::error::Error::source(err)
+            .unwrap()
+            .to_string()
+            .replace("exit status: ", "exit code: ");
+        let formatted = ErrorWithHints::new(formatted, err.hints()).to_string();
+        anstream::adapter::strip_str(&formatted).to_string()
+    }
 
     #[test]
     fn missing_header() {
@@ -507,13 +520,8 @@ mod test {
         );
 
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        let formatted = format_error_with_hints(&err);
+        insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
         [stdout]
@@ -535,7 +543,7 @@ mod test {
         error: command '/usr/bin/gcc' failed with exit code 1
 
         hint: This error likely indicates that you need to install a library that provides "graphviz/cgraph.h" for `pygraphviz-1.11`
-        "###);
+        "#);
     }
 
     #[test]
@@ -565,13 +573,8 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        let formatted = format_error_with_hints(&err);
+        insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -582,7 +585,7 @@ mod test {
         error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
 
         hint: This error likely indicates that you need to install the library that provides a shared library for `ncurses` for `pygraphviz-1.11` (e.g., `libncurses-dev`)
-        "###);
+        ");
     }
 
     #[test]
@@ -613,12 +616,7 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
+        let formatted = format_error_with_hints(&err);
         insta::assert_snapshot!(formatted, @r#"
         Failed building wheel through setup.py (exit code: 0)
 
@@ -664,13 +662,8 @@ mod test {
             Some("pygraphviz-1.11"),
         );
         assert!(matches!(err, Error::MissingHeader { .. }));
-        // Unix uses exit status, Windows uses exit code.
-        let formatted = std::error::Error::source(&err)
-            .unwrap()
-            .to_string()
-            .replace("exit status: ", "exit code: ");
-        let formatted = anstream::adapter::strip_str(&formatted);
-        insta::assert_snapshot!(formatted, @r###"
+        let formatted = format_error_with_hints(&err);
+        insta::assert_snapshot!(formatted, @"
         Failed building wheel through setup.py (exit code: 0)
 
         [stderr]
@@ -678,6 +671,6 @@ mod test {
         ModuleNotFoundError: No module named 'distutils'
 
         hint: `distutils` was removed from the standard library in Python 3.12. Consider adding a constraint (like `pygraphviz >1.11`) to avoid building a version of `pygraphviz` that depends on `distutils`.
-        "###);
+        ");
     }
 }

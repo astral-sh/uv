@@ -1,4 +1,10 @@
 [unstable]
 build-std = ["std", "panic_abort"]
-build-std-features = ["compiler-builtins-mem", "panic_immediate_abort"]
+build-std-features = ["compiler-builtins-mem"]
 panic-abort-tests = true
+
+# Make PE binaries reproducible: replace timestamps and debug GUIDs with
+# content hashes so identical source produces identical bytes, and do
+# not embed PDBs.
+[target.'cfg(windows)']
+rustflags = ["-C", "link-arg=/Brepro", "-C", "link-arg=/DEBUG:NONE"]

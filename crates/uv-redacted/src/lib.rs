@@ -7,6 +7,12 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
+    "X-Amz-Credential",
+    "X-Amz-Security-Token",
+    "X-Amz-Signature",
+];
+
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum DisplaySafeUrlError {
     /// Failed to parse a URL.
@@ -19,7 +25,7 @@ pub enum DisplaySafeUrlError {
     AmbiguousAuthority(String),
 }
 
-/// A [`Url`] wrapper that redacts credentials when displaying the URL.
+/// A [`Url`] wrapper that redacts credentials and sensitive query parameters when displaying the URL.
 ///
 /// `DisplaySafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
@@ -58,6 +64,29 @@ pub enum DisplaySafeUrlError {
 #[repr(transparent)]
 pub struct DisplaySafeUrl(Url);
 
+/// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
+///
+/// This skips colons that are followed by `//`, as those indicate URL schemes (e.g., `https://`)
+/// rather than credentials. This is important for handling nested URLs like proxy URLs:
+/// `git+https://proxy.com/https://github.com/user/repo.git@branch`.
+fn has_credential_like_pattern(s: &str) -> bool {
+    let mut remaining = s;
+    while let Some(colon_pos) = remaining.find(':') {
+        let after_colon = &remaining[colon_pos + 1..];
+        // If the colon is followed by "//", consider it a URL scheme.
+        if after_colon.starts_with("//") {
+            remaining = after_colon;
+            continue;
+        }
+        // Check if there's an @ after this colon.
+        if after_colon.contains('@') {
+            return true;
+        }
+        remaining = after_colon;
+    }
+    false
+}
+
 impl DisplaySafeUrl {
     #[inline]
     pub fn parse(input: &str) -> Result<Self, DisplaySafeUrlError> {
@@ -93,18 +122,8 @@ impl DisplaySafeUrl {
         }
 
         // Check for the suspicious pattern.
-        if !url
-            .path()
-            .find(':')
-            .is_some_and(|pos| url.path()[pos..].contains('@'))
-            && !url
-                .fragment()
-                .map(|fragment| {
-                    fragment
-                        .find(':')
-                        .is_some_and(|pos| fragment[pos..].contains('@'))
-                })
-                .unwrap_or(false)
+        if !has_credential_like_pattern(url.path())
+            && !url.fragment().is_some_and(has_credential_like_pattern)
         {
             return Ok(());
         }
@@ -165,7 +184,7 @@ impl DisplaySafeUrl {
         Ok(Self(Url::deserialize_internal(deserializer)?))
     }
 
-    #[allow(clippy::result_unit_err)]
+    #[expect(clippy::result_unit_err)]
     pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, ()> {
         Ok(Self(Url::from_file_path(path)?))
     }
@@ -253,7 +272,11 @@ impl Debug for DisplaySafeUrl {
             .field("host", &url.host())
             .field("port", &url.port())
             .field("path", &url.path())
-            .field("query", &url.query())
+            .field(
+                "query",
+                &url.query()
+                    .map(|query| redacted_query(query, url.query_pairs())),
+            )
             .field("fragment", &url.fragment())
             .finish()
     }
@@ -262,6 +285,12 @@ impl Debug for DisplaySafeUrl {
 impl From<DisplaySafeUrl> for Url {
     fn from(url: DisplaySafeUrl) -> Self {
         url.0
+    }
+}
+
+impl From<Url> for DisplaySafeUrl {
+    fn from(url: Url) -> Self {
+        Self(url)
     }
 }
 
@@ -279,40 +308,64 @@ fn is_ssh_git_username(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+fn is_sensitive_query_parameter(key: &str) -> bool {
+    SENSITIVE_QUERY_PARAMETERS
+        .iter()
+        .any(|sensitive| key.eq_ignore_ascii_case(sensitive))
+}
+
+fn redacted_query<'a>(
+    query: &'a str,
+    query_pairs: impl Iterator<Item = (Cow<'a, str>, Cow<'a, str>)>,
+) -> Cow<'a, str> {
+    let mut redacted = false;
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    for (key, value) in query_pairs {
+        if is_sensitive_query_parameter(&key) {
+            serializer.append_pair(&key, "****");
+            redacted = true;
+        } else {
+            serializer.append_pair(&key, &value);
+        }
+    }
+
+    if redacted {
+        Cow::Owned(serializer.finish())
+    } else {
+        Cow::Borrowed(query)
+    }
+}
+
 fn display_with_redacted_credentials(
     url: &Url,
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
-    if url.password().is_none() && url.username() == "" {
-        return write!(f, "{url}");
-    }
+    write!(f, "{}:", url.scheme())?;
 
-    // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
-    // username.
-    if is_ssh_git_username(url) {
-        return write!(f, "{url}");
-    }
+    if url.has_authority() {
+        write!(f, "//")?;
 
-    write!(f, "{}://", url.scheme())?;
+        if url.username() != "" && url.password().is_some() {
+            write!(f, "{}", url.username())?;
+            write!(f, ":****@")?;
+        } else if url.username() != "" && is_ssh_git_username(url) {
+            write!(f, "{}@", url.username())?;
+        } else if url.username() != "" {
+            write!(f, "****@")?;
+        } else if url.password().is_some() {
+            write!(f, ":****@")?;
+        }
 
-    if url.username() != "" && url.password().is_some() {
-        write!(f, "{}", url.username())?;
-        write!(f, ":****@")?;
-    } else if url.username() != "" {
-        write!(f, "****@")?;
-    } else if url.password().is_some() {
-        write!(f, ":****@")?;
-    }
+        write!(f, "{}", url.host_str().unwrap_or(""))?;
 
-    write!(f, "{}", url.host_str().unwrap_or(""))?;
-
-    if let Some(port) = url.port() {
-        write!(f, ":{port}")?;
+        if let Some(port) = url.port() {
+            write!(f, ":{port}")?;
+        }
     }
 
     write!(f, "{}", url.path())?;
     if let Some(query) = url.query() {
-        write!(f, "?{query}")?;
+        write!(f, "?{}", redacted_query(query, url.query_pairs()))?;
     }
     if let Some(fragment) = url.fragment() {
         write!(f, "#{fragment}")?;
@@ -440,6 +493,99 @@ mod tests {
     }
 
     #[test]
+    fn redact_aws_presigned_query_values() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=credential&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=signature&X-Amz-Security-Token=token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=****&X-Amz-Date=20260424T120000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=****&X-Amz-Security-Token=****"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_case_insensitive() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?x-amz-credential=credential&x-amz-signature=signature&x-amz-security-token=token",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?x-amz-credential=****&x-amz-signature=****&x-amz-security-token=****"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_with_percent_encoded_keys() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&safe=value",
+        )
+        .unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Signature=****&safe=value"
+        );
+    }
+
+    #[test]
+    fn redact_aws_presigned_query_values_in_debug() {
+        let log_safe_url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Credential=credential&X-Amz-Signature=signature",
+        )
+        .unwrap();
+
+        let debug = format!("{log_safe_url:?}");
+        assert!(debug.contains(r#"query: Some("X-Amz-Credential=****&X-Amz-Signature=****")"#));
+        assert!(!debug.contains("credential"));
+        assert!(!debug.contains("signature"));
+    }
+
+    #[test]
+    fn does_not_redact_unknown_query_values() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("https://bucket.s3.amazonaws.com/dist.whl?token=secret").unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "https://bucket.s3.amazonaws.com/dist.whl?token=secret"
+        );
+    }
+
+    #[test]
+    fn does_not_add_authority_to_urls_without_authority() {
+        let log_safe_url = DisplaySafeUrl::parse("c:/home/ferris/projects/foo").unwrap();
+
+        assert_eq!(log_safe_url.to_string(), "c:/home/ferris/projects/foo");
+    }
+
+    #[test]
+    fn redacts_query_values_in_urls_without_authority() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("c:/home/ferris/projects/foo?X-Amz-Signature=signature").unwrap();
+
+        assert_eq!(
+            log_safe_url.to_string(),
+            "c:/home/ferris/projects/foo?X-Amz-Signature=****"
+        );
+    }
+
+    #[test]
+    fn redacts_query_values_in_cannot_be_a_base_urls() {
+        let log_safe_url =
+            DisplaySafeUrl::parse("mailto:ferris@example.com?X-Amz-Signature=signature").unwrap();
+
+        assert!(log_safe_url.cannot_be_a_base());
+        assert_eq!(
+            log_safe_url.to_string(),
+            "mailto:ferris@example.com?X-Amz-Signature=****"
+        );
+    }
+
+    #[test]
     fn url_join() {
         let url_str = "https://token@example.com/abc/";
         let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
@@ -480,12 +626,27 @@ mod tests {
 
     #[test]
     fn parse_url_not_ambiguous() {
-        #[allow(clippy::single_element_loop)]
         for url in &[
             // https://github.com/astral-sh/uv/issues/16756
             "file:///C:/jenkins/ython_Environment_Manager_PR-251@2/venv%201/workspace",
+            // https://github.com/astral-sh/uv/issues/17214
+            // Git proxy URLs with nested schemes should not trigger the ambiguity check
+            "git+https://githubproxy.cc/https://github.com/user/repo.git@branch",
+            "git+https://proxy.example.com/https://github.com/org/project@v1.0.0",
+            "git+https://proxy.example.com/https://github.com/org/project@refs/heads/main",
         ] {
             DisplaySafeUrl::parse(url).unwrap();
         }
+    }
+
+    #[test]
+    fn credential_like_pattern() {
+        assert!(!has_credential_like_pattern(
+            "/https://github.com/user/repo.git@branch"
+        ));
+        assert!(!has_credential_like_pattern("/http://example.com/path@ref"));
+
+        assert!(has_credential_like_pattern("/name:password@domain/a/b/c"));
+        assert!(has_credential_like_pattern(":password@domain"));
     }
 }

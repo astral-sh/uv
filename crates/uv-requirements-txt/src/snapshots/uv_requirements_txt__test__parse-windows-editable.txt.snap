@@ -45,6 +45,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [
@@ -104,6 +105,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [
@@ -163,6 +165,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [
@@ -222,6 +225,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [
@@ -281,6 +285,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -333,6 +338,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable[d",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -385,6 +391,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],
@@ -437,6 +444,7 @@ RequirementsTxt {
                             given: Some(
                                 "./editable",
                             ),
+                            expanded: false,
                         },
                     },
                     extras: [],

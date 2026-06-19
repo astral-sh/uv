@@ -1,0 +1,47 @@
+name = "fork-remaining-universe-partitioning"
+description = '''
+This scenario tries to check that the "remaining universe" handling in
+the universal resolver is correct. Namely, whenever we create forks
+from disjoint markers that don't union to the universe, we need to
+create *another* fork corresponding to the difference between the
+universe and the union of the forks.
+
+But when we do this, that remaining universe fork needs to be created
+like any other fork: it should start copying whatever set of forks
+existed by the time we got to this point, intersecting the markers with
+the markers describing the remaining universe and then filtering out
+any dependencies that are disjoint with the resulting markers.
+
+This test exercises that logic by ensuring that a package `z` in the
+remaining universe is excluded based on the combination of markers
+from a parent fork. That is, if the remaining universe fork does not
+pick up the markers from the parent forks, then `z` would be included
+because the remaining universe for _just_ the `b` dependencies of `a`
+is `os_name != 'linux' and os_name != 'darwin'`, which is satisfied by
+`z`'s marker of `sys_platform == 'windows'`. However, `a 1.0.0` is only
+selected in the context of `a < 2 ; sys_platform == 'illumos'`, so `z`
+should never appear in the resolution.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = [
+  "a>=2 ; sys_platform == 'windows'",
+  "a<2 ; sys_platform == 'illumos'",
+]
+
+[packages.z.versions."1.0.0"]
+[packages.a.versions."1.0.0"]
+requires = [
+  "b>=2 ; os_name == 'linux'",
+  "b<2 ; os_name == 'darwin'",
+  "z ; sys_platform == 'windows'",
+]
+[packages.a.versions."2.0.0"]
+[packages.b.versions."1.0.0"]
+[packages.b.versions."2.0.0"]

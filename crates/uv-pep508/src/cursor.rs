@@ -80,15 +80,14 @@ impl<'a> Cursor<'a> {
         Some((pos, char))
     }
 
-    pub(crate) fn remaining(&self) -> usize {
-        self.chars.clone().count()
-    }
-
     /// Peeks over the cursor as long as the condition is met, without consuming it.
     pub(crate) fn peek_while(&mut self, condition: impl Fn(char) -> bool) -> (usize, usize) {
         let peeker = self.chars.clone();
         let start = self.pos();
-        let len = peeker.take_while(|c| condition(*c)).count();
+        let len = peeker
+            .take_while(|c| condition(*c))
+            .map(char::len_utf8)
+            .sum();
         (start, len)
     }
 

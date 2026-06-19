@@ -398,9 +398,6 @@ impl Entry {
     }
 }
 
-#[cfg(doctest)]
-doc_comment::doctest!("../README.md", readme);
-
 #[cfg(test)]
 /// There are no actual tests in this module.
 /// Instead, it contains generics that each keystore invokes in their tests,

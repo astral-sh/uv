@@ -2,12 +2,13 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
+use thiserror::Error;
 
 use tracing::debug;
 use uv_cache::Cache;
-use uv_cli::version::VersionInfo;
+use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -20,13 +21,14 @@ use uv_normalize::PackageName;
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
+use uv_workspace::pyproject::PyProjectToml;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    DiscoveryOptions, WorkspaceCache, WorkspaceError,
+    DiscoveryOptions, ProjectWorkspace, VirtualProject, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind,
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
-use uv_workspace::{VirtualProject, Workspace};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -34,11 +36,12 @@ use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverInstallerSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
 /// Display version information for uv itself (`uv self version`)
 pub(crate) fn self_version(
@@ -47,13 +50,25 @@ pub(crate) fn self_version(
     printer: Printer,
 ) -> Result<ExitStatus> {
     let version_info = uv_cli::version::uv_self_version();
-    print_version(version_info, None, short, output_format, printer)?;
+    match output_format {
+        VersionFormat::Text => {
+            if short {
+                writeln!(printer.stdout(), "{}", version_info.version().cyan())?;
+            } else {
+                writeln!(printer.stdout(), "uv {}", version_info.cyan())?;
+            }
+        }
+        VersionFormat::Json => {
+            let string = serde_json::to_string_pretty(&version_info)?;
+            writeln!(printer.stdout(), "{string}")?;
+        }
+    }
 
     Ok(ExitStatus::Success)
 }
 
 /// Read or update project version (`uv version`)
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn project_version(
     value: Option<String>,
     mut bump: Vec<VersionBumpSpec>,
@@ -64,7 +79,7 @@ pub(crate) async fn project_version(
     explicit_project: bool,
     dry_run: bool,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -77,11 +92,20 @@ pub(crate) async fn project_version(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
+    malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let project = find_target(project_dir, package.as_ref(), explicit_project).await?;
+    let project = find_target(
+        project_dir,
+        package.as_ref(),
+        explicit_project,
+        cache,
+        workspace_cache,
+    )
+    .await?;
 
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
@@ -93,27 +117,31 @@ pub(crate) async fn project_version(
 
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_empty();
-    if frozen && is_read_only {
-        return Box::pin(print_frozen_version(
-            project,
-            &name,
-            project_dir,
-            active,
-            python,
-            install_mirrors,
-            &settings,
-            client_builder,
-            python_preference,
-            python_downloads,
-            concurrency,
-            no_config,
-            cache,
-            short,
-            output_format,
-            printer,
-            preview,
-        ))
-        .await;
+    if let Some(frozen_source) = frozen {
+        if is_read_only {
+            return Box::pin(print_frozen_version(
+                project,
+                &name,
+                project_dir,
+                frozen_source,
+                active,
+                python,
+                install_mirrors,
+                &settings,
+                client_builder,
+                python_preference,
+                python_downloads,
+                &concurrency,
+                no_config,
+                cache,
+                workspace_cache,
+                short,
+                output_format,
+                printer,
+                preview,
+            ))
+            .await;
+        }
     }
 
     let mut toml = PyProjectTomlMut::from_toml(
@@ -291,6 +319,11 @@ pub(crate) async fn project_version(
                     "{old_version} => {new_version} didn't increase the version; when bumping to a pre-release version you also need to increase a release version component, e.g., with `--bump <major|minor|patch>`"
                 ));
             }
+            if new_version.is_dev() && !old_version.is_dev() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when bumping to a dev version you also need to increase another version component, e.g., with `--bump <major|minor|patch|alpha|beta|rc>`"
+                ));
+            }
             return Err(anyhow!(
                 "{old_version} => {new_version} didn't increase the version; provide the exact version to force an update"
             ));
@@ -305,7 +338,13 @@ pub(crate) async fn project_version(
     let status = if dry_run {
         ExitStatus::Success
     } else if let Some(new_version) = &new_version {
-        let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
+        let project = update_project(
+            project,
+            new_version,
+            &mut toml,
+            &pyproject_path,
+            workspace_cache,
+        )?;
         Box::pin(lock_and_sync(
             project,
             project_dir,
@@ -320,11 +359,12 @@ pub(crate) async fn project_version(
             python_preference,
             python_downloads,
             installer_metadata,
-            concurrency,
+            &concurrency,
             no_config,
             cache,
             printer,
             preview,
+            &malware_settings,
         ))
         .await?
     } else {
@@ -333,24 +373,34 @@ pub(crate) async fn project_version(
     };
 
     // Report the results
-    let old_version = VersionInfo::new(Some(&name), &old_version);
-    let new_version = new_version.map(|version| VersionInfo::new(Some(&name), &version));
+    let old_version = ProjectVersionInfo::new(Some(&name), &old_version);
+    let new_version = new_version.map(|version| ProjectVersionInfo::new(Some(&name), &version));
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
 }
 
+/// A [`WorkspaceError`] that may carry a hint to use `uv self version`.
+#[derive(Debug, Error)]
+#[error("{err}")]
+pub(crate) struct MissingProjectVersionError {
+    err: WorkspaceError,
+}
+
+impl uv_errors::Hint for MissingProjectVersionError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(format!(
+            "If you meant to view uv's version, use `{}` instead",
+            "uv self version".green()
+        ))
+    }
+}
+
 /// Add hint to use `uv self version` when workspace discovery fails due to missing pyproject.toml
 /// and --project was not explicitly passed
 fn hint_uv_self_version(err: WorkspaceError, explicit_project: bool) -> anyhow::Error {
-    if matches!(err, WorkspaceError::MissingPyprojectToml) && !explicit_project {
-        anyhow!(
-            "{}\n\n{}{} If you meant to view uv's version, use `{}` instead",
-            err,
-            "hint".bold().cyan(),
-            ":".bold(),
-            "uv self version".green()
-        )
+    if matches!(err.as_ref(), WorkspaceErrorKind::MissingPyprojectToml) && !explicit_project {
+        MissingProjectVersionError { err }.into()
     } else {
         err.into()
     }
@@ -363,35 +413,34 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    cache: &Cache,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Find the project in the workspace.
-    // No workspace caching since `uv version` changes the workspace definition.
     let project = if let Some(package) = package {
-        VirtualProject::Project(
-            Workspace::discover(
-                project_dir,
-                &DiscoveryOptions {
-                    project: uv_workspace::ProjectDiscovery::Required,
-                    ..DiscoveryOptions::default()
-                },
-                &WorkspaceCache::default(),
-            )
-            .await
-            .map_err(|err| hint_uv_self_version(err, explicit_project))?
-            .with_current_project(package.clone())
-            .with_context(|| format!("Package `{package}` not found in workspace"))?,
-        )
-    } else {
-        VirtualProject::discover(
+        VirtualProject::discover_with_package(
             project_dir,
-            &DiscoveryOptions {
-                project: uv_workspace::ProjectDiscovery::Required,
-                ..DiscoveryOptions::default()
-            },
-            &WorkspaceCache::default(),
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+            package.clone(),
         )
         .await
         .map_err(|err| hint_uv_self_version(err, explicit_project))?
+    } else {
+        // Configuration discovery may have cached errors from virtual workspace member discovery.
+        // `uv version` requires a project, so reject non-project roots before consulting that cache.
+        let project_workspace_cache = WorkspaceCache::default();
+        VirtualProject::Project(
+            ProjectWorkspace::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                cache,
+                &project_workspace_cache,
+            )
+            .await
+            .map_err(|err| hint_uv_self_version(err, explicit_project))?,
+        )
     };
     Ok(project)
 }
@@ -402,6 +451,7 @@ fn update_project(
     new_version: &Version,
     toml: &mut PyProjectTomlMut,
     pyproject_path: &Path,
+    workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
     // Save to disk
     toml.set_version(new_version)?;
@@ -410,7 +460,11 @@ fn update_project(
 
     // Update the `pyproject.toml` in-memory.
     let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)?
+        .update_member(
+            PyProjectToml::from_string(content, pyproject_path)
+                .map_err(ProjectError::PyprojectTomlParse)?,
+            workspace_cache,
+        )?
         .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     Ok(project)
@@ -421,6 +475,7 @@ async fn print_frozen_version(
     project: VirtualProject,
     name: &PackageName,
     project_dir: &Path,
+    frozen_source: FrozenSource,
     active: Option<bool>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -428,30 +483,37 @@ async fn print_frozen_version(
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Discover the interpreter (this is the same interpreter --no-sync uses).
+    let groups = DependencyGroupsWithDefaults::none();
+    let workspace_python = WorkspacePython::from_request(
+        python.as_deref().map(PythonRequest::parse),
+        Some(project.workspace()),
+        &groups,
+        project_dir,
+        no_config,
+    )
+    .await?;
     let interpreter = ProjectInterpreter::discover(
         project.workspace(),
-        project_dir,
-        &DependencyGroupsWithDefaults::none(),
-        python.as_deref().map(PythonRequest::parse),
+        &groups,
+        workspace_python,
         &client_builder,
         python_preference,
         python_downloads,
         &install_mirrors,
         false,
-        no_config,
         active,
         cache,
         printer,
-        preview,
     )
     .await?
     .into_interpreter();
@@ -464,14 +526,14 @@ async fn print_frozen_version(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         project::lock::LockOperation::new(
-            LockMode::Frozen,
+            LockMode::Frozen(frozen_source.into()),
             &settings.resolver,
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
             concurrency,
             cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )
@@ -481,9 +543,11 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -505,19 +569,18 @@ async fn print_frozen_version(
     };
 
     // Finally, print!
-    let old_version = VersionInfo::new(Some(name), version);
+    let old_version = ProjectVersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
     Ok(ExitStatus::Success)
 }
 
 /// Re-lock and re-sync the project after a series of edits.
-#[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
     project: VirtualProject,
     project_dir: &Path,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     active: Option<bool>,
     no_sync: bool,
     python: Option<String>,
@@ -527,14 +590,15 @@ async fn lock_and_sync(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     no_config: bool,
     cache: &Cache,
     printer: Printer,
     preview: Preview,
+    malware_settings: &MalwareCheckSettings,
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
-    if frozen {
+    if frozen.is_some() {
         return Ok(ExitStatus::Success);
     }
 
@@ -548,21 +612,26 @@ async fn lock_and_sync(
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = if no_sync {
         // Discover the interpreter.
+        let workspace_python = WorkspacePython::from_request(
+            python.as_deref().map(PythonRequest::parse),
+            Some(project.workspace()),
+            &groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
         let interpreter = ProjectInterpreter::discover(
             project.workspace(),
-            project_dir,
             &groups,
-            python.as_deref().map(PythonRequest::parse),
+            workspace_python,
             &client_builder,
             python_preference,
             python_downloads,
             &install_mirrors,
             false,
-            no_config,
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         .into_interpreter();
@@ -584,7 +653,6 @@ async fn lock_and_sync(
             cache,
             DryRun::Disabled,
             printer,
-            preview,
         )
         .await?
         .into_environment()?;
@@ -623,9 +691,11 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -673,18 +743,21 @@ async fn lock_and_sync(
         installer_metadata,
         concurrency,
         cache,
-        workspace_cache,
+        &workspace_cache,
         DryRun::Disabled,
         printer,
         preview,
+        malware_settings,
     )
     .await
     {
-        Ok(()) => {}
+        Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -693,8 +766,8 @@ async fn lock_and_sync(
 }
 
 fn print_version(
-    old_version: VersionInfo,
-    new_version: Option<VersionInfo>,
+    old_version: ProjectVersionInfo,
+    new_version: Option<ProjectVersionInfo>,
     short: bool,
     output_format: VersionFormat,
     printer: Printer,

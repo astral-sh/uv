@@ -1,6 +1,6 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.5"
+version = "0.0.55"
 description = "This is an internal component crate of uv"
 keywords = ["virtualenv", "venv", "python"]
 
@@ -13,14 +13,16 @@ license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
 
 [dependencies]
 uv-console = { workspace = true }
+uv-errors = { workspace = true }
 uv-fs = { workspace = true }
-uv-preview = { workspace = true }
+uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-shell = { workspace = true }
@@ -34,6 +36,3 @@ owo-colors = { workspace = true }
 pathdiff = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-self-replace = { workspace = true }

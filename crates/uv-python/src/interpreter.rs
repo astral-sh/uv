@@ -25,22 +25,22 @@ use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform::{Arch, Libc, Os};
-use uv_platform_tags::{Platform, Tags, TagsError};
+use uv_platform_tags::{Platform, Tags, TagsError, TagsOptions};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
 use crate::managed::ManagedPythonInstallations;
 use crate::pointer_size::PointerSize;
 use crate::{
-    Prefix, PythonInstallationKey, PythonVariant, PythonVersion, Target, VersionRequest,
-    VirtualEnvironment,
+    Prefix, PyVenvConfiguration, PythonInstallationKey, PythonVariant, PythonVersion, Target,
+    VersionRequest, VirtualEnvironment,
 };
 
 #[cfg(windows)]
 use windows::Win32::Foundation::{APPMODEL_ERROR_NO_PACKAGE, ERROR_CANT_ACCESS_FILE, WIN32_ERROR};
 
 /// A Python executable and its associated platform markers.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     platform: Platform,
@@ -49,13 +49,12 @@ pub struct Interpreter {
     virtualenv: Scheme,
     manylinux_compatible: bool,
     sys_prefix: PathBuf,
-    sys_base_exec_prefix: PathBuf,
     sys_base_prefix: PathBuf,
     sys_base_executable: Option<PathBuf>,
     sys_executable: PathBuf,
-    sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
@@ -84,16 +83,15 @@ impl Interpreter {
             virtualenv: info.virtualenv,
             manylinux_compatible: info.manylinux_compatible,
             sys_prefix: info.sys_prefix,
-            sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
             gil_disabled: info.gil_disabled,
             debug_enabled: info.debug_enabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
             sys_executable: info.sys_executable,
-            sys_path: info.sys_path,
             site_packages: info.site_packages,
             stdlib: info.stdlib,
+            extension_suffixes: info.extension_suffixes,
             standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
@@ -118,7 +116,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--target` directory.
-    pub fn with_target(self, target: Target) -> io::Result<Self> {
+    pub(crate) fn with_target(self, target: Target) -> io::Result<Self> {
         target.init()?;
         Ok(Self {
             target: Some(target),
@@ -127,7 +125,7 @@ impl Interpreter {
     }
 
     /// Return a new [`Interpreter`] to install into the given `--prefix` directory.
-    pub fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
+    pub(crate) fn with_prefix(self, prefix: Prefix) -> io::Result<Self> {
         prefix.init(self.virtualenv())?;
         Ok(Self {
             prefix: Some(prefix),
@@ -204,7 +202,7 @@ impl Interpreter {
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.
-    pub fn key(&self) -> PythonInstallationKey {
+    pub(crate) fn key(&self) -> PythonInstallationKey {
         PythonInstallationKey::new(
             LenientImplementationName::from(self.implementation_name()),
             self.python_major(),
@@ -231,17 +229,17 @@ impl Interpreter {
     }
 
     /// Return the [`Arch`] reported by the interpreter platform tags.
-    pub fn arch(&self) -> Arch {
+    pub(crate) fn arch(&self) -> Arch {
         Arch::from(&self.platform().arch())
     }
 
     /// Return the [`Libc`] reported by the interpreter platform tags.
-    pub fn libc(&self) -> Libc {
+    pub(crate) fn libc(&self) -> Libc {
         Libc::from(self.platform().os())
     }
 
     /// Return the [`Os`] reported by the interpreter platform tags.
-    pub fn os(&self) -> Os {
+    pub(crate) fn os(&self) -> Os {
         Os::from(self.platform().os())
     }
 
@@ -253,8 +251,12 @@ impl Interpreter {
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),
-                self.manylinux_compatible,
-                self.gil_disabled,
+                TagsOptions {
+                    manylinux_compatible: self.manylinux_compatible,
+                    gil_disabled: self.gil_disabled,
+                    debug_enabled: self.debug_enabled,
+                    is_cross: false,
+                },
             )?;
             self.tags.set(tags).expect("tags should not be set");
         }
@@ -270,19 +272,19 @@ impl Interpreter {
     }
 
     /// Returns `true` if the environment is a `--target` environment.
-    pub fn is_target(&self) -> bool {
+    fn is_target(&self) -> bool {
         self.target.is_some()
     }
 
     /// Returns `true` if the environment is a `--prefix` environment.
-    pub fn is_prefix(&self) -> bool {
+    fn is_prefix(&self) -> bool {
         self.prefix.is_some()
     }
 
     /// Returns `true` if this interpreter is managed by uv.
     ///
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
-    pub fn is_managed(&self) -> bool {
+    pub(crate) fn is_managed(&self) -> bool {
         if let Ok(test_managed) =
             std::env::var(uv_static::EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED)
         {
@@ -303,8 +305,14 @@ impl Interpreter {
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
             return false;
         };
+        let Ok(root) = installations.absolute_root() else {
+            return false;
+        };
+        let sys_base_prefix = dunce::canonicalize(&self.sys_base_prefix)
+            .unwrap_or_else(|_| self.sys_base_prefix.clone());
+        let root = dunce::canonicalize(&root).unwrap_or(root);
 
-        let Ok(suffix) = self.sys_base_prefix.strip_prefix(installations.root()) else {
+        let Ok(suffix) = sys_base_prefix.strip_prefix(&root) else {
             return false;
         };
 
@@ -382,7 +390,7 @@ impl Interpreter {
 
     /// Returns the Python version up to the patch component.
     #[inline]
-    pub fn python_patch_version(&self) -> Version {
+    pub(crate) fn python_patch_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(3).copied())
     }
 
@@ -399,7 +407,7 @@ impl Interpreter {
     }
 
     /// Return the patch version component of this Python version.
-    pub fn python_patch(&self) -> u8 {
+    pub(crate) fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
@@ -410,13 +418,13 @@ impl Interpreter {
     }
 
     /// Return the major version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_major(&self) -> u8 {
+    fn implementation_major(&self) -> u8 {
         let major = self.markers.implementation_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
     /// Return the minor version of the implementation (e.g., `CPython` or `PyPy`).
-    pub fn implementation_minor(&self) -> u8 {
+    fn implementation_minor(&self) -> u8 {
         let minor = self.markers.implementation_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
@@ -431,11 +439,6 @@ impl Interpreter {
         self.markers.implementation_name()
     }
 
-    /// Return the `sys.base_exec_prefix` path for this Python interpreter.
-    pub fn sys_base_exec_prefix(&self) -> &Path {
-        &self.sys_base_exec_prefix
-    }
-
     /// Return the `sys.base_prefix` path for this Python interpreter.
     pub fn sys_base_prefix(&self) -> &Path {
         &self.sys_base_prefix
@@ -448,7 +451,7 @@ impl Interpreter {
 
     /// Return the `sys._base_executable` path for this Python interpreter. Some platforms do not
     /// have this attribute, so it may be `None`.
-    pub fn sys_base_executable(&self) -> Option<&Path> {
+    pub(crate) fn sys_base_executable(&self) -> Option<&Path> {
         self.sys_base_executable.as_deref()
     }
 
@@ -457,14 +460,14 @@ impl Interpreter {
         &self.sys_executable
     }
 
+    /// Return the recognized native extension module suffixes for this Python interpreter.
+    pub fn extension_suffixes(&self) -> &[Box<str>] {
+        &self.extension_suffixes
+    }
+
     /// Return the "real" queried executable path for this Python interpreter.
     pub fn real_executable(&self) -> &Path {
         &self.real_executable
-    }
-
-    /// Return the `sys.path` for this Python interpreter.
-    pub fn sys_path(&self) -> &[PathBuf] {
-        &self.sys_path
     }
 
     /// Return the `site.getsitepackages` for this Python interpreter.
@@ -484,12 +487,12 @@ impl Interpreter {
     }
 
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn purelib(&self) -> &Path {
+    fn purelib(&self) -> &Path {
         &self.scheme.purelib
     }
 
     /// Return the `platlib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn platlib(&self) -> &Path {
+    fn platlib(&self) -> &Path {
         &self.scheme.platlib
     }
 
@@ -499,12 +502,12 @@ impl Interpreter {
     }
 
     /// Return the `data` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn data(&self) -> &Path {
+    fn data(&self) -> &Path {
         &self.scheme.data
     }
 
     /// Return the `include` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
-    pub fn include(&self) -> &Path {
+    fn include(&self) -> &Path {
         &self.scheme.include
     }
 
@@ -539,12 +542,12 @@ impl Interpreter {
     }
 
     /// Return the `--target` directory for this interpreter, if any.
-    pub fn target(&self) -> Option<&Target> {
+    fn target(&self) -> Option<&Target> {
         self.target.as_ref()
     }
 
     /// Return the `--prefix` directory for this interpreter, if any.
-    pub fn prefix(&self) -> Option<&Prefix> {
+    fn prefix(&self) -> Option<&Prefix> {
         self.prefix.as_ref()
     }
 
@@ -638,18 +641,6 @@ impl Interpreter {
             .map(Cow::Borrowed)
             .chain(prefix.into_iter().flatten().map(Cow::Owned))
             .chain(interpreter.into_iter().flatten().map(Cow::Borrowed))
-    }
-
-    /// Check if the interpreter matches the given Python version.
-    ///
-    /// If a patch version is present, we will require an exact match.
-    /// Otherwise, just the major and minor version numbers need to match.
-    pub fn satisfies(&self, version: &PythonVersion) -> bool {
-        if version.patch().is_some() {
-            version.version() == self.python_version()
-        } else {
-            (version.major(), version.minor()) == self.python_tuple()
-        }
     }
 
     /// Whether or not this Python interpreter is from a default Python executable name, like
@@ -823,7 +814,7 @@ pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(transparent)]
-    BrokenSymlink(BrokenSymlink),
+    BrokenLink(BrokenLink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -859,30 +850,53 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::BrokenLink(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
-pub struct BrokenSymlink {
+pub struct BrokenLink {
     pub path: PathBuf,
+    /// Whether we have a broken symlink (Unix) or whether the shim returned that the underlying
+    /// Python went away (Windows).
+    pub unix: bool,
     /// Whether the interpreter path looks like a virtual environment.
     pub venv: bool,
 }
 
-impl Display for BrokenSymlink {
+impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
-            self.path.user_display()
-        )?;
-        if self.venv {
+        if self.unix {
             write!(
                 f,
-                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-                "hint".bold().cyan(),
-                ":".bold(),
-                "uv venv".green()
-            )?;
+                "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )
+        } else {
+            write!(
+                f,
+                "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
+                self.path.user_display()
+            )
         }
-        Ok(())
+    }
+}
+
+impl uv_errors::Hint for BrokenLink {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if self.venv {
+            uv_errors::Hints::from(format!(
+                "Consider recreating the environment (e.g., with `{}`)",
+                "uv venv".green()
+            ))
+        } else {
+            uv_errors::Hints::none()
+        }
     }
 }
 
@@ -904,9 +918,9 @@ pub enum InterpreterInfoError {
     BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
-    #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
+    #[error("Python {python_version} is not supported. Please use Python 3.6 or newer.")]
     UnsupportedPythonVersion { python_version: String },
-    #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
+    #[error("Python executable does not support `-I` flag. Please use Python 3.6 or newer.")]
     UnsupportedPython,
     #[error(
         "Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`."
@@ -915,11 +929,11 @@ pub enum InterpreterInfoError {
         python_major: usize,
         python_minor: usize,
     },
-    #[error("Only Pyodide is support for Emscripten Python")]
+    #[error("Only Pyodide is supported for Emscripten Python")]
     EmscriptenNotPyodide,
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
@@ -935,6 +949,7 @@ struct InterpreterInfo {
     sys_path: Vec<PathBuf>,
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
+    extension_suffixes: Vec<Box<str>>,
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
@@ -943,7 +958,7 @@ struct InterpreterInfo {
 
 impl InterpreterInfo {
     /// Return the resolved [`InterpreterInfo`] for the given Python executable.
-    pub(crate) fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query(interpreter: &Path, cache: &Cache) -> Result<Self, Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
@@ -954,44 +969,69 @@ impl InterpreterInfo {
             r#"import sys; sys.path = ["{}"] + sys.path; from python.get_interpreter_info import main; main()"#,
             tempdir.path().escape_for_python()
         );
-        let output = Command::new(interpreter)
+        let mut command = Command::new(interpreter);
+        command
             .arg("-I") // Isolated mode.
             .arg("-B") // Don't write bytecode.
             .arg("-c")
-            .arg(script)
-            .output()
-            .map_err(|err| {
-                match err.kind() {
-                    io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
-                    io::ErrorKind::PermissionDenied => {
-                        return Error::PermissionDenied {
-                            path: interpreter.to_path_buf(),
-                            err,
-                        };
-                    }
-                    _ => {}
-                }
-                #[cfg(windows)]
-                if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
-                    .raw_os_error()
-                    .and_then(|code| u32::try_from(code).ok())
-                    .map(WIN32_ERROR)
-                {
-                    // These error codes are returned if the Python interpreter is a corrupt MSIX
-                    // package, which we want to differentiate from a typical spawn failure.
-                    return Error::CorruptWindowsPackage {
+            .arg(script);
+
+        // Disable Apple's SYSTEM_VERSION_COMPAT shim so that `platform.mac_ver()` reports
+        // the real macOS version instead of "10.16" for interpreters built against older SDKs
+        // (e.g., conda with MACOSX_DEPLOYMENT_TARGET=10.15).
+        //
+        // See:
+        //
+        // - https://github.com/astral-sh/uv/issues/14267
+        // - https://github.com/pypa/packaging/blob/f2bbd4f578644865bc5cb2534768e46563ee7f66/src/packaging/tags.py#L436
+        #[cfg(target_os = "macos")]
+        command.env("SYSTEM_VERSION_COMPAT", "0");
+
+        let output = command.output().map_err(|err| {
+            match err.kind() {
+                io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
+                io::ErrorKind::PermissionDenied => {
+                    return Error::PermissionDenied {
                         path: interpreter.to_path_buf(),
                         err,
                     };
                 }
-                Error::SpawnFailed {
+                _ => {}
+            }
+            #[cfg(windows)]
+            if let Some(APPMODEL_ERROR_NO_PACKAGE | ERROR_CANT_ACCESS_FILE) = err
+                .raw_os_error()
+                .and_then(|code| u32::try_from(code).ok())
+                .map(WIN32_ERROR)
+            {
+                // These error codes are returned if the Python interpreter is a corrupt MSIX
+                // package, which we want to differentiate from a typical spawn failure.
+                return Error::CorruptWindowsPackage {
                     path: interpreter.to_path_buf(),
                     err,
-                }
-            })?;
+                };
+            }
+            Error::SpawnFailed {
+                path: interpreter.to_path_buf(),
+                err,
+            }
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+            // Handle uninstalled CPython interpreters on Windows.
+            //
+            // The IO error from the CPython trampoline is unstructured and localized, so we check
+            // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
+            // interpreter was uninstalled.
+            if python_home(interpreter).is_some_and(|home| !home.exists()) {
+                return Err(Error::BrokenLink(BrokenLink {
+                    path: interpreter.to_path_buf(),
+                    unix: false,
+                    venv: uv_fs::is_virtualenv_executable(interpreter),
+                }));
+            }
 
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
@@ -1077,7 +1117,7 @@ impl InterpreterInfo {
     /// Running a Python script is (relatively) expensive, and the markers won't change
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
-    pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
@@ -1091,8 +1131,9 @@ impl InterpreterInfo {
                     .symlink_metadata()
                     .is_ok_and(|metadata| metadata.is_symlink())
                 {
-                    Error::BrokenSymlink(BrokenSymlink {
+                    Error::BrokenLink(BrokenLink {
                         path: executable.to_path_buf(),
+                        unix: true,
                         venv: uv_fs::is_virtualenv_executable(executable),
                     })
                 } else {
@@ -1111,8 +1152,12 @@ impl InterpreterInfo {
             // invalidate the cache (e.g.) on OS upgrades.
             cache_digest(&(
                 ARCH,
-                sys_info::os_type().unwrap_or_default(),
-                sys_info::os_release().unwrap_or_default(),
+                uv_platform::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
             )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't want to query the executable with symbolic links resolved because
@@ -1272,6 +1317,13 @@ fn find_base_python(
     }
 }
 
+/// Parse the `home` key from `pyvenv.cfg`, if any.
+fn python_home(interpreter: &Path) -> Option<PathBuf> {
+    let venv_root = interpreter.parent()?.parent()?;
+    let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
+    pyvenv_cfg.home
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
@@ -1328,6 +1380,7 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+            "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {
                 "data": "/home/ferris/.pyenv/versions/3.12.0",
                 "include": "/home/ferris/.pyenv/versions/3.12.0/include",

@@ -235,7 +235,7 @@ impl RequirementsSpecification {
 
     /// Read the requirements and constraints from a source, using a cache for file contents.
     #[instrument(skip_all, level = tracing::Level::DEBUG, fields(source = % source))]
-    pub async fn from_source_with_cache(
+    async fn from_source_with_cache(
         source: &RequirementsSource,
         client_builder: &BaseClientBuilder<'_>,
         cache: &mut SourceCache,
@@ -284,7 +284,7 @@ impl RequirementsSpecification {
                         ));
                     }
                 };
-                let pyproject_toml = toml::from_str::<PyProjectToml>(&content)
+                let pyproject_toml = PyProjectToml::from_toml(&content, path.user_display())
                     .with_context(|| format!("Failed to parse: `{}`", path.user_display()))?;
 
                 Self {
@@ -335,7 +335,7 @@ impl RequirementsSpecification {
                 }
             }
             RequirementsSource::PylockToml(path) => {
-                if !path.is_file() {
+                if !(path.starts_with("http://") || path.starts_with("https://") || path.exists()) {
                     return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
@@ -565,12 +565,12 @@ impl RequirementsSpecification {
             }
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -603,12 +603,12 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -627,12 +627,12 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -658,7 +658,7 @@ impl RequirementsSpecification {
                     }
                 }
             }
-            spec.excludes.extend(source.excludes.into_iter());
+            spec.excludes.extend(source.excludes);
         }
 
         Ok(spec)
@@ -679,39 +679,13 @@ impl RequirementsSpecification {
         Self::from_sources(requirements, &[], &[], &[], None, client_builder).await
     }
 
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].
-    pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
-    }
-
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints.
-    pub fn from_constraints(requirements: Vec<Requirement>, constraints: Vec<Requirement>) -> Self {
-        Self {
-            requirements: requirements
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect(),
-            constraints: constraints
-                .into_iter()
-                .map(NameRequirementSpecification::from)
-                .collect(),
-            ..Self::default()
-        }
-    }
-
-    /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`], including
-    /// constraints and overrides.
-    pub fn from_overrides(
+    /// constraints, overrides, and excludes.
+    pub fn from_excludes(
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        excludes: Vec<PackageName>,
     ) -> Self {
         Self {
             requirements: requirements
@@ -726,13 +700,9 @@ impl RequirementsSpecification {
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),
+            excludes,
             ..Self::default()
         }
-    }
-
-    /// Return true if the specification does not include any requirements to install.
-    pub fn is_empty(&self) -> bool {
-        self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
 }
 
@@ -756,7 +726,7 @@ async fn read_file(path: &Path, client_builder: &BaseClientBuilder<'_>) -> Resul
         if !cfg!(unix) || matches!(path.try_exists(), Ok(false)) {
             let url = DisplaySafeUrl::parse(&path.to_string_lossy())?;
 
-            let client = client_builder.build();
+            let client = client_builder.build()?;
             let response = client
                 .for_host(&url)
                 .get(Url::from(url.clone()))

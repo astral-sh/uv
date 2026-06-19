@@ -55,8 +55,8 @@ impl<'dist> RequirementsTxtDist<'dist> {
                             Some(Scheme::File) => {
                                 if path
                                     .strip_prefix("//localhost")
-                                    .filter(|path| path.starts_with('/'))
-                                    .is_some()
+                                    .as_ref()
+                                    .is_some_and(|path| path.starts_with('/'))
                                 {
                                     // Always absolute; nothing to do.
                                     None

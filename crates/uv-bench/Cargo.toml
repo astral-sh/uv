@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.5"
+version = "0.0.55"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -16,23 +16,26 @@ workspace = true
 [lib]
 doctest = false
 bench = false
+test = false
 
 [[bench]]
 name = "uv"
 path = "benches/uv.rs"
 harness = false
 
-[dependencies]
+[dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
-uv-extract = { workspace = true, optional = true }
+uv-extract = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-performance-memory-allocator = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -42,12 +45,16 @@ uv-types = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
+async_zip = { workspace = true }
+astral-tokio-tar = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+flate2 = { workspace = true }
+fs-err = { workspace = true }
+futures = { workspace = true }
 jiff = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
-
-[package.metadata.cargo-shear]
-ignored = ["uv-extract"]
+tokio-util = { workspace = true }
 
 [features]
 static = ["uv-extract/static"]

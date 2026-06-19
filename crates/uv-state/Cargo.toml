@@ -1,6 +1,6 @@
 [package]
 name = "uv-state"
-version = "0.0.5"
+version = "0.0.55"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -11,6 +11,7 @@ license = { workspace = true }
 
 [lib]
 doctest = false
+test = false
 
 [lints]
 workspace = true
@@ -18,4 +19,3 @@ workspace = true
 [dependencies]
 uv-dirs = { workspace = true }
 tempfile = { workspace = true }
-fs-err = { workspace = true }

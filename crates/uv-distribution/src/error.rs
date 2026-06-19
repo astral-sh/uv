@@ -1,29 +1,45 @@
+use std::fmt;
 use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
+use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
-use uv_distribution_filename::WheelFilenameError;
+use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
-use uv_fs::{LockedFileError, Simplified};
+use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_platform_tags::Platform;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
+
+#[derive(Debug, Clone, Copy)]
+pub struct PythonVersion {
+    pub(crate) version: (u8, u8),
+    pub(crate) variant: PythonVariant,
+}
+
+impl fmt::Display for PythonVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (major, minor) = self.version;
+        write!(f, "{major}.{minor}{}", self.variant.executable_suffix())
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Building source distributions is disabled")]
     NoBuild,
+    #[error("Building source distributions for `{0}` is disabled")]
+    NoBuildPackage(PackageName),
 
     // Network error
-    #[error("Expected an absolute path, but received: {}", _0.user_display())]
-    RelativePath(PathBuf),
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
@@ -34,6 +50,8 @@ pub enum Error {
     Reqwest(#[from] WrappedReqwestError),
     #[error(transparent)]
     Client(#[from] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
 
     // Cache writing error
     #[error("Failed to read from the distribution cache")]
@@ -41,7 +59,7 @@ pub enum Error {
     #[error("Failed to write to the distribution cache")]
     CacheWrite(#[source] std::io::Error),
     #[error("Failed to acquire lock on the distribution cache")]
-    CacheLock(#[source] LockedFileError),
+    CacheLock(#[source] CacheError),
     #[error("Failed to deserialize cache entry")]
     CacheDecode(#[from] rmp_serde::decode::Error),
     #[error("Failed to serialize cache entry")]
@@ -77,14 +95,37 @@ pub enum Error {
         filename: Version,
         metadata: Version,
     },
+    /// This shouldn't happen, it's a bug in the build backend.
+    #[error(
+        "The built wheel `{}` is not compatible with the current Python {} on {}",
+        filename,
+        python_version,
+        python_platform.pretty(),
+    )]
+    BuiltWheelIncompatibleHostPlatform {
+        filename: WheelFilename,
+        python_platform: Platform,
+        python_version: PythonVersion,
+    },
+    /// This may happen when trying to cross-install native dependencies without their build backend
+    /// being aware that the target is a cross-install.
+    #[error(
+        "The built wheel `{}` is not compatible with the target Python {} on {}. Consider using `--no-build` to disable building wheels.",
+        filename,
+        python_version,
+        python_platform.pretty(),
+    )]
+    BuiltWheelIncompatibleTargetPlatform {
+        filename: WheelFilename,
+        python_platform: Platform,
+        python_version: PythonVersion,
+    },
     #[error("Failed to parse metadata from built wheel")]
     Metadata(#[from] uv_pypi_types::MetadataError),
     #[error("Failed to read metadata: `{}`", _0.user_display())]
     WheelMetadata(PathBuf, #[source] Box<uv_metadata::Error>),
     #[error("Failed to read metadata from installed package `{0}`")]
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
-    #[error("Failed to read zip archive from built wheel")]
-    Zip(#[from] ZipError),
     #[error("Failed to extract archive: {0}")]
     Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
@@ -92,17 +133,15 @@ pub enum Error {
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
     MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("The source distribution `{0}` is missing Git LFS artifacts.")]
-    MissingGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    MissingSourceDistGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
+    #[error("The wheel `{0}` is missing Git LFS artifacts.")]
+    MissingWheelGitLfsArtifacts(DisplaySafeUrl, #[source] GitError),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
-    #[error("Failed to extract metadata from `requires.txt`")]
-    RequiresTxt(#[source] uv_pypi_types::MetadataError),
     #[error("The source distribution is missing a `pyproject.toml` file")]
     MissingPyprojectToml,
     #[error("Failed to extract static metadata from `pyproject.toml`")]
     PyprojectToml(#[source] uv_pypi_types::MetadataError),
-    #[error("Unsupported scheme in URL: {0}")]
-    UnsupportedScheme(String),
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
@@ -160,6 +199,9 @@ pub enum Error {
 
     #[error("Hash-checking is not supported for Git repositories: `{0}`")]
     HashesNotSupportedGit(String),
+
+    #[error(transparent)]
+    InstallWheelError(uv_install_wheel::Error),
 }
 
 impl From<reqwest::Error> for Error {
@@ -175,6 +217,16 @@ impl From<reqwest_middleware::Error> for Error {
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(WrappedReqwestError::from(error))
             }
+        }
+    }
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Build(err) => err.hints(),
+            Self::MetadataLowering(err) => err.hints(),
+            _ => uv_errors::Hints::none(),
         }
     }
 }
@@ -241,5 +293,63 @@ impl Error {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, PythonVersion};
+    use std::str::FromStr;
+    use uv_distribution_filename::WheelFilename;
+    use uv_platform_tags::{Arch, Os, Platform};
+    use uv_python::PythonVariant;
+
+    #[test]
+    fn built_wheel_error_formats_freethreaded_python() {
+        let err = Error::BuiltWheelIncompatibleHostPlatform {
+            filename: WheelFilename::from_str(
+                "cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl",
+            )
+            .unwrap(),
+            python_platform: Platform::new(
+                Os::Macos {
+                    major: 11,
+                    minor: 0,
+                },
+                Arch::Aarch64,
+            ),
+            python_version: PythonVersion {
+                version: (3, 15),
+                variant: PythonVariant::Freethreaded,
+            },
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `cryptography-47.0.0.dev1-cp315-abi3t-macosx_11_0_arm64.whl` is not compatible with the current Python 3.15t on macOS aarch64"
+        );
+    }
+
+    #[test]
+    fn built_wheel_error_formats_target_python() {
+        let err = Error::BuiltWheelIncompatibleTargetPlatform {
+            filename: WheelFilename::from_str("py313-0.1.0-py313-none-any.whl").unwrap(),
+            python_platform: Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 28,
+                },
+                Arch::X86_64,
+            ),
+            python_version: PythonVersion {
+                version: (3, 12),
+                variant: PythonVariant::Default,
+            },
+        };
+
+        assert_eq!(
+            err.to_string(),
+            "The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on Linux x86_64. Consider using `--no-build` to disable building wheels."
+        );
     }
 }

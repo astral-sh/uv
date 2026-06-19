@@ -1,3 +1,4 @@
+use std::convert::Into;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -8,12 +9,14 @@ use thiserror::Error;
 use tracing::{debug, error, info, trace, warn};
 
 use uv_static::EnvVars;
+#[cfg(windows)]
+use windows::Win32::Foundation::ERROR_LOCK_VIOLATION;
 
 use crate::{Simplified, is_known_already_locked_error};
 
 /// Parsed value of `UV_LOCK_TIMEOUT`, with a default of 5 min.
 static LOCK_TIMEOUT: LazyLock<Duration> = LazyLock::new(|| {
-    let default_timeout = Duration::from_secs(300);
+    let default_timeout = Duration::from_mins(5);
     let Some(lock_timeout) = env::var_os(EnvVars::UV_LOCK_TIMEOUT) else {
         return default_timeout;
     };
@@ -59,10 +62,18 @@ pub enum LockedFileError {
         source: io::Error,
     },
     #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
     #[cfg(feature = "tokio")]
     JoinError(#[from] tokio::task::JoinError),
+    #[error("Could not create temporary file")]
+    CreateTemporary(#[source] io::Error),
+    #[error("Could not persist temporary file `{}`", path.user_display())]
+    PersistTemporary {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 impl LockedFileError {
@@ -72,6 +83,8 @@ impl LockedFileError {
             #[cfg(feature = "tokio")]
             Self::JoinError(_) => None,
             Self::Lock { source, .. } => Some(source),
+            Self::CreateTemporary(err) => Some(err),
+            Self::PersistTemporary { source, .. } => Some(source),
             Self::Io(err) => Some(err),
         }
     }
@@ -87,6 +100,12 @@ pub enum LockedFileMode {
 impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
+    ///
+    /// On Android, [`std::fs::File::try_lock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
         match self {
             Self::Exclusive => file.try_lock()?,
@@ -95,13 +114,63 @@ impl LockedFileMode {
         Ok(())
     }
 
+    /// Try to lock the file and return an error if the lock is already acquired by another process
+    /// and cannot be acquired immediately.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::try_lock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
+        use std::os::fd::AsFd;
+
+        let operation = match self {
+            Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
+        };
+        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
+            if errno == rustix::io::Errno::WOULDBLOCK {
+                std::fs::TryLockError::WouldBlock
+            } else {
+                std::fs::TryLockError::Error(io::Error::from_raw_os_error(errno.raw_os_error()))
+            }
+        })
+    }
+
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// On Android, [`std::fs::File::lock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
         match self {
             Self::Exclusive => file.lock()?,
             Self::Shared => file.lock_shared()?,
         }
         Ok(())
+    }
+
+    /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::lock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
+        use std::os::fd::AsFd;
+
+        let operation = match self {
+            Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::LockShared,
+        };
+        rustix::fs::flock(file.as_fd(), operation)
+            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
 
@@ -136,7 +205,7 @@ impl LockedFile {
         let try_lock_exclusive = tokio::task::spawn_blocking(move || (mode.try_lock(&file), file));
         let file = match try_lock_exclusive.await? {
             (Ok(()), file) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 return Ok(Self(file));
             }
             (Err(err), file) => {
@@ -169,7 +238,7 @@ impl LockedFile {
             source: err,
         })?;
 
-        debug!("Acquired {mode} lock for `{resource}`");
+        trace!("Acquired {mode} lock for `{resource}`");
         Ok(Self(file))
     }
 
@@ -181,7 +250,7 @@ impl LockedFile {
         );
         match mode.try_lock(&file) {
             Ok(()) => {
-                debug!("Acquired {mode} lock for `{resource}`");
+                trace!("Acquired {mode} lock for `{resource}`");
                 Some(Self(file))
             }
             Err(err) => {
@@ -201,7 +270,7 @@ impl LockedFile {
         mode: LockedFileMode,
         resource: impl Display,
     ) -> Result<Self, LockedFileError> {
-        let file = Self::create(path)?;
+        let file = Self::create(&path)?;
         let resource = resource.to_string();
         Self::lock_file(file, mode, &resource).await
     }
@@ -222,9 +291,24 @@ impl LockedFile {
     }
 
     #[cfg(unix)]
-    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, std::io::Error> {
-        use std::os::unix::fs::PermissionsExt;
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
+        use rustix::io::Errno;
+        #[expect(clippy::disallowed_types)]
+        use std::{fs::File, os::unix::fs::PermissionsExt};
         use tempfile::NamedTempFile;
+
+        /// The permissions the lockfile should end up with
+        const DESIRED_MODE: u32 = 0o666;
+
+        #[expect(clippy::disallowed_types)]
+        fn try_set_permissions(file: &File, path: &Path) {
+            if let Err(err) = file.set_permissions(std::fs::Permissions::from_mode(DESIRED_MODE)) {
+                warn!(
+                    "Failed to set permissions on temporary file `{path}`: {err}",
+                    path = path.user_display()
+                );
+            }
+        }
 
         // If path already exists, return it.
         if let Ok(file) = fs_err::OpenOptions::new()
@@ -238,16 +322,12 @@ impl LockedFile {
         // Otherwise, create a temporary file with 666 permissions. We must set
         // permissions _after_ creating the file, to override the `umask`.
         let file = if let Some(parent) = path.as_ref().parent() {
-            NamedTempFile::new_in(parent)?
+            NamedTempFile::new_in(parent)
         } else {
-            NamedTempFile::new()?
-        };
-        if let Err(err) = file
-            .as_file()
-            .set_permissions(std::fs::Permissions::from_mode(0o666))
-        {
-            warn!("Failed to set permissions on temporary file: {err}");
+            NamedTempFile::new()
         }
+        .map_err(LockedFileError::CreateTemporary)?;
+        try_set_permissions(file.as_file(), file.path());
 
         // Try to move the file to path, but if path exists now, just open path
         match file.persist_noclobber(path.as_ref()) {
@@ -258,34 +338,110 @@ impl LockedFile {
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
+                        .map_err(Into::into)
+                } else if matches!(
+                    Errno::from_io_error(&err.error),
+                    Some(Errno::NOTSUP | Errno::INVAL)
+                ) {
+                    // Fallback in case `persist_noclobber`, which uses `renameat2` or
+                    // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
+                    // with `EINVAL` and MacOS with `ENOTSUP`. For these reasons and many others,
+                    // there isn't an ErrorKind we can use here, and in fact on MacOS `ENOTSUP` gets
+                    // mapped to `ErrorKind::Other`
+
+                    // There is a race here where another process has just created the file, and we
+                    // try to open it and get permission errors because the other process hasn't set
+                    // the permission bits yet. This will lead to a transient failure, but unlike
+                    // alternative approaches it won't ever lead to a situation where two processes
+                    // are locking two different files. Also, since `persist_noclobber` is more
+                    // likely to not be supported on special filesystems which don't have permission
+                    // bits, it's less likely to ever matter.
+                    let file = fs_err::OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(true)
+                        .open(path.as_ref())?;
+
+                    // We don't want to `try_set_permissions` in cases where another user's process
+                    // has already created the lockfile and changed its permissions because we might
+                    // not have permission to change the permissions which would produce a confusing
+                    // warning.
+                    if file
+                        .metadata()
+                        .is_ok_and(|metadata| metadata.permissions().mode() != DESIRED_MODE)
+                    {
+                        try_set_permissions(file.file(), path.as_ref());
+                    }
+                    Ok(file)
                 } else {
-                    Err(err.error)
+                    let temp_path = err.file.into_temp_path();
+                    Err(LockedFileError::PersistTemporary {
+                        path: <tempfile::TempPath as AsRef<Path>>::as_ref(&temp_path).to_path_buf(),
+                        source: err.error,
+                    })
                 }
             }
         }
     }
 
     #[cfg(not(unix))]
-    fn create(path: impl AsRef<Path>) -> std::io::Result<fs_err::File> {
+    fn create(path: impl AsRef<Path>) -> Result<fs_err::File, LockedFileError> {
         fs_err::OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open(path.as_ref())
+            .map_err(Into::into)
+    }
+
+    /// Unlock the file.
+    ///
+    /// On Android, [`std::fs::File::unlock`] is not supported
+    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(not(target_os = "android"))]
+    fn unlock(&self) -> Result<(), io::Error> {
+        self.0.unlock()
+    }
+
+    /// Unlock the file.
+    ///
+    /// Android-specific implementation using [`rustix::fs::flock`] because
+    /// [`std::fs::File::unlock`] always returns `Unsupported` on Android
+    /// (see [rust-lang/rust#148325]).
+    ///
+    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
+    #[cfg(target_os = "android")]
+    fn unlock(&self) -> Result<(), io::Error> {
+        use std::os::fd::AsFd;
+
+        rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
+            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
 
 #[cfg(feature = "tokio")]
 impl Drop for LockedFile {
-    /// Unlock the file.
     fn drop(&mut self) {
-        if let Err(err) = self.0.unlock() {
-            error!(
-                "Failed to unlock resource at `{}`; program may be stuck: {err}",
-                self.0.path().display()
-            );
-        } else {
-            debug!("Released lock at `{}`", self.0.path().display());
+        match self.unlock() {
+            Ok(()) => {
+                trace!("Released lock at `{}`", self.0.path().display());
+            }
+            // See <https://bugs.winehq.org/show_bug.cgi?id=59711>
+            #[cfg(windows)]
+            Err(err)
+                if uv_windows::is_wine()
+                    && err.raw_os_error() == Some(ERROR_LOCK_VIOLATION.0.cast_signed()) =>
+            {
+                trace!("Released lock at `{}`", self.0.path().display());
+            }
+            Err(err) => {
+                error!(
+                    "Failed to unlock resource at `{}`; program may be stuck: {err}",
+                    self.0.path().display()
+                );
+            }
         }
     }
 }

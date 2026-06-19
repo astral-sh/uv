@@ -1,19 +1,22 @@
 //! Vendored from <https://github.com/PyO3/python-pkginfo-rs>
-
+use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::str;
 use std::str::FromStr;
 
+use indexmap::IndexMap;
+
 use crate::MetadataError;
 use crate::metadata::Headers;
 
-/// Code Metadata 2.3 as specified in
+/// Core Metadata 2.x as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Metadata23 {
-    /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3` and
-    /// `2.4`.
+    /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3`,
+    /// `2.4`, and `2.5`.
     pub metadata_version: String,
     /// The name of the distribution.
     pub name: String,
@@ -36,7 +39,7 @@ pub struct Metadata23 {
     pub description_content_type: Option<String>,
     /// A list of additional keywords, separated by commas, to be used to
     /// assist searching for the distribution in a larger catalog.
-    pub keywords: Option<String>,
+    pub keywords: Option<Keywords>,
     /// A string containing the URL for the distribution's home page.
     ///
     /// Deprecated by PEP 753.
@@ -59,7 +62,7 @@ pub struct Metadata23 {
     /// it should be omitted if it is identical to `author`.
     pub maintainer: Option<String>,
     /// A string containing the maintainer's e-mail address.
-    /// It can contain a name and e-mail address in the legal forms for a RFC-822 `From:` header.
+    /// It can contain a name and e-mail address in the legal forms for an RFC-822 `From:` header.
     ///
     /// Note that this field is intended for use when a project is being maintained by someone other
     /// than the original author: it should be omitted if it is identical to `author_email`.
@@ -95,11 +98,19 @@ pub struct Metadata23 {
     pub requires_external: Vec<String>,
     /// A string containing a browsable URL for the project and a label for it, separated by a
     /// comma.
-    pub project_urls: Vec<String>,
+    pub project_urls: ProjectUrls,
     /// A string containing the name of an optional feature. Must be a valid Python identifier.
     /// May be used to make a dependency conditional on whether the optional feature has been
     /// requested.
     pub provides_extra: Vec<String>,
+    /// Import names exclusively provided by the project.
+    ///
+    /// Introduced by PEP 794, requires metadata version 2.5.
+    pub import_names: Vec<String>,
+    /// Import namespaces provided by the project.
+    ///
+    /// Introduced by PEP 794, requires metadata version 2.5.
+    pub import_namespaces: Vec<String>,
     /// A string containing the name of another core metadata field.
     pub dynamic: Vec<String>,
 }
@@ -128,7 +139,10 @@ impl Metadata23 {
         } else {
             Some(body.to_string())
         };
-        let keywords = headers.get_first_value("Keywords");
+        let keywords = headers
+            .get_first_value("Keywords")
+            .as_deref()
+            .map(Keywords::from_metadata);
         let home_page = headers.get_first_value("Home-Page");
         let download_url = headers.get_first_value("Download-URL");
         let author = headers.get_first_value("Author");
@@ -144,8 +158,13 @@ impl Metadata23 {
         let maintainer_email = headers.get_first_value("Maintainer-email");
         let requires_python = headers.get_first_value("Requires-Python");
         let requires_external = headers.get_all_values("Requires-External").collect();
-        let project_urls = headers.get_all_values("Project-URL").collect();
+        let project_urls = ProjectUrls::from_iter_str(headers.get_all_values("Project-URL"));
         let provides_extra = headers.get_all_values("Provides-Extra").collect();
+        let import_names: Vec<String> = headers.get_all_values("Import-Name").collect();
+        let import_namespaces: Vec<String> = headers.get_all_values("Import-Namespace").collect();
+        // PEP 794 requires rejecting modules that are used both in import names and import
+        // namespaces. (Nesting is allowed, only exact matches are forbidden.)
+        validate_import_name_overlap(&import_names, &import_namespaces)?;
         let description_content_type = headers.get_first_value("Description-Content-Type");
         let dynamic = headers.get_all_values("Dynamic").collect();
         Ok(Self {
@@ -175,6 +194,8 @@ impl Metadata23 {
             requires_external,
             project_urls,
             provides_extra,
+            import_names,
+            import_namespaces,
             dynamic,
         })
     }
@@ -235,7 +256,11 @@ impl Metadata23 {
         write_all(&mut writer, "Platform", &self.platforms);
         write_all(&mut writer, "Supported-Platform", &self.supported_platforms);
         write_all(&mut writer, "Summary", &self.summary);
-        write_opt_str(&mut writer, "Keywords", self.keywords.as_ref());
+        write_opt_str(
+            &mut writer,
+            "Keywords",
+            self.keywords.as_ref().map(Keywords::as_metadata).as_ref(),
+        );
         write_opt_str(&mut writer, "Home-Page", self.home_page.as_ref());
         write_opt_str(&mut writer, "Download-URL", self.download_url.as_ref());
         write_opt_str(&mut writer, "Author", self.author.as_ref());
@@ -263,8 +288,10 @@ impl Metadata23 {
             self.requires_python.as_ref(),
         );
         write_all(&mut writer, "Requires-External", &self.requires_external);
-        write_all(&mut writer, "Project-URL", &self.project_urls);
+        write_all(&mut writer, "Project-URL", self.project_urls.to_vec_str());
         write_all(&mut writer, "Provides-Extra", &self.provides_extra);
+        write_all(&mut writer, "Import-Name", &self.import_names);
+        write_all(&mut writer, "Import-Namespace", &self.import_namespaces);
         write_opt_str(
             &mut writer,
             "Description-Content-Type",
@@ -280,6 +307,31 @@ impl Metadata23 {
     }
 }
 
+fn import_name_base(value: &str) -> &str {
+    match value.split_once(';') {
+        Some((base, _suffix)) => base.trim_end(),
+        None => value,
+    }
+}
+
+fn validate_import_name_overlap(
+    import_names: &[String],
+    import_namespaces: &[String],
+) -> Result<(), MetadataError> {
+    let import_name_set: BTreeSet<_> = import_names
+        .iter()
+        .map(|import_name| import_name_base(import_name))
+        .collect();
+    if let Some(overlap) = import_namespaces
+        .iter()
+        .map(|import_namespace| import_name_base(import_namespace))
+        .find(|import_namespace| import_name_set.contains(import_namespace))
+    {
+        return Err(MetadataError::DuplicateImportName(overlap.to_string()));
+    }
+    Ok(())
+}
+
 impl FromStr for Metadata23 {
     type Err = MetadataError;
 
@@ -288,10 +340,73 @@ impl FromStr for Metadata23 {
     }
 }
 
+/// Handle the different keywords representation between `METADATA` and `METADATA.json`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Keywords(Vec<String>);
+
+impl Keywords {
+    pub fn new(keywords: Vec<String>) -> Self {
+        Self(keywords)
+    }
+
+    /// Read the `METADATA` format.
+    fn from_metadata(keywords: &str) -> Self {
+        Self(keywords.split(',').map(ToString::to_string).collect())
+    }
+
+    /// Write the `METADATA` format.
+    pub fn as_metadata(&self) -> String {
+        let mut keywords = self.0.iter();
+        let mut rendered = String::new();
+        if let Some(keyword) = keywords.next() {
+            rendered.push_str(keyword);
+        }
+        for keyword in keywords {
+            rendered.push(',');
+            rendered.push_str(keyword);
+        }
+        rendered
+    }
+}
+
+/// Handle the different project URLs representation between `METADATA` and `METADATA.json`.
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ProjectUrls(IndexMap<String, String>);
+
+impl ProjectUrls {
+    pub fn new(project_urls: IndexMap<String, String>) -> Self {
+        Self(project_urls)
+    }
+
+    /// Read the `METADATA` format.
+    fn from_iter_str(project_urls: impl IntoIterator<Item = String>) -> Self {
+        Self(
+            project_urls
+                .into_iter()
+                .map(|project_url| {
+                    let (label, url) = project_url.split_once(',').unwrap_or((&project_url, ""));
+                    // TODO(konsti): The spec says separated by comma, but it's actually comma and a
+                    // space.
+                    (label.trim().to_string(), url.trim().to_string())
+                })
+                .collect(),
+        )
+    }
+
+    /// Write the `METADATA` format.
+    pub fn to_vec_str(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .map(|(label, url)| format!("{label}, {url}"))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::MetadataError;
+    use insta::assert_snapshot;
 
     #[test]
     fn test_parse_from_str() {
@@ -321,5 +436,36 @@ mod tests {
         let meta: Metadata23 = s.parse().unwrap();
         assert_eq!(meta.author.as_deref(), Some("中文"));
         assert_eq!(meta.description.as_deref(), Some("一个 Python 包"));
+    }
+
+    #[test]
+    fn import_name_round_trip() {
+        let metadata = Metadata23 {
+            metadata_version: "2.5".to_string(),
+            name: "pkg".to_string(),
+            version: "1.0".to_string(),
+            import_names: vec!["spam.foo".to_string(), "spam.eggs; private".to_string()],
+            import_namespaces: vec!["spam".to_string(), "zope".to_string()],
+            ..Default::default()
+        };
+
+        let formatted = metadata.core_metadata_format();
+        assert_eq!(
+            formatted,
+            "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: spam.foo\nImport-Name: spam.eggs; private\nImport-Namespace: spam\nImport-Namespace: zope\n"
+        );
+
+        let parsed: Metadata23 = formatted.parse().unwrap();
+        assert_eq!(parsed.import_names, metadata.import_names);
+        assert_eq!(parsed.import_namespaces, metadata.import_namespaces);
+    }
+
+    #[test]
+    fn import_name_overlap() {
+        let metadata = "Metadata-Version: 2.5\nName: pkg\nVersion: 1.0\nImport-Name: spam ; private\nImport-Namespace: spam\n";
+        assert_snapshot!(
+            Metadata23::parse(metadata.as_bytes()).unwrap_err(),
+            @"`Import-Name` and `Import-Namespace` must not both contain `spam`"
+        );
     }
 }

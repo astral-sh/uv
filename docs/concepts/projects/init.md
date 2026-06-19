@@ -10,7 +10,7 @@ flag can be used to create a project for a library instead.
 
 uv will create a project in the working directory, or, in a target directory by providing a name,
 e.g., `uv init foo`. The working directory can be modified with the `--directory` option, which will
-cause the target directory path will be interpreted relative to the specified working directory. If
+cause the target directory path to be interpreted relative to the specified working directory. If
 there's already a project in the target directory, i.e., if there's a `pyproject.toml`, uv will exit
 with an error.
 
@@ -29,7 +29,7 @@ pin file (`.python-version`).
 
 ```console
 $ tree example-app
-example-app
+example-app/
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -88,7 +88,7 @@ The source code is moved into a `src` directory with a module directory and an `
 
 ```console
 $ tree example-pkg
-example-pkg
+example-pkg/
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -113,7 +113,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.15,<0.10.0"]
+requires = ["uv_build>=0.11.22,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -136,7 +136,7 @@ dependencies = []
 example-pkg = "example_pkg:main"
 
 [build-system]
-requires = ["uv_build>=0.9.15,<0.10.0"]
+requires = ["uv_build>=0.11.22,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -168,7 +168,7 @@ marker is included to indicate to consumers that types can be read from the libr
 
 ```console
 $ tree example-lib
-example-lib
+example-lib/
 ├── .python-version
 ├── README.md
 ├── pyproject.toml
@@ -197,7 +197,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [build-system]
-requires = ["uv_build>=0.9.15,<0.10.0"]
+requires = ["uv_build>=0.11.22,<0.12"]
 build-backend = "uv_build"
 ```
 
@@ -250,7 +250,7 @@ files:
 
 ```console
 $ tree example-ext
-example-ext
+example-ext/
 ├── .python-version
 ├── Cargo.toml
 ├── README.md
@@ -311,7 +311,7 @@ Hello from example-ext!
 If you only want to create a `pyproject.toml`, use the `--bare` option:
 
 ```console
-$ uv init example --bare
+$ uv init example-bare --bare
 ```
 
 uv will skip creating a Python version pin file, a README, and any source directories or files.
@@ -327,7 +327,7 @@ uv will also not add extra metadata to the `pyproject.toml`, such as the `descri
 
 ```toml
 [project]
-name = "example"
+name = "example-bare"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []
@@ -339,5 +339,5 @@ cases uv will still configure a build system but will not create the expected fi
 When `--bare` is used, additional features can still be used opt-in:
 
 ```console
-$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
+$ uv init example-bare --bare --description "Hello world" --author-from git --vcs git --python-pin
 ```

@@ -89,15 +89,23 @@ To opt-out of this behavior, use the `--no-editable` option.
     If the project does not define a build system, it will not be installed.
     See the [build systems](./config.md#build-systems) documentation for details.
 
-### Retaining extraneous packages
+### Handling of extraneous packages
 
-Syncing is "exact" by default, which means it will remove any packages that are not present in the
-lockfile.
+`uv sync` performs "exact" syncing by default, which means it will remove any packages that are not
+present in the lockfile.
 
-To retain extraneous packages, use the `--inexact` option:
+To retain extraneous packages, use the `--inexact` flag:
 
 ```console
 $ uv sync --inexact
+```
+
+In contrast, `uv run` uses "inexact" syncing by default, ensuring that all required packages are
+installed but not removing extraneous packages. To enable exact syncing with `uv run`, use the
+`--exact` flag:
+
+```console
+$ uv run --exact ...
 ```
 
 ### Syncing optional dependencies
@@ -212,3 +220,17 @@ When these options are used, all the dependencies of the target are still instal
 
 If used improperly, these flags can result in a broken environment since a package can be missing
 its dependencies.
+
+## Malware checks
+
+!!! important
+
+    On-sync malware checking is in [preview](../preview.md), and is subject to change until stabilized.
+
+While syncing, uv can perform a lightweight scan of your lockfile for known malware by checking it
+against [OSV](https://osv.dev). OSV references MAL advisories from the OpenSSF's
+[malicious packages database](https://github.com/ossf/malicious-packages).
+
+If a locked dependency matches a malware advisory, the sync will be terminated.
+
+To enable malware checks, set `UV_MALWARE_CHECK=1` in your environment.

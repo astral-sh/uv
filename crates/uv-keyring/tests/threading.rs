@@ -52,7 +52,10 @@ async fn test_create_then_move() {
     handle.await.expect("Task failed");
 }
 
+/// Empirically, this test flakes on Windows and Linux because the platform credential stores do
+/// not reliably serialize concurrent access.
 #[tokio::test]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 async fn test_simultaneous_create_then_move() {
     init_logger();
 
@@ -127,7 +130,7 @@ async fn test_create_set_then_move() {
 }
 
 #[tokio::test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 async fn test_simultaneous_create_set_then_move() {
     init_logger();
 
@@ -166,7 +169,10 @@ async fn test_simultaneous_create_set_then_move() {
     }
 }
 
+/// Empirically, this test flakes on Windows and Linux because the platform credential stores do
+/// not reliably serialize concurrent access.
 #[tokio::test]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 async fn test_simultaneous_independent_create_set() {
     init_logger();
 

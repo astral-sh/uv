@@ -11,13 +11,11 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_python::downloads::ManagedPythonDownloadList;
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, PipCompileFormat, Reinstall, SourceStrategy, Upgrade,
+    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -31,16 +29,16 @@ use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_pep440::Version;
+use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, VersionRequest,
 };
-use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    GroupsSpecification, RequirementsSource, RequirementsSpecification, is_pylock_toml,
-    upgrade::read_requirements_txt,
+    GroupsSpecification, LockedRequirements, RequirementsSource, RequirementsSpecification,
+    is_pylock_toml, read_pylock_toml_requirements, read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -49,19 +47,20 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchMode, TorchSource, TorchStrategy};
-use uv_types::{EmptyInstalledPackages, HashStrategy};
-use uv_warnings::{warn_user, warn_user_once};
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
-use crate::commands::pip::{operations, resolution_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 
 /// Resolve a set of requirements into a set of pinned versions.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_compile(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
@@ -73,6 +72,7 @@ pub(crate) async fn pip_compile(
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
+    required_environments: SupportedEnvironments,
     extras: ExtrasSpecification,
     groups: GroupsSpecification,
     output_file: Option<&Path>,
@@ -97,6 +97,8 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -109,9 +111,10 @@ pub(crate) async fn pip_compile(
     install_mirrors: PythonInstallMirrors,
     mut python_version: Option<PythonVersion>,
     python_platform: Option<TargetTriple>,
+    python_downloads: PythonDownloads,
     universal: bool,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
+    sources: NoSources,
     annotation_style: AnnotationStyle,
     link_mode: LinkMode,
     mut python: Option<String>,
@@ -120,18 +123,10 @@ pub(crate) async fn pip_compile(
     concurrency: Concurrency,
     quiet: bool,
     cache: Cache,
+    workspace_cache: WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if !preview.is_enabled(PreviewFeatures::EXTRA_BUILD_DEPENDENCIES)
-        && !extra_build_dependencies.is_empty()
-    {
-        warn_user_once!(
-            "The `extra-build-dependencies` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeatures::EXTRA_BUILD_DEPENDENCIES
-        );
-    }
-
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
     if output_file
@@ -295,22 +290,22 @@ pub(crate) async fn pip_compile(
     // Find an interpreter to use for building distributions
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let python_preference = python_preference.with_system_flag(system);
-    let client = client_builder.clone().retries(0).build();
-    let download_list = ManagedPythonDownloadList::new(
-        &client,
-        install_mirrors.python_downloads_json_url.as_deref(),
-    )
-    .await?;
+    let reporter = PythonDownloadReporter::single(printer);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(
-            &request,
+        PythonInstallation::find_or_download(
+            Some(&request),
             environment_preference,
             python_preference,
-            &download_list,
+            python_downloads,
+            &client_builder,
             &cache,
-            preview,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
+        .await
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
@@ -324,10 +319,15 @@ pub(crate) async fn pip_compile(
             &request,
             environment_preference,
             python_preference,
-            &download_list,
+            python_downloads,
+            &client_builder,
             &cache,
-            preview,
+            Some(&reporter),
+            install_mirrors.python_install_mirror.as_deref(),
+            install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
+        .await
     }?
     .into_interpreter();
 
@@ -385,6 +385,18 @@ pub(crate) async fn pip_compile(
         PythonRequirement::from_interpreter(&interpreter)
     };
 
+    let artifact_environments = if universal {
+        SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .chain(required_environments.iter())
+                .copied()
+                .collect(),
+        )
+    } else {
+        SupportedEnvironments::default()
+    };
+
     // Determine the environment for the resolution.
     let (tags, resolver_env) = if universal {
         (
@@ -392,8 +404,16 @@ pub(crate) async fn pip_compile(
             ResolverEnvironment::universal(environments.into_markers()),
         )
     } else {
-        let (tags, marker_env) =
-            resolution_environment(python_version, python_platform, &interpreter)?;
+        let tags = resolution_tags(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        )?;
+        let marker_env = resolution_markers(
+            python_version.as_ref(),
+            python_platform.as_ref(),
+            &interpreter,
+        );
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
@@ -439,6 +459,8 @@ pub(crate) async fn pip_compile(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
+                amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -450,7 +472,7 @@ pub(crate) async fn pip_compile(
         .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Read the lockfile, if present.
     let LockedRequirements { preferences, git } =
@@ -533,8 +555,9 @@ pub(crate) async fn pip_compile(
         &build_hashes,
         exclude_newer.clone(),
         sources,
-        WorkspaceCache::default(),
-        concurrency,
+        SourceTreeEditablePolicy::Project,
+        workspace_cache,
+        concurrency.clone(),
         preview,
     );
 
@@ -547,6 +570,7 @@ pub(crate) async fn pip_compile(
         .index_strategy(index_strategy)
         .torch_backend(torch_backend)
         .build_options(build_options.clone())
+        .artifact_environments(artifact_environments)
         .build();
 
     // Resolve the requirements.
@@ -574,18 +598,20 @@ pub(crate) async fn pip_compile(
         &flat_index,
         &top_level_index,
         &build_dispatch,
-        concurrency,
+        &concurrency,
         options,
         Box::new(DefaultResolveLogger),
         printer,
     )
     .await
     {
-        Ok(resolution) => resolution,
+        Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 
@@ -779,7 +805,6 @@ pub(crate) async fn pip_compile(
 }
 
 /// Format the uv command used to generate the output file.
-#[allow(clippy::fn_params_excessive_bools)]
 fn cmd(
     include_index_url: bool,
     include_find_links: bool,

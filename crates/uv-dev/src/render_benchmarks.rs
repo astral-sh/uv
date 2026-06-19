@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use poloto::build;
-use resvg::usvg_text_layout::{TreeTextToPath, fontdb};
+use resvg::usvg::fontdb;
 use serde::Deserialize;
 use tagu::prelude::*;
 
@@ -44,7 +44,7 @@ pub(crate) fn render_benchmarks(args: &RenderBenchmarksArgs) -> Result<()> {
     render_to_png(
         &plot_benchmark(args.title.as_deref().unwrap_or("Benchmark"), &results)?,
         &args.path.with_extension("png"),
-        &fontdb,
+        fontdb,
     )?;
 
     Ok(())
@@ -72,22 +72,34 @@ fn plot_benchmark(heading: &str, results: &BenchmarkResults) -> Result<String> {
 }
 
 /// Render an SVG to a PNG file.
-fn render_to_png(data: &str, path: &Path, fontdb: &fontdb::Database) -> Result<()> {
-    let mut tree = resvg::usvg::Tree::from_str(data, &resvg::usvg::Options::default())?;
-    tree.convert_text(fontdb);
-    let fit_to = resvg::usvg::FitTo::Width(1600);
-    let size = fit_to
-        .fit_to(tree.size.to_screen_size())
-        .ok_or_else(|| anyhow!("failed to fit to screen size"))?;
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height()).unwrap();
-    resvg::render(
-        &tree,
-        fit_to,
-        resvg::tiny_skia::Transform::default(),
-        pixmap.as_mut(),
-    )
-    .ok_or_else(|| anyhow!("failed to render"))?;
-    fs_err::create_dir_all(path.parent().unwrap())?;
+fn render_to_png(data: &str, path: &Path, fontdb: fontdb::Database) -> Result<()> {
+    // Create options with the font database for text rendering
+    let mut opt = resvg::usvg::Options::default();
+    *opt.fontdb_mut() = fontdb;
+
+    let tree = resvg::usvg::Tree::from_str(data, &opt)?;
+
+    // Calculate scale to fit width of 1600 while maintaining aspect ratio
+    let target_width = 1600_u32;
+    let original_size = tree.size().to_int_size();
+    let scaled_size = original_size
+        .scale_to_width(target_width)
+        .ok_or_else(|| anyhow!("failed to scale to target width"))?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Acceptable precision loss for render scale calculation"
+    )]
+    let scale = target_width as f32 / original_size.width() as f32;
+
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(scaled_size.width(), scaled_size.height())
+        .ok_or_else(|| anyhow!("failed to create pixmap"))?;
+
+    let transform = resvg::tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    if let Some(parent) = path.parent() {
+        fs_err::create_dir_all(parent)?;
+    }
     pixmap.save_png(path)?;
     Ok(())
 }

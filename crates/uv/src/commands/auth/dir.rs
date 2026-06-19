@@ -1,7 +1,7 @@
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 
-use uv_auth::{PyxTokenStore, Service, TextCredentialStore};
+use uv_auth::{PyxTokenStore, Service, TextCredentialStore, is_default_pyx_domain};
 use uv_fs::Simplified;
 
 use crate::printer::Printer;
@@ -10,7 +10,7 @@ use crate::printer::Printer;
 pub(crate) fn dir(service: Option<&Service>, printer: Printer) -> anyhow::Result<()> {
     if let Some(service) = service {
         let pyx_store = PyxTokenStore::from_settings()?;
-        if pyx_store.is_known_domain(service.url()) {
+        if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
             writeln!(
                 printer.stdout(),
                 "{}",

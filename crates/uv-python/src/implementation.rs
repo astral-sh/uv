@@ -28,19 +28,31 @@ pub enum LenientImplementationName {
 }
 
 impl ImplementationName {
-    pub(crate) fn short_names() -> impl Iterator<Item = &'static str> {
-        ["cp", "pp", "gp"].into_iter()
+    /// Return the full implementation name.
+    pub(crate) const fn long_name(self) -> &'static str {
+        match self {
+            Self::CPython => "cpython",
+            Self::PyPy => "pypy",
+            Self::GraalPy => "graalpy",
+            Self::Pyodide => "pyodide",
+        }
     }
 
-    pub(crate) fn long_names() -> impl Iterator<Item = &'static str> {
-        ["cpython", "pypy", "graalpy", "pyodide"].into_iter()
+    /// Return the abbreviated implementation name, if one exists.
+    pub(crate) const fn short_name(self) -> Option<&'static str> {
+        match self {
+            Self::CPython => Some("cp"),
+            Self::PyPy => Some("pp"),
+            Self::GraalPy => Some("gp"),
+            Self::Pyodide => None,
+        }
     }
 
     pub(crate) fn iter_all() -> impl Iterator<Item = Self> {
         [Self::CPython, Self::PyPy, Self::GraalPy, Self::Pyodide].into_iter()
     }
 
-    pub fn pretty(self) -> &'static str {
+    pub(crate) fn pretty(self) -> &'static str {
         match self {
             Self::CPython => "CPython",
             Self::PyPy => "PyPy",
@@ -49,19 +61,28 @@ impl ImplementationName {
         }
     }
 
-    pub fn executable_name(self) -> &'static str {
+    /// The executable name used in distributions of this implementation.
+    pub(crate) fn executable_name(self) -> &'static str {
         match self {
             Self::CPython | Self::Pyodide => "python",
-            Self::PyPy | Self::GraalPy => self.into(),
+            Self::PyPy | Self::GraalPy => self.long_name(),
         }
     }
 
-    pub fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
+    /// The name used when installing this implementation as an executable into the bin directory.
+    fn executable_install_name(self) -> &'static str {
+        match self {
+            Self::Pyodide => "pyodide",
+            _ => self.executable_name(),
+        }
+    }
+
+    pub(crate) fn matches_interpreter(self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Pyodide => interpreter.os().is_emscripten(),
             _ => interpreter
                 .implementation_name()
-                .eq_ignore_ascii_case(self.into()),
+                .eq_ignore_ascii_case(self.long_name()),
         }
     }
 }
@@ -74,35 +95,18 @@ impl LenientImplementationName {
         }
     }
 
-    pub fn executable_name(&self) -> &str {
+    pub(crate) fn executable_install_name(&self) -> &str {
         match self {
-            Self::Known(implementation) => implementation.executable_name(),
+            Self::Known(implementation) => implementation.executable_install_name(),
             Self::Unknown(name) => name,
         }
-    }
-}
-
-impl From<&ImplementationName> for &'static str {
-    fn from(value: &ImplementationName) -> &'static str {
-        match value {
-            ImplementationName::CPython => "cpython",
-            ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => "graalpy",
-            ImplementationName::Pyodide => "pyodide",
-        }
-    }
-}
-
-impl From<ImplementationName> for &'static str {
-    fn from(value: ImplementationName) -> &'static str {
-        (&value).into()
     }
 }
 
 impl<'a> From<&'a LenientImplementationName> for &'a str {
     fn from(value: &'a LenientImplementationName) -> &'a str {
         match value {
-            LenientImplementationName::Known(implementation) => implementation.into(),
+            LenientImplementationName::Known(implementation) => implementation.long_name(),
             LenientImplementationName::Unknown(name) => name,
         }
     }
@@ -115,19 +119,20 @@ impl FromStr for ImplementationName {
     ///
     /// Supports the full name and the platform compatibility tag style name.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().as_str() {
-            "cpython" | "cp" => Ok(Self::CPython),
-            "pypy" | "pp" => Ok(Self::PyPy),
-            "graalpy" | "gp" => Ok(Self::GraalPy),
-            "pyodide" => Ok(Self::Pyodide),
-            _ => Err(Error::UnknownImplementation(s.to_string())),
-        }
+        Self::iter_all()
+            .find(|implementation| {
+                s.eq_ignore_ascii_case(implementation.long_name())
+                    || implementation
+                        .short_name()
+                        .is_some_and(|name| s.eq_ignore_ascii_case(name))
+            })
+            .ok_or_else(|| Error::UnknownImplementation(s.to_string()))
     }
 }
 
 impl Display for ImplementationName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.into())
+        f.write_str(self.long_name())
     }
 }
 

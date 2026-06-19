@@ -49,7 +49,7 @@ pub enum UnavailableVersion {
 }
 
 impl UnavailableVersion {
-    pub(crate) fn message(&self) -> String {
+    fn message(&self) -> String {
         match self {
             Self::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
             Self::InvalidMetadata => "invalid metadata".into(),
@@ -161,7 +161,7 @@ pub enum UnavailablePackage {
 }
 
 impl UnavailablePackage {
-    pub(crate) fn message(&self) -> &'static str {
+    fn message(&self) -> &'static str {
         match self {
             Self::NoIndex => "not found in the provided package locations",
             Self::Offline => "not found in the cache",

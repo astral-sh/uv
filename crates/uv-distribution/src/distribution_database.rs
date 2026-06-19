@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
-use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -18,19 +17,25 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
-use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
-    BuildInfo, BuildableSource, BuiltDist, Dist, File, HashPolicy, Hashed, IndexUrl, InstalledDist,
-    Name, SourceDist, ToUrlError,
+    BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
+    InstalledDist, Name, SourceDist, ToUrlError,
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_git::{GIT_LFS, GitError};
+use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
+use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
+use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
+use crate::error::PythonVersion;
+use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -58,12 +63,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,
-        concurrent_downloads: usize,
+        downloads_semaphore: Arc<Semaphore>,
     ) -> Self {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
-            client: ManagedClient::new(client, concurrent_downloads),
+            client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
         }
     }
@@ -90,11 +95,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].
     fn handle_response_errors(&self, err: reqwest::Error) -> io::Error {
         if err.is_timeout() {
+            // Assumption: The connect timeout with the 10s default is not the culprit.
             io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
                     "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
-                    self.client.unmanaged.timeout().as_secs()
+                    self.client.unmanaged.read_timeout().as_secs()
                 ),
             )
         } else {
@@ -246,8 +252,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             return Err(Error::Extract(name, err));
                         }
 
-                        // If the request failed because streaming is unsupported, download the
-                        // wheel directly.
+                        // If the request failed because streaming was unsupported or failed,
+                        // download the wheel directly.
                         let archive = self
                             .download_wheel(
                                 url,
@@ -312,13 +318,19 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         cache: CacheInfo::default(),
                         build: None,
                     }),
-                    Err(Error::Client(err)) if err.is_http_streaming_unsupported() => {
-                        warn!(
-                            "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
-                        );
+                    Err(Error::Extract(name, err)) => {
+                        if err.is_http_streaming_unsupported() {
+                            warn!(
+                                "Streaming unsupported for {dist}; downloading wheel to disk ({err})"
+                            );
+                        } else if err.is_http_streaming_failed() {
+                            warn!("Streaming failed for {dist}; downloading wheel to disk ({err})");
+                        } else {
+                            return Err(Error::Extract(name, err));
+                        }
 
-                        // If the request failed because streaming is unsupported, download the
-                        // wheel directly.
+                        // If the request failed because streaming was unsupported or failed,
+                        // download the wheel directly.
                         let archive = self
                             .download_wheel(
                                 wheel.url.raw().clone(),
@@ -346,6 +358,52 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     }
                     Err(err) => Err(err),
                 }
+            }
+
+            BuiltDist::GitPath(wheel) => {
+                // Fetch the Git repository.
+                let fetch = self
+                    .build_context
+                    .git()
+                    .fetch(
+                        &wheel.git,
+                        self.client.unmanaged.git_http_settings(wheel.git.url()),
+                        self.build_context.cache().bucket(CacheBucket::Git),
+                        self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
+                    )
+                    .await?;
+
+                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+                    if GIT_LFS.is_err() {
+                        return Err(Error::MissingWheelGitLfsArtifacts(
+                            wheel.url.to_url(),
+                            GitError::GitLfsNotFound,
+                        ));
+                    }
+                    return Err(Error::MissingWheelGitLfsArtifacts(
+                        wheel.url.to_url(),
+                        GitError::GitLfsNotConfigured,
+                    ));
+                }
+
+                let git_sha = fetch.git().precise().expect("Exact commit after checkout");
+                let cache_entry = self.build_context.cache().entry(
+                    CacheBucket::Wheels,
+                    WheelCache::Git(&wheel.url, git_sha.as_short_str()).root(),
+                    wheel.filename.stem(),
+                );
+
+                let install_path = fetch.path().join(&wheel.install_path);
+
+                self.load_wheel(
+                    &install_path,
+                    &wheel.filename,
+                    WheelExtension::Whl,
+                    cache_entry,
+                    dist,
+                    hashes,
+                )
+                .await
             }
 
             BuiltDist::Path(wheel) => {
@@ -379,11 +437,74 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         tags: &Tags,
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
+        // Warn if the source distribution isn't PEP 625 compliant.
+        // We do this here instead of in `SourceDistExtension::from_path` to minimize log volume:
+        // a non-compliant distribution isn't a huge problem if it's not actually being
+        // materialized into a wheel. Observe that we also allow no extension, since we expect that
+        // for directory and Git installs.
+        // NOTE: Observe that we also allow `.zip` sdists here, which are not PEP 625 compliant.
+        // This is because they were allowed on PyPI until relatively recently (2020).
+        if let Some(extension) = dist.extension()
+            && !matches!(
+                extension,
+                SourceDistExtension::TarGz | SourceDistExtension::Zip
+            )
+        {
+            if matches!(dist, SourceDist::Registry(_)) {
+                // Observe that we display a slightly different warning when the sdist comes
+                // from a registry, since that suggests that the user has inadvertently
+                // (rather than explicitly) depended on a non-compliant sdist.
+                warn_user_once!(
+                    "{dist} uses a legacy source distribution format ('.{extension}') that is not compliant with PEP 625. A future version of uv will reject this source distribution. Consider upgrading to a newer version of {package}",
+                    package = dist.name(),
+                );
+            } else {
+                warn_user_once!(
+                    "{dist} is not a standards-compliant source distribution: expected '.tar.gz' but found '.{extension}'. A future version of uv will reject source distributions that do not meet the requirements specified in PEP 625",
+                );
+            }
+        }
+
         let built_wheel = self
             .builder
             .download_and_build(&BuildableSource::Dist(dist), tags, hashes, &self.client)
             .boxed_local()
             .await?;
+
+        // Check that the wheel is compatible with its install target.
+        //
+        // When building a build dependency for a cross-install, the build dependency needs
+        // to install and run on the host instead of the target. In this case the `tags` are already
+        // for the host instead of the target, so this check passes.
+        if !built_wheel.filename.is_compatible(tags) {
+            return if tags.is_cross() {
+                Err(Error::BuiltWheelIncompatibleTargetPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: PythonVersion {
+                        version: tags.python_version(),
+                        variant: if tags.is_freethreaded() {
+                            PythonVariant::Freethreaded
+                        } else {
+                            PythonVariant::Default
+                        },
+                    },
+                })
+            } else {
+                Err(Error::BuiltWheelIncompatibleHostPlatform {
+                    filename: built_wheel.filename,
+                    python_platform: tags.python_platform().clone(),
+                    python_version: PythonVersion {
+                        version: tags.python_version(),
+                        variant: if tags.is_freethreaded() {
+                            PythonVariant::Freethreaded
+                        } else {
+                            PythonVariant::Default
+                        },
+                    },
+                })
+            };
+        }
 
         // Acquire the advisory lock.
         #[cfg(windows)]
@@ -417,7 +538,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Otherwise, unzip the wheel.
         let id = self
-            .unzip_wheel(&built_wheel.path, &built_wheel.target)
+            .unzip_wheel(
+                &built_wheel.path,
+                &built_wheel.target,
+                DistRef::Source(dist),
+            )
             .await?;
 
         Ok(LocalWheel {
@@ -485,7 +610,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .client
             .managed(|client| {
                 client
-                    .wheel_metadata(dist, self.build_context.capabilities())
+                    .wheel_metadata(
+                        dist,
+                        self.build_context.git(),
+                        self.build_context.capabilities(),
+                        self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
+                    )
                     .boxed_local()
             })
             .await;
@@ -584,6 +714,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
+        let query_url = &url.clone();
+
         let download = |response: reqwest::Response| {
             async {
                 let size = size.or_else(|| content_length(&response));
@@ -599,7 +731,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = hashes.algorithms();
+                let algorithms = http_hash_algorithms(hashes);
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -607,40 +739,42 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                match progress {
+                let files = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
                             WheelExtension::Whl => {
-                                uv_extract::stream::unzip(&mut reader, temp_dir.path())
+                                uv_extract::stream::unzip(query_url, &mut reader, temp_dir.path())
                                     .await
-                                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                                    .map_err(|err| Error::Extract(filename.to_string(), err))?
                             }
                             WheelExtension::WhlZst => {
                                 uv_extract::stream::untar_zst(&mut reader, temp_dir.path())
                                     .await
-                                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                                    .map_err(|err| Error::Extract(filename.to_string(), err))?
                             }
                         }
                     }
                     None => match extension {
                         WheelExtension::Whl => {
-                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
                                 .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                                .map_err(|err| Error::Extract(filename.to_string(), err))?
                         }
                         WheelExtension::WhlZst => {
                             uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                                .map_err(|err| Error::Extract(filename.to_string(), err))?
                         }
                     },
-                }
+                };
+                // Exhaust the reader to compute the hashes.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
 
-                // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_none() {
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                }
+                // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+                // valid.
+                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                    .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
@@ -693,14 +827,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -724,7 +858,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?
@@ -768,6 +902,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
+                let algorithms = http_hash_algorithms(hashes);
+                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
@@ -779,18 +916,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 match progress {
                     Some((reporter, progress)) => {
-                        // Wrap the reader in a progress reporter. This will report 100% progress
-                        // after the download is complete, even if we still have to unzip and hash
-                        // part of the file.
-                        let mut reader =
-                            ProgressReader::new(reader.compat(), progress, &**reporter);
+                        // Wrap the reader in a progress reporter. This will report 100% progress once
+                        // the download is complete, before the wheel is unzipped.
+                        let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
 
                         tokio::io::copy(&mut reader, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
                     None => {
-                        tokio::io::copy(&mut reader.compat(), &mut writer)
+                        tokio::io::copy(&mut hasher, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
@@ -804,52 +939,22 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, parallelize the unzip operation.
-                let hashes = if hashes.is_none() {
-                    let file = file.into_std().await;
-                    tokio::task::spawn_blocking({
-                        let target = temp_dir.path().to_owned();
-                        move || -> Result<(), uv_extract::Error> {
-                            // Unzip the wheel into a temporary directory.
-                            match extension {
-                                WheelExtension::Whl => {
-                                    uv_extract::unzip(file, &target)?;
-                                }
-                                WheelExtension::WhlZst => {
-                                    uv_extract::stream::untar_zst_file(file, &target)?;
-                                }
-                            }
-                            Ok(())
-                        }
-                    })
-                    .await?
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
-
-                    HashDigests::empty()
-                } else {
-                    // Create a hasher for each hash algorithm.
-                    let algorithms = hashes.algorithms();
-                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-                    match extension {
-                        WheelExtension::Whl => {
-                            uv_extract::stream::unzip(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        }
+                let target = temp_dir.path().to_owned();
+                let files = match extension {
+                    WheelExtension::Whl => {
+                        let file = file.into_std().await;
+                        tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
+                            .await?
                     }
+                    WheelExtension::WhlZst => uv_extract::stream::untar_zst(file, &target).await,
+                }
+                .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
-                    // If necessary, exhaust the reader to compute the hash.
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-
-                    hashers.into_iter().map(HashDigest::from).collect()
-                };
+                // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+                // valid.
+                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                    .map_err(Error::InstallWheelError)?;
 
                 // Persist the temporary directory to the directory store.
                 let id = self
@@ -898,14 +1003,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
-                    cache_control,
+                    cache_control.clone(),
                     download,
                 )
             })
             .await
             .map_err(|err| match err {
                 CachedClientError::Callback { err, .. } => err,
-                CachedClientError::Client { err, .. } => Error::Client(err),
+                CachedClientError::Client(err) => Error::Client(err),
             })?;
 
         // If the archive is missing the required hashes, or has since been removed, force a refresh.
@@ -929,7 +1034,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .await
                         .map_err(|err| match err {
                             CachedClientError::Callback { err, .. } => err,
-                            CachedClientError::Client { err, .. } => Error::Client(err),
+                            CachedClientError::Client(err) => Error::Client(err),
                         })
                 })
                 .await?
@@ -959,12 +1064,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Attempt to read the archive pointer from the cache.
         let pointer_entry = wheel_entry.with_file(format!("{}.rev", filename.cache_key()));
-        let pointer = LocalArchivePointer::read_from(&pointer_entry)?;
+        let pointer = PathArchivePointer::read_from(&pointer_entry)?;
 
         // Extract the archive from the pointer.
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
-            .map(LocalArchivePointer::into_archive)
+            .map(PathArchivePointer::into_archive)
             .filter(|archive| archive.has_digests(hashes));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
@@ -984,13 +1089,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         } else if hashes.is_none() {
             // Otherwise, unzip the wheel.
             let archive = Archive::new(
-                self.unzip_wheel(path, wheel_entry.path()).await?,
+                self.unzip_wheel(path, wheel_entry.path(), DistRef::Built(dist))
+                    .await?,
                 HashDigests::empty(),
                 filename.clone(),
             );
 
             // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
+            let pointer = PathArchivePointer {
                 timestamp: modified,
                 archive: archive.clone(),
             };
@@ -1022,23 +1128,28 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            match extension {
+            let files = match extension {
                 WheelExtension::Whl => {
-                    uv_extract::stream::unzip(&mut hasher, temp_dir.path())
+                    uv_extract::stream::unzip(path.display(), &mut hasher, temp_dir.path())
                         .await
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                        .map_err(|err| Error::Extract(filename.to_string(), err))?
                 }
                 WheelExtension::WhlZst => {
                     uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                        .map_err(|err| Error::Extract(filename.to_string(), err))?
                 }
-            }
+            };
 
             // Exhaust the reader to compute the hash.
             hasher.finish().await.map_err(Error::HashExhaustion)?;
 
             let hashes = hashers.into_iter().map(HashDigest::from).collect();
+
+            // Before we make the wheel accessible by persisting it, ensure that the RECORD is
+            // valid.
+            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                .map_err(Error::InstallWheelError)?;
 
             // Persist the temporary directory to the directory store.
             let id = self
@@ -1052,7 +1163,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let archive = Archive::new(id, hashes, filename.clone());
 
             // Write the archive pointer to the cache.
-            let pointer = LocalArchivePointer {
+            let pointer = PathArchivePointer {
                 timestamp: modified,
                 archive: archive.clone(),
             };
@@ -1074,20 +1185,29 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Unzip a wheel into the cache, returning the path to the unzipped directory.
-    async fn unzip_wheel(&self, path: &Path, target: &Path) -> Result<ArchiveId, Error> {
-        let temp_dir = tokio::task::spawn_blocking({
+    async fn unzip_wheel(
+        &self,
+        path: &Path,
+        target: &Path,
+        dist: DistRef<'_>,
+    ) -> Result<ArchiveId, Error> {
+        let (temp_dir, files) = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
-            move || -> Result<TempDir, Error> {
+            move || -> Result<_, Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                uv_extract::unzip(reader, temp_dir.path())
+                let files = uv_extract::unzip(reader, temp_dir.path())
                     .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-                Ok(temp_dir)
+                Ok((temp_dir, files))
             }
         })
         .await??;
+
+        // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
+        validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+            .map_err(Error::InstallWheelError)?;
 
         // Persist the temporary directory to the directory store.
         let id = self
@@ -1125,15 +1245,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
     pub unmanaged: &'a RegistryClient,
-    control: Semaphore,
+    control: Arc<Semaphore>,
 }
 
 impl<'a> ManagedClient<'a> {
-    /// Create a new `ManagedClient` using the given client and concurrency limit.
-    fn new(client: &'a RegistryClient, concurrency: usize) -> Self {
+    /// Create a new `ManagedClient` using the given client and concurrency semaphore.
+    fn new(client: &'a RegistryClient, control: Arc<Semaphore>) -> Self {
         ManagedClient {
             unmanaged: client,
-            control: Semaphore::new(concurrency),
+            control,
         }
     }
 
@@ -1251,13 +1371,13 @@ impl HttpArchivePointer {
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct LocalArchivePointer {
+pub struct PathArchivePointer {
     timestamp: Timestamp,
     archive: Archive,
 }
 
-impl LocalArchivePointer {
-    /// Read an [`LocalArchivePointer`] from the cache.
+impl PathArchivePointer {
+    /// Read an [`PathArchivePointer`] from the cache.
     pub fn read_from(path: impl AsRef<Path>) -> Result<Option<Self>, Error> {
         match fs_err::read(path) {
             Ok(cached) => Ok(Some(rmp_serde::from_slice::<Self>(&cached)?)),
@@ -1266,8 +1386,8 @@ impl LocalArchivePointer {
         }
     }
 
-    /// Write an [`LocalArchivePointer`] to the cache.
-    pub async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+    /// Write an [`PathArchivePointer`] to the cache.
+    async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
         write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
             .await
             .map_err(Error::CacheWrite)

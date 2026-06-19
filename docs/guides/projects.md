@@ -26,9 +26,10 @@ $ cd hello-world
 $ uv init
 ```
 
-uv will create the following files:
+uv will create the following files and directories:
 
 ```text
+├── .git/
 ├── .gitignore
 ├── .python-version
 ├── README.md
@@ -54,10 +55,12 @@ A complete listing would look like:
 
 ```text
 .
-├── .venv
+├── .git/
+├── .venv/
 │   ├── bin
 │   ├── lib
 │   └── pyvenv.cfg
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -198,8 +201,14 @@ version.
 
 Prior to every `uv run` invocation, uv will verify that the lockfile is up-to-date with the
 `pyproject.toml`, and that the environment is up-to-date with the lockfile, keeping your project
-in-sync without the need for manual intervention. `uv run` guarantees that your command is run in a
-consistent, locked environment.
+in-sync without the need for manual intervention. `uv run` guarantees that your command is run in an
+environment with all required dependencies at their locked versions.
+
+!!! note
+
+    `uv run` does not remove extraneous packages (those not in the lockfile) from the environment
+    by default. See [handling of extraneous packages](../concepts/projects/sync.md#handling-of-extraneous-packages)
+    for details.
 
 For example, to use `flask`:
 

@@ -4,21 +4,20 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
+use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
 use uv_cache::Cache;
 use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
-use uv_install_wheel::read_record_file;
+use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
-use uv_preview::Preview;
-use uv_python::{Interpreter, PythonEnvironment};
+use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_virtualenv::remove_virtualenv;
 
 pub use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -34,7 +33,7 @@ pub struct ToolEnvironment {
 }
 
 impl ToolEnvironment {
-    pub fn new(environment: PythonEnvironment, name: PackageName) -> Self {
+    fn new(environment: PythonEnvironment, name: PackageName) -> Self {
         Self { environment, name }
     }
 
@@ -153,7 +152,7 @@ impl InstalledTools {
     /// included with an error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
@@ -251,7 +250,7 @@ impl InstalledTools {
             environment_path.user_display()
         );
 
-        remove_virtualenv(environment_path.as_path())?;
+        uv_fs::remove_virtualenv(environment_path.as_path()).map_err(uv_virtualenv::Error::from)?;
 
         Ok(())
     }
@@ -288,15 +287,24 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
-                broken_symlink,
-            ))) => {
-                let target_path = fs_err::read_link(&broken_symlink.path)?;
-                warn!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    broken_symlink.path.user_display(),
-                    target_path.user_display()
-                );
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+                path,
+                unix,
+                venv: _,
+            }))) => {
+                if unix {
+                    let target_path = fs_err::read_link(&path)?;
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        path.user_display().cyan(),
+                        target_path.user_display().cyan(),
+                    );
+                } else {
+                    warn!(
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                        path.user_display().cyan(),
+                    );
+                }
 
                 Ok(None)
             }
@@ -311,12 +319,11 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
-        preview: Preview,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
         // Remove any existing environment.
-        match fs_err::remove_dir_all(&environment_path) {
+        match uv_fs::remove_virtualenv(&environment_path) {
             Ok(()) => {
                 debug!(
                     "Removed existing environment for tool `{name}`: {}",
@@ -324,7 +331,7 @@ impl InstalledTools {
                 );
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
         }
 
         debug!(
@@ -342,17 +349,9 @@ impl InstalledTools {
             false,
             false,
             false,
-            preview,
         )?;
 
         Ok(venv)
-    }
-
-    /// Create a temporary tools directory.
-    pub fn temp() -> Result<Self, Error> {
-        Ok(Self::from_path(
-            StateStore::temp()?.bucket(StateBucket::Tools),
-        ))
     }
 
     /// Initialize the tools directory.
@@ -381,36 +380,6 @@ impl InstalledTools {
     /// Return the path of the tools directory.
     pub fn root(&self) -> &Path {
         &self.root
-    }
-}
-
-/// A uv-managed tool installed on the current system..
-#[derive(Debug, Clone)]
-pub struct InstalledTool {
-    /// The path to the top-level directory of the tools.
-    path: PathBuf,
-}
-
-impl InstalledTool {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
-        Ok(Self { path })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl std::fmt::Display for InstalledTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.path
-                .file_name()
-                .unwrap_or(self.path.as_os_str())
-                .to_string_lossy()
-        )
     }
 }
 
@@ -452,7 +421,7 @@ pub fn entrypoint_paths(
     );
 
     // Read the RECORD file.
-    let record = read_record_file(&mut File::open(dist_info_path.join("RECORD"))?)?;
+    let record = read_record(File::open(dist_info_path.join("RECORD"))?)?;
 
     // The RECORD file uses relative paths, so we're looking for the relative path to be a prefix.
     let layout = site_packages.interpreter().layout();

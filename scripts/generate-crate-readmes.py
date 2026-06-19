@@ -50,6 +50,7 @@ versioning.
 
 
 REPO_URL = "https://github.com/astral-sh/uv"
+PRETTIER_VERSION = "3.8.3"
 
 
 def main() -> None:
@@ -150,9 +151,11 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "prettier", "--write", "--prose-wrap", "always"]
+        ["npx", "--yes", f"prettier@{PRETTIER_VERSION}", "--write"]
         + [str(path) for path in generated_paths],
         check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
 

@@ -9,18 +9,18 @@ use petgraph::Direction;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::Semaphore;
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
-use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython};
+use uv_distribution_types::{
+    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
+};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{Requirement, VersionOrUrl};
-use uv_preview::Preview;
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode};
@@ -32,7 +32,7 @@ use crate::commands::reporters::LatestVersionReporter;
 use crate::printer::Printer;
 
 /// Display the installed packages in the current environment as a dependency tree.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_tree(
     show_version_specifiers: bool,
     depth: u8,
@@ -49,11 +49,11 @@ pub(crate) async fn pip_tree(
     concurrency: Concurrency,
     strict: bool,
     exclude_newer: ExcludeNewer,
+    dependency_metadata: &DependencyMetadata,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
@@ -61,7 +61,6 @@ pub(crate) async fn pip_tree(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
@@ -89,6 +88,7 @@ pub(crate) async fn pip_tree(
         let capabilities = IndexCapabilities::default();
 
         let client_builder = client_builder.keyring(keyring_provider);
+        let latest_index_locations = index_locations.clone();
 
         // Initialize the registry client.
         let client = RegistryClientBuilder::new(
@@ -99,8 +99,8 @@ pub(crate) async fn pip_tree(
         .index_strategy(index_strategy)
         .markers(environment.interpreter().markers())
         .platform(environment.interpreter().platform())
-        .build();
-        let download_concurrency = Semaphore::new(concurrency.downloads);
+        .build()?;
+        let download_concurrency = concurrency.downloads_semaphore.clone();
 
         // Determine the platform tags.
         let interpreter = environment.interpreter();
@@ -114,8 +114,9 @@ pub(crate) async fn pip_tree(
             capabilities: &capabilities,
             prerelease,
             exclude_newer: &exclude_newer,
+            index_locations: &latest_index_locations,
             tags: Some(tags),
-            requires_python: &requires_python,
+            requires_python: Some(&requires_python),
         };
 
         let reporter = LatestVersionReporter::from(printer).with_length(packages.len() as u64);
@@ -176,7 +177,7 @@ pub(crate) async fn pip_tree(
 
     // Validate that the environment is consistent.
     if strict {
-        for diagnostic in site_packages.diagnostics(&markers, tags)? {
+        for diagnostic in site_packages.diagnostics(&markers, tags, dependency_metadata)? {
             writeln!(
                 printer.stderr(),
                 "{}{} {}",
@@ -214,7 +215,7 @@ pub(crate) struct DisplayDependencyGraph<'env> {
 
 impl<'env> DisplayDependencyGraph<'env> {
     /// Create a new [`DisplayDependencyGraph`] for the set of installed distributions.
-    pub(crate) fn new(
+    fn new(
         depth: usize,
         prune: &[PackageName],
         package: &[PackageName],
@@ -616,7 +617,7 @@ impl<'env> DisplayDependencyGraph<'env> {
     }
 
     /// Depth-first traverse the nodes to render the tree.
-    pub(crate) fn render(&self) -> Vec<String> {
+    fn render(&self) -> Vec<String> {
         let mut path = Vec::new();
         let mut lines = Vec::with_capacity(self.graph.node_count());
         let mut visited =

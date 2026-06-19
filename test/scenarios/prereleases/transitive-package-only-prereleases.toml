@@ -1,0 +1,18 @@
+name = "transitive-package-only-prereleases"
+description = "The user requires any version of package `a` which requires `b` which only has prerelease versions available."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "Since there are only prerelease versions of `b` available, it should be selected even though the user did not opt-in to prereleases."
+
+[expected.packages]
+a = "0.1.0"
+b = "1.0.0a1"
+
+[packages.a.versions."0.1.0"]
+requires = ["b"]
+
+[packages.b.versions."1.0.0a1"]

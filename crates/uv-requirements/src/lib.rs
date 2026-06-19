@@ -4,10 +4,12 @@ pub use crate::source_tree::*;
 pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
-
-use uv_distribution_types::{
-    Dist, DistErrorKind, GitSourceDist, Requirement, RequirementSource, SourceDist,
+pub use crate::upgrade::{
+    LockedRequirements, read_lock_requirements, read_pylock_toml_requirements,
+    read_requirements_txt,
 };
+
+use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
 
 mod extras;
 mod lookahead;
@@ -15,18 +17,25 @@ mod source_tree;
 mod sources;
 mod specification;
 mod unnamed;
-pub mod upgrade;
+mod upgrade;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{0} `{1}`")]
-    Dist(DistErrorKind, Box<Dist>, #[source] uv_distribution::Error),
+    Dist(
+        DistErrorKind,
+        Box<Dist>,
+        #[source] Box<uv_distribution::Error>,
+    ),
 
     #[error(transparent)]
-    Distribution(#[from] uv_distribution::Error),
+    Distribution(#[from] Box<uv_distribution::Error>),
 
     #[error(transparent)]
     DistributionTypes(#[from] uv_distribution_types::Error),
+
+    #[error(transparent)]
+    HashStrategy(#[from] uv_types::HashStrategyError),
 
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
@@ -37,8 +46,12 @@ pub enum Error {
 
 impl Error {
     /// Create an [`Error`] from a distribution error.
-    pub(crate) fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
-        Self::Dist(DistErrorKind::from_dist(&dist, &err), Box::new(dist), err)
+    fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
+        Self::Dist(
+            DistErrorKind::from_dist(&dist, &err),
+            Box::new(dist),
+            Box::new(err),
+        )
     }
 }
 
@@ -60,16 +73,28 @@ pub(crate) fn required_dist(
             subdirectory.clone(),
             *ext,
         )?,
-        RequirementSource::Git {
+        RequirementSource::GitDirectory {
             git,
             subdirectory,
             url,
-        } => Dist::Source(SourceDist::Git(GitSourceDist {
-            name: requirement.name.clone(),
-            git: Box::new(git.clone()),
-            subdirectory: subdirectory.clone(),
-            url: url.clone(),
-        })),
+        } => Dist::from_git_directory_url(
+            requirement.name.clone(),
+            url.clone(),
+            git.clone(),
+            subdirectory.clone(),
+        )?,
+        RequirementSource::GitPath {
+            git,
+            install_path,
+            ext,
+            url,
+        } => Dist::from_git_path_url(
+            requirement.name.clone(),
+            url.clone(),
+            git.clone(),
+            install_path.clone(),
+            *ext,
+        )?,
         RequirementSource::Path {
             install_path,
             ext,

@@ -44,8 +44,9 @@ default = true
 
 uv will also discover `uv.toml` configuration files in the user- and system-level
 [configuration directories](../reference/storage.md#configuration-directories), e.g., user-level
-configuration in `~/.config/uv/uv.toml`, and system-level configuration at `/etc/uv/uv.toml` on
-macOS and Linux.
+configuration in `~/.config/uv/uv.toml` on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows,
+and system-level configuration at `/etc/uv/uv.toml` on macOS and Linux, or
+`%PROGRAMDATA%\uv\uv.toml` on Windows.
 
 !!! important
 
@@ -76,7 +77,7 @@ configuration files (e.g., user-level configuration will be ignored).
 
 See the [settings reference](../reference/settings.md) for an enumeration of the available settings.
 
-## `.env`
+## Environment variable files
 
 `uv run` can load environment variables from dotenv files (e.g., `.env`, `.env.local`,
 `.env.development`), powered by the [`dotenvy`](https://github.com/allan2/dotenvy) crate.

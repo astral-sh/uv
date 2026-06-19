@@ -3,8 +3,10 @@ use std::path::Path;
 use std::slice;
 
 use rustc_hash::FxHashSet;
+
 use uv_auth::CredentialsCache;
-use uv_configuration::SourceStrategy;
+use uv_cache::Cache;
+use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -25,29 +27,17 @@ pub struct RequiresDist {
 }
 
 impl RequiresDist {
-    /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
-    /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::RequiresDist) -> Self {
-        Self {
-            name: metadata.name,
-            requires_dist: Box::into_iter(metadata.requires_dist)
-                .map(Requirement::from)
-                .collect(),
-            provides_extra: metadata.provides_extra,
-            dependency_groups: BTreeMap::default(),
-            dynamic: metadata.dynamic,
-        }
-    }
-
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub async fn from_project_maybe_workspace(
+    pub(crate) async fn from_project_maybe_workspace(
         metadata: uv_pypi_types::RequiresDist,
         install_path: &Path,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        sources: SourceStrategy,
-        cache: &WorkspaceCache,
+        sources: NoSources,
+        editable: bool,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
@@ -58,16 +48,21 @@ impl RequiresDist {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
-            members: match sources {
-                SourceStrategy::Enabled => MemberDiscovery::default(),
-                SourceStrategy::Disabled => MemberDiscovery::None,
+            members: if sources.is_none() {
+                MemberDiscovery::default()
+            } else {
+                MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
-            return Ok(Self::from_metadata23(metadata));
+            return Self::from_metadata23_with_source_context(metadata, git_member);
         };
 
         Self::from_project_workspace(
@@ -75,9 +70,32 @@ impl RequiresDist {
             &project_workspace,
             git_member,
             locations,
-            sources,
+            &sources,
+            editable,
             credentials_cache,
         )
+    }
+
+    fn from_metadata23_with_source_context(
+        metadata: uv_pypi_types::RequiresDist,
+        git_member: Option<&GitWorkspaceMember<'_>>,
+    ) -> Result<Self, MetadataError> {
+        let requires_dist = Box::into_iter(metadata.requires_dist)
+            .map(|requirement| {
+                let requirement_name = requirement.name.clone();
+                LoweredRequirement::preserve_git_source(requirement, git_member)
+                    .map(LoweredRequirement::into_inner)
+                    .map_err(|err| MetadataError::LoweringError(requirement_name, Box::new(err)))
+            })
+            .collect::<Result<Box<_>, _>>()?;
+
+        Ok(Self {
+            name: metadata.name,
+            requires_dist,
+            provides_extra: metadata.provides_extra,
+            dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
+        })
     }
 
     fn from_project_workspace(
@@ -85,37 +103,32 @@ impl RequiresDist {
         project_workspace: &ProjectWorkspace,
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        no_sources: &NoSources,
+        editable: bool,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.index.as_deref())
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_indexes = project_workspace
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.index.as_deref())
+            .unwrap_or(&empty);
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
-                .current_project()
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .map(ToolUvSources::inner)
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_sources = project_workspace
+            .current_project()
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .unwrap_or(&empty);
 
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
             project_workspace.current_project().root(),
@@ -130,14 +143,18 @@ impl RequiresDist {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, flat_group)| {
-                let requirements = match source_strategy {
-                    SourceStrategy::Enabled => flat_group
-                        .requirements
-                        .into_iter()
-                        .flat_map(|requirement| {
+                let requirements = flat_group
+                    .requirements
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        // Check if sources should be disabled for this specific package
+                        if no_sources.for_package(&requirement.name) {
+                            vec![Ok(Requirement::from(requirement))].into_iter()
+                        } else {
                             let requirement_name = requirement.name.clone();
                             let group = name.clone();
                             let extra = None;
+
                             LoweredRequirement::from_requirement(
                                 requirement,
                                 Some(&metadata.name),
@@ -149,38 +166,38 @@ impl RequiresDist {
                                 locations,
                                 project_workspace.workspace(),
                                 git_member,
+                                editable,
                                 credentials_cache,
                             )
-                            .map(
-                                move |requirement| match requirement {
-                                    Ok(requirement) => Ok(requirement.into_inner()),
-                                    Err(err) => Err(MetadataError::GroupLoweringError(
-                                        group.clone(),
-                                        requirement_name.clone(),
-                                        Box::new(err),
-                                    )),
-                                },
-                            )
-                        })
-                        .collect::<Result<Box<_>, _>>(),
-                    SourceStrategy::Disabled => Ok(flat_group
-                        .requirements
-                        .into_iter()
-                        .map(Requirement::from)
-                        .collect()),
-                }?;
+                            .map(move |requirement| match requirement {
+                                Ok(requirement) => Ok(requirement.into_inner()),
+                                Err(err) => Err(MetadataError::GroupLoweringError(
+                                    group.clone(),
+                                    requirement_name.clone(),
+                                    Box::new(err),
+                                )),
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                        }
+                    })
+                    .collect::<Result<Box<_>, _>>()?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
         // Lower the requirements.
         let requires_dist = Box::into_iter(metadata.requires_dist);
-        let requires_dist = match source_strategy {
-            SourceStrategy::Enabled => requires_dist
-                .flat_map(|requirement| {
+        let requires_dist = requires_dist
+            .flat_map(|requirement| {
+                // Check if sources should be disabled for this specific package
+                if no_sources.for_package(&requirement.name) {
+                    vec![Ok(Requirement::from(requirement))].into_iter()
+                } else {
                     let requirement_name = requirement.name.clone();
                     let extra = requirement.marker.top_level_extra_name();
                     let group = None;
+
                     LoweredRequirement::from_requirement(
                         requirement,
                         Some(&metadata.name),
@@ -192,6 +209,7 @@ impl RequiresDist {
                         locations,
                         project_workspace.workspace(),
                         git_member,
+                        editable,
                         credentials_cache,
                     )
                     .map(move |requirement| match requirement {
@@ -201,10 +219,11 @@ impl RequiresDist {
                             Box::new(err),
                         )),
                     })
-                })
-                .collect::<Result<Box<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
-        };
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                }
+            })
+            .collect::<Result<Box<_>, _>>()?;
 
         Ok(Self {
             name: metadata.name,
@@ -419,11 +438,6 @@ impl FlatRequiresDist {
 
         Self(flattened.into_boxed_slice())
     }
-
-    /// Consume the [`FlatRequiresDist`] and return the inner requirements.
-    pub fn into_inner(self) -> Box<[Requirement]> {
-        self.0
-    }
 }
 
 impl IntoIterator for FlatRequiresDist {
@@ -437,56 +451,59 @@ impl IntoIterator for FlatRequiresDist {
 
 #[cfg(test)]
 mod test {
+    use std::fmt::Write;
     use std::path::Path;
     use std::str::FromStr;
 
-    use anyhow::Context;
     use indoc::indoc;
     use insta::assert_snapshot;
+    use tempfile::TempDir;
+
     use uv_auth::CredentialsCache;
-    use uv_configuration::SourceStrategy;
+    use uv_cache::Cache;
+    use uv_configuration::NoSources;
     use uv_distribution_types::IndexLocations;
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
-    use uv_workspace::pyproject::PyProjectToml;
     use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
     use crate::RequiresDist;
     use crate::metadata::requires_dist::FlatRequiresDist;
 
-    async fn requires_dist_from_pyproject_toml(contents: &str) -> anyhow::Result<RequiresDist> {
-        let pyproject_toml = PyProjectToml::from_string(contents.to_string())?;
-        let path = Path::new("pyproject.toml");
-        let project_workspace = ProjectWorkspace::from_project(
-            path,
-            pyproject_toml
-                .project
-                .as_ref()
-                .context("metadata field project not found")?,
-            &pyproject_toml,
+    async fn requires_dist_from_pyproject_toml(
+        temp_dir: &Path,
+        contents: &str,
+    ) -> anyhow::Result<RequiresDist> {
+        fs_err::write(temp_dir.join("pyproject.toml"), contents)?;
+        let cache = Cache::from_path(temp_dir.join(".uv_cache"));
+        let project_workspace = ProjectWorkspace::discover(
+            temp_dir,
             &DiscoveryOptions {
-                stop_discovery_at: Some(path.to_path_buf()),
+                stop_discovery_at: Some(temp_dir.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
+            &cache,
             &WorkspaceCache::default(),
         )
         .await?;
-        let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents)?;
+        let pyproject_toml = uv_pypi_types::PyProjectToml::from_toml(contents, "pyproject.toml")?;
         let requires_dist = uv_pypi_types::RequiresDist::from_pyproject_toml(pyproject_toml)?;
         Ok(RequiresDist::from_project_workspace(
             requires_dist,
             &project_workspace,
             None,
             &IndexLocations::default(),
-            SourceStrategy::default(),
+            &NoSources::default(),
+            true,
             &CredentialsCache::new(),
         )?)
     }
 
     async fn format_err(input: &str) -> String {
-        use std::fmt::Write;
-
-        let err = requires_dist_from_pyproject_toml(input).await.unwrap_err();
+        let temp_dir = TempDir::new().unwrap();
+        let err = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap_err();
         let mut causes = err.chain();
         let mut message = String::new();
         let _ = writeln!(message, "error: {}", causes.next().unwrap());
@@ -494,6 +511,8 @@ mod test {
             let _ = writeln!(message, "  Caused by: {err}");
         }
         message
+            .replace(&temp_dir.path().display().to_string(), "[PATH]")
+            .replace('\\', "/")
     }
 
     #[tokio::test]
@@ -509,14 +528,14 @@ mod test {
             tqdm = true
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        assert_snapshot!(format_err(input).await, @"
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = true
           |        ^^^^
         invalid type: boolean `true`, expected a single source (as a map) or list of sources
-
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -532,13 +551,14 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        assert_snapshot!(format_err(input).await, @r#"
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", rev = "baaaaaab", tag = "v1.0.0" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         expected at most one of `rev`, `tag`, or `branch`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -555,7 +575,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 48
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 48
           |
         8 | tqdm = { git = "https://github.com/tqdm/tqdm", ref = "baaaaaab" }
           |                                                ^^^
@@ -575,13 +596,14 @@ mod test {
             tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 7, column 8
+        assert_snapshot!(format_err(input).await, @r#"
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 7, column 8
           |
         7 | tqdm = { git = "https://github.com/tqdm/tqdm", extra = "torch", group = "dev" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         cannot specify both `extra` and `group`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -597,13 +619,14 @@ mod test {
             tqdm = { path = "tqdm", index = "torch" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 8
+        assert_snapshot!(format_err(input).await, @r#"
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 8
           |
         8 | tqdm = { path = "tqdm", index = "torch" }
           |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         cannot specify both `path` and `index`
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -616,7 +639,12 @@ mod test {
               "tqdm",
             ]
         "#};
-        assert!(requires_dist_from_pyproject_toml(input).await.is_ok());
+        let temp_dir = TempDir::new().unwrap();
+        assert!(
+            requires_dist_from_pyproject_toml(temp_dir.path(), input)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -633,7 +661,8 @@ mod test {
         "#};
 
         assert_snapshot!(format_err(input).await, @r#"
-        error: TOML parse error at line 8, column 16
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = invalid url to tqdm-4.66.0-py3-none-any.whl" }
           |                ^
@@ -654,13 +683,14 @@ mod test {
             tqdm = { url = "§invalid#+#*Ä" }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: TOML parse error at line 8, column 16
+        assert_snapshot!(format_err(input).await, @r#"
+        error: Failed to parse: `[PATH]/pyproject.toml`
+          Caused by: TOML parse error at line 8, column 16
           |
         8 | tqdm = { url = "§invalid#+#*Ä" }
           |                ^^^^^^^^^^^^^^^^^
         relative URL without a base: "§invalid#+#*Ä"
-        "###);
+        "#);
     }
 
     #[tokio::test]
@@ -676,10 +706,10 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @"
         error: Failed to parse entry: `tqdm`
           Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -695,10 +725,10 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
+        assert_snapshot!(format_err(input).await, @"
         error: Failed to parse entry: `tqdm`
           Caused by: `tqdm` references a workspace in `tool.uv.sources` (e.g., `tqdm = { workspace = true }`), but is not a workspace member
-        "###);
+        ");
     }
 
     #[tokio::test]
@@ -714,9 +744,7 @@ mod test {
             tqdm = { workspace = true }
         "#};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: The following field was marked as dynamic: dependencies
-        "###);
+        assert_snapshot!(format_err(input).await, @"error: The following field was marked as dynamic: dependencies");
     }
 
     #[tokio::test]
@@ -726,9 +754,7 @@ mod test {
             tqdm = { workspace = true }
         "};
 
-        assert_snapshot!(format_err(input).await, @r###"
-        error: metadata field project not found
-        "###);
+        assert_snapshot!(format_err(input).await, @"error: No `project` table found in: [PATH]/pyproject.toml");
     }
 
     #[test]

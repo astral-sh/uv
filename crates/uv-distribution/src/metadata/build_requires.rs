@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::Path;
+
 use uv_auth::CredentialsCache;
-use uv_configuration::SourceStrategy;
+use uv_cache::Cache;
+use uv_configuration::NoSources;
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
 };
@@ -23,7 +25,7 @@ pub struct BuildRequires {
 impl BuildRequires {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
+    fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
@@ -40,19 +42,28 @@ impl BuildRequires {
         metadata: uv_pypi_types::BuildRequires,
         install_path: &Path,
         locations: &IndexLocations,
-        sources: SourceStrategy,
-        cache: &WorkspaceCache,
+        sources: &NoSources,
+        editable: bool,
+        stop_discovery_at: Option<&Path>,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
-        let discovery = match sources {
-            SourceStrategy::Enabled => DiscoveryOptions::default(),
-            SourceStrategy::Disabled => DiscoveryOptions {
-                members: MemberDiscovery::None,
-                ..Default::default()
+        let discovery = DiscoveryOptions {
+            stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
+            members: if sources.all() {
+                MemberDiscovery::None
+            } else {
+                MemberDiscovery::default()
             },
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -62,36 +73,41 @@ impl BuildRequires {
             &project_workspace,
             locations,
             sources,
+            editable,
             credentials_cache,
         )
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
-    pub fn from_project_workspace(
+    fn from_project_workspace(
         metadata: uv_pypi_types::BuildRequires,
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        sources: &NoSources,
+        editable: bool,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
+        let project_indexes = if sources.all() {
+            &empty
+        } else {
+            project_workspace
                 .current_project()
                 .pyproject_toml()
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.index.as_deref())
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
+                .unwrap_or(&empty)
         };
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = match source_strategy {
-            SourceStrategy::Enabled => project_workspace
+        let project_sources = if sources.all() {
+            &empty
+        } else {
+            project_workspace
                 .current_project()
                 .pyproject_toml()
                 .tool
@@ -99,41 +115,49 @@ impl BuildRequires {
                 .and_then(|tool| tool.uv.as_ref())
                 .and_then(|uv| uv.sources.as_ref())
                 .map(ToolUvSources::inner)
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
+                .unwrap_or(&empty)
         };
 
         // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
-        let requires_dist = match source_strategy {
-            SourceStrategy::Enabled => requires_dist
+        let requires_dist = if sources.all() {
+            requires_dist.into_iter().map(Requirement::from).collect()
+        } else {
+            requires_dist
                 .flat_map(|requirement| {
-                    let requirement_name = requirement.name.clone();
-                    let extra = requirement.marker.top_level_extra_name();
-                    let group = None;
-                    LoweredRequirement::from_requirement(
-                        requirement,
-                        metadata.name.as_ref(),
-                        project_workspace.project_root(),
-                        project_sources,
-                        project_indexes,
-                        extra.as_deref(),
-                        group,
-                        locations,
-                        project_workspace.workspace(),
-                        None,
-                        credentials_cache,
-                    )
-                    .map(move |requirement| match requirement {
-                        Ok(requirement) => Ok(requirement.into_inner()),
-                        Err(err) => Err(MetadataError::LoweringError(
-                            requirement_name.clone(),
-                            Box::new(err),
-                        )),
-                    })
+                    // Check if sources should be disabled for this specific package
+                    if sources.for_package(&requirement.name) {
+                        vec![Ok(Requirement::from(requirement))].into_iter()
+                    } else {
+                        let requirement_name = requirement.name.clone();
+                        let extra = requirement.marker.top_level_extra_name();
+                        let group = None;
+                        LoweredRequirement::from_requirement(
+                            requirement,
+                            metadata.name.as_ref(),
+                            project_workspace.project_root(),
+                            project_sources,
+                            project_indexes,
+                            extra.as_deref(),
+                            group,
+                            locations,
+                            project_workspace.workspace(),
+                            None,
+                            editable,
+                            credentials_cache,
+                        )
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => Err(MetadataError::LoweringError(
+                                requirement_name.clone(),
+                                Box::new(err),
+                            )),
+                        })
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                    }
                 })
-                .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
+                .collect::<Result<Vec<_>, _>>()?
         };
 
         Ok(Self {
@@ -147,44 +171,42 @@ impl BuildRequires {
         metadata: uv_pypi_types::BuildRequires,
         workspace: &Workspace,
         locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        sources: &NoSources,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
-        let project_indexes = match source_strategy {
-            SourceStrategy::Enabled => workspace
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.index.as_deref())
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_indexes = workspace
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.index.as_deref())
+            .unwrap_or(&empty);
 
         // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
         let empty = BTreeMap::default();
-        let project_sources = match source_strategy {
-            SourceStrategy::Enabled => workspace
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .map(ToolUvSources::inner)
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
+        let project_sources = workspace
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .unwrap_or(&empty);
 
         // Lower the requirements.
         let requires_dist = metadata.requires_dist.into_iter();
-        let requires_dist = match source_strategy {
-            SourceStrategy::Enabled => requires_dist
-                .flat_map(|requirement| {
+        let requires_dist = requires_dist
+            .flat_map(|requirement| {
+                // Check if sources should be disabled for this specific package
+                if sources.for_package(&requirement.name) {
+                    vec![Ok(Requirement::from(requirement))].into_iter()
+                } else {
                     let requirement_name = requirement.name.clone();
                     let extra = requirement.marker.top_level_extra_name();
                     let group = None;
+
                     LoweredRequirement::from_requirement(
                         requirement,
                         None,
@@ -196,6 +218,7 @@ impl BuildRequires {
                         locations,
                         workspace,
                         None,
+                        true,
                         credentials_cache,
                     )
                     .map(move |requirement| match requirement {
@@ -205,10 +228,11 @@ impl BuildRequires {
                             Box::new(err),
                         )),
                     })
-                })
-                .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
-        };
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             name: metadata.name,
@@ -235,11 +259,11 @@ impl LoweredExtraBuildDependencies {
         extra_build_dependencies: ExtraBuildDependencies,
         workspace: &Workspace,
         index_locations: &IndexLocations,
-        source_strategy: SourceStrategy,
+        source_strategy: &NoSources,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         match source_strategy {
-            SourceStrategy::Enabled => {
+            NoSources::None => {
                 // Collect project sources and indexes
                 let project_indexes = workspace
                     .pyproject_toml()
@@ -283,6 +307,7 @@ impl LoweredExtraBuildDependencies {
                                     index_locations,
                                     workspace,
                                     None,
+                                    true,
                                     credentials_cache,
                                 )
                                 .map(move |requirement| {
@@ -304,7 +329,10 @@ impl LoweredExtraBuildDependencies {
                 }
                 Ok(Self(build_requires))
             }
-            SourceStrategy::Disabled => Ok(Self::from_non_lowered(extra_build_dependencies)),
+            NoSources::All | NoSources::Packages(_) => {
+                // Without source resolution, just return the dependencies as-is
+                Ok(Self::from_non_lowered(extra_build_dependencies))
+            }
         }
     }
 
