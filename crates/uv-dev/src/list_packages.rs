@@ -21,10 +21,12 @@ pub(crate) async fn list_packages(
 ) -> Result<()> {
     let cache = Cache::try_from(args.cache_args)?.init().await?;
     let client = RegistryClientBuilder::new(
-        BaseClientBuilder::default().timeout(environment.http_timeout),
+        BaseClientBuilder::default()
+            .read_timeout(environment.http_read_timeout)
+            .connect_timeout(environment.http_connect_timeout),
         cache,
     )
-    .build();
+    .build()?;
 
     let index_url = IndexUrl::parse(&args.url, None)?;
     let index = client.fetch_simple_index(&index_url).await?;

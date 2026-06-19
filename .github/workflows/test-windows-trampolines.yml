@@ -1,5 +1,11 @@
 on:
   workflow_call:
+    inputs:
+      trampoline-build:
+        description: "Whether to check the committed trampoline binaries"
+        required: false
+        type: string
+        default: "false"
 
 permissions: {}
 
@@ -10,6 +16,44 @@ env:
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
+  # Verify windows crate version matches between workspaces
+  windows-version-check:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    name: "check windows crate version"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: "Check windows crate versions match"
+        run: uv run --no-project scripts/check-trampoline-version-consistency.py
+
+  # Verify committed trampolines were built with the Docker image
+  windows-trampoline-check-binary:
+    # Only run when trampoline sources changed, the trampoline binaries changed
+    # or the `build:windows-trampoline` label is set. Dependency bumps would
+    # otherwise force a trampoline rebuild on every dependency update.
+    if: ${{ inputs.trampoline-build == 'true' }}
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    name: "check binary"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: "Build trampolines in Docker"
+        run: scripts/build-trampolines.sh --cache-from type=gha --cache-to type=gha
+
+      - name: "Check committed trampolines match build"
+        run: git diff --exit-code crates/uv-trampoline-builder/trampolines/
+
   # Separate jobs for the nightly crate
   windows-trampoline-check:
     timeout-minutes: 15
@@ -20,7 +64,7 @@ jobs:
       matrix:
         target-arch: ["x86_64", "i686", "aarch64"]
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -32,7 +76,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
@@ -43,7 +87,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@d850aa816998e5cf15f67a78c7b933f2a5033f8a # v2.63.3
+        uses: taiki-e/install-action@0631aa6515c7d545823c67cfae7ef4fc7f490154 # v2.81.8
         with:
           tool: cargo-bloat
 
@@ -81,7 +125,7 @@ jobs:
           - { runner: windows-latest, target-arch: "i686" }
           - { runner: windows-11-arm, target-arch: "aarch64" }
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - name: Setup Dev Drive
@@ -90,7 +134,7 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"

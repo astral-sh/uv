@@ -3,7 +3,10 @@ use std::fmt::Write;
 use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 
-use uv_auth::{AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username};
+use uv_auth::{
+    AuthBackend, Credentials, PyxTokenStore, Service, TextCredentialStore, Username,
+    is_default_pyx_domain,
+};
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::IndexUrl;
 use uv_pep508::VerbatimUrl;
@@ -22,7 +25,7 @@ pub(crate) async fn logout(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         return pyx_logout(&pyx_store, client_builder, printer).await;
     }
 
@@ -36,7 +39,7 @@ pub(crate) async fn logout(
     };
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(&url);
+    let url_credentials = Credentials::from_url(&url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
 
     let username = match (username, url_username) {
@@ -96,7 +99,7 @@ async fn pyx_logout(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Initialize the client.
-    let client = client_builder.build();
+    let client = client_builder.build()?;
 
     // Retrieve the token store.
     let Some(tokens) = store.read().await? else {

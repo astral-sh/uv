@@ -5,10 +5,10 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
-use uv_fs::with_added_extension;
+pub struct WindowsRunnable;
 
 #[derive(Debug)]
-pub enum WindowsRunnable {
+enum WindowsRunnableKind {
     /// Windows PE (.exe)
     Executable,
     /// `PowerShell` script (.ps1)
@@ -19,7 +19,7 @@ pub enum WindowsRunnable {
     Batch,
 }
 
-impl WindowsRunnable {
+impl WindowsRunnableKind {
     /// Returns a list of all supported Windows runnable types.
     fn all() -> &'static [Self] {
         &[
@@ -67,7 +67,9 @@ impl WindowsRunnable {
             }
         }
     }
+}
 
+impl WindowsRunnable {
     /// Handle console and legacy setuptools scripts for Windows.
     ///
     /// Returns [`Command`] that can be used to invoke a supported runnable on Windows
@@ -79,7 +81,7 @@ impl WindowsRunnable {
         if let Some(script_type) = script_path
             .extension()
             .and_then(OsStr::to_str)
-            .and_then(Self::from_extension)
+            .and_then(WindowsRunnableKind::from_extension)
             .filter(|_| script_path.is_file())
         {
             return script_type.as_command(&script_path);
@@ -87,12 +89,12 @@ impl WindowsRunnable {
 
         // Guess the extension when an explicit one is not provided.
         // We also add the extension when missing since for some types (e.g. PowerShell) it must be explicit.
-        Self::all()
+        WindowsRunnableKind::all()
             .iter()
             .map(|script_type| {
                 (
                     script_type,
-                    with_added_extension(&script_path, script_type.to_extension()),
+                    script_path.with_added_extension(script_type.to_extension()),
                 )
             })
             .find(|(_, script_path)| script_path.is_file())

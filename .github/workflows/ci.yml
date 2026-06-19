@@ -22,15 +22,18 @@ jobs:
       run-checks: ${{ steps.plan.outputs.run_checks }}
       test-publish: ${{ steps.plan.outputs.test_publish }}
       test-windows-trampoline: ${{ steps.plan.outputs.test_windows_trampoline }}
+      test-windows-trampoline-check-binary: ${{ steps.plan.outputs.test_windows_trampoline_check_binary }}
       save-rust-cache: ${{ steps.plan.outputs.save_rust_cache }}
       run-bench: ${{ steps.plan.outputs.run_bench }}
       test-smoke: ${{ steps.plan.outputs.test_smoke }}
       test-ecosystem: ${{ steps.plan.outputs.test_ecosystem }}
       test-integration: ${{ steps.plan.outputs.test_integration }}
       test-system: ${{ steps.plan.outputs.test_system }}
+      test-macos: ${{ steps.plan.outputs.test_macos }}
       build-docker: ${{ steps.plan.outputs.build_docker }}
+      push-docker: ${{ steps.plan.outputs.push_docker }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -44,9 +47,14 @@ jobs:
           HAS_INTEGRATION_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }}
           HAS_SYSTEM_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
           HAS_EXTENDED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:extended') }}
+          HAS_MACOS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:macos') }}
+          HAS_PUBLISH_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'test:publish') }}
           HAS_BUILD_SKIP_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip') }}
+          HAS_BUILD_SKIP_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-docker') }}
           HAS_BUILD_SKIP_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:skip-release') }}
           HAS_BUILD_RELEASE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }}
+          HAS_BUILD_PUSH_DOCKER_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:push-docker') }}
+          HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'build:windows-trampoline') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           [[ "$GH_REF" == "refs/heads/main" ]] && on_main_branch=1
@@ -54,26 +62,40 @@ jobs:
           [[ "$HAS_INTEGRATION_LABEL" == "true" ]] && has_integration_label=1
           [[ "$HAS_SYSTEM_LABEL" == "true" ]] && has_system_label=1
           [[ "$HAS_EXTENDED_LABEL" == "true" ]] && has_extended_label=1
+          [[ "$HAS_MACOS_LABEL" == "true" ]] && has_macos_label=1
+          [[ "$HAS_PUBLISH_LABEL" == "true" ]] && has_publish_label=1
           [[ "$HAS_BUILD_SKIP_LABEL" == "true" ]] && has_build_skip_label=1
+          [[ "$HAS_BUILD_SKIP_DOCKER_LABEL" == "true" ]] && has_build_skip_docker_label=1
           [[ "$HAS_BUILD_SKIP_RELEASE_LABEL" == "true" ]] && has_build_skip_release_label=1
           [[ "$HAS_BUILD_RELEASE_LABEL" == "true" ]] && has_build_release_label=1
+          [[ "$HAS_BUILD_PUSH_DOCKER_LABEL" == "true" ]] && has_build_push_docker_label=1
+          [[ "$HAS_BUILD_WINDOWS_TRAMPOLINE_LABEL" == "true" ]] && has_build_windows_trampoline_label=1
 
           # Detect changed files
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             [[ "$file" =~ \.rs$ ]] && rust_code_changed=1
             [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
-            [[ "$file" == "rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
+            [[ "$file" == "rust-toolchain.toml" || "$file" == "crates/uv-build/rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
             [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
             [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
-            [[ "$file" == ".github/workflows/build-release-binaries.yml" ]] && release_workflow_changed=1
+            [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
+            [[ "$file" == "scripts/check_uv_wheel_contents.py" || "$file" == "scripts/patch-dist-manifest-checksums.py" || "$file" == "scripts/repair-sdist-cargo-lock.py" ]] && release_build_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
             [[ "$file" == "uv.schema.json" ]] && schema_changed=1
-            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ ]] && publish_code_changed=1
-            [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_changed=1
+            [[ "$file" =~ ^crates/uv-publish/ || "$file" =~ ^scripts/publish/ || "$file" == "crates/uv/src/commands/publish.rs" ]] && publish_code_changed=1
+            [[ "$file" == ".github/workflows/test-windows-trampolines.yml" ]] && trampoline_workflow_changed=1
+            [[ "$file" =~ ^crates/uv-trampoline/ || "$file" =~ ^crates/uv-trampoline-builder/ ]] && trampoline_code_changed=1
+            [[ "$file" =~ ^crates/uv-trampoline/.*\.rs$ || "$file" =~ ^crates/uv-trampoline-builder/trampolines/ ]] && trampoline_repro_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" ]] && trampoline_build_scripts_changed=1
+            [[ "$file" == "scripts/build-trampolines.sh" || "$file" == "scripts/build-trampolines-in-docker.sh" || "$file" == "scripts/check-trampoline-version-consistency.py" ]] && trampoline_scripts_changed=1
             [[ "$file" =~ ^crates/uv-build/ ]] && uv_build_changed=1
             [[ "$file" == "Dockerfile" ]] && dockerfile_changed=1
             [[ "$file" == ".github/workflows/build-docker.yml" ]] && docker_workflow_changed=1
+            [[ "$file" == ".github/workflows/bench.yml" ]] && bench_workflow_changed=1
+            [[ "$file" == ".github/workflows/test-integration.yml" || "$file" =~ ^test/integration/ || "$file" == "scripts/check_registry.py" || "$file" == "scripts/check_cache_compat.py" || "$file" == "scripts/registries-test.py" ]] && integration_changed=1
+            [[ "$file" == ".github/workflows/test-system.yml" ]] && system_workflow_changed=1
+            [[ "$file" == "scripts/check_system_python.py" || "$file" == "scripts/check_embedded_python.py" ]] && system_test_changed=1
             [[ "$file" =~ ^docs/ || "$file" =~ ^mkdocs.*\.yml$ || "$file" =~ \.md$ || "$file" =~ ^bin/ || "$file" =~ ^assets/ ]] && continue
             any_code_changed=1
           done <<< "$(git diff --name-only "${BASE_SHA:-origin/main}...HEAD")"
@@ -90,15 +112,18 @@ jobs:
           [[ $schema_changed ]] && check_schema=1
           [[ ! $has_skip_label && ! $has_build_skip_label && ! $has_build_skip_release_label && ($release_build_changed || $has_build_release_label) ]] && build_release_binaries=1
           [[ ! $has_skip_label ]] && run_checks=1
-          [[ $publish_changed || $on_main_branch ]] && test_publish=1
-          [[ ! $has_skip_label && ($trampoline_changed || $on_main_branch) ]] && test_windows_trampoline=1
+          [[ $publish_changed || $has_publish_label || $has_extended_label || $on_main_branch ]] && test_publish=1
+          [[ ! $has_skip_label && ($trampoline_code_changed || $trampoline_scripts_changed || $trampoline_workflow_changed || $rust_deps_changed || $has_build_windows_trampoline_label || $on_main_branch) ]] && test_windows_trampoline=1
+          [[ ! $has_skip_label && ($trampoline_repro_changed || $trampoline_build_scripts_changed || $has_build_windows_trampoline_label) ]] && test_windows_trampoline_check_binary=1
           [[ $on_main_branch || $cache_relevant_changed ]] && save_rust_cache=1
-          [[ ! $has_skip_label && ($any_rust_changed || $on_main_branch) ]] && run_bench=1
+          [[ ! $has_skip_label && ($any_rust_changed || $bench_workflow_changed || $on_main_branch) ]] && run_bench=1
           [[ ! $has_skip_label ]] && test_smoke=1
           [[ ! $has_skip_label ]] && test_ecosystem=1
-          [[ $has_integration_label || $has_extended_label || $on_main_branch ]] && test_integration=1
-          [[ $has_system_label || $has_extended_label || $on_main_branch ]] && test_system=1
-          [[ ! $has_skip_label && $docker_build_changed ]] && build_docker=1
+          [[ $has_integration_label || $has_extended_label || $on_main_branch || $integration_changed ]] && test_integration=1
+          [[ $has_system_label || $has_extended_label || $on_main_branch || $system_workflow_changed || $system_test_changed ]] && test_system=1
+          [[ $has_macos_label || $has_extended_label || $on_main_branch || $build_release_binaries ]] && test_macos=1
+          [[ ! $has_build_skip_label && ! $has_build_skip_docker_label && ($docker_build_changed || $has_build_push_docker_label) ]] && build_docker=1
+          [[ $has_build_push_docker_label ]] && push_docker=1
 
           # Output (convert 1/empty to true/false for GHA)
           out() { [[ "$2" ]] && echo "$1=true" || echo "$1=false"; }
@@ -109,13 +134,16 @@ jobs:
             out run_checks              "$run_checks"
             out test_publish            "$test_publish"
             out test_windows_trampoline "$test_windows_trampoline"
+            out test_windows_trampoline_check_binary "$test_windows_trampoline_check_binary"
             out save_rust_cache         "$save_rust_cache"
             out run_bench               "$run_bench"
             out test_smoke              "$test_smoke"
             out test_ecosystem          "$test_ecosystem"
             out test_integration        "$test_integration"
             out test_system             "$test_system"
+            out test_macos              "$test_macos"
             out build_docker            "$build_docker"
+            out push_docker             "$push_docker"
           } >> "$GITHUB_OUTPUT"
 
   check-fmt:
@@ -152,6 +180,11 @@ jobs:
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: ./.github/workflows/check-release.yml
 
+  check-lock:
+    needs: plan
+    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    uses: ./.github/workflows/check-lock.yml
+
   check-generated-files:
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
@@ -166,11 +199,14 @@ jobs:
     uses: ./.github/workflows/test.yml
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+      test-macos: ${{ needs.plan.outputs.test-macos }}
 
   test-windows-trampolines:
     needs: plan
     if: ${{ needs.plan.outputs.test-windows-trampoline == 'true' }}
     uses: ./.github/workflows/test-windows-trampolines.yml
+    with:
+      trampoline-build: ${{ needs.plan.outputs.test-windows-trampoline-check-binary }}
 
   build-dev-binaries:
     needs: plan
@@ -228,6 +264,8 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.build-docker == 'true' }}
     uses: ./.github/workflows/build-docker.yml
+    with:
+      push-dev: ${{ needs.plan.outputs.push-docker == 'true' }}
     secrets: inherit
     permissions:
       contents: read
@@ -254,7 +292,9 @@ jobs:
     runs-on: ubuntu-latest
     # Only the main repository is a trusted publisher
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.test-publish == 'true' }}
-    environment: uv-test-publish
+    environment:
+      name: uv-test-publish
+      deployment: false
     env:
       # No dbus in GitHub Actions
       PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
@@ -263,17 +303,17 @@ jobs:
       # For trusted publishing
       id-token: write
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -281,19 +321,20 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Build astral-test-pypa-gh-action"
+        shell: bash -eo pipefail {0}
         run: |
           # Build a yet unused version of `astral-test-pypa-gh-action`
           mkdir astral-test-pypa-gh-action
           cd astral-test-pypa-gh-action
-          ../uv init --package
+          ../uv init --package --no-workspace
           # Get the latest patch version
-          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '.files[-1].filename' | sed 's/astral_test_pypa_gh_action-0\.1\.\([0-9]\+\)\.tar\.gz/\1/')
+          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' | grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)')
           # Set the current version to one higher (which should be unused)
           sed -i "s/0.1.0/0.1.$((patch_version + 1))/g" pyproject.toml
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
@@ -302,8 +343,8 @@ jobs:
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
 
-      - name: "Request GitLab OIDC token for impersonation"
-        uses: digital-blueprint/gitlab-pipeline-trigger-action@20e77989b24af658ba138a0aa5291bdc657f1505 # v1.3.0
+      - name: "Request GitLab OIDC tokens for impersonation"
+        uses: digital-blueprint/gitlab-pipeline-trigger-action@c59b56e9d2688ab42c1304322ac8831a4ef6f7d2 # v1.4.0
         with:
           host: gitlab.com
           id: astral-test-publish/astral-test-gitlab-pypi-tp
@@ -314,21 +355,31 @@ jobs:
           fail_if_no_artifacts: true
           download_path: ./gitlab-artifacts
 
-      - name: "Load GitLab OIDC token from GitLab job artifacts"
+      - name: "Load GitLab OIDC tokens from GitLab job artifacts"
         id: load-gitlab-oidc-token
         run: |
-          # we expect ./gitlab-artifacts/*/artifacts/id-token to exist
-          id_token_file=$(find ./gitlab-artifacts -type f -name id-token | head -n 1)
-          if [ -z "${id_token_file}" ]; then
-            echo "No id-token file found in GitLab artifacts"
+          # we expect ./gitlab-artifacts/*/artifacts/pypi-id-token to exist
+          pypi_id_token_file=$(find ./gitlab-artifacts -type f -name pypi-id-token | head -n 1)
+          if [ -z "${pypi_id_token_file}" ]; then
+            echo "No pypi-id-token file found in GitLab artifacts"
             exit 1
           fi
-          GITLAB_OIDC_TOKEN=$(cat "${id_token_file}")
+          GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
 
-          # Add a secret mask for the token.
-          echo "::add-mask::$GITLAB_OIDC_TOKEN"
+          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
+          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
+          if [ -z "${pyx_id_token_file}" ]; then
+            echo "No pyx-id-token file found in GitLab artifacts"
+            exit 1
+          fi
+          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
 
-          echo "GITLAB_OIDC_TOKEN=${GITLAB_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
+          # Add secret masks for the tokens.
+          echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
+          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
+
+          echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
+          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
 
       - name: "Add password to keyring"
         run: |
@@ -346,7 +397,7 @@ jobs:
 
       - name: "Publish test packages"
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
-        run: ./uv run -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
+        run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
           RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
@@ -356,7 +407,8 @@ jobs:
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
           UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
-          UV_TEST_PUBLISH_GITLAB_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_OIDC_TOKEN }}
+          UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
+          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"
@@ -368,7 +420,7 @@ jobs:
       - check-generated-files
       - test
       - build-dev-binaries
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: "Check required jobs passed"
         run: |

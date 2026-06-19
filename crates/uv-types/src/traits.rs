@@ -12,14 +12,44 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, Resolution, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation};
+use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
+
+/// Controls how source tree requirements influence workspace-member editability during lowering.
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum SourceTreeEditablePolicy {
+    /// Use project-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are ignored, preserving the existing implicit
+    /// editable default for workspace members.
+    #[default]
+    Project,
+
+    /// Use tool-style semantics when lowering workspace members.
+    ///
+    /// Explicit source-tree editable settings are preserved, while implicit workspace members
+    /// default to non-editable.
+    Tool,
+}
+
+impl SourceTreeEditablePolicy {
+    /// Return the default editable mode for workspace members lowered under this policy.
+    ///
+    /// `explicit` is the explicit editable choice on the source tree being lowered, if any. In
+    /// `Tool` mode it propagates to workspace siblings; in `Project` mode it is ignored.
+    pub fn workspace_member_editable(self, explicit: Option<bool>) -> bool {
+        match self {
+            Self::Project => true,
+            Self::Tool => explicit.unwrap_or(false),
+        }
+    }
+}
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -99,6 +129,11 @@ pub trait BuildContext {
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> &NoSources;
 
+    /// How source tree requirements should influence workspace-member editability.
+    fn source_tree_editable_policy(&self) -> SourceTreeEditablePolicy {
+        SourceTreeEditablePolicy::Project
+    }
+
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
 
@@ -116,13 +151,13 @@ pub trait BuildContext {
         &'a self,
         requirements: &'a [Requirement],
         build_stack: &'a BuildStack,
-    ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
+    ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
     /// use the same base Python as [`BuildContext::interpreter`]
     fn install<'a>(
         &'a self,
-        resolution: &'a Resolution,
+        requirements: &'a ResolvedRequirements,
         venv: &'a PythonEnvironment,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
@@ -139,6 +174,7 @@ pub trait BuildContext {
         source: &'a Path,
         subdirectory: Option<&'a Path>,
         install_path: &'a Path,
+        stop_discovery_at: Option<&'a Path>,
         version_id: Option<&'a str>,
         dist: Option<&'a SourceDist>,
         sources: &'a NoSources,
@@ -254,6 +290,12 @@ impl std::error::Error for AnyErrorBuild {
     }
 }
 
+impl uv_errors::Hint for AnyErrorBuild {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        self.0.hints()
+    }
+}
+
 impl<T: IsBuildBackendError> From<T> for AnyErrorBuild {
     fn from(err: T) -> Self {
         Self(Box::new(err))
@@ -273,11 +315,6 @@ impl Deref for AnyErrorBuild {
 pub struct BuildStack(FxHashSet<DistributionId>);
 
 impl BuildStack {
-    /// Return an empty stack.
-    pub fn empty() -> Self {
-        Self(FxHashSet::default())
-    }
-
     pub fn contains(&self, id: &DistributionId) -> bool {
         self.0.contains(id)
     }

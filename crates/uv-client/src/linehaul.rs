@@ -1,6 +1,6 @@
 use std::env;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::instrument;
 
 use uv_pep508::MarkerEnvironment;
@@ -8,54 +8,54 @@ use uv_platform_tags::{Os, Platform};
 use uv_static::EnvVars;
 use uv_version::version;
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Installer {
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub subcommand: Option<Vec<String>>,
+#[derive(Serialize)]
+struct Installer {
+    name: Option<String>,
+    version: Option<String>,
+    subcommand: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Implementation {
-    pub name: Option<String>,
-    pub version: Option<String>,
+#[derive(Serialize)]
+struct Implementation {
+    name: Option<String>,
+    version: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Libc {
-    pub lib: Option<String>,
-    pub version: Option<String>,
+#[derive(Serialize)]
+struct Libc {
+    lib: Option<String>,
+    version: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct Distro {
-    pub name: Option<String>,
-    pub version: Option<String>,
-    pub id: Option<String>,
-    pub libc: Option<Libc>,
+#[derive(Serialize)]
+struct Distro {
+    name: Option<String>,
+    version: Option<String>,
+    id: Option<String>,
+    libc: Option<Libc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct System {
-    pub name: Option<String>,
-    pub release: Option<String>,
+#[derive(Serialize)]
+struct System {
+    name: Option<String>,
+    release: Option<String>,
 }
 
 /// Linehaul structs were derived from
 /// <https://github.com/pypi/linehaul-cloud-function/blob/1.0.1/linehaul/ua/datastructures.py>.
 /// For the sake of parity, the nullability of all the values was kept intact.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct LineHaul {
-    pub installer: Option<Installer>,
-    pub python: Option<String>,
-    pub implementation: Option<Implementation>,
-    pub distro: Option<Distro>,
-    pub system: Option<System>,
-    pub cpu: Option<String>,
-    pub openssl_version: Option<String>,
-    pub setuptools_version: Option<String>,
-    pub rustc_version: Option<String>,
-    pub ci: Option<bool>,
+#[derive(Serialize)]
+pub(crate) struct LineHaul {
+    installer: Option<Installer>,
+    python: Option<String>,
+    implementation: Option<Implementation>,
+    distro: Option<Distro>,
+    system: Option<System>,
+    cpu: Option<String>,
+    openssl_version: Option<String>,
+    setuptools_version: Option<String>,
+    rustc_version: Option<String>,
+    ci: Option<bool>,
 }
 
 /// Implements Linehaul information format as defined by
@@ -64,7 +64,7 @@ pub struct LineHaul {
 impl LineHaul {
     /// Initializes Linehaul information based on PEP 508 markers.
     #[instrument(name = "linehaul", skip_all)]
-    pub fn new(
+    pub(crate) fn new(
         markers: Option<&MarkerEnvironment>,
         platform: Option<&Platform>,
         subcommand: Option<Vec<String>>,
@@ -94,7 +94,7 @@ impl LineHaul {
         // Build Distro as Linehaul expects.
         let distro: Option<Distro> = if cfg!(target_os = "linux") {
             // Gather distribution info from /etc/os-release.
-            sys_info::linux_os_release().ok().map(|info| Distro {
+            uv_platform::LinuxOsRelease::from_env().map(|info| Distro {
                 // e.g., Jammy, Focal, etc.
                 id: info.version_codename,
                 // e.g., Ubuntu, Fedora, etc.

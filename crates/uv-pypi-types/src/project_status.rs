@@ -10,7 +10,10 @@ use tracing::info;
 use uv_small_str::SmallString;
 
 /// The status marker for a project.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, PartialEq, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
 pub enum Status {
     #[default]
     Active,
@@ -48,9 +51,12 @@ impl<'de> Deserialize<'de> for Status {
 /// The project status information.
 ///
 /// This includes a status marker and an optional reason for the status.
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[rkyv(derive(Debug))]
 pub struct ProjectStatus {
+    #[serde(default)]
     pub status: Status,
+    #[serde(default)]
     pub reason: Option<SmallString>,
 }
 
@@ -71,6 +77,31 @@ mod tests {
         assert_eq!(Status::new("acTiVe"), None);
     }
 
+    /// An empty project status should default to Active with no reason.
+    #[test]
+    fn test_deserialize_empty() {
+        let json = "{}";
+
+        let project_status: ProjectStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(project_status.status, Status::Active);
+        assert_eq!(project_status.reason, None);
+    }
+
+    /// A project status with explicitly null reason should default to Active with no reason.
+    #[test]
+    fn test_deserialize_null() {
+        let json = r#"
+        {
+            "reason": null
+        }
+        "#;
+
+        let project_status: ProjectStatus = serde_json::from_str(json).unwrap();
+        assert_eq!(project_status.status, Status::Active);
+        assert_eq!(project_status.reason, None);
+    }
+
+    /// A project status with known status and reason.
     #[test]
     fn test_deserialize() {
         let json = r#"
@@ -88,6 +119,7 @@ mod tests {
         );
     }
 
+    /// A project status with an unknown status should default to Active.
     #[test]
     fn test_deserialize_unknown_status() {
         let json = r#"

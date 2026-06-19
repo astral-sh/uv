@@ -9,18 +9,20 @@ use console::Term;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+
 use tracing::{debug, trace};
 
+use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
-use uv_preview::Preview;
+use uv_platform_tags::Os;
 use uv_pypi_types::Scheme;
-use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
+use uv_python::managed::{
+    ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
+};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
 use uv_warnings::warn_user_once;
-
-use crate::{Error, Prompt};
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -48,7 +50,7 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
 }
 
 /// Create a [`VirtualEnvironment`] at the given location.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) fn create(
     location: &Path,
     interpreter: &Interpreter,
@@ -58,7 +60,6 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: Preview,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -115,27 +116,39 @@ pub(crate) fn create(
             } else {
                 "directory"
             };
-            let hint = format!(
-                "Use the `{}` flag or set `{}` to replace the existing {name}",
-                "--clear".green(),
-                "UV_VENV_CLEAR=1".green()
-            );
             // TODO(zanieb): We may want to consider omitting the hint in some of these cases, e.g.,
             // when `--no-clear` is used do we want to suggest `--clear`?
-            let err = Err(Error::Io(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                format!(
-                    "A {name} already exists at: {}\n\n{}{} {hint}",
-                    location.user_display(),
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                ),
-            )));
+            let err = Err(Error::Exists {
+                name,
+                path: location.to_path_buf(),
+            });
             match on_existing {
                 OnExisting::Allow => {
                     debug!("Allowing existing {name} due to `--allow-existing`");
                 }
                 OnExisting::Remove(reason) => {
+                    if !is_virtualenv
+                        && let RemovalReason::UserRequest(clear_non_virtualenv) = reason
+                    {
+                        match clear_non_virtualenv {
+                            ClearNonVirtualenv::Allow => {}
+                            ClearNonVirtualenv::Warn => {
+                                warn_user_once!(
+                                    "The `--clear` option will remove the existing directory at `{}` \
+                                    even though it is not a virtual environment. \
+                                    This will become an error in a future release. \
+                                    Use `--force` to suppress this warning, or \
+                                    `--preview-features venv-safe-clear` to error on this now.",
+                                    location.user_display()
+                                );
+                            }
+                            ClearNonVirtualenv::Error => {
+                                return Err(Error::ClearNonVirtualenv {
+                                    path: location.to_path_buf(),
+                                });
+                            }
+                        }
+                    }
                     debug!("Removing existing {name} ({reason})");
                     // Before removing the virtual environment, we need to canonicalize the path
                     // because `Path::metadata` will follow the symlink but we're still operating on
@@ -143,7 +156,7 @@ pub(crate) fn create(
                     let location = location
                         .canonicalize()
                         .unwrap_or_else(|_| location.to_path_buf());
-                    remove_virtualenv(&location)?;
+                    uv_fs::remove_virtualenv(&location)?;
                     fs_err::create_dir_all(&location)?;
                 }
                 OnExisting::Fail => return err,
@@ -159,17 +172,16 @@ pub(crate) fn create(
                             let location = location
                                 .canonicalize()
                                 .unwrap_or_else(|_| location.to_path_buf());
-                            remove_virtualenv(&location)?;
+                            uv_fs::remove_virtualenv(&location)?;
                             fs_err::create_dir_all(&location)?;
                         }
                         Some(false) => return err,
-                        // When we don't have a TTY, warn that the behavior will change in the future
+                        // When we don't have a TTY, require `--clear` explicitly.
                         None => {
-                            warn_user_once!(
-                                "A {name} already exists at `{}`. In the future, uv will require `{}` to replace it",
-                                location.user_display(),
-                                "--clear".green(),
-                            );
+                            return Err(Error::Exists {
+                                name,
+                                path: location.to_path_buf(),
+                            });
                         }
                     }
                 }
@@ -207,12 +219,11 @@ pub(crate) fn create(
     fs_err::write(location.join(".gitignore"), "*")?;
 
     let mut using_minor_version_link = false;
-    let executable_target = if upgradeable && interpreter.is_standalone() {
-        if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
-            base_python.as_path(),
-            &interpreter.key(),
-            preview,
-        ) {
+    let executable_target = if upgradeable {
+        if let Some(minor_version_link) =
+            ManagedPythonInstallation::try_from_interpreter(interpreter)
+                .and_then(|installation| PythonMinorVersionLink::from_installation(&installation))
+        {
             if !minor_version_link.exists() {
                 base_python.clone()
             } else {
@@ -238,7 +249,7 @@ pub(crate) fn create(
     };
 
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    // In preview mode, for standalone interpreters, this `home` value will include a
+    // For standalone interpreters, this `home` value will include a
     // symlink directory on Unix or junction on Windows to enable transparent Python patch
     // upgrades.
     let python_home = executable_target
@@ -301,19 +312,28 @@ pub(crate) fn create(
     if cfg!(windows) {
         if using_minor_version_link {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            create_link_to_executable(target.as_path(), &executable_target)
+            replace_link_to_executable(target.as_path(), &executable_target)
                 .map_err(Error::Python)?;
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            create_link_to_executable(targetw.as_path(), &executable_target)
+            replace_link_to_executable(targetw.as_path(), &executable_target)
                 .map_err(Error::Python)?;
             if interpreter.gil_disabled() {
                 let targett = scripts.join(WindowsExecutable::PythonMajorMinort.exe(interpreter));
-                create_link_to_executable(targett.as_path(), &executable_target)
+                replace_link_to_executable(targett.as_path(), &executable_target)
                     .map_err(Error::Python)?;
                 let targetwt = scripts.join(WindowsExecutable::PythonwMajorMinort.exe(interpreter));
-                create_link_to_executable(targetwt.as_path(), &executable_target)
+                replace_link_to_executable(targetwt.as_path(), &executable_target)
                     .map_err(Error::Python)?;
             }
+        } else if matches!(
+            interpreter.platform().os(),
+            Os::Pyodide { .. } | Os::PyEmscripten { .. }
+        ) {
+            // For PyEmscripten, link only `python.exe`.
+            // This should not be copied as `python.exe` is a wrapper that launches Pyodide.
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            replace_link_to_executable(target.as_path(), &executable_target)
+                .map_err(Error::Python)?;
         } else {
             // Always copy `python.exe`.
             copy_launcher_windows(
@@ -440,6 +460,13 @@ pub(crate) fn create(
 
     // Add all the activate scripts for different shells
     for (name, template) in ACTIVATE_TEMPLATES {
+        // csh has no way to determine its own script location, so a relocatable
+        // activate.csh is not possible. Skip it entirely instead of generating a
+        // non-functional script.
+        if relocatable && *name == "activate.csh" {
+            continue;
+        }
+
         let path_sep = if cfg!(windows) { ";" } else { ":" };
 
         let relative_site_packages = [
@@ -470,9 +497,7 @@ pub(crate) fn create(
                     escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
                 )
             }
-            // Note:
-            // * relocatable activate scripts appear not to be possible in csh.
-            // * `activate.ps1` is already relocatable by default.
+            // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
 
@@ -503,7 +528,11 @@ pub(crate) fn create(
         ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
-            interpreter.markers().python_full_version().string.clone(),
+            if using_minor_version_link {
+                interpreter.python_minor_version().to_string()
+            } else {
+                interpreter.markers().python_full_version().string.clone()
+            },
         ),
         (
             "include-system-site-packages".to_string(),
@@ -602,62 +631,20 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
     }
 }
 
-/// Perform a safe removal of a virtual environment.
-pub fn remove_virtualenv(location: &Path) -> Result<(), Error> {
-    // On Windows, if the current executable is in the directory, defer self-deletion since Windows
-    // won't let you unlink a running executable.
-    #[cfg(windows)]
-    if let Ok(itself) = std::env::current_exe() {
-        let target = std::path::absolute(location)?;
-        if itself.starts_with(&target) {
-            debug!("Detected self-delete of executable: {}", itself.display());
-            self_replace::self_delete_outside_path(location)?;
-        }
-    }
-
-    // We defer removal of the `pyvenv.cfg` until the end, so if we fail to remove the environment,
-    // uv can still identify it as a Python virtual environment that can be deleted.
-    for entry in fs_err::read_dir(location)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path == location.join("pyvenv.cfg") {
-            continue;
-        }
-        if path.is_dir() {
-            fs_err::remove_dir_all(&path)?;
-        } else {
-            fs_err::remove_file(&path)?;
-        }
-    }
-
-    match fs_err::remove_file(location.join("pyvenv.cfg")) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
-
-    // Remove the virtual environment directory itself
-    match fs_err::remove_dir_all(location) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        // If the virtual environment is a mounted file system, e.g., in a Docker container, we
-        // cannot delete it — but that doesn't need to be a fatal error
-        Err(err) if err.kind() == io::ErrorKind::ResourceBusy => {
-            debug!(
-                "Skipping removal of `{}` directory due to {err}",
-                location.display(),
-            );
-        }
-        Err(err) => return Err(err.into()),
-    }
-
-    Ok(())
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ClearNonVirtualenv {
+    /// Allow clearing a non-virtual environment directory.
+    Allow,
+    /// Warn before clearing a non-virtual environment directory.
+    Warn,
+    /// Refuse to clear a non-virtual environment directory.
+    Error,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RemovalReason {
     /// The removal was explicitly requested, i.e., with `--clear`.
-    UserRequest,
+    UserRequest(ClearNonVirtualenv),
     /// The environment can be removed because it is considered temporary, e.g., a build
     /// environment.
     TemporaryEnvironment,
@@ -669,7 +656,7 @@ pub enum RemovalReason {
 impl std::fmt::Display for RemovalReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UserRequest => f.write_str("requested with `--clear`"),
+            Self::UserRequest(_) => f.write_str("requested with `--clear`"),
             Self::ManagedEnvironment => f.write_str("environment is managed by uv"),
             Self::TemporaryEnvironment => f.write_str("environment is temporary"),
         }
@@ -693,11 +680,16 @@ pub enum OnExisting {
 }
 
 impl OnExisting {
-    pub fn from_args(allow_existing: bool, clear: bool, no_clear: bool) -> Self {
+    pub fn from_args(
+        allow_existing: bool,
+        clear: bool,
+        no_clear: bool,
+        clear_non_virtualenv: ClearNonVirtualenv,
+    ) -> Self {
         if allow_existing {
             Self::Allow
         } else if clear {
-            Self::Remove(RemovalReason::UserRequest)
+            Self::Remove(RemovalReason::UserRequest(clear_non_virtualenv))
         } else if no_clear {
             Self::Fail
         } else {

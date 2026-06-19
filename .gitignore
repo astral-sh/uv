@@ -20,6 +20,9 @@ target/
 # Python tmp files
 __pycache__
 
+# GitHub issue mirror
+.prism/
+
 # Maturin builds, and other native editable builds
 *.so
 *.pyd
@@ -48,3 +51,7 @@ profile.json.gz
 # IDE
 .idea
 .vscode
+
+# Codex
+.codex/*
+!.codex/hooks.json

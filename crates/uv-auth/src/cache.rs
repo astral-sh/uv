@@ -11,7 +11,7 @@ use url::Url;
 use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::credentials::{Authentication, Username};
+use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -62,13 +62,16 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
-        if let Some(credentials) = Credentials::from_url(url) {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
+        if let Some(credentials) = Credentials::from_url(url)? {
             trace!("Caching credentials for {url}");
             self.insert(url, Arc::new(Authentication::from(credentials)));
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -119,7 +122,11 @@ impl CredentialsCache {
     /// Note we do not cache per username, but if a username is passed we will confirm that the
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
-    pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Authentication>> {
+    pub(crate) fn get_url(
+        &self,
+        url: &DisplaySafeUrl,
+        username: &Username,
+    ) -> Option<Arc<Authentication>> {
         let urls = self.urls.read().unwrap();
         let credentials = urls.get(url);
         if let Some(credentials) = credentials {
@@ -138,7 +145,7 @@ impl CredentialsCache {
     }
 
     /// Update the cache with the given credentials.
-    pub(crate) fn insert(&self, url: &Url, credentials: Arc<Authentication>) {
+    pub(crate) fn insert(&self, url: &DisplaySafeUrl, credentials: Arc<Authentication>) {
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -181,9 +188,7 @@ impl CredentialsCache {
 
         // If we only have a username, add a new entry or replace an existing entry if it doesn't have a password
         let existing = realms.get(&key);
-        if existing.is_none()
-            || existing.is_some_and(|credentials| credentials.password().is_none())
-        {
+        if existing.is_none_or(|credentials| credentials.password().is_none()) {
             return realms.insert(key, credentials.clone());
         }
 
@@ -373,11 +378,12 @@ mod tests {
         }));
         let cache = CredentialsCache::default();
         // Insert with URL with credentials and get with redacted URL.
-        let url = Url::parse("https://username:password@example.com/foobar").unwrap();
+        let url = DisplaySafeUrl::parse("https://username:password@example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
         // Insert with redacted URL and get with URL with credentials.
-        let url = Url::parse("https://username:password@second-example.com/foobar").unwrap();
+        let url =
+            DisplaySafeUrl::parse("https://username:password@second-example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
     }

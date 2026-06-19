@@ -66,7 +66,7 @@ accelerate = ["accelerate>=0.21.0"]
 retrieval = ["faiss-cpu", "datasets!=2.5.0"]
 flax = [
     "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
+    "jaxlib>=0.4.1,<=0.5",
     "flax>=0.4.1,<=0.7.0",
     "optax>=0.0.8,<=0.1.4"
 ]
@@ -160,7 +160,7 @@ all = [
     "torch",
     "accelerate>=0.21.0",
     "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
+    "jaxlib>=0.4.1,<=0.5",
     "flax>=0.4.1,<=0.7.0",
     "optax>=0.0.8,<=0.1.4",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -193,7 +193,7 @@ docs = [
     "torch",
     "accelerate>=0.21.0",
     "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
+    "jaxlib>=0.4.1,<=0.5",
     "flax>=0.4.1,<=0.7.0",
     "optax>=0.0.8,<=0.1.4",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -263,7 +263,7 @@ dev = [
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.4.1,<=0.4.13",
-    "jaxlib>=0.4.1,<=0.4.13",
+    "jaxlib>=0.4.1,<=0.5",
     "kenlm",
     "keras-nlp>=0.3.1",
     "librosa",

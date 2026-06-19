@@ -1,0 +1,14 @@
+name = "no-binary"
+description = "Both wheels and source distributions are available, and the user has disabled binaries."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "The source distribution should be used for install"
+
+[packages.a.versions."1.0.0"]
+
+[resolver_options]
+no_binary = ["a"]

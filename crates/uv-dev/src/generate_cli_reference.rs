@@ -115,7 +115,7 @@ fn generate() -> String {
     output
 }
 
-#[allow(clippy::format_push_string)]
+#[expect(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
@@ -204,7 +204,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 let id = format!("{name_key}--{}", arg.get_id());
                 output.push_str(&format!("<dt id=\"{id}\">"));
                 output.push_str(&format!(
-                    "<a href=\"#{id}\"<code>{}</code></a>",
+                    "<a href=\"#{id}\"><code>{}</code></a>",
                     arg.get_id().to_string().to_uppercase(),
                 ));
                 output.push_str("</dt>");
@@ -340,5 +340,28 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
                 .join("\n"),
         );
         output.push_str(&markdown::to_html(&value));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{Arg, Command};
+    use insta::assert_snapshot;
+
+    use super::generate_command;
+
+    #[test]
+    fn generates_linked_positional_argument() {
+        let mut command = Command::new("sample").arg(Arg::new("path").index(1));
+        command.build();
+
+        let mut output = String::new();
+        generate_command(&mut output, &command, &mut Vec::new());
+        let argument = output
+            .lines()
+            .find(|line| line.starts_with("<dl class=\"cli-reference\"><dt id=\"sample--path\""))
+            .expect("expected positional argument definition");
+
+        assert_snapshot!(argument, @r##"<dl class="cli-reference"><dt id="sample--path"><a href="#sample--path"><code>PATH</code></a></dt></dl>"##);
     }
 }

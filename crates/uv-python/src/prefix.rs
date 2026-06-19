@@ -9,7 +9,7 @@ pub struct Prefix(PathBuf);
 
 impl Prefix {
     /// Return the [`Scheme`] for the `--prefix` directory.
-    pub fn scheme(&self, virtualenv: &Scheme) -> Scheme {
+    pub(crate) fn scheme(&self, virtualenv: &Scheme) -> Scheme {
         Scheme {
             purelib: self.0.join(&virtualenv.purelib),
             platlib: self.0.join(&virtualenv.platlib),
@@ -20,12 +20,12 @@ impl Prefix {
     }
 
     /// Return an iterator over the `site-packages` directories inside the environment.
-    pub fn site_packages(&self, virtualenv: &Scheme) -> impl Iterator<Item = PathBuf> {
+    pub(crate) fn site_packages(&self, virtualenv: &Scheme) -> impl Iterator<Item = PathBuf> {
         std::iter::once(self.0.join(&virtualenv.purelib))
     }
 
     /// Initialize the `--prefix` directory.
-    pub fn init(&self, virtualenv: &Scheme) -> std::io::Result<()> {
+    pub(crate) fn init(&self, virtualenv: &Scheme) -> std::io::Result<()> {
         for site_packages in self.site_packages(virtualenv) {
             fs_err::create_dir_all(site_packages)?;
         }

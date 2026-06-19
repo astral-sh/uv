@@ -192,7 +192,7 @@ impl RequirementsSource {
     pub fn from_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -242,7 +242,7 @@ impl RequirementsSource {
     pub fn from_with_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -307,11 +307,6 @@ impl RequirementsSource {
             Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
-
-    /// Returns `true` if the source allows groups to be specified.
-    pub fn allows_groups(&self) -> bool {
-        matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
-    }
 }
 
 impl std::fmt::Display for RequirementsSource {
@@ -334,7 +329,7 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
-#[allow(clippy::case_sensitive_file_extension_comparisons)]
+#[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }

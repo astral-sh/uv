@@ -20,6 +20,7 @@ pub use required_version::*;
 pub use sources::*;
 pub use target_triple::*;
 pub use threading::*;
+
 pub use trusted_host::*;
 pub use trusted_publishing::*;
 pub use vcs::*;
@@ -46,6 +47,7 @@ mod required_version;
 mod sources;
 mod target_triple;
 mod threading;
+
 mod trusted_host;
 mod trusted_publishing;
 mod vcs;

@@ -5,26 +5,26 @@ use std::sync::Arc;
 
 use configparser::ini::Ini;
 use futures::{TryStreamExt, stream::FuturesOrdered};
-use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, Requirement, SourceUrl, VersionId,
+    BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitDirectorySourceUrl, GitPathSourceUrl,
+    Identifier, PathSourceUrl, RemoteSource, Requirement, SourceUrl,
 };
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep508::{UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::Metadata10;
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{Metadata10, ParsedUrl, PyProjectToml, VerbatimParsedUrl};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
 use crate::Error;
 
-/// Like [`RequirementsSpecification`], but with concrete names for all requirements.
+/// Like [`RequirementsSpecification`](crate::RequirementsSpecification), but with concrete names
+/// for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
     /// Whether to check hashes for distributions.
     hasher: &'a HashStrategy,
@@ -166,9 +166,12 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 // Attempt to read a `pyproject.toml` file.
                 let project_path = parsed_directory_url.install_path.join("pyproject.toml");
-                if let Some(pyproject) = fs_err::read_to_string(project_path)
-                    .ok()
-                    .and_then(|contents| toml::from_str::<PyProjectToml>(&contents).ok())
+                if let Some(pyproject) =
+                    fs_err::read_to_string(&project_path)
+                        .ok()
+                        .and_then(|contents| {
+                            PyProjectToml::from_toml(&contents, project_path.user_display()).ok()
+                        })
                 {
                     // Read PEP 621 metadata from the `pyproject.toml`.
                     if let Some(project) = pyproject.project {
@@ -187,23 +190,22 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     }
 
                     // Read Poetry-specific metadata from the `pyproject.toml`.
-                    if let Some(tool) = pyproject.tool {
-                        if let Some(poetry) = tool.poetry {
-                            if let Some(name) = poetry.name {
-                                debug!(
-                                    "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
-                                    path = parsed_directory_url.install_path.display(),
-                                    name = name
-                                );
-                                return Ok(uv_pep508::Requirement {
-                                    name,
-                                    extras: requirement.extras,
-                                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                                    marker: requirement.marker,
-                                    origin: requirement.origin,
-                                });
-                            }
-                        }
+                    if let Some(tool) = pyproject.tool
+                        && let Some(poetry) = tool.poetry
+                        && let Some(name) = poetry.name
+                    {
+                        debug!(
+                            "Found Poetry metadata for {path} in `pyproject.toml` ({name})",
+                            path = parsed_directory_url.install_path.display(),
+                            name = name
+                        );
+                        return Ok(uv_pep508::Requirement {
+                            name,
+                            extras: requirement.extras,
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            marker: requirement.marker,
+                            origin: requirement.origin,
+                        });
                     }
                 }
 
@@ -217,29 +219,28 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                             ini.read(contents).ok()
                         })
                 {
-                    if let Some(section) = setup_cfg.get("metadata") {
-                        if let Some(Some(name)) = section.get("name") {
-                            if let Ok(name) = PackageName::from_str(name) {
-                                debug!(
-                                    "Found setuptools metadata for {path} in `setup.cfg` ({name})",
-                                    path = parsed_directory_url.install_path.display(),
-                                    name = name
-                                );
-                                return Ok(uv_pep508::Requirement {
-                                    name,
-                                    extras: requirement.extras,
-                                    version_or_url: Some(VersionOrUrl::Url(requirement.url)),
-                                    marker: requirement.marker,
-                                    origin: requirement.origin,
-                                });
-                            }
-                        }
+                    if let Some(section) = setup_cfg.get("metadata")
+                        && let Some(Some(name)) = section.get("name")
+                        && let Ok(name) = PackageName::from_str(name)
+                    {
+                        debug!(
+                            "Found setuptools metadata for {path} in `setup.cfg` ({name})",
+                            path = parsed_directory_url.install_path.display(),
+                            name = name
+                        );
+                        return Ok(uv_pep508::Requirement {
+                            name,
+                            extras: requirement.extras,
+                            version_or_url: Some(VersionOrUrl::Url(requirement.url)),
+                            marker: requirement.marker,
+                            origin: requirement.origin,
+                        });
                     }
                 }
 
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
-                    install_path: Cow::Borrowed(&parsed_directory_url.install_path),
+                    install_path: &parsed_directory_url.install_path,
                     editable: parsed_directory_url.editable,
                 })
             }
@@ -265,16 +266,30 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                     ext,
                 })
             }
-            ParsedUrl::Git(parsed_git_url) => SourceUrl::Git(GitSourceUrl {
-                url: &requirement.url.verbatim,
-                git: &parsed_git_url.url,
-                subdirectory: parsed_git_url.subdirectory.as_deref(),
-            }),
+            ParsedUrl::GitDirectory(parsed_git_url) => {
+                SourceUrl::GitDirectory(GitDirectorySourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    subdirectory: parsed_git_url.subdirectory.as_deref(),
+                })
+            }
+            ParsedUrl::GitPath(parsed_git_url) => {
+                let ext = match parsed_git_url.ext {
+                    DistExtension::Source(ext) => ext,
+                    DistExtension::Wheel => unreachable!(),
+                };
+                SourceUrl::GitPath(GitPathSourceUrl {
+                    url: &requirement.url.verbatim,
+                    git: &parsed_git_url.url,
+                    path: Cow::Borrowed(&parsed_git_url.install_path),
+                    ext,
+                })
+            }
         };
 
         // Fetch the metadata for the distribution.
         let name = {
-            let id = VersionId::from_url(source.url());
+            let id = source.distribution_id();
             if let Some(archive) = index
                 .distributions()
                 .get(&id)
@@ -293,7 +308,10 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let hashes = hasher.get_url(source.url());
                 let source = BuildableSource::Url(source);
-                let archive = database.build_wheel_metadata(&source, hashes).await?;
+                let archive = database
+                    .build_wheel_metadata(&source, hashes)
+                    .await
+                    .map_err(Box::new)?;
 
                 let name = archive.metadata.name.clone();
 
@@ -314,30 +332,4 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
             origin: requirement.origin,
         })
     }
-}
-
-/// A pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct PyProjectToml {
-    project: Option<Project>,
-    tool: Option<Tool>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct Project {
-    name: PackageName,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct Tool {
-    poetry: Option<ToolPoetry>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct ToolPoetry {
-    name: Option<PackageName>,
 }

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{
     ExtraBuildRequirement, ExtraBuildRequires, IndexLocations, Requirement,
@@ -24,7 +25,7 @@ pub struct BuildRequires {
 impl BuildRequires {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
+    fn from_metadata23(metadata: uv_pypi_types::BuildRequires) -> Self {
         Self {
             name: metadata.name,
             requires_dist: metadata
@@ -42,19 +43,27 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: &NoSources,
-        cache: &WorkspaceCache,
+        editable: bool,
+        stop_discovery_at: Option<&Path>,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
-        let discovery = if sources.all() {
-            DiscoveryOptions {
-                members: MemberDiscovery::None,
-                ..Default::default()
-            }
-        } else {
-            DiscoveryOptions::default()
+        let discovery = DiscoveryOptions {
+            stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
+            members: if sources.all() {
+                MemberDiscovery::None
+            } else {
+                MemberDiscovery::default()
+            },
         };
-        let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
+        let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
+            install_path,
+            &discovery,
+            cache,
+            workspace_cache,
+        )
+        .await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -64,16 +73,18 @@ impl BuildRequires {
             &project_workspace,
             locations,
             sources,
+            editable,
             credentials_cache,
         )
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
-    pub fn from_project_workspace(
+    fn from_project_workspace(
         metadata: uv_pypi_types::BuildRequires,
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         sources: &NoSources,
+        editable: bool,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
@@ -132,6 +143,7 @@ impl BuildRequires {
                             locations,
                             project_workspace.workspace(),
                             None,
+                            editable,
                             credentials_cache,
                         )
                         .map(move |requirement| match requirement {
@@ -206,6 +218,7 @@ impl BuildRequires {
                         locations,
                         workspace,
                         None,
+                        true,
                         credentials_cache,
                     )
                     .map(move |requirement| match requirement {
@@ -294,6 +307,7 @@ impl LoweredExtraBuildDependencies {
                                     index_locations,
                                     workspace,
                                     None,
+                                    true,
                                     credentials_cache,
                                 )
                                 .map(move |requirement| {

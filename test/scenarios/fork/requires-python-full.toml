@@ -1,0 +1,23 @@
+name = "fork-requires-python-full"
+description = '''
+This tests that a `Requires-Python` specifier will result in the
+exclusion of dependency specifications that cannot possibly satisfy it.
+
+In particular, this is tested via the `python_full_version` marker
+instead of the more common `python_version` marker.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[environment]
+python = "3.12"
+
+[root]
+requires_python = ">=3.10"
+requires = ["a==1.0.0 ; python_full_version == '3.9'"]
+
+[packages.a.versions."1.0.0"]

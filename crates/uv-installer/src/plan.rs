@@ -1,3 +1,5 @@
+use std::fmt;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
@@ -8,7 +10,7 @@ use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
-    BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
+    BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -18,13 +20,216 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, Tags};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
+use uv_redacted::DisplaySafeUrl;
 use uv_types::HashStrategy;
 
 use crate::satisfies::RequirementSatisfaction;
 use crate::{InstallationStrategy, SitePackages};
+
+/// A wheel dependency is incompatible with the current platform.
+#[derive(Debug)]
+pub struct IncompatibleWheelError {
+    /// The dependency source (URL or path, with location).
+    kind: IncompatibleWheelKind,
+    /// Optional compatibility hint generated from wheel tags.
+    compatibility_hint: Option<IncompatibleWheelHint>,
+}
+
+#[derive(Debug)]
+enum IncompatibleWheelKind {
+    Url(DisplaySafeUrl),
+    Path(PathBuf),
+}
+
+impl fmt::Display for IncompatibleWheelKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Url(url) => write!(f, "URL ({url})"),
+            Self::Path(path) => write!(f, "path ({})", path.user_display()),
+        }
+    }
+}
+
+/// A hint describing why a wheel is incompatible.
+#[derive(Debug)]
+enum IncompatibleWheelHint {
+    /// The wheel targets a different Python version than the current interpreter.
+    Python {
+        wheel_tags: Vec<LanguageTag>,
+        current: Option<LanguageTag>,
+    },
+    /// The wheel targets a different ABI than the current interpreter.
+    Abi {
+        wheel_tags: Vec<AbiTag>,
+        current: Option<AbiTag>,
+    },
+    /// The wheel targets a GIL-enabled interpreter, but the current one is free-threaded.
+    FreethreadedAbi {
+        wheel_tags: Vec<AbiTag>,
+        current: Option<AbiTag>,
+    },
+    /// The wheel targets a different platform than the current one.
+    Platform {
+        wheel_tags: Vec<PlatformTag>,
+        current: Option<PlatformTag>,
+    },
+}
+
+impl fmt::Display for IncompatibleWheelHint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Python {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're using {}",
+                        format_language_tags(wheel_tags),
+                        format_language_tag(*current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_language_tags(wheel_tags))
+                }
+            }
+            Self::Abi {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're using {}",
+                        format_abi_tags(wheel_tags),
+                        format_abi_tag(*current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_abi_tags(wheel_tags))
+                }
+            }
+            Self::FreethreadedAbi {
+                wheel_tags,
+                current,
+            } => {
+                let current_display = if let Some(current) = current {
+                    format_abi_tag(*current)
+                } else {
+                    "free-threaded Python".to_string()
+                };
+                let wheel_display = wheel_tags
+                    .iter()
+                    .map(|tag| match tag {
+                        AbiTag::Abi3 => format!("the stable ABI (`{}`)", tag.cyan()),
+                        _ => {
+                            if let Some(pretty) = tag.pretty() {
+                                format!("the {} ABI (`{}`)", pretty.cyan(), tag.cyan())
+                            } else {
+                                format!("`{}`", tag.cyan())
+                            }
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "You're using {current_display}, but the wheel was built for {wheel_display}, which requires a GIL-enabled interpreter"
+                )
+            }
+            Self::Platform {
+                wheel_tags,
+                current,
+            } => {
+                if let Some(current) = current {
+                    write!(
+                        f,
+                        "The wheel is compatible with {}, but you're on {}",
+                        format_platform_tags(wheel_tags),
+                        format_platform_tag(current),
+                    )
+                } else {
+                    write!(f, "The wheel requires {}", format_platform_tags(wheel_tags))
+                }
+            }
+        }
+    }
+}
+
+/// Format a single language tag with optional pretty name and cyan coloring.
+fn format_language_tag(tag: LanguageTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of language tags as a comma-separated string.
+fn format_language_tags(tags: &[LanguageTag]) -> String {
+    tags.iter()
+        .map(|tag| format_language_tag(*tag))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Format a single ABI tag with optional pretty name and cyan coloring.
+fn format_abi_tag(tag: AbiTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of ABI tags as a comma-separated string.
+fn format_abi_tags(tags: &[AbiTag]) -> String {
+    tags.iter()
+        .map(|tag| format_abi_tag(*tag))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Format a single platform tag with optional pretty name and cyan coloring.
+fn format_platform_tag(tag: &PlatformTag) -> String {
+    if let Some(pretty) = tag.pretty() {
+        format!("{} (`{}`)", pretty.cyan(), tag.cyan())
+    } else {
+        format!("`{}`", tag.cyan())
+    }
+}
+
+/// Format a list of platform tags as a comma-separated string.
+fn format_platform_tags(tags: &[PlatformTag]) -> String {
+    tags.iter()
+        .map(format_platform_tag)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+impl fmt::Display for IncompatibleWheelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "A {} dependency is incompatible with the current platform",
+            self.kind,
+        )
+    }
+}
+
+impl std::error::Error for IncompatibleWheelError {}
+
+impl uv_errors::Hint for IncompatibleWheelError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        if let Some(hint) = &self.compatibility_hint {
+            uv_errors::Hints::from(hint.to_string())
+        } else {
+            uv_errors::Hints::none()
+        }
+    }
+}
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -195,19 +400,19 @@ impl<'a> Planner<'a> {
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
-                        if *entry.index.url() != wheel.best_wheel().index {
+                        if *entry.index().url() != wheel.best_wheel().index {
                             return None;
                         }
-                        if entry.dist.filename != wheel.best_wheel().filename {
+                        if entry.dist().filename != wheel.best_wheel().filename {
                             return None;
                         }
-                        if entry.built && no_build {
+                        if entry.is_built() && no_build {
                             return None;
                         }
-                        if !entry.built && no_binary {
+                        if !entry.is_built() && no_binary {
                             return None;
                         }
-                        Some(&entry.dist)
+                        Some(entry.dist())
                     }) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
@@ -216,20 +421,14 @@ impl<'a> Planner<'a> {
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
                     if !wheel.filename.is_compatible(tags) {
-                        let hint = generate_wheel_compatibility_hint(&wheel.filename, tags);
-                        if let Some(hint) = hint {
-                            bail!(
-                                "A URL dependency is incompatible with the current platform: {}\n\n{}{} {}",
-                                wheel.url,
-                                "hint".bold().cyan(),
-                                ":".bold(),
-                                hint
-                            );
+                        return Err(IncompatibleWheelError {
+                            kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
+                            compatibility_hint: generate_wheel_compatibility_hint(
+                                &wheel.filename,
+                                tags,
+                            ),
                         }
-                        bail!(
-                            "A URL dependency is incompatible with the current platform: {}",
-                            wheel.url
-                        );
+                        .into());
                     }
 
                     if no_binary {
@@ -290,20 +489,14 @@ impl<'a> Planner<'a> {
                     }
 
                     if !wheel.filename.is_compatible(tags) {
-                        let hint = generate_wheel_compatibility_hint(&wheel.filename, tags);
-                        if let Some(hint) = hint {
-                            bail!(
-                                "A path dependency is incompatible with the current platform: {}\n\n{}{} {}",
-                                wheel.install_path.user_display(),
-                                "hint".bold().cyan(),
-                                ":".bold(),
-                                hint
-                            );
+                        return Err(IncompatibleWheelError {
+                            kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
+                            compatibility_hint: generate_wheel_compatibility_hint(
+                                &wheel.filename,
+                                tags,
+                            ),
                         }
-                        bail!(
-                            "A path dependency is incompatible with the current platform: {}",
-                            wheel.install_path.user_display()
-                        );
+                        .into());
                     }
 
                     if no_binary {
@@ -322,7 +515,7 @@ impl<'a> Planner<'a> {
                         )
                         .entry(format!("{}.rev", wheel.filename.cache_key()));
 
-                    match LocalArchivePointer::read_from(&cache_entry) {
+                    match PathArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
                             Ok(timestamp) => {
                                 if pointer.is_up_to_date(timestamp) {
@@ -341,7 +534,6 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
-
                                         debug!(
                                             "Path wheel requirement already cached: {cached_dist}"
                                         );
@@ -365,24 +557,73 @@ impl<'a> Planner<'a> {
                         }
                     }
                 }
+                Dist::Built(BuiltDist::GitPath(wheel)) => {
+                    if !wheel.filename.is_compatible(tags) {
+                        bail!(
+                            "A Git path dependency is incompatible with the current platform: {}",
+                            wheel.install_path.user_display()
+                        );
+                    }
+
+                    if no_binary {
+                        bail!(
+                            "A Git path dependency points to a wheel which conflicts with `--no-binary`: {}",
+                            wheel.url
+                        );
+                    }
+
+                    if let Some(git_sha) = wheel.git.precise() {
+                        // Find the exact wheel from the cache, since we know the filename in
+                        // advance.
+                        let cache_entry = cache
+                            .shard(
+                                CacheBucket::Wheels,
+                                WheelCache::Git(&wheel.url, git_sha.as_short_str()).root(),
+                            )
+                            .entry(format!("{}.rev", wheel.filename.cache_key()));
+
+                        if let Some(pointer) = PathArchivePointer::read_from(&cache_entry)? {
+                            let cache_info = pointer.to_cache_info();
+                            let build_info = pointer.to_build_info();
+                            let archive = pointer.into_archive();
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
+                                let cached_dist = CachedDirectUrlDist {
+                                    filename: wheel.filename.clone(),
+                                    url: VerbatimParsedUrl {
+                                        parsed_url: wheel.parsed_url(),
+                                        verbatim: wheel.url.clone(),
+                                    },
+                                    hashes: archive.hashes,
+                                    cache_info,
+                                    build_info,
+                                    path: cache.archive(&archive.id).into_boxed_path(),
+                                };
+
+                                debug!("Git wheel requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                        }
+                    }
+                }
                 Dist::Source(SourceDist::Registry(sdist)) => {
                     if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
-                        if *entry.index.url() != sdist.index {
+                        if *entry.index().url() != sdist.index {
                             return None;
                         }
-                        if entry.dist.filename.name != sdist.name {
+                        if entry.dist().filename.name != sdist.name {
                             return None;
                         }
-                        if entry.dist.filename.version != sdist.version {
+                        if entry.dist().filename.version != sdist.version {
                             return None;
                         }
-                        if entry.built && no_build {
+                        if entry.is_built() && no_build {
                             return None;
                         }
-                        if !entry.built && no_binary {
+                        if !entry.is_built() && no_binary {
                             return None;
                         }
-                        Some(&entry.dist)
+                        Some(entry.dist())
                     }) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
@@ -394,7 +635,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.url(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_url_dist(sdist);
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -403,7 +644,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
@@ -414,11 +656,29 @@ impl<'a> Planner<'a> {
                         }
                     }
                 }
-                Dist::Source(SourceDist::Git(sdist)) => {
+                Dist::Source(SourceDist::GitPath(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    if let Some(wheel) = built_index.git(sdist) {
-                        if wheel.filename.name == sdist.name {
+                    if let Some(wheel) = built_index.git_path(sdist)? {
+                        if wheel.filename().name == sdist.name {
+                            let cached_dist = wheel.into_git_path_dist(sdist);
+                            debug!("Git source requirement already cached: {cached_dist}");
+                            cached.push(CachedDist::Url(cached_dist));
+                            continue;
+                        }
+
+                        warn!(
+                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                            sdist,
+                            wheel.filename()
+                        );
+                    }
+                }
+                Dist::Source(SourceDist::GitDirectory(sdist)) => {
+                    // Find the most-compatible wheel from the cache, since we don't know
+                    // the filename in advance.
+                    if let Some(wheel) = built_index.git_directory(sdist) {
+                        if wheel.filename().name == sdist.name {
                             let cached_dist = wheel.into_git_dist(sdist);
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
@@ -427,7 +687,8 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist, wheel.filename
+                            sdist,
+                            wheel.filename()
                         );
                     }
                 }
@@ -441,7 +702,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_path_dist(sdist);
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
@@ -450,7 +711,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
@@ -471,7 +733,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
-                            if wheel.filename.name == sdist.name {
+                            if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_directory_dist(sdist);
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
@@ -482,7 +744,8 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist, wheel.filename
+                                sdist,
+                                wheel.filename()
                             );
                         }
                         Ok(None) => {}
@@ -538,146 +801,31 @@ fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool 
 }
 
 /// Generate a hint for explaining wheel compatibility issues.
-fn generate_wheel_compatibility_hint(filename: &WheelFilename, tags: &Tags) -> Option<String> {
+fn generate_wheel_compatibility_hint(
+    filename: &WheelFilename,
+    tags: &Tags,
+) -> Option<IncompatibleWheelHint> {
     let TagCompatibility::Incompatible(incompatible_tag) = filename.compatibility(tags) else {
         return None;
     };
 
     match incompatible_tag {
-        IncompatibleTag::Python => {
-            let wheel_tags = filename.python_tags();
-            let current_tag = tags.python_tag();
-
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-
-                Some(format!(
-                    "The wheel is compatible with {}, but you're using {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                ))
-            } else {
-                Some(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-            }
-        }
-        IncompatibleTag::FreethreadedAbi => {
-            let wheel_abi = filename
-                .abi_tags()
-                .iter()
-                .map(|tag| format!("`{}`", tag.cyan()))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let message = if let Some(current) = tags.abi_tag() {
-                if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                }
-            } else {
-                "free-threaded Python".to_string()
-            };
-            Some(format!(
-                "The wheel uses the stable ABI ({wheel_abi}), but you're using {message}, which is incompatible"
-            ))
-        }
-        IncompatibleTag::Abi => {
-            let wheel_tags = filename.abi_tags();
-            let current_tag = tags.abi_tag();
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-                Some(format!(
-                    "The wheel is compatible with {}, but you're using {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                ))
-            } else {
-                Some(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-            }
-        }
-        IncompatibleTag::Platform => {
-            let wheel_tags = filename.platform_tags();
-            let current_tag = tags.platform_tag();
-
-            if let Some(current) = current_tag {
-                let message = if let Some(pretty) = current.pretty() {
-                    format!("{} (`{}`)", pretty.cyan(), current.cyan())
-                } else {
-                    format!("`{}`", current.cyan())
-                };
-                Some(format!(
-                    "The wheel is compatible with {}, but you're on {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    message
-                ))
-            } else {
-                Some(format!(
-                    "The wheel requires {}",
-                    wheel_tags
-                        .iter()
-                        .map(|tag| if let Some(pretty) = tag.pretty() {
-                            format!("{} (`{}`)", pretty.cyan(), tag.cyan())
-                        } else {
-                            format!("`{}`", tag.cyan())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-            }
-        }
+        IncompatibleTag::Python => Some(IncompatibleWheelHint::Python {
+            wheel_tags: filename.python_tags().to_vec(),
+            current: tags.python_tag(),
+        }),
+        IncompatibleTag::FreethreadedAbi => Some(IncompatibleWheelHint::FreethreadedAbi {
+            wheel_tags: filename.abi_tags().to_vec(),
+            current: tags.abi_tag(),
+        }),
+        IncompatibleTag::Abi => Some(IncompatibleWheelHint::Abi {
+            wheel_tags: filename.abi_tags().to_vec(),
+            current: tags.abi_tag(),
+        }),
+        IncompatibleTag::Platform => Some(IncompatibleWheelHint::Platform {
+            wheel_tags: filename.platform_tags().to_vec(),
+            current: tags.platform_tag().cloned(),
+        }),
         _ => None,
     }
 }
@@ -778,7 +926,7 @@ impl Plan {
 mod tests {
     use super::*;
     use std::str::FromStr;
-    use uv_platform_tags::{Arch, Os, Platform};
+    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
 
     #[test]
     fn test_abi3_on_free_threaded_python_hint() {
@@ -795,9 +943,12 @@ mod tests {
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
-            true,      // manylinux_compatible
-            true,      // gil_disabled (free-threaded)
-            false,     // is_cross
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: true,
+                debug_enabled: false,
+                is_cross: false,
+            },
         )
         .unwrap();
 
@@ -808,8 +959,45 @@ mod tests {
         // Generate the hint
         let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
 
+        let hint = hint.to_string();
         let hint = anstream::adapter::strip_str(&hint);
-        insta::assert_snapshot!(hint, @"The wheel uses the stable ABI (`abi3`), but you're using free-threaded CPython 3.14 (`cp314t`), which is incompatible");
+        insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the stable ABI (`abi3`), which requires a GIL-enabled interpreter");
+    }
+
+    #[test]
+    fn test_gil_enabled_cpython_on_free_threaded_python_hint() {
+        // Create a Tags object for free-threaded Python 3.14
+        let platform = Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 28,
+            },
+            Arch::X86_64,
+        );
+        let tags = Tags::from_env(
+            &platform,
+            (3, 14),   // python_version
+            "cpython", // implementation_name
+            (3, 14),   // implementation_version
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: true,
+                debug_enabled: false,
+                is_cross: false,
+            },
+        )
+        .unwrap();
+
+        // Create a wheel filename with cp314 ABI tag (same version, GIL-enabled)
+        let filename =
+            WheelFilename::from_str("foo-1.0-cp314-cp314-manylinux_2_17_x86_64.whl").unwrap();
+
+        // Generate the hint
+        let hint = generate_wheel_compatibility_hint(&filename, &tags).unwrap();
+
+        let hint = hint.to_string();
+        let hint = anstream::adapter::strip_str(&hint);
+        insta::assert_snapshot!(hint, @"You're using free-threaded CPython 3.14 (`cp314t`), but the wheel was built for the CPython 3.14 ABI (`cp314`), which requires a GIL-enabled interpreter");
     }
 
     #[test]
@@ -827,9 +1015,12 @@ mod tests {
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
-            true,      // manylinux_compatible
-            false,     // gil_disabled (regular Python)
-            false,     // is_cross
+            TagsOptions {
+                manylinux_compatible: true,
+                gil_disabled: false,
+                debug_enabled: false,
+                is_cross: false,
+            },
         )
         .unwrap();
 

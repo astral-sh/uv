@@ -12,6 +12,7 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_static::EnvVars;
 
 pub(crate) mod pypi;
+pub(crate) mod pyx;
 
 #[derive(Debug, Error)]
 pub enum TrustedPublishingError {
@@ -35,12 +36,17 @@ pub enum TrustedPublishingError {
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
-        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the PyPI configuration: {2:#?}"
+        "Server returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the publisher configuration: {2:#?}"
     )]
-    Pypi(StatusCode, String, OidcTokenClaims),
+    TokenRejected(StatusCode, String, OidcTokenClaims),
     /// When trusted publishing is misconfigured, the error above should occur, not this one.
-    #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
+    #[error(
+        "Server returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}"
+    )]
     InvalidOidcToken(StatusCode, String),
+    /// The user gave us a malformed upload URL for trusted publishing with pyx.
+    #[error("The upload URL `{0}` does not look like a valid pyx upload URL")]
+    InvalidPyxUploadUrl(DisplaySafeUrl),
 }
 
 #[derive(Deserialize)]
@@ -74,62 +80,88 @@ struct PublishToken {
 /// The payload of the OIDC token.
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
-pub struct OidcTokenClaims {
+#[serde(untagged)]
+pub enum OidcTokenClaims {
+    GitHub(GitHubTokenClaims),
+    GitLab(GitLabTokenClaims),
+    Buildkite(BuildkiteTokenClaims),
+}
+
+/// The relevant payload of a GitHub OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct GitHubTokenClaims {
     sub: String,
     repository: String,
     repository_owner: String,
     repository_owner_id: String,
     job_workflow_ref: String,
     r#ref: String,
+    environment: Option<String>,
+}
+
+/// The relevant payload of a GitLab OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct GitLabTokenClaims {
+    sub: String,
+    project_path: String,
+    ci_config_ref_uri: String,
+    environment: Option<String>,
+}
+
+/// The relevant payload of a Buildkite OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct BuildkiteTokenClaims {
+    sub: String,
+    pipeline_slug: String,
+    organization_slug: String,
 }
 
 /// A service (i.e. uploadable index) that supports trusted publishing.
+///
+/// Interactions should go through the default [`get_token`]; implementors
+/// should implement the constituent trait methods.
 pub(crate) trait TrustedPublishingService {
-    /// Borrow the HTTP client with middleware.
+    /// Borrow an HTTP client with middleware.
     fn client(&self) -> &ClientWithMiddleware;
 
     /// Retrieve the service's expected OIDC audience.
     async fn audience(&self) -> Result<String, TrustedPublishingError>;
 
     /// Exchange an ambient OIDC identity token for a short-lived upload token on the service.
-    async fn publish_token(
+    async fn exchange_token(
         &self,
         oidc_token: ambient_id::IdToken,
     ) -> Result<TrustedPublishingToken, TrustedPublishingError>;
-}
 
-/// Returns the short-lived token to use for uploading.
-///
-/// Return states:
-/// - `Ok(Some(token))`: Successfully obtained a trusted publishing token.
-/// - `Ok(None)`: Not in a supported CI environment for trusted publishing.
-/// - `Err(...)`: An error occurred while trying to obtain the token.
-pub(crate) async fn get_token(
-    service: &impl TrustedPublishingService,
-) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
-    // Get the OIDC token's audience from the registry.
-    let audience = service.audience().await?;
+    /// Perform the full trusted publishing token exchange.
+    async fn get_token(&self) -> Result<Option<TrustedPublishingToken>, TrustedPublishingError> {
+        // Get the OIDC token's audience from the registry.
+        let audience = self.audience().await?;
 
-    // Perform ambient OIDC token discovery.
-    // Depending on the host (GitHub Actions, GitLab CI, etc.)
-    // this may perform additional network requests.
-    let oidc_token = get_oidc_token(&audience, service.client()).await?;
+        // Perform ambient OIDC token discovery.
+        // Depending on the host (GitHub Actions, GitLab CI, etc.)
+        // this may perform additional network requests.
+        let oidc_token = get_oidc_token(&audience, self.client()).await?;
 
-    // Exchange the OIDC token for a short-lived upload token,
-    // if OIDC token discovery succeeded.
-    if let Some(oidc_token) = oidc_token {
-        let publish_token = service.publish_token(oidc_token).await?;
+        // Exchange the OIDC token for a short-lived upload token,
+        // if OIDC token discovery succeeded.
+        if let Some(oidc_token) = oidc_token {
+            let publish_token = self.exchange_token(oidc_token).await?;
 
-        // If we're on GitHub Actions, mask the exchanged token in logs.
-        #[allow(clippy::print_stdout)]
-        if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
-            println!("::add-mask::{publish_token}");
+            // If we're on GitHub Actions, mask the exchanged token in logs.
+            #[expect(clippy::print_stdout)]
+            if env::var(EnvVars::GITHUB_ACTIONS) == Ok("true".to_string()) {
+                println!("::add-mask::{publish_token}");
+            }
+
+            Ok(Some(publish_token))
+        } else {
+            // Not in a supported CI environment for trusted publishing.
+            Ok(None)
         }
-
-        Ok(Some(publish_token))
-    } else {
-        // Not in a supported CI environment for trusted publishing.
-        Ok(None)
     }
 }
 

@@ -1,10 +1,8 @@
-use std::env;
-
 use anyhow::Result;
 use indoc::indoc;
 use insta::assert_snapshot;
 
-use crate::common::{TestContext, make_project, uv_snapshot};
+use uv_test::{make_project, uv_snapshot};
 
 /// The root package has diverging URLs for disjoint markers:
 /// ```toml
@@ -14,9 +12,9 @@ use crate::common::{TestContext, make_project, uv_snapshot};
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -48,9 +46,9 @@ fn branching_urls_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_urls_overlapping() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -86,9 +84,9 @@ fn branching_urls_overlapping() -> Result<()> {
 /// a -> b -> b2 -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_but_transitive_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -139,7 +137,8 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
       ╰─▶ Requirements contain conflicting URLs for package `iniconfig` in split `python_full_version >= '3.12'`:
           - https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl
           - https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
-      help: `b2` (v0.1.0) was included because `a` (v0.1.0) depends on `b` (v0.1.0) which depends on `b2`
+
+    hint: `b2` (v0.1.0) was included because `a` (v0.1.0) depends on `b` (v0.1.0) which depends on `b2`
     "
     );
 
@@ -157,9 +156,9 @@ fn root_package_splits_but_transitive_conflict() -> Result<()> {
 /// a -> b -> b2 ; python_version >= '3.12' -> https://../iniconfig-2.0.0-py3-none-any.whl
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_transitive_too() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -363,9 +362,9 @@ fn root_package_splits_transitive_too() -> Result<()> {
 /// a -> b2 ; python_version >= '3.12' -> iniconfig==2.0.0
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn root_package_splits_other_dependencies_too() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -547,9 +546,9 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(feature = "pypi")]
+#[cfg(feature = "test-pypi")]
 fn branching_between_registry_and_direct_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -633,9 +632,9 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_disjoint() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -717,9 +716,9 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 /// ]
 /// ```
 #[test]
-#[cfg(all(feature = "git", feature = "pypi"))]
+#[cfg(all(feature = "test-git", feature = "test-pypi"))]
 fn branching_urls_of_different_sources_conflict() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [
@@ -749,7 +748,7 @@ fn branching_urls_of_different_sources_conflict() -> Result<()> {
 /// Ensure that we don't pre-visit package with URLs.
 #[test]
 fn dont_pre_visit_url_packages() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = uv_test::test_context!("3.12");
 
     let deps = indoc! {r#"
         dependencies = [

@@ -41,7 +41,20 @@ The `UV_PREVIEW_FEATURES` environment variable can be used similarly, e.g.:
 $ UV_PREVIEW_FEATURES=foo,bar uv run ...
 ```
 
-For backwards compatibility, enabling preview features that do not exist will warn, but not error.
+Preview features can also be enabled in `uv.toml`, or under `[tool.uv]` in `pyproject.toml` and PEP
+723 metadata:
+
+```toml
+preview-features = ["foo", "bar"]
+```
+
+Set `preview-features = true` to enable all preview features.
+
+Some preview features take effect before configuration files are loaded and cannot be enabled from
+configuration.
+
+For backwards compatibility, enabling preview features that do not exist will warn, but not error,
+regardless of the source.
 
 ## Using preview features
 
@@ -50,11 +63,6 @@ gated by some sort of user interaction, For example, while `pylock.toml` support
 can use `uv pip install` with a `pylock.toml` file without additional configuration because
 specifying the `pylock.toml` file indicates you want to use the feature. However, a warning will be
 displayed that the feature is in preview. The preview feature can be enabled to silence the warning.
-
-Other preview features change behavior without changes to your use of uv. For example, when the
-`python-upgrade` feature is enabled, the default behavior of `uv python install` changes to allow uv
-to upgrade Python versions transparently. This feature requires enabling the preview flag for proper
-usage.
 
 ## Available preview features
 
@@ -67,14 +75,23 @@ The following preview features are available:
 - `pylock`: Allows installing from `pylock.toml` files.
 - `python-install-default`: Allows
   [installing `python` and `python3` executables](./python-versions.md#installing-python-executables).
-- `python-upgrade`: Allows
-  [transparent Python version upgrades](./python-versions.md#upgrading-python-versions).
 - `format`: Allows using `uv format`.
+- `index-exclude-newer`: Allows setting `exclude-newer` on configured package indexes.
+- `azure-endpoint`: Allows signing requests to Azure Blob Storage endpoints with Azure credentials.
 - `native-auth`: Enables storage of credentials in a
   [system-native location](../concepts/authentication/http.md#the-uv-credentials-store).
+- `auth-helper`: Allows using `uv auth helper` as a credential helper for external tools.
 - `workspace-metadata`: Allows using `uv workspace metadata`.
 - `workspace-dir`: Allows using `uv workspace dir`.
 - `workspace-list`: Allows using `uv workspace list`.
+- `target-workspace-discovery`: Uses the directory containing a local `uv run` target, rather than
+  the current working directory, as the starting point for project and workspace discovery. This
+  feature takes effect before configuration is loaded.
+- `project-directory-must-exist`: Rejects an invalid `--project` path instead of warning and
+  continuing. Except for `uv init`, the path must already exist as a directory or point to a
+  `pyproject.toml` file. This feature takes effect before configuration is loaded.
+- `malware-check`: Allows `uv sync` and other commands to check for malware using
+  [OSV](https://osv.dev) before installing packages.
 
 ## Disabling preview features
 

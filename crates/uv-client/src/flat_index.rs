@@ -40,21 +40,38 @@ pub enum FindLinksDirectoryError {
 /// An entry in a `--find-links` index.
 #[derive(Debug, Clone)]
 pub struct FlatIndexEntry {
-    pub filename: DistFilename,
-    pub file: File,
-    pub index: IndexUrl,
+    filename: DistFilename,
+    file: File,
+    index: IndexUrl,
+}
+
+impl FlatIndexEntry {
+    /// Return the distribution filename.
+    pub(crate) fn filename(&self) -> &DistFilename {
+        &self.filename
+    }
+
+    /// Convert the entry into its component parts.
+    pub fn into_parts(self) -> (DistFilename, File, IndexUrl) {
+        (self.filename, self.file, self.index)
+    }
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct FlatIndexEntries {
     /// The list of `--find-links` entries.
-    pub entries: Vec<FlatIndexEntry>,
+    entries: Vec<FlatIndexEntry>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
-    pub offline: bool,
+    offline: bool,
 }
 
 impl FlatIndexEntries {
+    /// Convert the entries into their component parts.
+    pub fn into_parts(self) -> (Vec<FlatIndexEntry>, bool) {
+        (self.entries, self.offline)
+    }
+
     /// Create a [`FlatIndexEntries`] from a list of `--find-links` entries.
     fn from_entries(entries: Vec<FlatIndexEntry>) -> Self {
         Self {
@@ -140,7 +157,10 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Fetch a flat remote index from a `--find-links` URL.
-    pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
+    pub(crate) async fn fetch_index(
+        &self,
+        index: &IndexUrl,
+    ) -> Result<FlatIndexEntries, FlatIndexError> {
         match index {
             IndexUrl::Path(url) => {
                 let path = url
@@ -212,7 +232,7 @@ impl<'a> FlatIndexClient<'a> {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {}: {err}", &url);
+                                debug!("Skipping file in {}: {err}", &url);
                                 None
                             }
                         }
@@ -263,7 +283,7 @@ impl<'a> FlatIndexClient<'a> {
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
         // The path context is provided by the caller.
-        #[allow(clippy::disallowed_methods)]
+        #[expect(clippy::disallowed_methods)]
         let entries = std::fs::read_dir(path)?;
 
         let mut dists = Vec::new();

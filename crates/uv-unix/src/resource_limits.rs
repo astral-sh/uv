@@ -76,7 +76,7 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
 
     // Cap the target limit to avoid issues with extremely high values.
     // If hard is negative or exceeds MAX_NOFILE_LIMIT, use MAX_NOFILE_LIMIT.
-    #[allow(clippy::unnecessary_cast)]
+    #[expect(clippy::unnecessary_cast)]
     let target = rlim_t_to_u64(hard.min(MAX_NOFILE_LIMIT)).unwrap_or(MAX_NOFILE_LIMIT as u64);
 
     if soft >= target {
@@ -105,7 +105,7 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
 ///
 /// On Linux/macOS, `rlim_t` is `u64` so this always succeeds.
 /// On FreeBSD, `rlim_t` is `i64` so negative values return `None`.
-#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
+#[expect(clippy::useless_conversion)]
 fn rlim_t_to_u64(value: rlim_t) -> Option<u64> {
     u64::try_from(value).ok()
 }
