@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
@@ -26,7 +27,7 @@ use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
@@ -515,6 +516,23 @@ async fn do_lock(
     let requirements = target.requirements();
     let overrides = target.overrides();
     let excludes = target.exclude_dependencies();
+
+    let file_excludes: uv_configuration::Excludes = match target.exclude_dependencies_file() {
+        Some(path) => {
+            let contents = fs_err::read_to_string(&path)?;
+            let requirements = contents
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(uv_pep508::Requirement::<VerbatimParsedUrl>::from_str)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|err| ProjectError::Anyhow(anyhow::anyhow!(err)))?;
+            requirements.into_iter().collect()
+        }
+        None => excludes.iter().cloned().collect(),
+    };
+    let _ = &file_excludes; // TODO: thread `file_excludes` into the resolver in place of `excludes`.
+
     let constraints = target.constraints();
     let build_constraints = target.build_constraints();
     let dependency_groups = target.dependency_groups()?;

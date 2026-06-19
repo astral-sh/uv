@@ -511,6 +511,31 @@ pub struct ToolUv {
     )]
     pub(crate) exclude_dependencies: Option<Vec<PackageName>>,
 
+    /// PROTOTYPE: a constraints-style file whose entries describe version-aware exclusions.
+    ///
+    /// Each line uses the standard requirements.txt syntax (`requests<2.31`, `numpy==1.24.0`,
+    /// `left-pad`); matching versions are silently dropped during resolution. A bare name
+    /// excludes every version, identical to listing it in `exclude-dependencies`.
+    ///
+    /// This lets a project source a large, externally-generated deny-list from a standalone
+    /// file instead of inlining every entry here. The path is resolved relative to the
+    /// workspace-root `pyproject.toml`.
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<String>",
+            description = "Path to a constraints-style file of version-aware exclusions."
+        )
+    )]
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            exclude-dependencies-file = "banned.txt"
+        "#
+    )]
+    pub(crate) exclude_dependencies_file: Option<std::path::PathBuf>,
+
     /// Constraints to apply when resolving the project's dependencies.
     ///
     /// Constraints are used to restrict the versions of dependencies that are selected during

@@ -785,6 +785,14 @@ impl Workspace {
         };
         excludes.clone()
     }
+    pub fn exclude_dependencies_file(&self) -> Option<std::path::PathBuf> {
+        self.pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.exclude_dependencies_file.as_ref())
+            .map(|path| self.install_path.join(path))
+    }
 
     /// Returns the set of constraints for the workspace.
     pub fn constraints(&self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
