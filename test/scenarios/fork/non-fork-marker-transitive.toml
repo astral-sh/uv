@@ -1,0 +1,24 @@
+name = "fork-non-fork-marker-transitive"
+description = '''
+This is the same setup as `non-local-fork-marker-transitive`, but the disjoint
+dependency specifications on `c` use the same constraints and thus depend on
+the same version of `c`. In this case, there is no conflict.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a==1.0.0", "b==1.0.0"]
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=2.0.0 ; sys_platform == 'linux'"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=2.0.0 ; sys_platform == 'darwin'"]
+
+[packages.c.versions."1.0.0"]
+[packages.c.versions."2.0.0"]

@@ -13,7 +13,7 @@ const HEADER: &[u8; 43] = b"Signature: 8a477f597d28d172789f06886806bc55";
 /// * The `directory` exists and contains a `CACHEDIR.TAG` file, regardless of its content.
 /// * The file can't be created for any reason (the `directory` doesn't exist, permission error,
 ///   can't write to the file etc.)
-pub fn add_tag<P: AsRef<path::Path>>(directory: P) -> io::Result<()> {
+fn add_tag<P: AsRef<path::Path>>(directory: P) -> io::Result<()> {
     let directory = directory.as_ref();
     match fs_err::OpenOptions::new()
         .write(true)

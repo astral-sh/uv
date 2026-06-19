@@ -3,16 +3,18 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
 };
+use uv_distribution_types::Verbatim;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
@@ -20,22 +22,23 @@ use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
+use uv_warnings::warn_user;
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
-    detect_conflicts,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
+    default_dependency_groups, detect_conflicts,
 };
 use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
-use crate::settings::{LockCheck, ResolverSettings};
+use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum ExportTarget {
     /// A PEP 723 script, with inline metadata.
     Script(Pep723Script),
@@ -54,7 +57,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 }
 
 /// Export the project's `uv.lock` in an alternate format.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
     format: Option<ExportFormat>,
@@ -68,9 +71,11 @@ pub(crate) async fn export(
     groups: DependencyGroups,
     editable: Option<EditableMode>,
     lock_check: LockCheck,
-    frozen: bool,
+    frozen: Option<FrozenSource>,
     include_annotations: bool,
     include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
     script: Option<Pep723Script>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -90,27 +95,31 @@ pub(crate) async fn export(
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
-        let project = if frozen {
+        let project = if frozen.is_some() {
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
+                cache,
                 &workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
-            VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                    .await?
-                    .with_current_project(name.clone())
-                    .with_context(|| format!("Package `{name}` not found in workspace"))?,
+            VirtualProject::discover_with_package(
+                project_dir,
+                &DiscoveryOptions::default(),
+                cache,
+                &workspace_cache,
+                name.clone(),
             )
+            .await?
         } else {
             let project = VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &workspace_cache,
             )
             .await?;
@@ -142,7 +151,7 @@ pub(crate) async fn export(
     let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
-    let interpreter = if frozen {
+    let interpreter = if frozen.is_some() {
         None
     } else {
         Some(match &target {
@@ -158,34 +167,40 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter(),
-            ExportTarget::Project(project) => ProjectInterpreter::discover(
-                project.workspace(),
-                project_dir,
-                &groups,
-                python.as_deref().map(PythonRequest::parse),
-                &client_builder,
-                python_preference,
-                python_downloads,
-                &install_mirrors,
-                false,
-                no_config,
-                Some(false),
-                cache,
-                printer,
-                preview,
-            )
-            .await?
-            .into_interpreter(),
+            ExportTarget::Project(project) => {
+                let workspace_python = WorkspacePython::from_request(
+                    python.as_deref().map(PythonRequest::parse),
+                    Some(project.workspace()),
+                    &groups,
+                    project_dir,
+                    no_config,
+                )
+                .await?;
+                ProjectInterpreter::discover(
+                    project.workspace(),
+                    &groups,
+                    workspace_python,
+                    &client_builder,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    false,
+                    Some(false),
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter()
+            }
         })
     };
 
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
+    let mode = if let Some(frozen_source) = frozen {
+        LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(interpreter.as_ref().unwrap(), lock_check)
     } else if matches!(target, ExportTarget::Script(_))
@@ -208,7 +223,7 @@ pub(crate) async fn export(
             &client_builder,
             &state,
             Box::new(DefaultResolveLogger),
-            concurrency,
+            &concurrency,
             cache,
             &workspace_cache,
             printer,
@@ -220,9 +235,11 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(client_builder.is_native_tls())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::with_system_certs(
+                client_builder.system_certs(),
+            )
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -373,6 +390,51 @@ pub(crate) async fn export(
                 )?;
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
+
+            let mut wrote_preamble = false;
+
+            // If necessary, include the `--index-url` and `--extra-index-url` locations.
+            if include_index_url {
+                let mut seen = FxHashSet::default();
+                let mut emitted_explicit_index = false;
+
+                if let Some(index) = settings.index_locations.default_index() {
+                    writeln!(writer, "--index-url {}", index.url().verbatim())?;
+                    seen.insert(index.url());
+                    wrote_preamble = true;
+                    emitted_explicit_index |= index.explicit;
+                }
+                for index in settings
+                    .index_locations
+                    .implicit_indexes()
+                    .chain(settings.index_locations.explicit_indexes())
+                {
+                    if seen.insert(index.url()) {
+                        writeln!(writer, "--extra-index-url {}", index.url().verbatim())?;
+                        wrote_preamble = true;
+                    }
+                    emitted_explicit_index |= index.explicit;
+                }
+
+                if emitted_explicit_index {
+                    warn_user!(
+                        "`requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`."
+                    );
+                }
+            }
+
+            // If necessary, include the `--find-links` locations.
+            if include_find_links {
+                for flat_index in settings.index_locations.flat_indexes() {
+                    writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
+                    wrote_preamble = true;
+                }
+            }
+
+            if wrote_preamble {
+                writeln!(writer)?;
+            }
+
             write!(writer, "{export}")?;
         }
         ExportFormat::PylockToml => {
@@ -382,7 +444,7 @@ pub(crate) async fn export(
                 &extras,
                 &groups,
                 include_annotations,
-                editable,
+                editable.as_ref(),
                 &install_options,
             )?;
 
@@ -443,6 +505,19 @@ fn cmd() -> String {
 
             // Skip only this argument if option and value are together
             if arg.starts_with("--upgrade-package=") || arg.starts_with("-P") {
+                // Reset state; skip this iteration.
+                *skip_next = None;
+                return Some(None);
+            }
+
+            // Always skip the `--upgrade-group` and mark the next item to be skipped
+            if arg == "--upgrade-group" {
+                *skip_next = Some(true);
+                return Some(None);
+            }
+
+            // Skip only this argument if option and value are together
+            if arg.starts_with("--upgrade-group=") {
                 // Reset state; skip this iteration.
                 *skip_next = None;
                 return Some(None);

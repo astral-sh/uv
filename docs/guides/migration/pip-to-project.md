@@ -437,6 +437,33 @@ a `docs` group:
 $ uv add -r requirements-docs.in -c requirements-docs.txt --group docs
 ```
 
+#### Importing dependency sources
+
+When importing requirements on local paths or Git repositories, for example:
+
+```python title="requirements.in"
+./path-dep
+-e ./editable-path-dep
+git-dep @ git+https://github.com/astral-sh/git-dep
+```
+
+uv will map them to [dependency sources](../../concepts/projects/dependencies.md#dependency-sources)
+in the `[tool.uv.sources]` table of the `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[project]
+dependencies = [
+    "path-dep",
+    "editable-path-dep",
+    "git-dep",
+]
+
+[tool.uv.sources]
+path-dep = { path = "./path-dep" }
+editable-path-dep = { path = "./editable-path-dep", editable = true }
+git-dep = { git = "https://github.com/astral-sh/git-dep" }
+```
+
 ### Project environments
 
 Unlike `pip`, uv is not centered around the concept of an "active" virtual environment. Instead, uv

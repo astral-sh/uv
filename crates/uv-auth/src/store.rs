@@ -5,14 +5,15 @@ use fs_err as fs;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use uv_fs::{LockedFile, with_added_extension};
-use uv_preview::{Preview, PreviewFeatures};
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
+use uv_preview::{Preview, PreviewFeature};
 use uv_redacted::DisplaySafeUrl;
 
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
 use crate::credentials::{Password, Token, Username};
+use crate::index::is_path_prefix;
 use crate::realm::Realm;
 use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
@@ -28,20 +29,24 @@ pub enum AuthBackend {
 }
 
 impl AuthBackend {
-    pub fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
+    pub async fn from_settings(preview: Preview) -> Result<Self, TomlCredentialError> {
         // If preview is enabled, we'll use the system-native store
-        if preview.is_enabled(PreviewFeatures::NATIVE_AUTH) {
+        if preview.is_enabled(PreviewFeature::NativeAuth) {
             return Ok(Self::System(KeyringProvider::native()));
         }
 
         // Otherwise, we'll use the plaintext credential store
         let path = TextCredentialStore::default_file()?;
-        match TextCredentialStore::read(&path) {
+        match TextCredentialStore::read(&path).await {
             Ok((store, lock)) => Ok(Self::TextStore(store, lock)),
-            Err(TomlCredentialError::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            Err(err)
+                if err
+                    .as_io_error()
+                    .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
+            {
                 Ok(Self::TextStore(
                     TextCredentialStore::default(),
-                    TextCredentialStore::lock(&path)?,
+                    TextCredentialStore::lock(&path).await?,
                 ))
             }
             Err(err) => Err(err),
@@ -69,6 +74,8 @@ pub enum AuthScheme {
 pub enum TomlCredentialError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
     #[error("Failed to parse TOML credential file: {0}")]
     ParseError(#[from] toml::de::Error),
     #[error("Failed to serialize credentials to TOML")]
@@ -81,6 +88,21 @@ pub enum TomlCredentialError {
     CredentialsDirError,
     #[error("Token is not valid unicode")]
     TokenNotUnicode(#[from] std::string::FromUtf8Error),
+}
+
+impl TomlCredentialError {
+    pub(crate) fn as_io_error(&self) -> Option<&std::io::Error> {
+        match self {
+            Self::Io(err) => Some(err),
+            Self::LockedFile(err) => err.as_io_error(),
+            Self::ParseError(_)
+            | Self::SerializeError(_)
+            | Self::BasicAuthError(_)
+            | Self::BearerAuthError(_)
+            | Self::CredentialsDirError
+            | Self::TokenNotUnicode(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -99,6 +121,12 @@ pub enum BearerAuthError {
     UnexpectedUsername,
     #[error("`password` cannot be provided with `scheme = bearer`")]
     UnexpectedPassword,
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum LookupError {
+    #[error("Multiple credentials found for URL '{0}', specify which username to use")]
+    AmbiguousUsername(DisplaySafeUrl),
 }
 
 /// A single credential entry in a TOML credentials file.
@@ -203,7 +231,7 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct TomlCredentials {
     /// Array of credential entries.
-    #[serde(rename = "credential")]
+    #[serde(default, rename = "credential")]
     credentials: Vec<TomlCredential>,
 }
 
@@ -233,12 +261,12 @@ impl TextCredentialStore {
     }
 
     /// Acquire a lock on the credentials file at the given path.
-    pub fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
+    async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let lock = with_added_extension(path, ".lock");
-        Ok(LockedFile::acquire_blocking(lock, "credentials store")?)
+        let lock = path.with_added_extension("lock");
+        Ok(LockedFile::acquire(lock, LockedFileMode::Exclusive, "credentials store").await?)
     }
 
     /// Read credentials from a file.
@@ -269,8 +297,10 @@ impl TextCredentialStore {
     /// Returns [`TextCredentialStore`] and a [`LockedFile`] to hold if mutating the store.
     ///
     /// If the store will not be written to following the read, the lock can be dropped.
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
-        let lock = Self::lock(path.as_ref())?;
+    pub(crate) async fn read<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<(Self, LockedFile), TomlCredentialError> {
+        let lock = Self::lock(path.as_ref()).await?;
         let store = Self::from_file(path)?;
         Ok((store, lock))
     }
@@ -313,7 +343,7 @@ impl TextCredentialStore {
         &self,
         url: &DisplaySafeUrl,
         username: Option<&str>,
-    ) -> Option<&Credentials> {
+    ) -> Result<Option<&Credentials>, LookupError> {
         let request_realm = Realm::from(url);
 
         // Perform an exact lookup first
@@ -324,7 +354,7 @@ impl TextCredentialStore {
                 url_service.clone(),
                 Username::from(username.map(str::to_string)),
             )) {
-                return Some(credential);
+                return Ok(Some(credential));
             }
         }
 
@@ -339,8 +369,8 @@ impl TextCredentialStore {
                 continue;
             }
 
-            // Service path must be a prefix of request path
-            if !url.path().starts_with(service.url().path()) {
+            // Service path must be a prefix of the request path.
+            if !is_path_prefix(service.url().path(), url.path()) {
                 continue;
             }
 
@@ -355,15 +385,17 @@ impl TextCredentialStore {
             let specificity = service.url().path().len();
             if best.is_none_or(|(best_specificity, _, _)| specificity > best_specificity) {
                 best = Some((specificity, service, credential));
+            } else if best.is_some_and(|(best_specificity, _, _)| specificity == best_specificity) {
+                return Err(LookupError::AmbiguousUsername(url.clone()));
             }
         }
 
         // Return the most specific match
         if let Some((_, _, credential)) = best {
-            return Some(credential);
+            return Ok(Some(credential));
         }
 
-        None
+        Ok(None)
     }
 
     /// Store credentials for a given service.
@@ -434,10 +466,10 @@ mod tests {
         let service = Service::from_str("https://example.com").unwrap();
         store.insert(service.clone(), credentials.clone());
         let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url, None).is_some());
+        assert!(store.get_credentials(&url, None).unwrap().is_some());
 
         let url = DisplaySafeUrl::parse("https://example.com/path").unwrap();
-        let retrieved = store.get_credentials(&url, None).unwrap();
+        let retrieved = store.get_credentials(&url, None).unwrap().unwrap();
         assert_eq!(retrieved.username(), Some("user"));
         assert_eq!(retrieved.password(), Some("pass"));
 
@@ -447,11 +479,11 @@ mod tests {
                 .is_some()
         );
         let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url, None).is_none());
+        assert!(store.get_credentials(&url, None).unwrap().is_none());
     }
 
-    #[test]
-    fn test_file_operations() {
+    #[tokio::test]
+    async fn test_file_operations() {
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(
             temp_file,
@@ -473,12 +505,12 @@ password = "pass2"
         let store = TextCredentialStore::from_file(temp_file.path()).unwrap();
 
         let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
-        assert!(store.get_credentials(&url, None).is_some());
+        assert!(store.get_credentials(&url, None).unwrap().is_some());
         let url = DisplaySafeUrl::parse("https://test.org/").unwrap();
-        assert!(store.get_credentials(&url, None).is_some());
+        assert!(store.get_credentials(&url, None).unwrap().is_some());
 
         let url = DisplaySafeUrl::parse("https://example.com").unwrap();
-        let cred = store.get_credentials(&url, None).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
         assert_eq!(cred.username(), Some("testuser"));
         assert_eq!(cred.password(), Some("testpass"));
 
@@ -487,7 +519,7 @@ password = "pass2"
         store
             .write(
                 temp_output.path(),
-                TextCredentialStore::lock(temp_file.path()).unwrap(),
+                TextCredentialStore::lock(temp_file.path()).await.unwrap(),
             )
             .unwrap();
 
@@ -514,7 +546,7 @@ password = "pass2"
 
         for url_str in matching_urls {
             let url = DisplaySafeUrl::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url, None);
+            let cred = store.get_credentials(&url, None).unwrap();
             assert!(cred.is_some(), "Failed to match URL with prefix: {url_str}");
         }
 
@@ -522,12 +554,14 @@ password = "pass2"
         let non_matching_urls = [
             "https://example.com/different",
             "https://example.com/ap", // Not a complete path segment match
+            "https://example.com/apiary", // Not a complete path segment match
+            "https://example.com/api-v2", // Not a complete path segment match
             "https://example.com",    // Shorter than the stored prefix
         ];
 
         for url_str in non_matching_urls {
             let url = DisplaySafeUrl::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url, None);
+            let cred = store.get_credentials(&url, None).unwrap();
             assert!(cred.is_none(), "Should not match non-prefix URL: {url_str}");
         }
     }
@@ -551,7 +585,7 @@ password = "pass2"
 
         for url_str in matching_urls {
             let url = DisplaySafeUrl::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url, None);
+            let cred = store.get_credentials(&url, None).unwrap();
             assert!(
                 cred.is_some(),
                 "Failed to match URL in same realm: {url_str}"
@@ -567,7 +601,7 @@ password = "pass2"
 
         for url_str in non_matching_urls {
             let url = DisplaySafeUrl::parse(url_str).unwrap();
-            let cred = store.get_credentials(&url, None);
+            let cred = store.get_credentials(&url, None).unwrap();
             assert!(
                 cred.is_none(),
                 "Should not match URL in different realm: {url_str}"
@@ -591,12 +625,12 @@ password = "pass2"
 
         // Should match the most specific prefix
         let url = DisplaySafeUrl::parse("https://example.com/api/v1/users").unwrap();
-        let cred = store.get_credentials(&url, None).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
         assert_eq!(cred.username(), Some("specific"));
 
         // Should match the general prefix for non-specific paths
         let url = DisplaySafeUrl::parse("https://example.com/api/v2").unwrap();
-        let cred = store.get_credentials(&url, None).unwrap();
+        let cred = store.get_credentials(&url, None).unwrap().unwrap();
         assert_eq!(cred.username(), Some("general"));
     }
 
@@ -609,17 +643,17 @@ password = "pass2"
         store.insert(service.clone(), user1_creds.clone());
 
         // Should return credentials when username matches
-        let result = store.get_credentials(&url, Some("user1"));
+        let result = store.get_credentials(&url, Some("user1")).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().username(), Some("user1"));
         assert_eq!(result.unwrap().password(), Some("pass1"));
 
         // Should not return credentials when username doesn't match
-        let result = store.get_credentials(&url, Some("user2"));
+        let result = store.get_credentials(&url, Some("user2")).unwrap();
         assert!(result.is_none());
 
         // Should return credentials when no username is specified
-        let result = store.get_credentials(&url, None);
+        let result = store.get_credentials(&url, None).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().username(), Some("user1"));
     }
@@ -647,12 +681,12 @@ password = "pass2"
         let url = DisplaySafeUrl::parse("https://example.com/api/v1/users").unwrap();
 
         // Should match specific credentials when username matches
-        let result = store.get_credentials(&url, Some("specific_user"));
+        let result = store.get_credentials(&url, Some("specific_user")).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().username(), Some("specific_user"));
 
         // Should match the general credentials when requesting general_user (falls back to less specific prefix)
-        let result = store.get_credentials(&url, Some("general_user"));
+        let result = store.get_credentials(&url, Some("general_user")).unwrap();
         assert!(
             result.is_some(),
             "Should match general_user from less specific prefix"
@@ -660,8 +694,37 @@ password = "pass2"
         assert_eq!(result.unwrap().username(), Some("general_user"));
 
         // Should match most specific when no username specified
-        let result = store.get_credentials(&url, None);
+        let result = store.get_credentials(&url, None).unwrap();
         assert!(result.is_some());
         assert_eq!(result.unwrap().username(), Some("specific_user"));
+    }
+
+    #[test]
+    fn test_ambiguous_username_error() {
+        let mut store = TextCredentialStore::default();
+
+        // Add two credentials for the same service with different usernames
+        let service = Service::from_str("https://example.com/api").unwrap();
+        let user1_creds = Credentials::basic(Some("user1".to_string()), Some("pass1".to_string()));
+        let user2_creds = Credentials::basic(Some("user2".to_string()), Some("pass2".to_string()));
+
+        store.insert(service.clone(), user1_creds);
+        store.insert(service.clone(), user2_creds);
+
+        let url = DisplaySafeUrl::parse("https://example.com/api/v1").unwrap();
+
+        // When no username is specified, should return an error because there are multiple matches with same specificity
+        let result = store.get_credentials(&url, None);
+        assert!(result.is_err());
+        assert_eq!(result, Err(LookupError::AmbiguousUsername(url.clone())));
+
+        // When a specific username is provided, should return the correct credentials
+        let result = store.get_credentials(&url, Some("user1")).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("user1"));
+
+        let result = store.get_credentials(&url, Some("user2")).unwrap();
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().username(), Some("user2"));
     }
 }

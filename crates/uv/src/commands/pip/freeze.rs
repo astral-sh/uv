@@ -4,13 +4,16 @@ use std::path::PathBuf;
 use anyhow::Result;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
+use tracing::debug;
 
 use uv_cache::Cache;
-use uv_distribution_types::{Diagnostic, InstalledDistKind, Name};
+use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, Name};
+use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_preview::Preview;
+use uv_normalize::PackageName;
 use uv_python::PythonPreference;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, Target};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::operations::report_target_environment;
@@ -19,13 +22,16 @@ use crate::printer::Printer;
 /// Enumerate the installed packages in the current environment.
 pub(crate) fn pip_freeze(
     exclude_editable: bool,
+    exclude: &FxHashSet<PackageName>,
     strict: bool,
+    dependency_metadata: &DependencyMetadata,
     python: Option<&str>,
     system: bool,
+    target: Option<Target>,
+    prefix: Option<Prefix>,
     paths: Option<Vec<PathBuf>>,
     cache: &Cache,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
@@ -33,8 +39,24 @@ pub(crate) fn pip_freeze(
         EnvironmentPreference::from_system_flag(system, false),
         PythonPreference::default().with_system_flag(system),
         cache,
-        preview,
     )?;
+
+    // Apply any `--target` or `--prefix` directories.
+    let environment = if let Some(target) = target {
+        debug!(
+            "Using `--target` directory at {}",
+            target.root().user_display()
+        );
+        environment.with_target(target)?
+    } else if let Some(prefix) = prefix {
+        debug!(
+            "Using `--prefix` directory at {}",
+            prefix.root().user_display()
+        );
+        environment.with_prefix(prefix)?
+    } else {
+        environment
+    };
 
     report_target_environment(&environment, cache, printer)?;
 
@@ -59,7 +81,15 @@ pub(crate) fn pip_freeze(
     site_packages
         .iter()
         .flat_map(uv_installer::SitePackages::iter)
-        .filter(|dist| !(exclude_editable && dist.is_editable()))
+        .filter(|dist| {
+            if exclude_editable && dist.is_editable() {
+                return false;
+            }
+            if exclude.contains(dist.name()) {
+                return false;
+            }
+            true
+        })
         .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
         .map(|dist| match &dist.kind {
             InstalledDistKind::Registry(dist) => {
@@ -92,7 +122,7 @@ pub(crate) fn pip_freeze(
         let tags = environment.interpreter().tags()?;
 
         for entry in site_packages {
-            for diagnostic in entry.diagnostics(&markers, tags)? {
+            for diagnostic in entry.diagnostics(&markers, tags, dependency_metadata)? {
                 writeln!(
                     printer.stderr(),
                     "{}{} {}",

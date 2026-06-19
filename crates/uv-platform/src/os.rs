@@ -24,18 +24,15 @@ impl Os {
         matches!(self.0, target_lexicon::OperatingSystem::Emscripten)
     }
 
-    pub fn is_macos(&self) -> bool {
+    pub(crate) fn is_macos(self) -> bool {
         matches!(self.0, target_lexicon::OperatingSystem::Darwin(_))
     }
 
     /// Whether this OS can run the other OS.
     pub fn supports(&self, other: Self) -> bool {
-        // Emscripten cannot run on Windows, but all other OSes can run Emscripten.
+        // Emscripten can run on any OS
         if other.is_emscripten() {
-            return !self.is_windows();
-        }
-        if self.is_windows() && other.is_emscripten() {
-            return false;
+            return true;
         }
 
         // Otherwise, we require an exact match
@@ -104,7 +101,7 @@ impl From<&uv_platform_tags::Os> for Os {
                 Self::new(target_lexicon::OperatingSystem::Openbsd)
             }
             uv_platform_tags::Os::Windows => Self::new(target_lexicon::OperatingSystem::Windows),
-            uv_platform_tags::Os::Pyodide { .. } => {
+            uv_platform_tags::Os::Pyodide { .. } | uv_platform_tags::Os::PyEmscripten { .. } => {
                 Self::new(target_lexicon::OperatingSystem::Emscripten)
             }
             uv_platform_tags::Os::Ios { .. } => {

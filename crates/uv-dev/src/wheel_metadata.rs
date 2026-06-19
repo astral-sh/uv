@@ -8,6 +8,7 @@ use uv_cache::{Cache, CacheArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities, RemoteSource};
+use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::ParsedUrl;
 use uv_settings::EnvironmentOptions;
@@ -23,12 +24,15 @@ pub(crate) async fn wheel_metadata(
     args: WheelMetadataArgs,
     environment: EnvironmentOptions,
 ) -> Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init()?;
+    let cache = Cache::try_from(args.cache_args)?.init().await?;
     let client = RegistryClientBuilder::new(
-        BaseClientBuilder::default().timeout(environment.http_timeout),
+        BaseClientBuilder::default()
+            .read_timeout(environment.http_read_timeout)
+            .connect_timeout(environment.http_connect_timeout),
         cache,
     )
-    .build();
+    .build()?;
+    let resolver = GitResolver::default();
     let capabilities = IndexCapabilities::default();
 
     let filename = WheelFilename::from_str(&args.url.filename()?)?;
@@ -44,7 +48,9 @@ pub(crate) async fn wheel_metadata(
                 location: Box::new(archive.url),
                 url: args.url,
             }),
+            &resolver,
             &capabilities,
+            None,
         )
         .await?;
     println!("{metadata:?}");

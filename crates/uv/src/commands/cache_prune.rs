@@ -11,7 +11,7 @@ use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Prune all unreachable objects from the cache.
-pub(crate) fn cache_prune(
+pub(crate) async fn cache_prune(
     ci: bool,
     force: bool,
     cache: Cache,
@@ -37,7 +37,7 @@ pub(crate) fn cache_prune(
                 printer.stderr(),
                 "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
             )?;
-            cache.with_exclusive_lock()?
+            cache.with_exclusive_lock().await?
         }
     };
 

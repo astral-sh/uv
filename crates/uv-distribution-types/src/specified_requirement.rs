@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 
-use uv_git_types::GitReference;
+use uv_git_types::{GitLfs, GitReference};
 use uv_normalize::ExtraName;
 use uv_pep508::{MarkerEnvironment, MarkerTree, UnnamedRequirement};
 use uv_pypi_types::{Hashes, ParsedUrl};
@@ -75,9 +75,10 @@ impl UnresolvedRequirement {
         rev: Option<&str>,
         tag: Option<&str>,
         branch: Option<&str>,
+        lfs: Option<bool>,
         marker: Option<MarkerTree>,
     ) -> Self {
-        #[allow(clippy::manual_map)]
+        #[expect(clippy::manual_map)]
         let git_reference = if let Some(rev) = rev {
             Some(GitReference::from_rev(rev.to_string()))
         } else if let Some(tag) = tag {
@@ -97,7 +98,7 @@ impl UnresolvedRequirement {
                     })
                     .unwrap_or(requirement.marker),
                 source: match requirement.source {
-                    RequirementSource::Git {
+                    RequirementSource::GitDirectory {
                         git,
                         subdirectory,
                         url,
@@ -107,9 +108,37 @@ impl UnresolvedRequirement {
                         } else {
                             git
                         };
-                        RequirementSource::Git {
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
+                        RequirementSource::GitDirectory {
                             git,
                             subdirectory,
+                            url,
+                        }
+                    }
+                    RequirementSource::GitPath {
+                        git,
+                        install_path,
+                        ext,
+                        url,
+                    } => {
+                        let git = if let Some(git_reference) = git_reference {
+                            git.with_reference(git_reference)
+                        } else {
+                            git
+                        };
+                        let git = if let Some(lfs) = lfs {
+                            git.with_lfs(GitLfs::from(lfs))
+                        } else {
+                            git
+                        };
+                        RequirementSource::GitPath {
+                            git,
+                            install_path,
+                            ext,
                             url,
                         }
                     }
@@ -125,12 +154,27 @@ impl UnresolvedRequirement {
                     })
                     .unwrap_or(requirement.marker),
                 url: match requirement.url.parsed_url {
-                    ParsedUrl::Git(mut git) => {
+                    ParsedUrl::GitDirectory(mut git) => {
                         if let Some(git_reference) = git_reference {
                             git.url = git.url.with_reference(git_reference);
                         }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
+                        }
                         VerbatimParsedUrl {
-                            parsed_url: ParsedUrl::Git(git),
+                            parsed_url: ParsedUrl::GitDirectory(git),
+                            verbatim: requirement.url.verbatim,
+                        }
+                    }
+                    ParsedUrl::GitPath(mut git) => {
+                        if let Some(git_reference) = git_reference {
+                            git.url = git.url.with_reference(git_reference);
+                        }
+                        if let Some(lfs) = lfs {
+                            git.url = git.url.with_lfs(GitLfs::from(lfs));
+                        }
+                        VerbatimParsedUrl {
+                            parsed_url: ParsedUrl::GitPath(git),
                             verbatim: requirement.url.verbatim,
                         }
                     }
@@ -138,14 +182,6 @@ impl UnresolvedRequirement {
                 },
                 ..requirement
             }),
-        }
-    }
-
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
-        match self {
-            Self::Named(requirement) => &requirement.extras,
-            Self::Unnamed(requirement) => &requirement.extras,
         }
     }
 
@@ -160,14 +196,6 @@ impl UnresolvedRequirement {
         }
     }
 
-    /// Returns `true` if the requirement is editable.
-    pub fn is_editable(&self) -> bool {
-        match self {
-            Self::Named(requirement) => requirement.is_editable(),
-            Self::Unnamed(requirement) => requirement.url.is_editable(),
-        }
-    }
-
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Option<Hashes> {
         match self {
@@ -177,17 +205,6 @@ impl UnresolvedRequirement {
                 Hashes::parse_fragment(fragment).ok()
             }
         }
-    }
-}
-
-impl NameRequirementSpecification {
-    /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
-        let RequirementSource::Url { ref url, .. } = self.requirement.source else {
-            return None;
-        };
-        let fragment = url.fragment()?;
-        Hashes::parse_fragment(fragment).ok()
     }
 }
 

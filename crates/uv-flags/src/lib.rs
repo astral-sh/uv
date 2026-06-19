@@ -6,11 +6,12 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct EnvironmentFlags: u32 {
         const SKIP_WHEEL_FILENAME_CHECK = 1 << 0;
+        const HIDE_BUILD_OUTPUT = 1 << 1;
     }
 }
 
 /// Initialize the environment flags.
-#[allow(clippy::result_unit_err)]
+#[expect(clippy::result_unit_err)]
 pub fn init(flags: EnvironmentFlags) -> Result<(), ()> {
     FLAGS.set(flags).map_err(|_| ())
 }

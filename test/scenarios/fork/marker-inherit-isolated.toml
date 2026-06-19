@@ -1,0 +1,25 @@
+name = "fork-marker-inherit-isolated"
+description = '''
+This is like `fork-marker-inherit`, but where both `a>=2` and `a<2`
+have a conditional dependency on `b`. For `a>=2`, the conditional
+dependency on `b` has overlap with the `a>=2` marker expression, and
+thus, `b` should be included *only* in the dependencies for `a==2.0.0`.
+As with `fork-marker-inherit`, the `a<2` path should exclude `b==1.0.0`
+since their marker expressions are disjoint.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
+
+[packages.a.versions."1.0.0"]
+requires = ["b ; sys_platform == 'linux'"]
+[packages.a.versions."2.0.0"]
+requires = ["b ; sys_platform == 'linux'"]
+
+[packages.b.versions."1.0.0"]

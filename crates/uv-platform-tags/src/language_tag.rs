@@ -32,6 +32,8 @@ pub enum LanguageTag {
     GraalPy { python_version: (u8, u8) },
     /// Ex) `pyston38`
     Pyston { python_version: (u8, u8) },
+    /// Ex) `cp3`, specifically in `cp3-none-any`
+    CPythonMajor { major: u8 },
 }
 
 impl LanguageTag {
@@ -58,6 +60,7 @@ impl LanguageTag {
             Self::Pyston {
                 python_version: (major, minor),
             } => Some(format!("Pyston {major}.{minor}")),
+            Self::CPythonMajor { major } => Some(format!("CPython {major}")),
         }
     }
 }
@@ -94,6 +97,9 @@ impl std::fmt::Display for LanguageTag {
             } => {
                 write!(f, "pyston{major}{minor}")
             }
+            Self::CPythonMajor { major } => {
+                write!(f, "cp{major}")
+            }
         }
     }
 }
@@ -102,7 +108,7 @@ impl FromStr for LanguageTag {
     type Err = ParseLanguageTagError;
 
     /// Parse a [`LanguageTag`] from a string.
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         /// Parse a Python version from a string (e.g., convert `39` into `(3, 9)`).
         fn parse_python_version(
@@ -181,11 +187,36 @@ impl FromStr for LanguageTag {
                 }
             }
         } else if let Some(cp) = s.strip_prefix("cp") {
-            // Ex) `cp39`
-            let (major, minor) = parse_python_version(cp, "CPython", s)?;
-            Ok(Self::CPython {
-                python_version: (major, minor),
-            })
+            match cp.len() {
+                0 => Err(ParseLanguageTagError::MissingMajorVersion {
+                    implementation: "CPython",
+                    tag: s.to_string(),
+                }),
+                1 => {
+                    // Ex) `cp3`
+                    let major = cp
+                        .chars()
+                        .next()
+                        .ok_or_else(|| ParseLanguageTagError::MissingMajorVersion {
+                            implementation: "CPython",
+                            tag: s.to_string(),
+                        })?
+                        .to_digit(10)
+                        .ok_or_else(|| ParseLanguageTagError::InvalidMajorVersion {
+                            implementation: "CPython",
+                            tag: s.to_string(),
+                        })? as u8;
+                    Ok(Self::CPythonMajor { major })
+                }
+                2 | 3 => {
+                    // Ex) `cp39`, `cp310`
+                    let (major, minor) = parse_python_version(cp, "CPython", s)?;
+                    Ok(Self::CPython {
+                        python_version: (major, minor),
+                    })
+                }
+                _ => Err(ParseLanguageTagError::UnknownFormat(s.to_string())),
+            }
         } else if let Some(pp) = s.strip_prefix("pp") {
             // Ex) `pp39`
             let (major, minor) = parse_python_version(pp, "PyPy", s)?;
@@ -289,6 +320,10 @@ mod tests {
         };
         assert_eq!(LanguageTag::from_str("cp39"), Ok(tag));
         assert_eq!(tag.to_string(), "cp39");
+
+        let tag = LanguageTag::CPythonMajor { major: 3 };
+        assert_eq!(LanguageTag::from_str("cp3"), Ok(tag));
+        assert_eq!(tag.to_string(), "cp3");
 
         assert_eq!(
             LanguageTag::from_str("cp"),

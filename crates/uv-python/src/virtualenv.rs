@@ -8,6 +8,7 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
+use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -33,6 +34,8 @@ pub struct VirtualEnvironment {
 /// A parsed `pyvenv.cfg`
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
+    /// The `PYTHONHOME` directory containing the base Python executable.
+    pub(crate) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
@@ -113,8 +116,10 @@ impl CondaEnvironmentKind {
         // If the environment name is "base" or "root", treat it as a base environment
         //
         // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but in a future breaking release we should remove this special-casing.
-        if current_env == "base" || current_env == "root" {
+        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
+        if !uv_preview::is_enabled(PreviewFeature::SpecialCondaEnvNames)
+            && (current_env == "base" || current_env == "root")
+        {
             return Self::Base;
         }
 
@@ -225,6 +230,7 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
 impl PyVenvConfiguration {
     /// Parse a `pyvenv.cfg` file into a [`PyVenvConfiguration`].
     pub fn parse(cfg: impl AsRef<Path>) -> Result<Self, Error> {
+        let mut home = None;
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
@@ -242,6 +248,9 @@ impl PyVenvConfiguration {
                 continue;
             };
             match key.trim() {
+                "home" => {
+                    home = Some(PathBuf::from(value.trim()));
+                }
                 "virtualenv" => {
                     virtualenv = true;
                 }
@@ -268,6 +277,7 @@ impl PyVenvConfiguration {
         }
 
         Ok(Self {
+            home,
             virtualenv,
             uv,
             relocatable,
@@ -288,7 +298,7 @@ impl PyVenvConfiguration {
     }
 
     /// Returns true if the virtual environment is relocatable.
-    pub fn is_relocatable(&self) -> bool {
+    pub(crate) fn is_relocatable(&self) -> bool {
         self.relocatable
     }
 
@@ -307,12 +317,12 @@ impl PyVenvConfiguration {
         let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
         let mut found = false;
         for line in &mut lines {
-            if let Some((lhs, _)) = line.split_once('=') {
-                if lhs.trim() == key {
-                    *line = Cow::Owned(format!("{key} = {value}"));
-                    found = true;
-                    break;
-                }
+            if let Some((lhs, _)) = line.split_once('=')
+                && lhs.trim() == key
+            {
+                *line = Cow::Owned(format!("{key} = {value}"));
+                found = true;
+                break;
             }
         }
         if !found {

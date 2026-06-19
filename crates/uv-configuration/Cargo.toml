@@ -1,11 +1,10 @@
 [package]
 name = "uv-configuration"
-version = "0.0.1"
-description = "This is a component crate of uv"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -24,17 +23,21 @@ uv-distribution-types = { workspace = true }
 uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
-uv-pep508 = { workspace = true, features = ["schemars"] }
+uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
+
 clap = { workspace = true, features = ["derive"], optional = true }
 either = { workspace = true }
 fs-err = { workspace = true }
 rayon = { workspace = true }
+reqwest = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+tokio = { workspace = true }
 serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -42,6 +45,16 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+insta = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
 default = []
+schemars = [
+  "dep:schemars",
+  "uv-auth/schemars",
+  "uv-distribution-types/schemars",
+  "uv-normalize/schemars",
+  "uv-pep508/schemars",
+  "uv-redacted/schemars",
+]

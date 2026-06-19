@@ -6,13 +6,14 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
+use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
 use uv_redacted::DisplaySafeUrl;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
-    let cache = Cache::temp()?.init()?;
-    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build();
+    let cache = Cache::temp()?.init().await?;
+    let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache).build()?;
 
     // The first run is without cache (the tempdir is empty), the second has the cache from the
     // first run.
@@ -24,8 +25,11 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
             location: Box::new(DisplaySafeUrl::parse(url)?),
             url: VerbatimUrl::from_str(url)?,
         });
+        let resolver = GitResolver::default();
         let capabilities = IndexCapabilities::default();
-        let metadata = client.wheel_metadata(&dist, &capabilities).await?;
+        let metadata = client
+            .wheel_metadata(&dist, &resolver, &capabilities, None)
+            .await?;
         assert_eq!(metadata.version.to_string(), "4.66.1");
     }
 

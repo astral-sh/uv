@@ -13,10 +13,9 @@ use crate::{InstalledMetadata, InstalledVersion, Name};
 /// Note equality and hash operations are only based on the name and canonical version, not the
 /// kind.
 #[derive(Debug, Clone, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum LocalDist {
-    Cached(CachedDist, CanonicalVersion),
-    Installed(InstalledDist, CanonicalVersion),
+    Cached(Box<CachedDist>, CanonicalVersion),
+    Installed(Box<InstalledDist>, CanonicalVersion),
 }
 
 impl LocalDist {
@@ -49,14 +48,14 @@ impl InstalledMetadata for LocalDist {
 impl From<CachedDist> for LocalDist {
     fn from(dist: CachedDist) -> Self {
         let version = CanonicalVersion::from(dist.installed_version());
-        Self::Cached(dist, version)
+        Self::Cached(Box::new(dist), version)
     }
 }
 
 impl From<InstalledDist> for LocalDist {
     fn from(dist: InstalledDist) -> Self {
         let version = CanonicalVersion::from(dist.installed_version());
-        Self::Installed(dist, version)
+        Self::Installed(Box::new(dist), version)
     }
 }
 

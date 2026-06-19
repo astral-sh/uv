@@ -6,12 +6,13 @@ use std::vec;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use thiserror::Error;
+use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, SourceStrategy,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
@@ -21,22 +22,26 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::{Preview, PreviewFeatures};
+use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_shell::{Shell, shlex_posix, shlex_windows};
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_types::{
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
+};
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
-use crate::commands::project::{WorkspacePython, validate_project_requires_python};
+use crate::commands::project::{
+    WorkspacePython, lock_project_environment, validate_project_requires_python,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -58,7 +63,7 @@ enum VenvError {
 }
 
 /// Create a virtual environment.
-#[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn venv(
     project_dir: &Path,
     path: Option<PathBuf>,
@@ -81,49 +86,57 @@ pub(crate) async fn venv(
     no_config: bool,
     no_project: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     relocatable: bool,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(WorkspaceError::Toml(path, err)) => {
-                warn_user!(
-                    "Failed to parse `{}` during environment creation:\n{}",
-                    path.user_display().cyan(),
-                    textwrap::indent(&err.to_string(), "  ")
-                );
-                None
-            }
             Err(err) => {
-                warn_user!("{err}");
+                match err.as_ref() {
+                    WorkspaceErrorKind::MissingProject(_)
+                    | WorkspaceErrorKind::MissingPyprojectToml
+                    | WorkspaceErrorKind::NonWorkspace(_) => {}
+                    WorkspaceErrorKind::Toml(path, err) => {
+                        warn_user!(
+                            "Failed to parse `{}` during environment creation:\n{}",
+                            path.user_display().cyan(),
+                            textwrap::indent(&err.to_string(), "  ")
+                        );
+                    }
+                    _ => warn_user!("{err}"),
+                }
                 None
             }
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
-            .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+    // Only use the project environment path if we're invoked from the root with no explicit path.
+    // This isn't strictly necessary and we may want to change it later, but this avoids a breaking
+    // change when adding project environment support to `uv venv`.
+    let project_environment = project
+        .as_ref()
+        .map(VirtualProject::workspace)
+        .filter(|workspace| path.is_none() && workspace.install_path() == project_dir);
+
+    // Determine the default path; either the virtual environment for the project or `.venv`.
+    let path = path.unwrap_or_else(|| {
+        project_environment.map_or_else(
+            || PathBuf::from(".venv"),
+            |workspace| workspace.venv(Some(false)),
+        )
+    });
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -160,7 +173,6 @@ pub(crate) async fn venv(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&python, false, printer)?;
@@ -190,10 +202,21 @@ pub(crate) async fn venv(
         path.user_display().cyan()
     )?;
 
-    let upgradeable = preview.is_enabled(PreviewFeatures::PYTHON_UPGRADE)
-        && python_request
-            .as_ref()
-            .is_none_or(|request| !request.includes_patch());
+    let upgradeable = python_request
+        .as_ref()
+        .is_none_or(|request| !request.includes_patch());
+
+    // Lock the project environment to avoid synchronization issues.
+    let _lock = if let Some(workspace) = project_environment {
+        lock_project_environment(workspace)
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire project environment lock: {err}");
+            })
+            .ok()
+    } else {
+        None
+    };
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
@@ -205,7 +228,6 @@ pub(crate) async fn venv(
         relocatable,
         seed,
         upgradeable,
-        preview,
     )
     .map_err(VenvError::Creation)?;
 
@@ -221,7 +243,7 @@ pub(crate) async fn venv(
             .keyring(keyring_provider)
             .markers(interpreter.markers())
             .platform(interpreter.platform())
-            .build();
+            .build()?;
 
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
@@ -241,14 +263,13 @@ pub(crate) async fn venv(
 
         // Initialize any shared state.
         let state = SharedState::default();
-        let workspace_cache = WorkspaceCache::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();
         let build_hasher = HashStrategy::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
-        let sources = SourceStrategy::Disabled;
+        let sources = NoSources::All;
 
         // Do not allow builds
         let build_options = BuildOptions::new(NoBinary::None, NoBuild::All);
@@ -275,7 +296,8 @@ pub(crate) async fn venv(
             &build_hasher,
             exclude_newer,
             sources,
-            workspace_cache,
+            SourceTreeEditablePolicy::Project,
+            workspace_cache.clone(),
             concurrency,
             preview,
         );
@@ -300,17 +322,17 @@ pub(crate) async fn venv(
         //
         // Since the virtual environment is empty, and the set of requirements is trivial (no
         // constraints, no editables, etc.), we can use the build dispatch APIs directly.
-        let resolution = build_dispatch
+        let requirements = build_dispatch
             .resolve(&requirements, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
         let installed = build_dispatch
-            .install(&resolution, &venv, &build_stack)
+            .install(&requirements, &venv, &build_stack)
             .await
             .map_err(|err| VenvError::Seed(err.into()))?;
 
         let changelog = Changelog::from_installed(installed);
-        DefaultInstallLogger.on_complete(&changelog, printer)?;
+        DefaultInstallLogger.on_complete(&changelog, printer, DryRun::Disabled)?;
     }
 
     // Determine the appropriate activation command.

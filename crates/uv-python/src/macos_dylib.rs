@@ -5,7 +5,7 @@ use uv_warnings::warn_user;
 
 use crate::managed::ManagedPythonInstallation;
 
-pub fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
+pub(crate) fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
     let output = match std::process::Command::new("install_name_tool")
         .arg("-id")
         .arg(&dylib)

@@ -38,6 +38,7 @@ Ok(
             fork_strategy: RequiresPython,
             exclude_newer: ExcludeNewerWire {
                 exclude_newer: None,
+                exclude_newer_span: None,
                 exclude_newer_package: ExcludeNewerPackage(
                     {},
                 ),

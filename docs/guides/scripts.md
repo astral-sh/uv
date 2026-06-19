@@ -296,7 +296,7 @@ of inline script metadata to limit uv to only considering distributions released
 date. This is useful for improving the reproducibility of your script when run at a later point in
 time.
 
-The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
+The date should be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
 (e.g., `2006-12-02T02:07:43Z`).
 
 ```python title="example.py"

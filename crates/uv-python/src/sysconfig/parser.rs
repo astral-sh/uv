@@ -287,14 +287,14 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": "value1",
             "key2": 42,
             "key3": "multi-part string"
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -314,7 +314,7 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": "value1\"value2\"value3",
@@ -322,7 +322,7 @@ mod tests {
             "key3": "value1\\\"value2\\\"value3",
             "key4": "value1\\\\value2\\\\value3"
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -371,14 +371,14 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": "value1",
             "key2": 42,
             "key3": "multi-part string"
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -396,13 +396,13 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": 12345,
             "key2": -15
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -420,13 +420,13 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": "value with \"escaped quotes\"",
             "key2": "single-quoted 'escaped'"
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -445,12 +445,12 @@ mod tests {
         let result = input.parse::<SysconfigData>().expect("Parsing failed");
         let snapshot = result.to_string_pretty().unwrap();
 
-        insta::assert_snapshot!(snapshot, @r###"
+        insta::assert_snapshot!(snapshot, @r#"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "key1": "multi-line string"
         }
-        "###);
+        "#);
     }
 
     #[test]

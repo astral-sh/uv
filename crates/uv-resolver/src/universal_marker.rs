@@ -359,7 +359,7 @@ impl UniversalMarker {
     /// producing different versions of the same package), then one should
     /// always use a universal marker since it accounts for all possible ways
     /// for a package to be installed.
-    pub fn pep508(self) -> MarkerTree {
+    pub(crate) fn pep508(self) -> MarkerTree {
         self.pep508
     }
 
@@ -408,7 +408,7 @@ impl ConflictMarker {
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
-    pub fn from_conflicts(conflicts: &Conflicts) -> Self {
+    pub(crate) fn from_conflicts(conflicts: &Conflicts) -> Self {
         if conflicts.is_empty() {
             return Self::TRUE;
         }
@@ -426,7 +426,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra or
     /// group (for a specific package) is activated.
-    pub fn from_conflict_item(item: &ConflictItem) -> Self {
+    pub(crate) fn from_conflict_item(item: &ConflictItem) -> Self {
         match *item.kind() {
             ConflictKind::Extra(ref extra) => Self::extra(item.package(), extra),
             ConflictKind::Group(ref group) => Self::group(item.package(), group),
@@ -436,7 +436,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the production
     /// dependencies for the given package are activated.
-    pub fn project(package: &PackageName) -> Self {
+    fn project(package: &PackageName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_project(package));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -446,7 +446,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
-    pub fn extra(package: &PackageName, extra: &ExtraName) -> Self {
+    fn extra(package: &PackageName, extra: &ExtraName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -456,7 +456,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    pub fn group(package: &PackageName, group: &GroupName) -> Self {
+    fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -466,7 +466,7 @@ impl ConflictMarker {
 
     /// Returns a new conflict marker that is the negation of this one.
     #[must_use]
-    pub fn negate(self) -> Self {
+    pub(crate) fn negate(self) -> Self {
         Self {
             marker: self.marker.negate(),
         }
@@ -475,7 +475,7 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the union of `self` and
     /// `other`.
     #[must_use]
-    pub fn or(self, other: Self) -> Self {
+    fn or(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.or(other.marker);
         Self { marker }
@@ -484,32 +484,15 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
-    pub fn and(self, other: Self) -> Self {
+    pub(crate) fn and(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.and(other.marker);
         Self { marker }
     }
 
-    /// Returns a new conflict marker corresponding to the logical implication
-    /// of `self` and the given consequent.
-    ///
-    /// If the conflict marker returned is always `true`, then it can be said
-    /// that `self` implies `consequent`.
-    #[must_use]
-    pub fn implies(self, other: Self) -> Self {
-        let mut marker = self.marker;
-        marker.implies(other.marker);
-        Self { marker }
-    }
-
     /// Returns true if this conflict marker will always evaluate to `true`.
-    pub fn is_true(self) -> bool {
+    pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
-    }
-
-    /// Returns true if this conflict marker will always evaluate to `false`.
-    pub fn is_false(self) -> bool {
-        self.marker.is_false()
     }
 
     /// Returns inclusion and exclusion (respectively) conflict items parsed
@@ -710,8 +693,15 @@ impl<'a> ParsedRawExtra<'a> {
 ///
 /// If a conflict item isn't present in the map of known conflicts, it's assumed to be false in all
 /// environments.
-pub(crate) fn resolve_conflicts(
+/// Resolve unencoded package extra markers and conflict-encoded extra markers in a
+/// [`MarkerTree`] based on the conditions under which each item is known to be true.
+///
+/// When `scope_package` is set, unencoded package extras like `extra == 'cpu'` are interpreted
+/// relative to that package. Conflict-encoded extras and groups are resolved independent of
+/// `scope_package`.
+pub(crate) fn resolve_activated_extras(
     marker: MarkerTree,
+    scope_package: Option<&PackageName>,
     known_conflicts: &FxHashMap<ConflictItem, MarkerTree>,
 ) -> MarkerTree {
     if marker.is_true() || marker.is_false() {
@@ -799,6 +789,25 @@ pub(crate) fn resolve_conflicts(
                                 or.and(conflict_marker.negate());
                                 found = true;
                                 break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Search for an unencoded package extra in the current package scope.
+            if !found {
+                if let Some(package) = scope_package {
+                    let conflict_item = ConflictItem::from((package.clone(), name.clone()));
+                    if let Some(conflict_marker) = known_conflicts.get(&conflict_item) {
+                        match operator {
+                            ExtraOperator::Equal => {
+                                or.and(*conflict_marker);
+                                found = true;
+                            }
+                            ExtraOperator::NotEqual => {
+                                or.and(conflict_marker.negate());
+                                found = true;
                             }
                         }
                     }
@@ -1014,7 +1023,7 @@ mod tests {
     fn resolve() {
         let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
         let cm = MarkerTree::from_str("(python_version >= '3.10' and extra == 'extra-3-pkg-foo') or (python_version < '3.10' and extra != 'extra-3-pkg-foo')").unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
         assert_eq!(
             cm.try_to_string().as_deref(),
             Some(
@@ -1024,7 +1033,7 @@ mod tests {
 
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-foo'")
             .unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
         assert_eq!(
             cm.try_to_string().as_deref(),
             Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
@@ -1032,7 +1041,31 @@ mod tests {
 
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-bar'")
             .unwrap();
-        let cm = resolve_conflicts(cm, &known_conflicts);
+        let cm = resolve_activated_extras(cm, None, &known_conflicts);
+        assert!(cm.is_false());
+    }
+
+    #[test]
+    fn resolve_unencoded_package_extras() {
+        let known_conflicts = create_known_conflicts([("foo", "sys_platform == 'darwin'")]);
+        let package = create_package("pkg");
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'foo'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform == 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra != 'foo'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
+        assert_eq!(
+            cm.try_to_string().as_deref(),
+            Some("python_full_version >= '3.10' and sys_platform != 'darwin'")
+        );
+
+        let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'bar'").unwrap();
+        let cm = resolve_activated_extras(cm, Some(&package), &known_conflicts);
         assert!(cm.is_false());
     }
 }

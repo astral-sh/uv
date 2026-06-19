@@ -3,14 +3,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use dashmap::DashMap;
-use dashmap::mapref::one::Ref;
 use fs_err::tokio as fs;
+use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_fs::LockedFile;
+use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
 use uv_version::version;
@@ -25,6 +24,8 @@ pub enum GitResolverError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
+    LockedFile(#[from] LockedFileError),
+    #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
     #[error("Git operation failed")]
     Git(#[source] anyhow::Error),
@@ -34,19 +35,50 @@ pub enum GitResolverError {
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
 }
 
+/// HTTP settings for fetching a Git repository.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GitHttpSettings {
+    disable_ssl: bool,
+    offline: bool,
+}
+
+impl GitHttpSettings {
+    /// Configure whether certificate verification should be disabled.
+    #[must_use]
+    pub fn with_disabled_ssl(mut self, disable_ssl: bool) -> Self {
+        self.disable_ssl = disable_ssl;
+        self
+    }
+
+    /// Configure whether network access should be disabled.
+    #[must_use]
+    pub fn with_offline(mut self, offline: bool) -> Self {
+        self.offline = offline;
+        self
+    }
+}
+
 /// A resolver for Git repositories.
-#[derive(Default, Clone)]
-pub struct GitResolver(Arc<DashMap<RepositoryReference, GitOid>>);
+#[derive(Clone)]
+pub struct GitResolver(Arc<HashMap<RepositoryReference, GitOid>>);
+
+impl Default for GitResolver {
+    fn default() -> Self {
+        Self(Arc::new(
+            HashMap::builder().resize_mode(ResizeMode::Blocking).build(),
+        ))
+    }
+}
 
 impl GitResolver {
     /// Inserts a new [`GitOid`] for the given [`RepositoryReference`].
     pub fn insert(&self, reference: RepositoryReference, sha: GitOid) {
-        self.0.insert(reference, sha);
+        self.0.pin().insert(reference, sha);
     }
 
     /// Returns the [`GitOid`] for the given [`RepositoryReference`], if it exists.
-    fn get(&self, reference: &RepositoryReference) -> Option<Ref<'_, RepositoryReference, GitOid>> {
-        self.0.get(reference)
+    fn get(&self, reference: &RepositoryReference) -> Option<GitOid> {
+        self.0.pin().get(reference).copied()
     }
 
     /// Return the [`GitOid`] for the given [`GitUrl`], if it is already known.
@@ -59,7 +91,7 @@ impl GitResolver {
         // If we know the precise commit already, return it.
         let reference = RepositoryReference::from(url);
         if let Some(precise) = self.get(&reference) {
-            return Some(*precise);
+            return Some(precise);
         }
 
         None
@@ -144,8 +176,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        disable_ssl: bool,
-        offline: bool,
+        http_settings: GitHttpSettings,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -157,7 +188,7 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
-                Cow::Owned(url.clone().with_precise(*precise))
+                Cow::Owned(url.clone().with_precise(precise))
             } else {
                 Cow::Borrowed(url)
             }
@@ -166,22 +197,24 @@ impl GitResolver {
         // Avoid races between different processes, too.
         let lock_dir = cache.join("locks");
         fs::create_dir_all(&lock_dir).await?;
-        let repository_url = RepositoryUrl::new(url.repository());
+        let repository_url = url.repository().clone();
         let _lock = LockedFile::acquire(
             lock_dir.join(cache_digest(&repository_url)),
+            LockedFileMode::Exclusive,
             &repository_url,
         )
         .await?;
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), cache, offline).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
+                .with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), cache, offline)
+            GitSource::new(url.as_ref().clone(), cache, http_settings.offline)
         };
 
         // If necessary, disable SSL.
-        let source = if disable_ssl {
+        let source = if http_settings.disable_ssl {
             source.dangerous()
         } else {
             source
@@ -215,7 +248,7 @@ impl GitResolver {
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
         let reference = RepositoryReference::from(&url);
         let precise = self.get(&reference)?;
-        Some(url.with_precise(*precise))
+        Some(url.with_precise(precise))
     }
 
     /// Returns `true` if the two Git URLs refer to the same precise commit.
@@ -237,11 +270,11 @@ impl GitResolver {
         }
 
         // Otherwise, the URLs must resolve to the same precise commit.
-        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref).map(|sha| *sha)) else {
+        let Some(a_precise) = a.precise().or_else(|| self.get(&a_ref)) else {
             return false;
         };
 
-        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref).map(|sha| *sha)) else {
+        let Some(b_precise) = b.precise().or_else(|| self.get(&b_ref)) else {
             return false;
         };
 
@@ -269,7 +302,7 @@ pub struct RepositoryReference {
 impl From<&GitUrl> for RepositoryReference {
     fn from(git: &GitUrl) -> Self {
         Self {
-            url: RepositoryUrl::new(git.repository()),
+            url: git.repository().clone(),
             reference: git.reference().clone(),
         }
     }

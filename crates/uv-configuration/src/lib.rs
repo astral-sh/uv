@@ -15,10 +15,12 @@ pub use name_specifiers::*;
 pub use overrides::*;
 pub use package_options::*;
 pub use project_build_backend::*;
+pub use proxy_url::*;
 pub use required_version::*;
 pub use sources::*;
 pub use target_triple::*;
 pub use threading::*;
+
 pub use trusted_host::*;
 pub use trusted_publishing::*;
 pub use vcs::*;
@@ -40,10 +42,12 @@ mod name_specifiers;
 mod overrides;
 mod package_options;
 mod project_build_backend;
+mod proxy_url;
 mod required_version;
 mod sources;
 mod target_triple;
 mod threading;
+
 mod trusted_host;
 mod trusted_publishing;
 mod vcs;

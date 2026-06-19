@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use uv_auth::{
     AccessToken, AuthBackend, Credentials, PyxJwt, PyxOAuthTokens, PyxTokenStore, PyxTokens,
-    Service, TextCredentialStore,
+    Service, TextCredentialStore, is_default_pyx_domain,
 };
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder};
 use uv_distribution_types::IndexUrl;
@@ -17,7 +17,6 @@ use uv_preview::Preview;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 // We retry no more than this many times when polling for login status.
 const STATUS_RETRY_LIMIT: u32 = 60;
@@ -28,12 +27,12 @@ pub(crate) async fn login(
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
-    network_settings: &NetworkSettings,
+    client_builder: BaseClientBuilder<'_>,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     let pyx_store = PyxTokenStore::from_settings()?;
-    if pyx_store.is_known_domain(service.url()) {
+    if pyx_store.is_known_domain(service.url()) || is_default_pyx_domain(service.url()) {
         if username.is_some() {
             bail!("Cannot specify a username when logging in to pyx");
         }
@@ -41,16 +40,9 @@ pub(crate) async fn login(
             bail!("Cannot specify a password when logging in to pyx");
         }
 
-        let client = BaseClientBuilder::new(
-            network_settings.connectivity,
-            network_settings.native_tls,
-            network_settings.allow_insecure_host.clone(),
-            preview,
-            network_settings.timeout,
-            network_settings.retries,
-        )
-        .auth_integration(AuthIntegration::NoAuthMiddleware)
-        .build();
+        let client = client_builder
+            .auth_integration(AuthIntegration::NoAuthMiddleware)
+            .build()?;
 
         let access_token = pyx_login_with_browser(&pyx_store, &client, &printer).await?;
         let jwt = PyxJwt::decode(&access_token)?;
@@ -68,7 +60,7 @@ pub(crate) async fn login(
         return Ok(ExitStatus::Success);
     }
 
-    let backend = AuthBackend::from_settings(preview)?;
+    let backend = AuthBackend::from_settings(preview).await?;
 
     // If the URL includes a known index URL suffix, strip it
     // TODO(zanieb): Use a shared abstraction across `login` and `logout`?
@@ -79,7 +71,7 @@ pub(crate) async fn login(
     };
 
     // Extract credentials from URL if present
-    let url_credentials = Credentials::from_url(&url);
+    let url_credentials = Credentials::from_url(&url)?;
     let url_username = url_credentials.as_ref().and_then(|c| c.username());
     let url_password = url_credentials.as_ref().and_then(|c| c.password());
 

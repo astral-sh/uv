@@ -1,4 +1,0 @@
-INHERIT: mkdocs.template.yml
-
-watch:
-  - mkdocs.template.yml

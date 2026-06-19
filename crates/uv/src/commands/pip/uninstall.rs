@@ -12,7 +12,6 @@ use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
-use uv_preview::Preview;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonPreference};
@@ -24,7 +23,6 @@ use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 /// Uninstall packages from the current environment.
-#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pip_uninstall(
     sources: &[RequirementsSource],
     python: Option<String>,
@@ -37,7 +35,6 @@ pub(crate) async fn pip_uninstall(
     client_builder: &BaseClientBuilder<'_>,
     dry_run: DryRun,
     printer: Printer,
-    preview: Preview,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -55,7 +52,6 @@ pub(crate) async fn pip_uninstall(
         EnvironmentPreference::from_system_flag(system, true),
         PythonPreference::default().with_system_flag(system),
         &cache,
-        preview,
     )?;
 
     report_target_environment(&environment, &cache, printer)?;
@@ -202,8 +198,9 @@ pub(crate) async fn pip_uninstall(
 
     // Uninstall each package.
     if !dry_run.enabled() {
+        let layout = environment.interpreter().layout();
         for distribution in &distributions {
-            let summary = uv_installer::uninstall(distribution).await?;
+            let summary = uv_installer::uninstall(distribution, &layout).await?;
             debug!(
                 "Uninstalled {} ({} file{}, {} director{})",
                 distribution.name(),

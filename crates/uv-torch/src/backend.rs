@@ -49,7 +49,7 @@ use uv_pep440::Version;
 use uv_platform_tags::Os;
 use uv_static::EnvVars;
 
-use crate::{Accelerator, AcceleratorError, AmdGpuArchitecture};
+use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
 
 /// The strategy to use when determining the appropriate PyTorch index.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -113,6 +113,22 @@ pub enum TorchMode {
     Cu90,
     /// Use the PyTorch index for CUDA 8.0.
     Cu80,
+    /// Use the PyTorch index for ROCm 7.2.
+    #[serde(rename = "rocm7.2")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm7.2"))]
+    Rocm72,
+    /// Use the PyTorch index for ROCm 7.1.
+    #[serde(rename = "rocm7.1")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm7.1"))]
+    Rocm71,
+    /// Use the PyTorch index for ROCm 7.0.
+    #[serde(rename = "rocm7.0")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm7.0"))]
+    Rocm70,
+    /// Use the PyTorch index for ROCm 6.4.
+    #[serde(rename = "rocm6.4")]
+    #[cfg_attr(feature = "clap", clap(name = "rocm6.4"))]
+    Rocm64,
     /// Use the PyTorch index for ROCm 6.3.
     #[serde(rename = "rocm6.3")]
     #[cfg_attr(feature = "clap", clap(name = "rocm6.3"))]
@@ -216,35 +232,43 @@ pub enum TorchStrategy {
 
 impl TorchStrategy {
     /// Determine the [`TorchStrategy`] from the given [`TorchMode`], [`Os`], and [`Accelerator`].
+    ///
+    /// The `cuda_driver_version` and `amd_gpu_architecture` overrides, if provided, take
+    /// precedence over system detection and correspond to the `UV_CUDA_DRIVER_VERSION` and
+    /// `UV_AMD_GPU_ARCHITECTURE` environment variables respectively.
     pub fn from_mode(
         mode: TorchMode,
         source: TorchSource,
         os: &Os,
+        cuda_driver_version: Option<Version>,
+        amd_gpu_architecture: Option<AmdGpuArchitecture>,
     ) -> Result<Self, AcceleratorError> {
         let backend = match mode {
-            TorchMode::Auto => match Accelerator::detect()? {
-                Some(Accelerator::Cuda { driver_version }) => {
-                    return Ok(Self::Cuda {
-                        os: os.clone(),
-                        driver_version: driver_version.clone(),
-                        source,
-                    });
+            TorchMode::Auto => {
+                match Accelerator::detect(cuda_driver_version, amd_gpu_architecture)? {
+                    Some(Accelerator::Cuda { driver_version }) => {
+                        return Ok(Self::Cuda {
+                            os: os.clone(),
+                            driver_version: driver_version.clone(),
+                            source,
+                        });
+                    }
+                    Some(Accelerator::Amd { gpu_architecture }) => {
+                        return Ok(Self::Amd {
+                            os: os.clone(),
+                            gpu_architecture,
+                            source,
+                        });
+                    }
+                    Some(Accelerator::Xpu) => {
+                        return Ok(Self::Xpu {
+                            os: os.clone(),
+                            source,
+                        });
+                    }
+                    None => TorchBackend::Cpu,
                 }
-                Some(Accelerator::Amd { gpu_architecture }) => {
-                    return Ok(Self::Amd {
-                        os: os.clone(),
-                        gpu_architecture,
-                        source,
-                    });
-                }
-                Some(Accelerator::Xpu) => {
-                    return Ok(Self::Xpu {
-                        os: os.clone(),
-                        source,
-                    });
-                }
-                None => TorchBackend::Cpu,
-            },
+            }
             TorchMode::Cpu => TorchBackend::Cpu,
             TorchMode::Cu130 => TorchBackend::Cu130,
             TorchMode::Cu129 => TorchBackend::Cu129,
@@ -272,6 +296,10 @@ impl TorchStrategy {
             TorchMode::Cu91 => TorchBackend::Cu91,
             TorchMode::Cu90 => TorchBackend::Cu90,
             TorchMode::Cu80 => TorchBackend::Cu80,
+            TorchMode::Rocm72 => TorchBackend::Rocm72,
+            TorchMode::Rocm71 => TorchBackend::Rocm71,
+            TorchMode::Rocm70 => TorchBackend::Rocm70,
+            TorchMode::Rocm64 => TorchBackend::Rocm64,
             TorchMode::Rocm63 => TorchBackend::Rocm63,
             TorchMode::Rocm624 => TorchBackend::Rocm624,
             TorchMode::Rocm62 => TorchBackend::Rocm62,
@@ -305,48 +333,66 @@ impl TorchStrategy {
             TorchSource::PyTorch => {
                 matches!(
                     package_name.as_str(),
-                    "torch"
-                        | "torcharrow"
-                        | "torchaudio"
-                        | "torchcsprng"
-                        | "torchdata"
-                        | "torchdistx"
-                        | "torchserve"
-                        | "torchtext"
-                        | "torchvision"
-                        | "triton"
+                    "fbgemm-gpu"
+                        | "fbgemm-gpu-genai"
                         | "pytorch-triton"
                         | "pytorch-triton-rocm"
                         | "pytorch-triton-xpu"
+                        | "torch"
+                        | "torch-tensorrt"
+                        | "torchao"
+                        | "torcharrow"
+                        | "torchaudio"
+                        | "torchcodec"
+                        | "torchcsprng"
+                        | "torchdistx"
+                        | "torchrec"
+                        | "torchserve"
+                        | "torchtext"
+                        | "torchtune"
+                        | "torchvision"
+                        | "triton"
+                        | "triton-rocm"
+                        | "triton-xpu"
+                        | "xformers"
                 )
             }
             TorchSource::Pyx => {
                 matches!(
                     package_name.as_str(),
                     "deepspeed"
+                        | "fbgemm-gpu"
+                        | "fbgemm-gpu-genai"
                         | "flash-attn"
                         | "flash-attn-3"
                         | "megablocks"
                         | "natten"
                         | "pyg-lib"
+                        | "pytorch-triton"
+                        | "pytorch-triton-rocm"
+                        | "pytorch-triton-xpu"
+                        | "torch"
                         | "torch-cluster"
                         | "torch-scatter"
                         | "torch-sparse"
                         | "torch-spline-conv"
-                        | "vllm"
-                        | "torch"
+                        | "torch-tensorrt"
+                        | "torchao"
                         | "torcharrow"
                         | "torchaudio"
+                        | "torchcodec"
                         | "torchcsprng"
-                        | "torchdata"
                         | "torchdistx"
+                        | "torchrec"
                         | "torchserve"
                         | "torchtext"
+                        | "torchtune"
                         | "torchvision"
                         | "triton"
-                        | "pytorch-triton"
-                        | "pytorch-triton-rocm"
-                        | "pytorch-triton-xpu"
+                        | "triton-rocm"
+                        | "triton-xpu"
+                        | "vllm"
+                        | "xformers"
                 )
             }
         }
@@ -360,20 +406,26 @@ impl TorchStrategy {
     pub fn has_system_dependency(&self, package_name: &PackageName) -> bool {
         matches!(
             package_name.as_str(),
-            "flash-attn"
+            "deepspeed"
+                | "fbgemm-gpu"
+                | "fbgemm-gpu-genai"
+                | "flash-attn"
                 | "flash-attn-3"
                 | "megablocks"
                 | "natten"
-                | "deepspeed"
-                | "vllm"
                 | "torch"
+                | "torch-tensorrt"
+                | "torchao"
                 | "torcharrow"
                 | "torchaudio"
+                | "torchcodec"
                 | "torchcsprng"
-                | "torchdata"
                 | "torchdistx"
+                | "torchrec"
                 | "torchtext"
+                | "torchtune"
                 | "torchvision"
+                | "vllm"
         )
     }
 
@@ -425,6 +477,7 @@ impl TorchStrategy {
                     | Os::Haiku { .. }
                     | Os::Android { .. }
                     | Os::Pyodide { .. }
+                    | Os::PyEmscripten { .. }
                     | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                         TorchBackend::Cpu.index_url(*source),
                     ))),
@@ -457,6 +510,7 @@ impl TorchStrategy {
                 | Os::Haiku { .. }
                 | Os::Android { .. }
                 | Os::Pyodide { .. }
+                | Os::PyEmscripten { .. }
                 | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                     TorchBackend::Cpu.index_url(*source),
                 ))),
@@ -475,6 +529,7 @@ impl TorchStrategy {
                 | Os::Haiku { .. }
                 | Os::Android { .. }
                 | Os::Pyodide { .. }
+                | Os::PyEmscripten { .. }
                 | Os::Ios { .. } => Either::Right(Either::Left(std::iter::once(
                     TorchBackend::Cpu.index_url(*source),
                 ))),
@@ -516,6 +571,10 @@ pub enum TorchBackend {
     Cu91,
     Cu90,
     Cu80,
+    Rocm72,
+    Rocm71,
+    Rocm70,
+    Rocm64,
     Rocm63,
     Rocm624,
     Rocm62,
@@ -647,6 +706,22 @@ impl TorchBackend {
                 TorchSource::PyTorch => &PYTORCH_CU80_INDEX_URL,
                 TorchSource::Pyx => &PYX_CU80_INDEX_URL,
             },
+            Self::Rocm72 => match source {
+                TorchSource::PyTorch => &PYTORCH_ROCM72_INDEX_URL,
+                TorchSource::Pyx => &PYX_ROCM72_INDEX_URL,
+            },
+            Self::Rocm71 => match source {
+                TorchSource::PyTorch => &PYTORCH_ROCM71_INDEX_URL,
+                TorchSource::Pyx => &PYX_ROCM71_INDEX_URL,
+            },
+            Self::Rocm70 => match source {
+                TorchSource::PyTorch => &PYTORCH_ROCM70_INDEX_URL,
+                TorchSource::Pyx => &PYX_ROCM70_INDEX_URL,
+            },
+            Self::Rocm64 => match source {
+                TorchSource::PyTorch => &PYTORCH_ROCM64_INDEX_URL,
+                TorchSource::Pyx => &PYX_ROCM64_INDEX_URL,
+            },
             Self::Rocm63 => match source {
                 TorchSource::PyTorch => &PYTORCH_ROCM63_INDEX_URL,
                 TorchSource::Pyx => &PYX_ROCM63_INDEX_URL,
@@ -774,6 +849,10 @@ impl TorchBackend {
             Self::Cu91 => Some(Version::new([9, 1])),
             Self::Cu90 => Some(Version::new([9, 0])),
             Self::Cu80 => Some(Version::new([8, 0])),
+            Self::Rocm72 => None,
+            Self::Rocm71 => None,
+            Self::Rocm70 => None,
+            Self::Rocm64 => None,
             Self::Rocm63 => None,
             Self::Rocm624 => None,
             Self::Rocm62 => None,
@@ -824,6 +903,10 @@ impl TorchBackend {
             Self::Cu91 => None,
             Self::Cu90 => None,
             Self::Cu80 => None,
+            Self::Rocm72 => Some(Version::new([7, 2])),
+            Self::Rocm71 => Some(Version::new([7, 1])),
+            Self::Rocm70 => Some(Version::new([7, 0])),
+            Self::Rocm64 => Some(Version::new([6, 4])),
             Self::Rocm63 => Some(Version::new([6, 3])),
             Self::Rocm624 => Some(Version::new([6, 2, 4])),
             Self::Rocm62 => Some(Version::new([6, 2])),
@@ -877,6 +960,10 @@ impl FromStr for TorchBackend {
             "cu91" => Ok(Self::Cu91),
             "cu90" => Ok(Self::Cu90),
             "cu80" => Ok(Self::Cu80),
+            "rocm7.2" => Ok(Self::Rocm72),
+            "rocm7.1" => Ok(Self::Rocm71),
+            "rocm7.0" => Ok(Self::Rocm70),
+            "rocm6.4" => Ok(Self::Rocm64),
             "rocm6.3" => Ok(Self::Rocm63),
             "rocm6.2.4" => Ok(Self::Rocm624),
             "rocm6.2" => Ok(Self::Rocm62),
@@ -991,9 +1078,62 @@ static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 26]> = LazyLock
 ///
 /// AMD also provides a compatibility matrix: <https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html>;
 /// however, this list includes a broader array of GPUs than those in the matrix.
-static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 44]> =
+static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]> =
     LazyLock::new(|| {
         [
+            // ROCm 7.2
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx900),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx906),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx950),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1150),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1151),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm72, AmdGpuArchitecture::Gfx1201),
+            // ROCm 7.1
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx900),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx906),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx950),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm71, AmdGpuArchitecture::Gfx1201),
+            // ROCm 7.0
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx900),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx906),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx950),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm70, AmdGpuArchitecture::Gfx1201),
+            // ROCm 6.4
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx900),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx906),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx908),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx90a),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx942),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1030),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1100),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1101),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1102),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1200),
+            (TorchBackend::Rocm64, AmdGpuArchitecture::Gfx1201),
             // ROCm 6.3
             (TorchBackend::Rocm63, AmdGpuArchitecture::Gfx900),
             (TorchBackend::Rocm63, AmdGpuArchitecture::Gfx906),
@@ -1100,6 +1240,14 @@ static PYTORCH_CU90_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap());
 static PYTORCH_CU80_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap());
+static PYTORCH_ROCM72_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.2").unwrap());
+static PYTORCH_ROCM71_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.1").unwrap());
+static PYTORCH_ROCM70_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm7.0").unwrap());
+static PYTORCH_ROCM64_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.4").unwrap());
 static PYTORCH_ROCM63_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/rocm6.3").unwrap());
 static PYTORCH_ROCM624_INDEX_URL: LazyLock<IndexUrl> =
@@ -1247,6 +1395,22 @@ static PYX_CU90_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
 static PYX_CU80_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
     let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu80")).unwrap()
+});
+static PYX_ROCM72_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
+    let api_base_url = &*PYX_API_BASE_URL;
+    IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm7.2")).unwrap()
+});
+static PYX_ROCM71_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
+    let api_base_url = &*PYX_API_BASE_URL;
+    IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm7.1")).unwrap()
+});
+static PYX_ROCM70_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
+    let api_base_url = &*PYX_API_BASE_URL;
+    IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm7.0")).unwrap()
+});
+static PYX_ROCM64_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
+    let api_base_url = &*PYX_API_BASE_URL;
+    IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/rocm6.4")).unwrap()
 });
 static PYX_ROCM63_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
     let api_base_url = &*PYX_API_BASE_URL;

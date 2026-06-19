@@ -84,158 +84,262 @@ pub enum TargetTriple {
     Riscv64UnknownLinuxGnu,
 
     /// An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux2014"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux2014", alias = "manylinux2014_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux2014")]
     #[serde(alias = "x8664-manylinux2014")]
+    #[serde(alias = "manylinux2014_x86_64")]
     X8664Manylinux2014,
 
     /// An `x86_64` target for the `manylinux_2_17` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_17", alias = "manylinux_2_17_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_17")]
     #[serde(alias = "x8664-manylinux217")]
+    #[serde(alias = "manylinux_2_17_x86_64")]
     X8664Manylinux217,
 
     /// An `x86_64` target for the `manylinux_2_28` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_28", alias = "manylinux_2_28_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_28")]
     #[serde(alias = "x8664-manylinux228")]
+    #[serde(alias = "manylinux_2_28_x86_64")]
     X8664Manylinux228,
 
     /// An `x86_64` target for the `manylinux_2_31` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_31"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_31", alias = "manylinux_2_31_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_31")]
     #[serde(alias = "x8664-manylinux231")]
+    #[serde(alias = "manylinux_2_31_x86_64")]
     X8664Manylinux231,
 
     /// An `x86_64` target for the `manylinux_2_32` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_32"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_32", alias = "manylinux_2_32_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_32")]
     #[serde(alias = "x8664-manylinux232")]
+    #[serde(alias = "manylinux_2_32_x86_64")]
     X8664Manylinux232,
 
     /// An `x86_64` target for the `manylinux_2_33` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_33"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_33", alias = "manylinux_2_33_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_33")]
     #[serde(alias = "x8664-manylinux233")]
+    #[serde(alias = "manylinux_2_33_x86_64")]
     X8664Manylinux233,
 
     /// An `x86_64` target for the `manylinux_2_34` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_34"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_34", alias = "manylinux_2_34_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_34")]
     #[serde(alias = "x8664-manylinux234")]
+    #[serde(alias = "manylinux_2_34_x86_64")]
     X8664Manylinux234,
 
     /// An `x86_64` target for the `manylinux_2_35` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_35"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_35", alias = "manylinux_2_35_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_35")]
     #[serde(alias = "x8664-manylinux235")]
+    #[serde(alias = "manylinux_2_35_x86_64")]
     X8664Manylinux235,
 
     /// An `x86_64` target for the `manylinux_2_36` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_36"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_36", alias = "manylinux_2_36_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_36")]
     #[serde(alias = "x8664-manylinux236")]
+    #[serde(alias = "manylinux_2_36_x86_64")]
     X8664Manylinux236,
 
     /// An `x86_64` target for the `manylinux_2_37` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_37"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_37", alias = "manylinux_2_37_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_37")]
     #[serde(alias = "x8664-manylinux237")]
+    #[serde(alias = "manylinux_2_37_x86_64")]
     X8664Manylinux237,
 
     /// An `x86_64` target for the `manylinux_2_38` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_38"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_38", alias = "manylinux_2_38_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_38")]
     #[serde(alias = "x8664-manylinux238")]
+    #[serde(alias = "manylinux_2_38_x86_64")]
     X8664Manylinux238,
 
     /// An `x86_64` target for the `manylinux_2_39` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_39"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_39", alias = "manylinux_2_39_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_39")]
     #[serde(alias = "x8664-manylinux239")]
+    #[serde(alias = "manylinux_2_39_x86_64")]
     X8664Manylinux239,
 
     /// An `x86_64` target for the `manylinux_2_40` platform.
-    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_40"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "x86_64-manylinux_2_40", alias = "manylinux_2_40_x86_64")
+    )]
     #[serde(rename = "x86_64-manylinux_2_40")]
     #[serde(alias = "x8664-manylinux240")]
+    #[serde(alias = "manylinux_2_40_x86_64")]
     X8664Manylinux240,
 
     /// An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux2014"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux2014", alias = "manylinux2014_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux2014")]
+    #[serde(alias = "manylinux2014_aarch64")]
     Aarch64Manylinux2014,
 
     /// An ARM64 target for the `manylinux_2_17` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_17", alias = "manylinux_2_17_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_17")]
     #[serde(alias = "aarch64-manylinux217")]
+    #[serde(alias = "manylinux_2_17_aarch64")]
     Aarch64Manylinux217,
 
     /// An ARM64 target for the `manylinux_2_28` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_28", alias = "manylinux_2_28_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_28")]
     #[serde(alias = "aarch64-manylinux228")]
+    #[serde(alias = "manylinux_2_28_aarch64")]
     Aarch64Manylinux228,
 
     /// An ARM64 target for the `manylinux_2_31` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_31"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_31", alias = "manylinux_2_31_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_31")]
     #[serde(alias = "aarch64-manylinux231")]
+    #[serde(alias = "manylinux_2_31_aarch64")]
     Aarch64Manylinux231,
 
     /// An ARM64 target for the `manylinux_2_32` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_32"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_32", alias = "manylinux_2_32_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_32")]
     #[serde(alias = "aarch64-manylinux232")]
+    #[serde(alias = "manylinux_2_32_aarch64")]
     Aarch64Manylinux232,
 
     /// An ARM64 target for the `manylinux_2_33` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_33"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_33", alias = "manylinux_2_33_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_33")]
     #[serde(alias = "aarch64-manylinux233")]
+    #[serde(alias = "manylinux_2_33_aarch64")]
     Aarch64Manylinux233,
 
     /// An ARM64 target for the `manylinux_2_34` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_34"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_34", alias = "manylinux_2_34_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_34")]
     #[serde(alias = "aarch64-manylinux234")]
+    #[serde(alias = "manylinux_2_34_aarch64")]
     Aarch64Manylinux234,
 
     /// An ARM64 target for the `manylinux_2_35` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_35"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_35", alias = "manylinux_2_35_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_35")]
     #[serde(alias = "aarch64-manylinux235")]
+    #[serde(alias = "manylinux_2_35_aarch64")]
     Aarch64Manylinux235,
 
     /// An ARM64 target for the `manylinux_2_36` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_36"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_36", alias = "manylinux_2_36_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_36")]
     #[serde(alias = "aarch64-manylinux236")]
+    #[serde(alias = "manylinux_2_36_aarch64")]
     Aarch64Manylinux236,
 
     /// An ARM64 target for the `manylinux_2_37` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_37"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_37", alias = "manylinux_2_37_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_37")]
     #[serde(alias = "aarch64-manylinux237")]
+    #[serde(alias = "manylinux_2_37_aarch64")]
     Aarch64Manylinux237,
 
     /// An ARM64 target for the `manylinux_2_38` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_38"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_38", alias = "manylinux_2_38_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_38")]
     #[serde(alias = "aarch64-manylinux238")]
+    #[serde(alias = "manylinux_2_38_aarch64")]
     Aarch64Manylinux238,
 
     /// An ARM64 target for the `manylinux_2_39` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_39"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_39", alias = "manylinux_2_39_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_39")]
     #[serde(alias = "aarch64-manylinux239")]
+    #[serde(alias = "manylinux_2_39_aarch64")]
     Aarch64Manylinux239,
 
     /// An ARM64 target for the `manylinux_2_40` platform.
-    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_40"))]
+    #[cfg_attr(
+        feature = "clap",
+        value(name = "aarch64-manylinux_2_40", alias = "manylinux_2_40_aarch64")
+    )]
     #[serde(rename = "aarch64-manylinux_2_40")]
     #[serde(alias = "aarch64-manylinux240")]
+    #[serde(alias = "manylinux_2_40_aarch64")]
     Aarch64Manylinux240,
 
     /// An ARM64 Android target.
@@ -255,8 +359,14 @@ pub enum TargetTriple {
     X8664LinuxAndroid,
 
     /// A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.
+    /// See <https://pyodide.org/en/stable/development/abi/312.html>
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
     Wasm32Pyodide2024,
+
+    /// A wasm32 target using the Pyodide 2025 platform. Meant for use with Python 3.13.
+    /// See <https://pyodide.org/en/stable/development/abi/313.html>
+    #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2025"))]
+    Wasm32Pyodide2025,
 
     /// An ARM64 target for iOS device
     ///
@@ -520,6 +630,13 @@ impl TargetTriple {
                 },
                 Arch::Wasm32,
             ),
+            Self::Wasm32Pyodide2025 => Platform::new(
+                Os::Pyodide {
+                    major: 2025,
+                    minor: 0,
+                },
+                Arch::Wasm32,
+            ),
             Self::Aarch64LinuxAndroid => {
                 let api_level = android_api_level().map_or(24, |api_level| {
                     debug!("Found Android API level: {}", api_level);
@@ -580,7 +697,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_machine` value for the target.
-    pub fn platform_machine(self) -> &'static str {
+    fn platform_machine(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "x86_64",
             Self::Aarch64PcWindowsMsvc => "ARM64",
@@ -621,6 +738,7 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => "aarch64",
             Self::X8664LinuxAndroid => "x86_64",
             Self::Wasm32Pyodide2024 => "wasm32",
+            Self::Wasm32Pyodide2025 => "wasm32",
             Self::Arm64Ios => "arm64",
             Self::Arm64IosSimulator => "arm64",
             Self::X8664IosSimulator => "x86_64",
@@ -628,7 +746,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_system` value for the target.
-    pub fn platform_system(self) -> &'static str {
+    fn platform_system(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "Windows",
             Self::Aarch64PcWindowsMsvc => "Windows",
@@ -669,6 +787,7 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => "Android",
             Self::X8664LinuxAndroid => "Android",
             Self::Wasm32Pyodide2024 => "Emscripten",
+            Self::Wasm32Pyodide2025 => "Emscripten",
             Self::Arm64Ios => "iOS",
             Self::Arm64IosSimulator => "iOS",
             Self::X8664IosSimulator => "iOS",
@@ -676,7 +795,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_version` value for the target.
-    pub fn platform_version(self) -> &'static str {
+    fn platform_version(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
@@ -720,6 +839,7 @@ impl TargetTriple {
             // https://github.com/emscripten-core/emscripten/blob/4.0.8/system/lib/libc/emscripten_syscall_stubs.c#L63
             // It doesn't really seem to mean anything? But for completeness we include it here.
             Self::Wasm32Pyodide2024 => "#1",
+            Self::Wasm32Pyodide2025 => "#1",
             Self::Arm64Ios => "",
             Self::Arm64IosSimulator => "",
             Self::X8664IosSimulator => "",
@@ -727,7 +847,7 @@ impl TargetTriple {
     }
 
     /// Return the `platform_release` value for the target.
-    pub fn platform_release(self) -> &'static str {
+    fn platform_release(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "",
             Self::Aarch64PcWindowsMsvc => "",
@@ -768,8 +888,10 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => "",
             Self::X8664LinuxAndroid => "",
             // This is the Emscripten compiler version for Pyodide 2024.
-            // See https://pyodide.org/en/stable/development/abi.html#pyodide-2024-0
+            // See https://pyodide.org/en/stable/development/abi/312.html
             Self::Wasm32Pyodide2024 => "3.1.58",
+            // See https://pyodide.org/en/stable/development/abi/313.html
+            Self::Wasm32Pyodide2025 => "4.0.9",
             Self::Arm64Ios => "",
             Self::Arm64IosSimulator => "",
             Self::X8664IosSimulator => "",
@@ -777,7 +899,7 @@ impl TargetTriple {
     }
 
     /// Return the `os_name` value for the target.
-    pub fn os_name(self) -> &'static str {
+    fn os_name(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "nt",
             Self::Aarch64PcWindowsMsvc => "nt",
@@ -818,6 +940,7 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => "posix",
             Self::X8664LinuxAndroid => "posix",
             Self::Wasm32Pyodide2024 => "posix",
+            Self::Wasm32Pyodide2025 => "posix",
             Self::Arm64Ios => "posix",
             Self::Arm64IosSimulator => "posix",
             Self::X8664IosSimulator => "posix",
@@ -825,7 +948,7 @@ impl TargetTriple {
     }
 
     /// Return the `sys_platform` value for the target.
-    pub fn sys_platform(self) -> &'static str {
+    fn sys_platform(self) -> &'static str {
         match self {
             Self::Windows | Self::X8664PcWindowsMsvc => "win32",
             Self::Aarch64PcWindowsMsvc => "win32",
@@ -866,6 +989,7 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => "android",
             Self::X8664LinuxAndroid => "android",
             Self::Wasm32Pyodide2024 => "emscripten",
+            Self::Wasm32Pyodide2025 => "emscripten",
             Self::Arm64Ios => "ios",
             Self::Arm64IosSimulator => "ios",
             Self::X8664IosSimulator => "ios",
@@ -914,6 +1038,7 @@ impl TargetTriple {
             Self::Aarch64LinuxAndroid => false,
             Self::X8664LinuxAndroid => false,
             Self::Wasm32Pyodide2024 => false,
+            Self::Wasm32Pyodide2025 => false,
             Self::Arm64Ios => false,
             Self::Arm64IosSimulator => false,
             Self::X8664IosSimulator => false,

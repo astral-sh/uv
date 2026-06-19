@@ -98,6 +98,12 @@ impl Manifest {
         self
     }
 
+    #[must_use]
+    pub fn with_lookaheads(mut self, lookaheads: Vec<RequestedRequirements>) -> Self {
+        self.lookaheads = lookaheads;
+        self
+    }
+
     /// Return an iterator over all requirements, constraints, and overrides, in priority order,
     /// such that requirements come first, followed by constraints, followed by overrides.
     ///
@@ -105,7 +111,7 @@ impl Manifest {
     /// - Determining which requirements should allow yanked versions.
     /// - Determining which requirements should allow pre-release versions (e.g., `torch>=2.2.0a1`).
     /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
-    pub fn requirements<'a>(
+    pub(crate) fn requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -115,7 +121,7 @@ impl Manifest {
     }
 
     /// Like [`Self::requirements`], but without the overrides.
-    pub fn requirements_no_overrides<'a>(
+    pub(crate) fn requirements_no_overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -166,7 +172,7 @@ impl Manifest {
     }
 
     /// Only the overrides from [`Self::requirements`].
-    pub fn overrides<'a>(
+    pub(crate) fn overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -205,7 +211,7 @@ impl Manifest {
     /// At time of writing, this is used for:
     /// - Determining which packages should use the "lowest-compatible version" of a package, when
     ///   the `lowest-direct` strategy is in use.
-    pub fn user_requirements<'a>(
+    pub(crate) fn user_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -241,31 +247,6 @@ impl Manifest {
                 ))
             }
         }
-    }
-
-    /// Returns an iterator over the direct requirements, with overrides applied.
-    ///
-    /// At time of writing, this is used for:
-    /// - Determining which packages should have development dependencies included in the
-    ///   resolution (assuming the user enabled development dependencies).
-    pub fn direct_requirements<'a>(
-        &'a self,
-        env: &'a ResolverEnvironment,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
-        self.overrides
-            .apply(self.requirements.iter())
-            .filter(move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-    }
-
-    /// Apply the overrides and constraints to a set of requirements.
-    ///
-    /// Constraints are always applied _on top_ of overrides, such that constraints are applied
-    /// even if a requirement is overridden.
-    pub fn apply<'a>(
-        &'a self,
-        requirements: impl IntoIterator<Item = &'a Requirement>,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.constraints.apply(self.overrides.apply(requirements))
     }
 
     /// Returns the number of input requirements.

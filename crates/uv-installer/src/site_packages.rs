@@ -8,9 +8,9 @@ use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_distribution_types::{
-    ConfigSettings, Diagnostic, ExtraBuildRequires, ExtraBuildVariables, InstalledDist,
-    InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings, Requirement,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
+    InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
+    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -165,7 +165,7 @@ impl SitePackages {
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.
-    pub fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
+    pub(crate) fn remove_packages(&mut self, name: &PackageName) -> Vec<InstalledDist> {
         let Some(indexes) = self.by_name.get(name) else {
             return Vec::new();
         };
@@ -187,7 +187,7 @@ impl SitePackages {
     }
 
     /// Returns `true` if there are any installed packages.
-    pub fn any(&self) -> bool {
+    pub(crate) fn any(&self) -> bool {
         self.distributions.iter().any(Option::is_some)
     }
 
@@ -196,6 +196,7 @@ impl SitePackages {
         &self,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
+        dependency_metadata: &DependencyMetadata,
     ) -> Result<Vec<SitePackagesDiagnostic>> {
         let mut diagnostics = Vec::new();
 
@@ -225,12 +226,19 @@ impl SitePackages {
                 };
 
                 // Determine the dependencies for the given package.
-                let Ok(metadata) = distribution.read_metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
-                        package: package.clone(),
-                        path: distribution.install_path().to_owned(),
-                    });
-                    continue;
+                let metadata = if let Some(metadata) =
+                    dependency_metadata.get(package, Some(distribution.version()))
+                {
+                    Cow::Owned(metadata)
+                } else {
+                    let Ok(metadata) = distribution.read_metadata() else {
+                        diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
+                            package: package.clone(),
+                            path: distribution.install_path().to_owned(),
+                        });
+                        continue;
+                    };
+                    Cow::Borrowed(metadata)
                 };
 
                 // Verify that the package is compatible with the current Python version.
@@ -485,6 +493,7 @@ impl SitePackages {
                             name,
                             distribution,
                             &requirement.source,
+                            None,
                             installation,
                             tags,
                             config_settings,
@@ -508,6 +517,7 @@ impl SitePackages {
                                 name,
                                 distribution,
                                 &constraint.source,
+                                None,
                                 installation,
                                 tags,
                                 config_settings,

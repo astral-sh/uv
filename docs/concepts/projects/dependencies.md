@@ -350,6 +350,31 @@ dependencies = ["langchain"]
 langchain = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/langchain" }
 ```
 
+Support for [Git LFS](https://git-lfs.com) is also configurable per source. By default, Git LFS
+objects will not be fetched.
+
+```console
+$ uv add --lfs git+https://github.com/astral-sh/lfs-cowsay
+```
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["lfs-cowsay"]
+
+[tool.uv.sources]
+lfs-cowsay = { git = "https://github.com/astral-sh/lfs-cowsay", lfs = true }
+```
+
+- When `lfs = true`, uv will always fetch LFS objects for this Git source.
+- When `lfs = false`, uv will never fetch LFS objects for this Git source.
+- When omitted, the `UV_GIT_LFS` environment variable is used for all Git sources without an
+  explicit `lfs` configuration.
+
+!!! important
+
+    Ensure Git LFS is installed and configured on your system before attempting to install sources
+    using Git LFS, otherwise a build failure can occur.
+
 ### URL
 
 To add a URL source, provide a `https://` URL to either a wheel (ending in `.whl`) or a source
@@ -517,7 +542,7 @@ explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 ```
 
@@ -605,7 +630,7 @@ url = "https://download.pytorch.org/whl/cpu"
 
 [[tool.uv.index]]
 name = "torch-gpu"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu130"
 ```
 
 ## Development dependencies
@@ -834,9 +859,9 @@ uv allows dependencies to be "virtual", in which the dependency itself is not in
 By default, dependencies are never virtual.
 
 A dependency with a [`path` source](#path) can be virtual if it explicitly sets
-[`tool.uv.package = false`](../../reference/settings.md#package). Unlike working _in_ the dependent
-project with uv, the package will be built even if a [build system](./config.md#build-systems) is
-not declared.
+[`tool.uv.package = false`](../../reference/settings.md#package). Without this setting, uv treats
+the path dependency as a normal package and will attempt to build it, even if the project does not
+declare a [build system](./config.md#build-systems).
 
 To treat a dependency as virtual, set `package = false` on the source:
 
@@ -860,8 +885,9 @@ bar = { path = "../projects/bar", package = true }
 ```
 
 Similarly, a dependency with a [`workspace` source](#workspace-member) can be virtual if it
-explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). The workspace
-member will be built even if a [build system](./config.md#build-systems) is not declared.
+explicitly sets [`tool.uv.package = false`](../../reference/settings.md#package). Without this
+setting, the workspace member will be built even if a [build system](./config.md#build-systems) is
+not declared.
 
 Workspace members that are _not_ dependencies can be virtual by default, e.g., if the parent
 `pyproject.toml` is:

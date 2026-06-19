@@ -52,26 +52,26 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
-        if let Some(major) = version.release().first() {
-            if u8::try_from(*major).is_err() {
-                return Err(format!(
-                    "Python version `{s}` has an invalid major version ({major})"
-                ));
-            }
+        if let Some(major) = version.release().first()
+            && u8::try_from(*major).is_err()
+        {
+            return Err(format!(
+                "Python version `{s}` has an invalid major version ({major})"
+            ));
         }
-        if let Some(minor) = version.release().get(1) {
-            if u8::try_from(*minor).is_err() {
-                return Err(format!(
-                    "Python version `{s}` has an invalid minor version ({minor})"
-                ));
-            }
+        if let Some(minor) = version.release().get(1)
+            && u8::try_from(*minor).is_err()
+        {
+            return Err(format!(
+                "Python version `{s}` has an invalid minor version ({minor})"
+            ));
         }
-        if let Some(patch) = version.release().get(2) {
-            if u8::try_from(*patch).is_err() {
-                return Err(format!(
-                    "Python version `{s}` has an invalid patch version ({patch})"
-                ));
-            }
+        if let Some(patch) = version.release().get(2)
+            && u8::try_from(*patch).is_err()
+        {
+            return Err(format!(
+                "Python version `{s}` has an invalid patch version ({patch})"
+            ));
         }
 
         Ok(Self(version))
@@ -188,7 +188,7 @@ impl PythonVersion {
     }
 
     /// Return the full parsed Python version.
-    pub fn into_version(self) -> Version {
+    pub(crate) fn into_version(self) -> Version {
         self.0.version
     }
 
@@ -210,17 +210,10 @@ impl PythonVersion {
             .copied()
             .map(|patch| u8::try_from(patch).expect("invalid patch version"))
     }
-
-    /// Returns a copy of the Python version without the patch version
-    #[must_use]
-    pub fn without_patch(&self) -> Self {
-        Self::from_str(format!("{}.{}", self.major(), self.minor()).as_str())
-            .expect("dropping a patch should always be valid")
-    }
 }
 
 /// Get the environment variable name for the build constraint for a given implementation.
-pub(crate) fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
+fn python_build_version_variable(implementation: ImplementationName) -> &'static str {
     match implementation {
         ImplementationName::CPython => EnvVars::UV_PYTHON_CPYTHON_BUILD,
         ImplementationName::PyPy => EnvVars::UV_PYTHON_PYPY_BUILD,

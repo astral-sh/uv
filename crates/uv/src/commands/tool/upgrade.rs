@@ -1,6 +1,6 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -21,7 +22,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_warnings::write_error_chain;
+use uv_types::SourceTreeEditablePolicy;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -51,6 +52,7 @@ pub(crate) async fn upgrade(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -100,7 +102,6 @@ pub(crate) async fn upgrade(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
-                preview,
             )
             .await?
             .into_interpreter(),
@@ -121,7 +122,7 @@ pub(crate) async fn upgrade(
     let mut errors = Vec::new();
     for (name, constraints) in &names {
         debug!("Upgrading tool: `{name}`");
-        let result = upgrade_tool(
+        let result = Box::pin(upgrade_tool(
             name,
             constraints,
             interpreter.as_ref(),
@@ -131,11 +132,12 @@ pub(crate) async fn upgrade(
             &args,
             &client_builder,
             cache,
+            workspace_cache,
             &filesystem,
             installer_metadata,
-            concurrency,
+            &concurrency,
             preview,
-        )
+        ))
         .await;
 
         match result {
@@ -168,12 +170,10 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain(
+            write_error_chain_with_options(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
-                printer.stderr(),
-                "error",
-                AnsiColors::Red,
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
         return Ok(ExitStatus::Failure);
@@ -266,9 +266,10 @@ async fn upgrade_tool(
     args: &ResolverInstallerOptions,
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     filesystem: &ResolverInstallerOptions,
     installer_metadata: bool,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     preview: Preview,
 ) -> Result<UpgradeReport> {
     // Ensure the tool is installed.
@@ -323,7 +324,7 @@ async fn upgrade_tool(
         Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
 
     // Resolve the requirements.
-    let spec = RequirementsSpecification::from_overrides(
+    let spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
         existing_tool_receipt
             .constraints()
@@ -332,11 +333,10 @@ async fn upgrade_tool(
             .cloned()
             .collect(),
         existing_tool_receipt.overrides().to_vec(),
+        existing_tool_receipt.excludes().to_vec(),
     );
-
     // Initialize any shared state.
     let state = PlatformState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
@@ -348,6 +348,7 @@ async fn upgrade_tool(
             spec.into(),
             interpreter,
             python_platform,
+            SourceTreeEditablePolicy::Tool,
             build_constraints.clone(),
             &settings.resolver,
             client_builder,
@@ -355,12 +356,13 @@ async fn upgrade_tool(
             Box::new(SummaryResolveLogger),
             concurrency,
             cache,
+            workspace_cache,
             printer,
             preview,
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone(), preview)?;
+        let environment = installed_tools.create_environment(name, interpreter.clone())?;
 
         let environment = sync_environment(
             environment,
@@ -392,6 +394,7 @@ async fn upgrade_tool(
             spec,
             Modifications::Exact,
             python_platform,
+            SourceTreeEditablePolicy::Tool,
             build_constraints,
             ExtraBuildRequires::default(),
             &settings,
@@ -446,6 +449,7 @@ async fn upgrade_tool(
             existing_tool_receipt.requirements().to_vec(),
             existing_tool_receipt.constraints().to_vec(),
             existing_tool_receipt.overrides().to_vec(),
+            existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
             printer,
         )?;

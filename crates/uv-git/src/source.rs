@@ -9,11 +9,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing::{debug, instrument};
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::cache_digest;
 use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
-use crate::GIT_STORE;
+use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
@@ -32,7 +32,7 @@ pub struct GitSource {
 
 impl GitSource {
     /// Initialize a [`GitSource`] with the given Git URL, HTTP client, and cache path.
-    pub fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
+    pub(crate) fn new(git: GitUrl, cache: impl Into<PathBuf>, offline: bool) -> Self {
         Self {
             git,
             disable_ssl: false,
@@ -44,7 +44,7 @@ impl GitSource {
 
     /// Disable SSL verification for this [`GitSource`].
     #[must_use]
-    pub fn dangerous(self) -> Self {
+    pub(crate) fn dangerous(self) -> Self {
         Self {
             disable_ssl: true,
             ..self
@@ -53,7 +53,7 @@ impl GitSource {
 
     /// Set the [`Reporter`] to use for the [`GitSource`].
     #[must_use]
-    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
+    pub(crate) fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             reporter: Some(reporter),
             ..self
@@ -61,20 +61,19 @@ impl GitSource {
     }
 
     /// Fetch the underlying Git repository at the given revision.
-    #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
-    pub fn fetch(self) -> Result<Fetch> {
-        // Compute the canonical URL for the repository.
-        let canonical = RepositoryUrl::new(self.git.repository());
+    #[instrument(skip(self), fields(repository = %self.git.url(), rev = ?self.git.precise()))]
+    pub(crate) fn fetch(self) -> Result<Fetch> {
+        let lfs_requested = self.git.lfs().enabled();
 
         // The path to the repo, within the Git database.
-        let ident = cache_digest(&canonical);
+        let ident = cache_digest(self.git.repository());
         let db_path = self.cache.join("db").join(&ident);
 
         // Authenticate the URL, if necessary.
-        let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository().clone()))
+        let remote = if let Some(credentials) = GIT_STORE.get(self.git.repository()) {
+            Cow::Owned(credentials.apply(self.git.url().clone()))
         } else {
-            Cow::Borrowed(self.git.repository())
+            Cow::Borrowed(self.git.url())
         };
 
         // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
@@ -85,24 +84,37 @@ impl GitSource {
 
             // If we have a locked revision, and we have a pre-existing database which has that
             // revision, then no update needs to happen.
+            // When requested, we also check if LFS artifacts have been fetched and validated.
             if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
-                if db.contains(rev) {
-                    debug!("Using existing Git source `{}`", self.git.repository());
-                    return Ok((maybe_db.unwrap(), rev, None));
+                if db.contains(rev) && (!lfs_requested || db.contains_lfs_artifacts(rev)) {
+                    debug!("Using existing Git source `{}`", self.git.url());
+                    return Ok((
+                        maybe_db
+                            .unwrap()
+                            .with_lfs_ready(lfs_requested.then_some(true)),
+                        rev,
+                        None,
+                    ));
                 }
             }
 
             // If the revision isn't locked, but it looks like it might be an exact commit hash,
             // and we do have a pre-existing database, then check whether it is, in fact, a commit
             // hash. If so, treat it like it's locked.
+            // When requested, we also check if LFS artifacts have been fetched and validated.
             if let Some(db) = &maybe_db {
                 if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
                     if let Ok(oid) = maybe_commit.parse::<GitOid>() {
-                        if db.contains(oid) {
-                            // This reference is an exact commit. Treat it like it's
-                            // locked.
-                            debug!("Using existing Git source `{}`", self.git.repository());
-                            return Ok((maybe_db.unwrap(), oid, None));
+                        if db.contains(oid) && (!lfs_requested || db.contains_lfs_artifacts(oid)) {
+                            // This reference is an exact commit. Treat it like it's locked.
+                            debug!("Using existing Git source `{}`", self.git.url());
+                            return Ok((
+                                maybe_db
+                                    .unwrap()
+                                    .with_lfs_ready(lfs_requested.then_some(true)),
+                                oid,
+                                None,
+                            ));
                         }
                     }
                 }
@@ -111,7 +123,7 @@ impl GitSource {
             // ... otherwise, we use this state to update the Git database. Note that we still check
             // for being offline here, for example in the situation that we have a locked revision
             // but the database doesn't have it.
-            debug!("Updating Git source `{}`", self.git.repository());
+            debug!("Updating Git source `{}`", self.git.url());
 
             // Report the checkout operation to the reporter.
             let task = self.reporter.as_ref().map(|reporter| {
@@ -125,6 +137,7 @@ impl GitSource {
                 self.git.precise(),
                 self.disable_ssl,
                 self.offline,
+                lfs_requested,
             )?;
 
             Ok((db, actual_rev, task))
@@ -134,16 +147,25 @@ impl GitSource {
         // path length limit on Windows.
         let short_id = db.to_short_id(actual_rev)?;
 
-        // Check out `actual_rev` from the database to a scoped location on the
-        // filesystem. This will use hard links and such to ideally make the
-        // checkout operation here pretty fast.
+        // Compute the canonical URL for the repository checkout.
+        let canonical = self.git.repository().clone().with_lfs(Some(lfs_requested));
+        // Recompute the checkout hash when Git LFS is enabled as we want
+        // to distinctly differentiate between LFS vs non-LFS source trees.
+        let ident = if lfs_requested {
+            cache_digest(&canonical)
+        } else {
+            ident
+        };
         let checkout_path = self
             .cache
             .join("checkouts")
             .join(&ident)
             .join(short_id.as_str());
 
-        db.copy_to(actual_rev, &checkout_path)?;
+        // Check out `actual_rev` from the database to a scoped location on the
+        // filesystem. This will use hard links and such to ideally make the
+        // checkout operation here pretty fast.
+        let checkout = db.copy_to(actual_rev, &checkout_path)?;
 
         // Report the checkout operation to the reporter.
         if let Some(task) = maybe_task {
@@ -155,6 +177,7 @@ impl GitSource {
         Ok(Fetch {
             git: self.git.with_precise(actual_rev),
             path: checkout_path,
+            lfs_ready: checkout.lfs_ready().unwrap_or(false),
         })
     }
 }
@@ -164,6 +187,8 @@ pub struct Fetch {
     git: GitUrl,
     /// The path to the checked out repository.
     path: PathBuf,
+    /// Git LFS artifacts have been initialized (if requested).
+    lfs_ready: bool,
 }
 
 impl Fetch {
@@ -175,12 +200,8 @@ impl Fetch {
         &self.path
     }
 
-    pub fn into_git(self) -> GitUrl {
-        self.git
-    }
-
-    pub fn into_path(self) -> PathBuf {
-        self.path
+    pub fn lfs_ready(&self) -> &bool {
+        &self.lfs_ready
     }
 }
 

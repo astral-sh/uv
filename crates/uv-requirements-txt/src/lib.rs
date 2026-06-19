@@ -40,19 +40,19 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::instrument;
 use unscanny::{Pattern, Scanner};
 use url::Url;
 
 #[cfg(feature = "http")]
-use uv_client::BaseClient;
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClient, ClientBuildError};
+use uv_client::{BaseClientBuilder, Connectivity};
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
@@ -65,6 +65,9 @@ use crate::shquote::unquote;
 
 mod requirement;
 mod shquote;
+
+/// A cache of file contents, keyed by path, to avoid re-reading files from disk.
+pub type SourceCache = FxHashMap<PathBuf, String>;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -162,7 +165,7 @@ pub struct RequirementsTxt {
 }
 
 impl RequirementsTxt {
-    /// See module level documentation
+    /// See module level documentation.
     #[instrument(
         skip_all,
         fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
@@ -170,13 +173,73 @@ impl RequirementsTxt {
     pub async fn parse(
         requirements_txt: impl AsRef<Path>,
         working_dir: impl AsRef<Path>,
+    ) -> Result<Self, RequirementsTxtFileError> {
+        Self::parse_with_cache(
+            requirements_txt,
+            working_dir,
+            &BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            &mut SourceCache::default(),
+        )
+        .await
+    }
+
+    /// Parse a `requirements.txt` file, using the given cache to avoid re-reading files from disk.
+    #[instrument(
+        skip_all,
+        fields(requirements_txt = requirements_txt.as_ref().as_os_str().to_str())
+    )]
+    pub async fn parse_with_cache(
+        requirements_txt: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
+        cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
         let mut visited = VisitedFiles::Requirements {
             requirements: &mut FxHashSet::default(),
             constraints: &mut FxHashSet::default(),
         };
-        Self::parse_impl(requirements_txt, working_dir, client_builder, &mut visited).await
+        Self::parse_impl(
+            requirements_txt,
+            working_dir,
+            client_builder,
+            &mut visited,
+            cache,
+        )
+        .await
+    }
+
+    /// Parse requirements from a string, using the given path for error messages and resolving
+    /// relative paths.
+    pub async fn parse_str(
+        content: &str,
+        requirements_txt: impl AsRef<Path>,
+        working_dir: impl AsRef<Path>,
+        client_builder: &BaseClientBuilder<'_>,
+        source_contents: &mut SourceCache,
+    ) -> Result<Self, RequirementsTxtFileError> {
+        let requirements_txt = requirements_txt.as_ref();
+        let working_dir = working_dir.as_ref();
+        let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
+
+        let mut visited = VisitedFiles::Requirements {
+            requirements: &mut FxHashSet::default(),
+            constraints: &mut FxHashSet::default(),
+        };
+
+        Self::parse_inner(
+            content,
+            working_dir,
+            requirements_dir,
+            client_builder,
+            requirements_txt,
+            &mut visited,
+            source_contents,
+        )
+        .await
+        .map_err(|err| RequirementsTxtFileError {
+            file: requirements_txt.to_path_buf(),
+            error: err,
+        })
     }
 
     /// See module level documentation
@@ -189,49 +252,76 @@ impl RequirementsTxt {
         working_dir: impl AsRef<Path>,
         client_builder: &BaseClientBuilder<'_>,
         visited: &mut VisitedFiles<'_>,
+        cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtFileError> {
         let requirements_txt = requirements_txt.as_ref();
         let working_dir = working_dir.as_ref();
 
-        let content =
-            if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://") {
-                #[cfg(not(feature = "http"))]
-                {
+        let content = if let Some(content) = cache.get(requirements_txt) {
+            // Use cached content if available.
+            content.clone()
+        } else if requirements_txt.starts_with("http://") | requirements_txt.starts_with("https://")
+        {
+            #[cfg(not(feature = "http"))]
+            {
+                return Err(RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::Io(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Remote file not supported without `http` feature",
+                    )),
+                });
+            }
+
+            #[cfg(feature = "http")]
+            {
+                let url = requirements_txt.display().to_string();
+                let url = DisplaySafeUrl::parse(&url).map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::InvalidUrl(
+                        requirements_txt.display().to_string(),
+                        err,
+                    ),
+                })?;
+
+                // Avoid constructing a client if network is disabled already
+                if client_builder.is_offline() {
                     return Err(RequirementsTxtFileError {
                         file: requirements_txt.to_path_buf(),
                         error: RequirementsTxtParserError::Io(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "Remote file not supported without `http` feature",
+                            format!(
+                                "Network connectivity is disabled, but a remote requirements file was requested: {url}"
+                            ),
                         )),
                     });
                 }
-
-                #[cfg(feature = "http")]
-                {
-                    // Avoid constructing a client if network is disabled already
-                    if client_builder.is_offline() {
-                        return Err(RequirementsTxtFileError {
-                            file: requirements_txt.to_path_buf(),
-                            error: RequirementsTxtParserError::Io(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!("Network connectivity is disabled, but a remote requirements file was requested: {}", requirements_txt.display()),
-                            )),
-                        });
-                    }
-
-                    let client = client_builder.build();
-                    read_url_to_string(&requirements_txt, client).await
-                }
-            } else {
-                // Ex) `file:///home/ferris/project/requirements.txt`
-                uv_fs::read_to_string_transcode(&requirements_txt)
+                let client = client_builder
+                    .build()
+                    .map_err(|err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
+                    })?;
+                let content = read_url_to_string(&requirements_txt, client)
                     .await
-                    .map_err(RequirementsTxtParserError::Io)
+                    .map_err(|err| RequirementsTxtFileError {
+                        file: requirements_txt.to_path_buf(),
+                        error: err,
+                    })?;
+                cache.insert(requirements_txt.to_path_buf(), content.clone());
+                content
             }
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.to_path_buf(),
-                error: err,
-            })?;
+        } else {
+            // Ex) `file:///home/ferris/project/requirements.txt`
+            let content = uv_fs::read_to_string_transcode(&requirements_txt)
+                .await
+                .map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: RequirementsTxtParserError::Io(err),
+                })?;
+            cache.insert(requirements_txt.to_path_buf(), content.clone());
+            content
+        };
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(
@@ -241,6 +331,7 @@ impl RequirementsTxt {
             client_builder,
             requirements_txt,
             visited,
+            cache,
         )
         .await
         .map_err(|err| RequirementsTxtFileError {
@@ -264,6 +355,7 @@ impl RequirementsTxt {
         client_builder: &BaseClientBuilder<'_>,
         requirements_txt: &Path,
         visited: &mut VisitedFiles<'_>,
+        cache: &mut SourceCache,
     ) -> Result<Self, RequirementsTxtParserError> {
         let mut s = Scanner::new(content);
 
@@ -300,7 +392,7 @@ impl RequirementsTxt {
                         };
                     match visited {
                         VisitedFiles::Requirements { requirements, .. } => {
-                            if !requirements.insert(sub_file.clone()) {
+                            if !requirements.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -308,7 +400,7 @@ impl RequirementsTxt {
                         // from `pip`, which seems to treat `-r` requirements in constraints files as
                         // _requirements_, but we don't want to support that.
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -318,6 +410,7 @@ impl RequirementsTxt {
                         working_dir,
                         client_builder,
                         visited,
+                        cache,
                     ))
                     .await
                     .map_err(|err| RequirementsTxtParserError::Subfile {
@@ -376,13 +469,13 @@ impl RequirementsTxt {
                     // Switch to constraints mode, if we aren't in it already.
                     let mut visited = match visited {
                         VisitedFiles::Requirements { constraints, .. } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
                         }
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
@@ -394,6 +487,7 @@ impl RequirementsTxt {
                         working_dir,
                         client_builder,
                         &mut visited,
+                        cache,
                     ))
                     .await
                     .map_err(|err| RequirementsTxtParserError::Subfile {
@@ -489,7 +583,7 @@ impl RequirementsTxt {
     }
 
     /// Merge the data from a nested `requirements` file (`other`) into this one.
-    pub fn update_from(&mut self, other: Self) {
+    fn update_from(&mut self, other: Self) {
         let Self {
             requirements,
             constraints,
@@ -900,7 +994,7 @@ fn parse_requirement_and_hashes(
     //
     // While `requirements.txt` is a valid package name (per the spec), PyPI disallows
     // `requirements.txt` and some other variants anyway.
-    #[allow(clippy::case_sensitive_file_extension_comparisons)]
+    #[expect(clippy::case_sensitive_file_extension_comparisons)]
     if requirement.ends_with(".txt") || requirement.ends_with(".in") {
         let path = Path::new(requirement);
         let path = if path.is_absolute() {
@@ -940,7 +1034,7 @@ fn parse_requirement_and_hashes(
 /// Parse `--hash=... --hash ...` after a requirement
 fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
-    if s.eat_while("--hash").is_empty() {
+    if !s.eat_if("--hash") {
         let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
@@ -1113,6 +1207,8 @@ pub enum RequirementsTxtParserError {
     #[cfg(feature = "http")]
     Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
+    ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
+    #[cfg(feature = "http")]
     InvalidUrl(String, DisplaySafeUrlError),
 }
 
@@ -1184,6 +1280,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
+            Self::ClientBuild(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
             Self::InvalidUrl(url, err) => {
                 match err {
                     DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
@@ -1221,6 +1321,8 @@ impl std::error::Error for RequirementsTxtParserError {
             Self::NonUnicodeUrl { .. } => None,
             #[cfg(feature = "http")]
             Self::Reqwest(_, err) => err.source(),
+            #[cfg(feature = "http")]
+            Self::ClientBuild(_, err) => Some(err.as_ref()),
             #[cfg(feature = "http")]
             Self::InvalidUrl(_, err) => err.source(),
         }
@@ -1352,6 +1454,10 @@ impl Display for RequirementsTxtFileError {
                 write!(f, "Error while accessing remote requirements file: `{url}`")
             }
             #[cfg(feature = "http")]
+            RequirementsTxtParserError::ClientBuild(url, _err) => {
+                write!(f, "Error while accessing remote requirements file: `{url}`")
+            }
+            #[cfg(feature = "http")]
             RequirementsTxtParserError::InvalidUrl(url, err) => match err {
                 DisplaySafeUrlError::Url(err) => write!(f, "Not a valid URL, {err}: `{url}`"),
                 DisplaySafeUrlError::AmbiguousAuthority(_) => {
@@ -1403,6 +1509,15 @@ enum VisitedFiles<'a> {
     Constraints {
         constraints: &'a mut FxHashSet<PathBuf>,
     },
+}
+
+/// Return a stable identity for a requirements file without changing the path used to read it.
+fn visited_file(path: &Path) -> PathBuf {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        path.to_path_buf()
+    } else {
+        normalize_path(path).into_owned()
+    }
 }
 
 /// Calculates the column and line offset of a given cursor based on the
@@ -1460,7 +1575,6 @@ mod test {
     use test_case::test_case;
     use unscanny::Scanner;
 
-    use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
     use crate::{RequirementsTxt, calculate_row_column};
@@ -1498,13 +1612,9 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(
-            requirements_txt.clone(),
-            &working_dir,
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let actual = RequirementsTxt::parse(requirements_txt.clone(), &working_dir)
+            .await
+            .unwrap();
 
         let snapshot = format!("parse-{}", path.to_string_lossy());
 
@@ -1550,13 +1660,9 @@ mod test {
         let requirements_txt = temp_dir.path().join(path);
         fs::write(&requirements_txt, contents).unwrap();
 
-        let actual = RequirementsTxt::parse(
-            &requirements_txt,
-            &working_dir,
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let actual = RequirementsTxt::parse(&requirements_txt, &working_dir)
+            .await
+            .unwrap();
 
         let snapshot = format!("line-endings-{}", path.to_string_lossy());
 
@@ -1575,13 +1681,9 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(
-            requirements_txt,
-            &working_dir,
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir)
+            .await
+            .unwrap();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1600,13 +1702,9 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(
-            requirements_txt,
-            &working_dir,
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir)
+            .await
+            .unwrap_err();
 
         let snapshot = format!("parse-unix-{}", path.to_string_lossy());
 
@@ -1625,13 +1723,9 @@ mod test {
         let working_dir = workspace_test_data_dir().join("requirements-txt");
         let requirements_txt = working_dir.join(path);
 
-        let actual = RequirementsTxt::parse(
-            requirements_txt,
-            &working_dir,
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let actual = RequirementsTxt::parse(requirements_txt, &working_dir)
+            .await
+            .unwrap();
 
         let snapshot = format!("parse-windows-{}", path.to_string_lossy());
 
@@ -1651,13 +1745,9 @@ mod test {
             -r missing.txt
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error)
             .chain()
             // The last error is operating-system specific.
@@ -1679,10 +1769,10 @@ mod test {
         insta::with_settings!({
             filters => filters,
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Error parsing included file in `<REQUIREMENTS_TXT>` at position 0
             failed to read from file `<MISSING_TXT>`: The system cannot find the path specified. (os error 2)
-            "###);
+            ");
         });
 
         Ok(())
@@ -1696,13 +1786,9 @@ mod test {
             numpy[ö]==1.29
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1710,12 +1796,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             Expected an alphanumeric character starting the extra name, found `ö`
             numpy[ö]==1.29
                   ^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1729,13 +1815,9 @@ mod test {
             numpy @ https:///
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1743,12 +1825,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 0
             empty host
             numpy @ https:///
                     ^^^^^^^^^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1762,13 +1844,9 @@ mod test {
             -e https://localhost:8080/
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1776,12 +1854,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected direct URL (`https://localhost:8080/`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
             https://localhost:8080/
             ^^^^^^^^^^^^^^^^^^^^^^^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1795,13 +1873,9 @@ mod test {
             -e https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1809,10 +1883,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Unsupported editable requirement in `<REQUIREMENTS_TXT>`
             Editable must refer to a local directory, not an HTTPS URL: `https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.gz`
-            "###);
+            ");
         });
 
         Ok(())
@@ -1826,13 +1900,9 @@ mod test {
             -e black[,abcdef]
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1840,12 +1910,12 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Couldn't parse requirement in `<REQUIREMENTS_TXT>` at position 3
             Expected either alphanumerical character (starting the extra name) or `]` (ending the extras section), found `,`
             black[,abcdef]
                   ^
-            "###);
+            ");
         });
 
         Ok(())
@@ -1859,13 +1929,9 @@ mod test {
             --index-url 123
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1873,10 +1939,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `123`
             relative URL without a base
-            "###);
+            ");
         });
 
         Ok(())
@@ -1890,13 +1956,9 @@ mod test {
             --index-url https:////
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1904,10 +1966,10 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
+            insta::assert_snapshot!(errors, @"
             Invalid URL in `<REQUIREMENTS_TXT>` at position 0: `https:////`
             empty host
-            "###);
+            ");
         });
 
         Ok(())
@@ -1922,13 +1984,9 @@ mod test {
             --no-binary
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1955,13 +2013,9 @@ mod test {
             file.txt
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -1998,18 +2052,14 @@ mod test {
             -r subdir/child.txt
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            parent_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let requirements = RequirementsTxt::parse(parent_txt.path(), temp_dir.path())
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2040,7 +2090,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2062,18 +2112,14 @@ mod test {
             --no-binary flask
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2110,7 +2156,7 @@ mod test {
                 ),
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2137,13 +2183,9 @@ mod test {
             --no-index
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
@@ -2192,6 +2234,7 @@ mod test {
                                         given: Some(
                                             "/foo/bar",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2239,13 +2282,9 @@ mod test {
             --index-url https://fake.pypi.org/simple
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -2287,13 +2326,9 @@ mod test {
             httpx # comment
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
@@ -2462,6 +2497,7 @@ mod test {
                         given: Some(
                             "https://test.pypi.org/simple/",
                         ),
+                        expanded: false,
                     },
                 ),
                 extra_index_urls: [],
@@ -2502,13 +2538,9 @@ mod test {
             importlib_metadata-8.2.0+local-py3-none-any.whl[extra]
         "})?;
 
-        let requirements = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap();
+        let requirements = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap();
 
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
@@ -2552,6 +2584,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.3.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2601,6 +2634,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2650,6 +2684,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [
@@ -2703,6 +2738,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2752,6 +2788,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [],
@@ -2801,6 +2838,7 @@ mod test {
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
+                                        expanded: false,
                                     },
                                 },
                                 extras: [
@@ -2844,13 +2882,9 @@ mod test {
             tqdm
         "})?;
 
-        let error = RequirementsTxt::parse(
-            requirements_txt.path(),
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await
-        .unwrap_err();
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
         let errors = anyhow::Error::new(error).chain().join("\n");
 
         let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
@@ -2858,9 +2892,29 @@ mod test {
         insta::with_settings!({
             filters => filters
         }, {
-            insta::assert_snapshot!(errors, @r###"
-            Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3
-            "###);
+            insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_hash_option() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str("flask==3.0.0 --hash--hash=sha256:deadbeef")?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-') at <REQUIREMENTS_TXT>:1:20");
         });
 
         Ok(())
@@ -2946,12 +3000,7 @@ mod test {
             -c constraints-only-recursive.txt
         "})?;
 
-        let parsed = RequirementsTxt::parse(
-            &requirements,
-            temp_dir.path(),
-            &BaseClientBuilder::default(),
-        )
-        .await?;
+        let parsed = RequirementsTxt::parse(&requirements, temp_dir.path()).await?;
 
         let requirements: BTreeSet<String> = parsed
             .requirements

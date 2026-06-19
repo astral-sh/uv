@@ -1,13 +1,13 @@
 use std::convert;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use tokio::sync::oneshot;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use uv_cache::Cache;
-use uv_configuration::RAYON_INITIALIZE;
+use uv_configuration::initialize_rayon_once;
 use uv_distribution_types::CachedDist;
 use uv_install_wheel::{Layout, LinkMode};
 use uv_preview::Preview;
@@ -108,7 +108,7 @@ impl<'a> Installer<'a> {
         let layout = venv.interpreter().layout();
         let relocatable = venv.relocatable();
         // Initialize the threadpool with the user settings.
-        LazyLock::force(&RAYON_INITIALIZE);
+        initialize_rayon_once();
         rayon::spawn(move || {
             let result = install(
                 wheels,
@@ -167,8 +167,8 @@ fn install(
     preview: Preview,
 ) -> Result<Vec<CachedDist>> {
     // Initialize the threadpool with the user settings.
-    LazyLock::force(&RAYON_INITIALIZE);
-    let locks = uv_install_wheel::Locks::new(preview);
+    initialize_rayon_once();
+    let state = uv_install_wheel::InstallState::new(preview);
     wheels.par_iter().try_for_each(|wheel| {
         uv_install_wheel::install_wheel(
             layout,
@@ -188,7 +188,7 @@ fn install(
             installer_name,
             installer_metadata,
             link_mode,
-            &locks,
+            &state,
         )
         .with_context(|| format!("Failed to install: {} ({wheel})", wheel.filename()))?;
 
@@ -198,6 +198,9 @@ fn install(
 
         Ok::<(), Error>(())
     })?;
+    if let Err(err) = state.warn_package_conflicts() {
+        warn!("Checking for conflicts between packages failed: {err}");
+    }
 
     Ok(wheels)
 }
@@ -208,4 +211,53 @@ pub trait Reporter: Send + Sync {
 
     /// Callback to invoke when the resolution is complete.
     fn on_install_complete(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use uv_cache::Cache;
+    use uv_preview::Preview;
+    use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
+
+    use super::Installer;
+
+    fn environment() -> PythonEnvironment {
+        let _preview = uv_preview::test::with_features(&[]);
+        let cache = Cache::temp().expect("cache should be available");
+        PythonEnvironment::find(
+            &PythonRequest::Any,
+            EnvironmentPreference::Any,
+            PythonPreference::System,
+            &cache,
+        )
+        .expect("Python environment should be available")
+    }
+
+    #[test]
+    fn default_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default());
+
+        assert_eq!(installer.name.as_deref(), Some("uv"));
+    }
+
+    #[test]
+    fn custom_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default())
+            .with_installer_name(Some("client".to_string()));
+
+        assert_eq!(installer.name.as_deref(), Some("client"));
+    }
+
+    #[test]
+    fn disabled_installer_name() {
+        let environment = environment();
+
+        let installer = Installer::new(&environment, Preview::default()).with_installer_name(None);
+
+        assert_eq!(installer.name, None);
+    }
 }

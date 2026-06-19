@@ -4,13 +4,13 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
-import site
-import sys
-
+import importlib.machinery
 import json
 import os
 import platform
+import site
 import struct
+import sys
 import sysconfig
 
 
@@ -43,6 +43,16 @@ if hasattr(sys, "implementation"):
 
         implementation_version = re.sub(
             r"graalpy(\d)(\d+)(?:dev[\da-f]+)?-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag,
+        )
+    elif implementation_name == "pyston":
+        # Pyston reports the CPython version as sys.implementation.version,
+        # so we need to discover the Pyston version from the cache_tag
+        import re
+
+        implementation_version = re.sub(
+            r"pyston-(\d)(\d+)",
             r"\1.\2",
             sys.implementation.cache_tag,
         )
@@ -434,7 +444,7 @@ def get_operating_system_and_architecture():
         version = None
         architecture = version_arch
 
-    if sys.version_info < (3, 7):
+    if sys.version_info < (3, 6):
         print(
             json.dumps(
                 {
@@ -477,6 +487,8 @@ def get_operating_system_and_architecture():
                 "minor": glibc_version[1],
             }
         elif hasattr(sys, "getandroidapilevel"):
+            # On Python <3.13, Android reports itself as "linux"
+            # See `operation_system == "android"` branch for Python 3.13+ below
             operating_system = {
                 "name": "android",
                 "api_level": sys.getandroidapilevel(),
@@ -521,9 +533,28 @@ def get_operating_system_and_architecture():
             "minor": int(version[1]),
             "simulator": ios_ver.is_simulator,
         }
+        [_version, architecture, _platform] = version_arch.split("-")
     elif operating_system == "emscripten":
+        pyemscripten_platform_version = sysconfig.get_config_var(
+            "PYEMSCRIPTEN_PLATFORM_VERSION"
+        )
+        # fallback to PYODIDE_ABI_VERSION for backward compatibility
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
-        if not pyodide_abi_version:
+        if pyemscripten_platform_version:
+            version = pyemscripten_platform_version.split("_")
+            operating_system = {
+                "name": "pyemscripten",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        elif pyodide_abi_version:
+            version = pyodide_abi_version.split("_")
+            operating_system = {
+                "name": "pyodide",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        else:
             print(
                 json.dumps(
                     {
@@ -533,11 +564,25 @@ def get_operating_system_and_architecture():
                 )
             )
             sys.exit(0)
-        version = pyodide_abi_version.split("_")
+    elif operating_system == "android":
+        # Python 3.13+ supports Android. We map the Android ABIs to our standard architectures.
+        #
+        # See:
+        #
+        # - https://peps.python.org/pep-0738/
+        # - https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/#android
+        # - https://developer.android.com/ndk/guides/abis#sa
+        android_abi_to_arch = {
+            "arm64_v8a": "aarch64",
+            "armeabi_v7a": "armv7l",
+            "x86": "i686",
+            "x86_64": "x86_64",
+        }
+        architecture = android_abi_to_arch.get(architecture, architecture)
+
         operating_system = {
-            "name": "pyodide",
-            "major": int(version[0]),
-            "minor": int(version[1]),
+            "name": "android",
+            "api_level": sys.getandroidapilevel(),
         }
     elif operating_system in [
         "freebsd",
@@ -649,6 +694,7 @@ def main() -> None:
         "sys_path": sys.path[1:],
         "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
+        "extension_suffixes": importlib.machinery.EXTENSION_SUFFIXES,
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.

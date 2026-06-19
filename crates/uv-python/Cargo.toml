@@ -1,11 +1,10 @@
 [package]
 name = "uv-python"
-version = "0.0.1"
-description = "This is a component crate of uv"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -18,11 +17,13 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-errors = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-client = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-filename = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
@@ -58,7 +59,6 @@ same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sys-info = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -67,12 +67,15 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+rayon = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-registry = { workspace = true }
 windows = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anyhow = { workspace = true }
 assert_fs = { workspace = true }
 indoc = { workspace = true }
@@ -83,4 +86,6 @@ tempfile = { workspace = true }
 test-log = { workspace = true }
 
 [build-dependencies]
+uv-static = { workspace = true }
+
 serde_json = { workspace = true }

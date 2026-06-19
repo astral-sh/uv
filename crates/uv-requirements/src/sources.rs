@@ -6,7 +6,6 @@ use console::Term;
 
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::Pep723Script;
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
@@ -15,7 +14,7 @@ pub enum RequirementsSource {
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
     /// Dependencies were provided via a PEP 723 script.
-    Pep723Script(Box<Pep723ScriptSource>),
+    Pep723Script(PathBuf),
     /// Dependencies were provided via a `pylock.toml` file.
     PylockToml(PathBuf),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
@@ -28,11 +27,14 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
+    /// An extensionless file that could be either a PEP 723 script or a requirements.txt file.
+    /// We detect the format when reading the file.
+    Extensionless(PathBuf),
 }
 
 impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PathBuf`]. The file type is determined by the file
-    /// extension.
+    /// extension and, in some cases, the file contents.
     pub fn from_requirements_file(path: PathBuf) -> Result<Self> {
         if path.ends_with("pyproject.toml") {
             Ok(Self::PyprojectToml(path))
@@ -51,7 +53,7 @@ impl RequirementsSource {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
         {
-            Ok(Self::Pep723Script(Pep723ScriptSource::new(path)))
+            Ok(Self::Pep723Script(path))
         } else if path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -66,15 +68,9 @@ impl RequirementsSource {
         {
             Ok(Self::RequirementsTxt(path))
         } else if path.extension().is_none() {
-            // If we don't have an extension, attempt to detect a PEP 723 script, and
-            // fall back to `requirements.txt` format if not.
-            match Pep723Script::read_sync(&path) {
-                Ok(Some(script)) => Ok(Self::Pep723Script(Pep723ScriptSource::with_script(
-                    path, script,
-                ))),
-                Ok(None) => Ok(Self::RequirementsTxt(path)),
-                Err(err) => Err(err.into()),
-            }
+            // If we don't have an extension, mark it as extensionless so we can detect
+            // the format later (either a PEP 723 script or a requirements.txt file).
+            Ok(Self::Extensionless(path))
         } else {
             Ok(Self::RequirementsTxt(path))
         }
@@ -82,6 +78,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
     pub fn from_requirements_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -114,6 +114,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
     pub fn from_constraints_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -146,6 +150,10 @@ impl RequirementsSource {
 
     /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
     pub fn from_overrides_txt(path: PathBuf) -> Result<Self> {
+        if path == Path::new("-") {
+            return Ok(Self::Extensionless(path));
+        }
+
         for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
             if path.ends_with(file_name) {
                 return Err(anyhow::anyhow!(
@@ -184,7 +192,7 @@ impl RequirementsSource {
     pub fn from_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -234,7 +242,7 @@ impl RequirementsSource {
     pub fn from_with_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
+        #[expect(clippy::case_sensitive_file_extension_comparisons)]
         if (name.ends_with(".txt") || name.ends_with(".in")) && Path::new(&name).is_file() {
             let term = Term::stderr();
             if term.is_term() {
@@ -299,38 +307,6 @@ impl RequirementsSource {
             Self::PylockToml(_) | Self::PyprojectToml(_) | Self::SetupPy(_) | Self::SetupCfg(_)
         )
     }
-
-    /// Returns `true` if the source allows groups to be specified.
-    pub fn allows_groups(&self) -> bool {
-        matches!(self, Self::PylockToml(_) | Self::PyprojectToml(_))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Pep723ScriptSource {
-    path: PathBuf,
-    script: Option<Pep723Script>,
-}
-
-impl Pep723ScriptSource {
-    fn new(path: PathBuf) -> Box<Self> {
-        Box::new(Self { path, script: None })
-    }
-
-    fn with_script(path: PathBuf, script: Pep723Script) -> Box<Self> {
-        Box::new(Self {
-            path,
-            script: Some(script),
-        })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn script(&self) -> Option<&Pep723Script> {
-        self.script.as_ref()
-    }
 }
 
 impl std::fmt::Display for RequirementsSource {
@@ -338,15 +314,14 @@ impl std::fmt::Display for RequirementsSource {
         match self {
             Self::Package(package) => write!(f, "{package:?}"),
             Self::Editable(path) => write!(f, "-e {path:?}"),
-            Self::Pep723Script(source) => {
-                write!(f, "{}", source.path().simplified_display())
-            }
             Self::PylockToml(path)
             | Self::RequirementsTxt(path)
+            | Self::Pep723Script(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::EnvironmentYml(path) => {
+            | Self::EnvironmentYml(path)
+            | Self::Extensionless(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }
@@ -354,7 +329,7 @@ impl std::fmt::Display for RequirementsSource {
 }
 
 /// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
-#[allow(clippy::case_sensitive_file_extension_comparisons)]
+#[expect(clippy::case_sensitive_file_extension_comparisons)]
 pub fn is_pylock_toml(file_name: &str) -> bool {
     file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }

@@ -8,15 +8,14 @@ use std::{fmt, io};
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildKind, BuildOptions, BuildOutput, Concurrency, Constraints,
-    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
-    SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType, NoSources,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -25,7 +24,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
-    PackageConfigSettings, RequiresPython, SourceDist,
+    PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
@@ -34,13 +33,12 @@ use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy};
+use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -62,6 +60,8 @@ enum Error {
     #[error(transparent)]
     FlatIndex(#[from] uv_client::FlatIndexError),
     #[error(transparent)]
+    ClientBuild(#[from] uv_client::ClientBuildError),
+    #[error(transparent)]
     BuildPlan(anyhow::Error),
     #[error(transparent)]
     Extract(#[from] uv_extract::Error),
@@ -81,8 +81,10 @@ enum Error {
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
     ListForcePep517,
-    #[error("Can only use `--list` with the uv backend")]
-    ListNonUv,
+    #[error(
+        "Can only use `--list` with a compatible uv build backend, but `{name}` is not compatible because {reason}"
+    )]
+    ListNonUv { name: String, reason: String },
     #[error(
         "`{0}` is not a valid build source. Expected to receive a source directory, or a source \
          distribution ending in one of: {1}."
@@ -96,8 +98,21 @@ enum Error {
     VersionMismatch(Version, Version),
 }
 
+/// Collect hints from a build [`Error`] by inspecting its inner types.
+fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
+    use uv_errors::Hint;
+    match err {
+        Error::BuildBackend(err) => err.hints(),
+        Error::BuildFrontend(err) => err.hints(),
+        Error::BuildDispatch(err) => err.hints(),
+        Error::Project(err) => err.hints(),
+        Error::Operations(err) => err.hints(),
+        _ => uv_errors::Hints::none(),
+    }
+}
+
 /// Build source distributions and wheels.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
@@ -112,6 +127,7 @@ pub(crate) async fn build_frontend(
     force_pep517: bool,
     clear: bool,
     build_constraints: Vec<RequirementsSource>,
+    build_constraints_from_workspace: Vec<Requirement>,
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -122,6 +138,7 @@ pub(crate) async fn build_frontend(
     python_downloads: PythonDownloads,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
@@ -139,6 +156,7 @@ pub(crate) async fn build_frontend(
         force_pep517,
         clear,
         &build_constraints,
+        &build_constraints_from_workspace,
         hash_checking,
         python.as_deref(),
         install_mirrors,
@@ -147,8 +165,9 @@ pub(crate) async fn build_frontend(
         no_config,
         python_preference,
         python_downloads,
-        concurrency,
+        &concurrency,
         cache,
+        workspace_cache,
         printer,
         preview,
     )
@@ -169,7 +188,9 @@ enum BuildResult {
     Success,
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+// https://github.com/rust-lang/rust/issues/147648
+#[allow(unused_assignments)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
@@ -184,6 +205,7 @@ async fn build_impl(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
+    build_constraints_from_workspace: &[Requirement],
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -192,8 +214,9 @@ async fn build_impl(
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    concurrency: Concurrency,
+    concurrency: &Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<BuildResult> {
@@ -216,6 +239,9 @@ async fn build_impl(
         upgrade: _,
         build_options,
         sources,
+        torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Determine the source to build.
@@ -241,11 +267,11 @@ async fn build_impl(
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.
-    let workspace_cache = WorkspaceCache::default();
     let workspace = Workspace::discover(
         src.directory(),
         &DiscoveryOptions::default(),
-        &workspace_cache,
+        cache,
+        workspace_cache,
     )
     .await;
 
@@ -338,10 +364,11 @@ async fn build_impl(
             python_request,
             install_mirrors.clone(),
             no_config,
-            workspace.as_ref(),
+            workspace.as_deref(),
             python_preference,
             python_downloads,
             cache,
+            workspace_cache,
             printer,
             index_locations,
             client_builder.clone(),
@@ -351,13 +378,14 @@ async fn build_impl(
             force_pep517,
             clear,
             build_constraints,
+            build_constraints_from_workspace,
             build_isolation,
             extra_build_dependencies,
             extra_build_variables,
             *index_strategy,
             *keyring_provider,
             exclude_newer.clone(),
-            *sources,
+            sources.clone(),
             concurrency,
             build_options,
             sdist,
@@ -370,7 +398,7 @@ async fn build_impl(
             preview,
         );
         async {
-            let result = future.await;
+            let result = Box::pin(future).await;
             (source, result)
         }
     }))
@@ -421,12 +449,17 @@ async fn build_impl(
                     None
                 };
 
+                let hints = collect_build_hints(&err).into_owned();
                 let report = miette::Report::new(Diagnostic {
                     source: source.to_string(),
                     cause: err.into(),
                     help,
                 });
                 anstream::eprint!("{report:?}");
+                anstream::eprint!("{hints}");
+                if !hints.is_empty() {
+                    anstream::eprintln!();
+                }
 
                 success = false;
             }
@@ -440,7 +473,7 @@ async fn build_impl(
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 async fn build_package(
     source: AnnotatedSource<'_>,
     output_dir: Option<&Path>,
@@ -451,6 +484,7 @@ async fn build_package(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     index_locations: &IndexLocations,
     client_builder: BaseClientBuilder<'_>,
@@ -460,14 +494,15 @@ async fn build_package(
     force_pep517: bool,
     clear: bool,
     build_constraints: &[RequirementsSource],
+    build_constraints_from_workspace: &[Requirement],
     build_isolation: &BuildIsolation,
     extra_build_dependencies: &ExtraBuildDependencies,
     extra_build_variables: &ExtraBuildVariables,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: ExcludeNewer,
-    sources: SourceStrategy,
-    concurrency: Concurrency,
+    sources: NoSources,
+    concurrency: &Concurrency,
     build_options: &BuildOptions,
     sdist: bool,
     wheel: bool,
@@ -515,13 +550,7 @@ async fn build_package(
             let groups = DependencyGroupsWithDefaults::none();
             interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
-                .map(RequiresPython::specifiers)
-                .map(|specifiers| {
-                    PythonRequest::Version(VersionRequest::Range(
-                        specifiers.clone(),
-                        PythonVariant::Default,
-                    ))
-                });
+                .and_then(PythonRequest::from_requires_python);
         }
     }
 
@@ -537,7 +566,6 @@ async fn build_package(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -563,7 +591,8 @@ async fn build_package(
     let build_constraints = Constraints::from_requirements(
         build_constraints
             .into_iter()
-            .map(|constraint| constraint.requirement),
+            .map(|constraint| constraint.requirement)
+            .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
     // Initialize the registry client.
@@ -573,7 +602,7 @@ async fn build_package(
         .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
-        .build();
+        .build()?;
 
     // Determine whether to enable build isolation.
     let environment;
@@ -600,7 +629,6 @@ async fn build_package(
 
     // Initialize any shared state.
     let state = SharedState::default();
-    let workspace_cache = WorkspaceCache::default();
 
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
@@ -626,9 +654,10 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        sources,
-        workspace_cache,
-        concurrency,
+        sources.clone(),
+        SourceTreeEditablePolicy::Project,
+        workspace_cache.clone(),
+        concurrency.clone(),
         preview,
     );
 
@@ -644,16 +673,28 @@ async fn build_package(
             return Err(Error::ListForcePep517);
         }
 
-        if !check_direct_build(source.path(), source.path().user_display()) {
-            // TODO(konsti): Provide more context on what mismatched
-            return Err(Error::ListNonUv);
+        if let Err(reason) = check_direct_build(source.path(), uv_version::version()) {
+            return Err(Error::ListNonUv {
+                name: source.path().user_display().to_string(),
+                reason: reason.to_string(),
+            });
         }
 
         BuildAction::List
-    } else if !force_pep517 && check_direct_build(source.path(), source.path().user_display()) {
-        BuildAction::DirectBuild
-    } else {
+    } else if force_pep517 {
         BuildAction::Pep517
+    } else {
+        match check_direct_build(source.path(), uv_version::version()) {
+            Ok(()) => BuildAction::DirectBuild,
+            Err(reason) => {
+                debug!(
+                    "Not using `uv_build` direct build for `{}` because {}",
+                    source.path().user_display(),
+                    reason
+                );
+                BuildAction::Pep517
+            }
+        }
     };
 
     // Prepare some common arguments for the build.
@@ -663,7 +704,7 @@ async fn build_package(
 
     let build_output = match printer {
         Printer::Default | Printer::NoProgress | Printer::Verbose => {
-            if build_logs {
+            if build_logs && !uv_flags::contains(uv_flags::EnvironmentFlags::HIDE_BUILD_OUTPUT) {
                 BuildOutput::Stderr
             } else {
                 BuildOutput::Quiet
@@ -686,7 +727,7 @@ async fn build_package(
                     printer,
                     "source distribution",
                     &build_dispatch,
-                    sources,
+                    &sources,
                     dist,
                     subdirectory,
                     version_id,
@@ -703,7 +744,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -718,7 +759,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(path.display(), reader, ext, temp_dir.path()).await?;
 
             // Extract the top-level directory from the archive.
             let extracted = match uv_extract::strip_component(temp_dir.path()) {
@@ -754,7 +795,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -791,7 +832,7 @@ async fn build_package(
                 printer,
                 "source distribution",
                 &build_dispatch,
-                sources,
+                &sources,
                 dist,
                 subdirectory,
                 version_id,
@@ -825,7 +866,8 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(&output_dir)?;
-            uv_extract::stream::archive(reader, ext, temp_dir.path()).await?;
+            uv_extract::stream::archive(source.path().display(), reader, ext, temp_dir.path())
+                .await?;
 
             // If the source distribution has a version in its filename, check the version.
             let version = source
@@ -898,7 +940,7 @@ async fn build_sdist(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: &NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
@@ -907,8 +949,13 @@ async fn build_sdist(
     let build_result = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
+                uv_build_backend::list_source_dist(
+                    &source_tree_,
+                    uv_version::version(),
+                    sources_enabled,
+                )
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -932,11 +979,13 @@ async fn build_sdist(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
+                    sources_enabled,
                 )
             })
             .await??
@@ -967,6 +1016,7 @@ async fn build_sdist(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
                     sources,
@@ -1001,7 +1051,7 @@ async fn build_wheel(
     build_kind_message: &str,
     // Below is only used with PEP 517 builds
     build_dispatch: &BuildDispatch<'_>,
-    sources: SourceStrategy,
+    sources: NoSources,
     dist: Option<&SourceDist>,
     subdirectory: Option<&Path>,
     version_id: Option<&str>,
@@ -1012,8 +1062,9 @@ async fn build_wheel(
     let build_message = match action {
         BuildAction::List => {
             let source_tree_ = source_tree.to_path_buf();
+            let sources_enabled = sources.is_none();
             let (filename, file_list) = tokio::task::spawn_blocking(move || {
-                uv_build_backend::list_wheel(&source_tree_, uv_version::version())
+                uv_build_backend::list_wheel(&source_tree_, uv_version::version(), sources_enabled)
             })
             .await??;
             let raw_filename = filename.to_string();
@@ -1037,12 +1088,14 @@ async fn build_wheel(
             )?;
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
+            let sources_enabled = sources.is_none();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_wheel(
                     &source_tree,
                     &output_dir_,
                     None,
                     uv_version::version(),
+                    sources_enabled,
                 )
             })
             .await??;
@@ -1070,9 +1123,10 @@ async fn build_wheel(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
-                    sources,
+                    &sources,
                     BuildKind::Wheel,
                     build_output,
                     BuildStack::default(),

@@ -5,7 +5,6 @@ use tracing::info;
 
 use uv_cache::{Cache, CacheArgs};
 use uv_configuration::Concurrency;
-use uv_preview::Preview;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonPreference, PythonRequest};
 
 #[derive(Parser)]
@@ -18,7 +17,7 @@ pub(crate) struct CompileArgs {
 }
 
 pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
-    let cache = Cache::try_from(args.cache_args)?.init()?;
+    let cache = Cache::try_from(args.cache_args)?.init().await?;
 
     let interpreter = if let Some(python) = args.python {
         python
@@ -28,7 +27,6 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
             EnvironmentPreference::OnlyVirtual,
             PythonPreference::default(),
             &cache,
-            Preview::default(),
         )?
         .into_interpreter();
         interpreter.sys_executable().to_path_buf()

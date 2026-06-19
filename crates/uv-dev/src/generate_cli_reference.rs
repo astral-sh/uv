@@ -115,7 +115,7 @@ fn generate() -> String {
     output
 }
 
-#[allow(clippy::format_push_string)]
+#[expect(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
@@ -204,7 +204,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 let id = format!("{name_key}--{}", arg.get_id());
                 output.push_str(&format!("<dt id=\"{id}\">"));
                 output.push_str(&format!(
-                    "<a href=\"#{id}\"<code>{}</code></a>",
+                    "<a href=\"#{id}\"><code>{}</code></a>",
                     arg.get_id().to_string().to_uppercase(),
                 ));
                 output.push_str("</dt>");
@@ -345,28 +345,23 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use clap::{Arg, Command};
+    use insta::assert_snapshot;
 
-    use anyhow::Result;
-
-    use uv_static::EnvVars;
-
-    use crate::generate_all::Mode;
-
-    use super::{Args, main};
+    use super::generate_command;
 
     #[test]
-    fn test_generate_cli_reference() -> Result<()> {
-        // Skip this test in CI to avoid redundancy with the dedicated CI job
-        if env::var_os(EnvVars::CI).is_some() {
-            return Ok(());
-        }
+    fn generates_linked_positional_argument() {
+        let mut command = Command::new("sample").arg(Arg::new("path").index(1));
+        command.build();
 
-        let mode = if env::var(EnvVars::UV_UPDATE_SCHEMA).as_deref() == Ok("1") {
-            Mode::Write
-        } else {
-            Mode::Check
-        };
-        main(&Args { mode })
+        let mut output = String::new();
+        generate_command(&mut output, &command, &mut Vec::new());
+        let argument = output
+            .lines()
+            .find(|line| line.starts_with("<dl class=\"cli-reference\"><dt id=\"sample--path\""))
+            .expect("expected positional argument definition");
+
+        assert_snapshot!(argument, @r##"<dl class="cli-reference"><dt id="sample--path"><a href="#sample--path"><code>PATH</code></a></dt></dl>"##);
     }
 }

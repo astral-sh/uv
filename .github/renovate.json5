@@ -3,15 +3,14 @@
   dependencyDashboard: true,
   suppressNotifications: ["prEditedNotification"],
   extends: [
-    "config:recommended",
+    "github>astral-sh/renovate-config",
     // For tool versions defined in GitHub Actions:
     "customManagers:githubActionsVersions",
   ],
-  labels: ["internal"],
+  labels: ["internal", "build:skip-docker", "build:skip-release"],
   schedule: ["* 0-3 * * 1"],
   semanticCommits: "disabled",
   separateMajorMinor: false,
-  prHourlyLimit: 10,
   enabledManagers: ["github-actions", "pre-commit", "cargo", "custom.regex"],
   cargo: {
     // See https://docs.renovatebot.com/configuration-options/#rangestrategy
@@ -41,6 +40,13 @@
       enabled: false,
     },
     {
+      // Disable updates of actions used by `.github/workflows/release.yml`;
+      // these action pins are managed by dist-workspace.toml
+      matchFileNames: [".github/workflows/release.yml"],
+      matchManagers: ["github-actions"],
+      enabled: false,
+    },
+    {
       // Create dedicated branches to update references to dependencies in the documentation.
       matchFileNames: ["docs/**/*.md"],
       commitMessageTopic: "documentation references to {{{depName}}}",
@@ -65,6 +71,27 @@
       matchDatasources: ["github-runners"],
       description: "Disable PRs updating GitHub runners (e.g. 'runs-on: macos-14')",
       enabled: false,
+    },
+    {
+      // Exclude test-system.yml from Python version updates, as it intentionally
+      // tests multiple Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-system.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-system.yml",
+      enabled: false,
+    },
+    {
+      // Exclude test-integration.yml from Python version updates, as it intentionally
+      // tests specific Python versions and should not be auto-updated.
+      matchFileNames: [".github/workflows/test-integration.yml"],
+      matchDepNames: ["python"],
+      description: "Disable Python version updates in test-integration.yml",
+      enabled: false,
+    },
+    {
+      matchFileNames: [".github/workflows/test-system.yml"],
+      extends: ["schedule:monthly"],
+      description: "Monthly update of test-system.yml dependencies",
     },
     {
       groupName: "pre-commit dependencies",
@@ -107,6 +134,14 @@
       matchDepNames: ["rust"],
       commitMessageTopic: "Rust",
     },
+    {
+      matchManagers: ["custom.regex"],
+      matchDepNames: ["maturin"],
+      commitMessageTopic: "maturin",
+      // Maturin upgrades can change release wheel contents, so keep release
+      // binary validation enabled.
+      labels: ["internal", "build:skip-docker"],
+    },
   ],
   customManagers: [
     // Update major GitHub actions references in documentation.
@@ -118,6 +153,17 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "regex:^v(?<major>\\d+)$",
+    },
+    // Maturin version used in maturin-action
+    {
+      customType: "regex",
+      managerFilePatterns: [
+        "/.github/workflows/build-release-binaries\\.yml$/",
+      ],
+      matchStrings: ["maturin-version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "maturin",
+      packageNameTemplate: "PyO3/maturin",
+      datasourceTemplate: "github-releases",
     },
     // Minimum supported Rust toolchain version
     {

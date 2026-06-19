@@ -19,7 +19,6 @@ fn main() {
 
     commit_info(&workspace_root);
 
-    #[allow(clippy::disallowed_methods)]
     let target = std::env::var(EnvVars::TARGET).unwrap();
     println!("cargo:rustc-env=RUST_HOST_TARGET={target}");
 }
@@ -28,6 +27,13 @@ fn commit_info(workspace_root: &Path) {
     // If not in a git repository, do not attempt to retrieve commit information
     let git_dir = workspace_root.join(".git");
     if !git_dir.exists() {
+        return;
+    }
+
+    // If in a jj repository, do not attempt to retrieve commit information because they snapshot
+    // frequently and will cause unnecessary rebuilds.
+    let jj_dir = workspace_root.join(".jj");
+    if jj_dir.exists() {
         return;
     }
 

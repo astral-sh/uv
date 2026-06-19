@@ -1,74 +1,190 @@
-#[cfg(feature = "schemars")]
-use std::borrow::Cow;
 use std::{
     ops::{Deref, DerefMut},
     str::FromStr,
 };
 
-use jiff::{Timestamp, ToSpan, tz::TimeZone};
+use jiff::Timestamp;
 use rustc_hash::FxHashMap;
+use serde::ser::SerializeMap;
+use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 use uv_normalize::PackageName;
+use uv_preview::PreviewFeature;
+use uv_warnings::warn_user_once;
 
-/// A timestamp that excludes files newer than it.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
-pub struct ExcludeNewerTimestamp(Timestamp);
+/// The configuration layer that supplied the effective `exclude-newer` cutoff for a package.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EffectiveExcludeNewerSource {
+    /// The global `exclude-newer` setting.
+    Global,
+    /// A package-specific `exclude-newer-package` override.
+    Package,
+    /// An index-specific `[[tool.uv.index]].exclude-newer` override.
+    Index,
+}
 
-impl ExcludeNewerTimestamp {
-    /// Returns the timestamp in milliseconds.
-    pub fn timestamp_millis(&self) -> i64 {
-        self.0.as_millisecond()
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerValueChange {
+    /// A relative span changed to a new value
+    SpanChanged(ExcludeNewerSpan, ExcludeNewerSpan),
+    /// A relative span was added
+    SpanAdded(ExcludeNewerSpan),
+    /// A relative span was removed
+    SpanRemoved,
+    /// A relative span is present and the timestamp changed
+    RelativeTimestampChanged(Timestamp, Timestamp, ExcludeNewerSpan),
+    /// The timestamp changed and a relative span is not present
+    AbsoluteTimestampChanged(Timestamp, Timestamp),
+}
+
+impl ExcludeNewerValueChange {
+    fn is_relative_timestamp_change(&self) -> bool {
+        matches!(self, Self::RelativeTimestampChanged(_, _, _))
     }
 }
 
-impl From<Timestamp> for ExcludeNewerTimestamp {
-    fn from(timestamp: Timestamp) -> Self {
-        Self(timestamp)
-    }
-}
-
-impl FromStr for ExcludeNewerTimestamp {
-    type Err = String;
-
-    /// Parse an [`ExcludeNewerTimestamp`] from a string.
-    ///
-    /// Accepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same
-    /// format (e.g., `2006-12-02`).
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        // NOTE(burntsushi): Previously, when using Chrono, we tried
-        // to parse as a date first, then a timestamp, and if both
-        // failed, we combined both of the errors into one message.
-        // But in Jiff, if an RFC 3339 timestamp could be parsed, then
-        // it must necessarily be the case that a date can also be
-        // parsed. So we can collapse the error cases here. That is,
-        // if we fail to parse a timestamp and a date, then it should
-        // be sufficient to just report the error from parsing the date.
-        // If someone tried to write a timestamp but committed an error
-        // in the non-date portion, the date parsing below will still
-        // report a holistic error that will make sense to the user.
-        // (I added a snapshot test for that case.)
-        if let Ok(timestamp) = input.parse::<Timestamp>() {
-            return Ok(Self(timestamp));
-        }
-        let date = input
-            .parse::<jiff::civil::Date>()
-            .map_err(|err| format!("`{input}` could not be parsed as a valid date: {err}"))?;
-        let timestamp = date
-            .checked_add(1.day())
-            .and_then(|date| date.to_zoned(TimeZone::system()))
-            .map(|zdt| zdt.timestamp())
-            .map_err(|err| {
-                format!(
-                    "`{input}` parsed to date `{date}`, but could not \
-                     be converted to a timestamp: {err}",
-                )
-            })?;
-        Ok(Self(timestamp))
-    }
-}
-
-impl std::fmt::Display for ExcludeNewerTimestamp {
+impl std::fmt::Display for ExcludeNewerValueChange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        match self {
+            Self::SpanChanged(old, new) => {
+                write!(f, "change of exclude newer span from `{old}` to `{new}`")
+            }
+            Self::SpanAdded(span) => {
+                write!(f, "addition of exclude newer span `{span}`")
+            }
+            Self::SpanRemoved => {
+                write!(f, "removal of exclude newer span")
+            }
+            Self::RelativeTimestampChanged(old, new, span) => {
+                write!(
+                    f,
+                    "change of calculated ({span}) exclude newer timestamp from `{old}` to `{new}`"
+                )
+            }
+            Self::AbsoluteTimestampChanged(old, new) => {
+                write!(
+                    f,
+                    "change of exclude newer timestamp from `{old}` to `{new}`"
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerChange {
+    GlobalChanged(ExcludeNewerValueChange),
+    GlobalAdded(ExcludeNewerValue),
+    GlobalRemoved,
+    Package(ExcludeNewerPackageChange),
+}
+
+impl ExcludeNewerChange {
+    /// Whether the change is due to a change in a relative timestamp.
+    pub fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::GlobalChanged(change) => change.is_relative_timestamp_change(),
+            Self::GlobalAdded(_) | Self::GlobalRemoved => false,
+            Self::Package(change) => change.is_relative_timestamp_change(),
+        }
+    }
+}
+
+impl std::fmt::Display for ExcludeNewerChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GlobalChanged(change) => {
+                write!(f, "{change}")
+            }
+            Self::GlobalAdded(value) => {
+                write!(f, "addition of global exclude newer {value}")
+            }
+            Self::GlobalRemoved => write!(f, "removal of global exclude newer"),
+            Self::Package(change) => {
+                write!(f, "{change}")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerPackageChange {
+    PackageAdded(PackageName, ExcludeNewerOverride),
+    PackageRemoved(PackageName),
+    PackageChanged(PackageName, Box<ExcludeNewerOverrideChange>),
+}
+
+impl ExcludeNewerPackageChange {
+    fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::PackageAdded(_, _) | Self::PackageRemoved(_) => false,
+            Self::PackageChanged(_, change) => change.is_relative_timestamp_change(),
+        }
+    }
+}
+
+impl std::fmt::Display for ExcludeNewerPackageChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PackageAdded(name, ExcludeNewerOverride::Enabled(value)) => {
+                write!(
+                    f,
+                    "addition of exclude newer `{}` for package `{name}`",
+                    value.as_ref()
+                )
+            }
+            Self::PackageAdded(name, ExcludeNewerOverride::Disabled) => {
+                write!(
+                    f,
+                    "addition of exclude newer exclusion for package `{name}`"
+                )
+            }
+            Self::PackageRemoved(name) => {
+                write!(f, "removal of exclude newer for package `{name}`")
+            }
+            Self::PackageChanged(name, change) => write!(f, "{change} for package `{name}`"),
+        }
+    }
+}
+
+fn compare_exclude_newer_value(
+    this: &ExcludeNewerValue,
+    other: &ExcludeNewerValue,
+) -> Option<ExcludeNewerValueChange> {
+    match (this.span(), other.span()) {
+        (None, Some(span)) => Some(ExcludeNewerValueChange::SpanAdded(*span)),
+        (Some(_), None) => Some(ExcludeNewerValueChange::SpanRemoved),
+        (Some(self_span), Some(other_span)) if self_span != other_span => Some(
+            ExcludeNewerValueChange::SpanChanged(*self_span, *other_span),
+        ),
+        (Some(_), Some(span)) if this.timestamp() != other.timestamp() => {
+            Some(ExcludeNewerValueChange::RelativeTimestampChanged(
+                this.timestamp(),
+                other.timestamp(),
+                *span,
+            ))
+        }
+        (None, None) if this.timestamp() != other.timestamp() => Some(
+            ExcludeNewerValueChange::AbsoluteTimestampChanged(this.timestamp(), other.timestamp()),
+        ),
+        (Some(_), Some(_)) | (None, None) => None,
+    }
+}
+
+pub struct ExcludeNewerValueWithSpanRef<'a>(pub &'a ExcludeNewerValue);
+
+impl serde::Serialize for ExcludeNewerValueWithSpanRef<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if let Some(span) = self.0.span() {
+            let mut map = serializer.serialize_map(Some(2))?;
+            map.serialize_entry("timestamp", &self.0.timestamp())?;
+            map.serialize_entry("span", span)?;
+            map.end()
+        } else {
+            self.0.timestamp().serialize(serializer)
+        }
     }
 }
 
@@ -76,43 +192,111 @@ impl std::fmt::Display for ExcludeNewerTimestamp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExcludeNewerPackageEntry {
-    pub package: PackageName,
-    pub timestamp: ExcludeNewerTimestamp,
+    package: PackageName,
+    setting: ExcludeNewerOverride,
 }
 
 impl FromStr for ExcludeNewerPackageEntry {
     type Err = String;
 
-    /// Parses a [`ExcludeNewerPackageEntry`] from a string in the format `PACKAGE=DATE`.
+    /// Parses a [`ExcludeNewerPackageEntry`] from a string in the format `PACKAGE=DATE` or `PACKAGE=false`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some((package, date)) = s.split_once('=') else {
+        let Some((package, value)) = s.split_once('=') else {
             return Err(format!(
-                "Invalid `exclude-newer-package` value `{s}`: expected format `PACKAGE=DATE`"
+                "Invalid `exclude-newer-package` value `{s}`: expected format `PACKAGE=DATE` or `PACKAGE=false`"
             ));
         };
 
         let package = PackageName::from_str(package).map_err(|err| {
             format!("Invalid `exclude-newer-package` package name `{package}`: {err}")
         })?;
-        let timestamp = ExcludeNewerTimestamp::from_str(date)
-            .map_err(|err| format!("Invalid `exclude-newer-package` timestamp `{date}`: {err}"))?;
 
-        Ok(Self { package, timestamp })
+        let setting = if value == "false" {
+            ExcludeNewerOverride::Disabled
+        } else {
+            ExcludeNewerOverride::Enabled(Box::new(ExcludeNewerValue::from_str(value).map_err(
+                |err| format!("Invalid `exclude-newer-package` value `{value}`: {err}"),
+            )?))
+        };
+
+        Ok(Self { package, setting })
     }
 }
 
-impl From<(PackageName, ExcludeNewerTimestamp)> for ExcludeNewerPackageEntry {
-    fn from((package, timestamp): (PackageName, ExcludeNewerTimestamp)) -> Self {
-        Self { package, timestamp }
+impl From<(PackageName, ExcludeNewerOverride)> for ExcludeNewerPackageEntry {
+    fn from((package, setting): (PackageName, ExcludeNewerOverride)) -> Self {
+        Self { package, setting }
+    }
+}
+
+impl From<(PackageName, ExcludeNewerValue)> for ExcludeNewerPackageEntry {
+    fn from((package, timestamp): (PackageName, ExcludeNewerValue)) -> Self {
+        Self {
+            package,
+            setting: ExcludeNewerOverride::Enabled(Box::new(timestamp)),
+        }
+    }
+}
+
+pub fn serialize_exclude_newer_package_with_spans<S>(
+    value: &Option<ExcludeNewerPackage>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let Some(value) = value else {
+        return serializer.serialize_none();
+    };
+
+    let mut map = serializer.serialize_map(Some(value.len()))?;
+    for (name, setting) in value {
+        match setting {
+            ExcludeNewerOverride::Disabled => map.serialize_entry(name, &false)?,
+            ExcludeNewerOverride::Enabled(value) => {
+                map.serialize_entry(name, &ExcludeNewerValueWithSpanRef(value.as_ref()))?;
+            }
+        }
+    }
+    map.end()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExcludeNewerOverrideChange {
+    Disabled { was: ExcludeNewerValue },
+    Enabled { now: ExcludeNewerValue },
+    TimestampChanged(ExcludeNewerValueChange),
+}
+
+impl ExcludeNewerOverrideChange {
+    fn is_relative_timestamp_change(&self) -> bool {
+        match self {
+            Self::Disabled { .. } | Self::Enabled { .. } => false,
+            Self::TimestampChanged(change) => change.is_relative_timestamp_change(),
+        }
+    }
+}
+
+impl std::fmt::Display for ExcludeNewerOverrideChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disabled { was } => {
+                write!(f, "add exclude newer exclusion (was `{was}`)")
+            }
+            Self::Enabled { now } => {
+                write!(f, "remove exclude newer exclusion (now `{now}`)")
+            }
+            Self::TimestampChanged(change) => write!(f, "{change}"),
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerTimestamp>);
+pub struct ExcludeNewerPackage(FxHashMap<PackageName, ExcludeNewerOverride>);
 
 impl Deref for ExcludeNewerPackage {
-    type Target = FxHashMap<PackageName, ExcludeNewerTimestamp>;
+    type Target = FxHashMap<PackageName, ExcludeNewerOverride>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -129,15 +313,15 @@ impl FromIterator<ExcludeNewerPackageEntry> for ExcludeNewerPackage {
     fn from_iter<T: IntoIterator<Item = ExcludeNewerPackageEntry>>(iter: T) -> Self {
         Self(
             iter.into_iter()
-                .map(|entry| (entry.package, entry.timestamp))
+                .map(|entry| (entry.package, entry.setting))
                 .collect(),
         )
     }
 }
 
 impl IntoIterator for ExcludeNewerPackage {
-    type Item = (PackageName, ExcludeNewerTimestamp);
-    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerTimestamp>;
+    type Item = (PackageName, ExcludeNewerOverride);
+    type IntoIter = std::collections::hash_map::IntoIter<PackageName, ExcludeNewerOverride>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -145,8 +329,8 @@ impl IntoIterator for ExcludeNewerPackage {
 }
 
 impl<'a> IntoIterator for &'a ExcludeNewerPackage {
-    type Item = (&'a PackageName, &'a ExcludeNewerTimestamp);
-    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerTimestamp>;
+    type Item = (&'a PackageName, &'a ExcludeNewerOverride);
+    type IntoIter = std::collections::hash_map::Iter<'a, PackageName, ExcludeNewerOverride>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -154,9 +338,66 @@ impl<'a> IntoIterator for &'a ExcludeNewerPackage {
 }
 
 impl ExcludeNewerPackage {
-    /// Convert to the inner `HashMap`.
-    pub fn into_inner(self) -> FxHashMap<PackageName, ExcludeNewerTimestamp> {
-        self.0
+    /// Returns true if this map is empty (no package-specific settings).
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn compare(&self, other: &Self) -> Option<ExcludeNewerPackageChange> {
+        for (package, setting) in self {
+            match (setting, other.get(package)) {
+                (
+                    ExcludeNewerOverride::Enabled(self_timestamp),
+                    Some(ExcludeNewerOverride::Enabled(other_timestamp)),
+                ) => {
+                    if let Some(change) =
+                        compare_exclude_newer_value(self_timestamp, other_timestamp)
+                    {
+                        return Some(ExcludeNewerPackageChange::PackageChanged(
+                            package.clone(),
+                            Box::new(ExcludeNewerOverrideChange::TimestampChanged(change)),
+                        ));
+                    }
+                }
+                (
+                    ExcludeNewerOverride::Enabled(self_timestamp),
+                    Some(ExcludeNewerOverride::Disabled),
+                ) => {
+                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                        package.clone(),
+                        Box::new(ExcludeNewerOverrideChange::Disabled {
+                            was: self_timestamp.as_ref().clone(),
+                        }),
+                    ));
+                }
+                (
+                    ExcludeNewerOverride::Disabled,
+                    Some(ExcludeNewerOverride::Enabled(other_timestamp)),
+                ) => {
+                    return Some(ExcludeNewerPackageChange::PackageChanged(
+                        package.clone(),
+                        Box::new(ExcludeNewerOverrideChange::Enabled {
+                            now: other_timestamp.as_ref().clone(),
+                        }),
+                    ));
+                }
+                (ExcludeNewerOverride::Disabled, Some(ExcludeNewerOverride::Disabled)) => {}
+                (_, None) => {
+                    return Some(ExcludeNewerPackageChange::PackageRemoved(package.clone()));
+                }
+            }
+        }
+
+        for (package, value) in other {
+            if !self.contains_key(package) {
+                return Some(ExcludeNewerPackageChange::PackageAdded(
+                    package.clone(),
+                    value.clone(),
+                ));
+            }
+        }
+
+        None
     }
 }
 
@@ -166,7 +407,7 @@ impl ExcludeNewerPackage {
 pub struct ExcludeNewer {
     /// Global timestamp that applies to all packages if no package-specific timestamp is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub global: Option<ExcludeNewerTimestamp>,
+    pub global: Option<ExcludeNewerValue>,
     /// Per-package timestamps that override the global timestamp.
     #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
     pub package: ExcludeNewerPackage,
@@ -174,21 +415,25 @@ pub struct ExcludeNewer {
 
 impl ExcludeNewer {
     /// Create a new exclude newer configuration with just a global timestamp.
-    pub fn global(global: ExcludeNewerTimestamp) -> Self {
+    pub fn global(global: ExcludeNewerValue) -> Self {
         Self {
             global: Some(global),
             package: ExcludeNewerPackage::default(),
         }
     }
 
-    /// Create a new exclude newer configuration.
-    pub fn new(global: Option<ExcludeNewerTimestamp>, package: ExcludeNewerPackage) -> Self {
-        Self { global, package }
+    fn warn_index_exclude_newer_preview() {
+        if !uv_preview::is_enabled(PreviewFeature::IndexExcludeNewer) {
+            warn_user_once!(
+                "Setting `exclude-newer` on configured indexes is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
+                PreviewFeature::IndexExcludeNewer
+            );
+        }
     }
 
     /// Create from CLI arguments.
     pub fn from_args(
-        global: Option<ExcludeNewerTimestamp>,
+        global: Option<ExcludeNewerValue>,
         package: Vec<ExcludeNewerPackageEntry>,
     ) -> Self {
         let package: ExcludeNewerPackage = package.into_iter().collect();
@@ -196,51 +441,107 @@ impl ExcludeNewer {
         Self { global, package }
     }
 
-    /// Returns the timestamp for a specific package, falling back to the global timestamp if set.
-    pub fn exclude_newer_package(
+    /// Returns the effective exclude-newer timestamp for a specific package, falling back to the
+    /// global value if no package-specific setting exists.
+    pub(crate) fn exclude_newer_package(&self, package_name: &PackageName) -> Option<Timestamp> {
+        match self.package.get(package_name) {
+            Some(ExcludeNewerOverride::Enabled(value)) => Some(value.timestamp()),
+            Some(ExcludeNewerOverride::Disabled) => None,
+            None => self.global.as_ref().map(ExcludeNewerValue::timestamp),
+        }
+    }
+
+    /// Returns the effective exclude-newer timestamp for a package resolved from a specific index.
+    pub fn exclude_newer_package_for_index(
         &self,
         package_name: &PackageName,
-    ) -> Option<ExcludeNewerTimestamp> {
-        self.package.get(package_name).copied().or(self.global)
+        index: Option<&ExcludeNewerOverride>,
+    ) -> Option<Timestamp> {
+        self.exclude_newer_package_for_index_with_source(package_name, index)
+            .map(|(timestamp, _)| timestamp)
+    }
+
+    /// Returns the effective exclude-newer timestamp and its source for a package resolved from a
+    /// specific index.
+    pub(crate) fn exclude_newer_package_for_index_with_source(
+        &self,
+        package_name: &PackageName,
+        index: Option<&ExcludeNewerOverride>,
+    ) -> Option<(Timestamp, EffectiveExcludeNewerSource)> {
+        match self.package.get(package_name) {
+            Some(ExcludeNewerOverride::Enabled(value)) => {
+                Some((value.timestamp(), EffectiveExcludeNewerSource::Package))
+            }
+            Some(ExcludeNewerOverride::Disabled) => None,
+            None => match index {
+                Some(ExcludeNewerOverride::Disabled) => {
+                    Self::warn_index_exclude_newer_preview();
+                    None
+                }
+                Some(ExcludeNewerOverride::Enabled(value)) => Some((
+                    {
+                        Self::warn_index_exclude_newer_preview();
+                        value.timestamp()
+                    },
+                    EffectiveExcludeNewerSource::Index,
+                )),
+                None => self
+                    .global
+                    .as_ref()
+                    .map(|value| (value.timestamp(), EffectiveExcludeNewerSource::Global)),
+            },
+        }
     }
 
     /// Returns true if this has any configuration (global or per-package).
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.global.is_none() && self.package.is_empty()
+    }
+
+    pub fn compare(&self, other: &Self) -> Option<ExcludeNewerChange> {
+        match (&self.global, &other.global) {
+            (Some(self_global), Some(other_global)) => {
+                if let Some(change) = compare_exclude_newer_value(self_global, other_global) {
+                    if !change.is_relative_timestamp_change() {
+                        return Some(ExcludeNewerChange::GlobalChanged(change));
+                    }
+                }
+            }
+            (None, Some(global)) => {
+                return Some(ExcludeNewerChange::GlobalAdded(global.clone()));
+            }
+            (Some(_), None) => return Some(ExcludeNewerChange::GlobalRemoved),
+            (None, None) => (),
+        }
+        self.package
+            .compare(&other.package)
+            .map(ExcludeNewerChange::Package)
     }
 }
 
 impl std::fmt::Display for ExcludeNewer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(global) = self.global {
+        if let Some(global) = &self.global {
             write!(f, "global: {global}")?;
             if !self.package.is_empty() {
                 write!(f, ", ")?;
             }
         }
         let mut first = true;
-        for (name, timestamp) in &self.package {
+        for (name, setting) in &self.package {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{name}: {timestamp}")?;
+            match setting {
+                ExcludeNewerOverride::Enabled(timestamp) => {
+                    write!(f, "{name}: {}", timestamp.as_ref())?;
+                }
+                ExcludeNewerOverride::Disabled => {
+                    write!(f, "{name}: disabled")?;
+                }
+            }
             first = false;
         }
         Ok(())
-    }
-}
-
-#[cfg(feature = "schemars")]
-impl schemars::JsonSchema for ExcludeNewerTimestamp {
-    fn schema_name() -> Cow<'static, str> {
-        Cow::Borrowed("ExcludeNewerTimestamp")
-    }
-
-    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "string",
-            "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
-            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
-        })
     }
 }

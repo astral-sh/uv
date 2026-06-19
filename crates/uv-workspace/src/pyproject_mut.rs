@@ -79,14 +79,6 @@ struct Comment {
     kind: CommentType,
 }
 
-impl ArrayEdit {
-    pub fn index(&self) -> usize {
-        match self {
-            Self::Update(i) | Self::Add(i) => *i,
-        }
-    }
-}
-
 /// The default version specifier when adding a dependency.
 // While PEP 440 allows an arbitrary number of version digits, the `major` and `minor` build on
 // most projects sticking to two or three components and a SemVer-ish versioning system, so can
@@ -357,6 +349,50 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    ///
+    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
+    pub fn replace_dependency(
+        &mut self,
+        req: &Requirement,
+        raw: bool,
+    ) -> Result<Option<ArrayEdit>, Error> {
+        let Some(dependencies) = self
+            .project_mut()?
+            .and_then(|project| project.get_mut("dependencies"))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(None);
+        };
+        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
+
+        match to_replace.as_slice() {
+            [] => Ok(None),
+            [_] => {
+                let (index, _) = to_replace.remove(0);
+                let req_string = if raw {
+                    req.displayable_with_credentials().to_string()
+                } else {
+                    req.to_string()
+                };
+                dependencies.replace(index, req_string);
+                Ok(Some(ArrayEdit::Update(index)))
+            }
+            _ => Err(Error::Ambiguous {
+                package_name: req.name.clone(),
+                requirements: to_replace
+                    .into_iter()
+                    .map(|(_, requirement)| requirement)
+                    .collect(),
+            }),
+        }
+    }
+
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -414,14 +450,13 @@ impl PyProjectTomlMut {
             .iter()
             .find(|table| {
                 // If the index has the same name, reuse it.
-                if let Some(index) = index.name.as_deref() {
-                    if table
+                if let Some(index) = index.name.as_deref()
+                    && table
                         .get("name")
                         .and_then(|name| name.as_str())
                         .is_some_and(|name| name == index)
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
 
                 // If the index is the default, and there's another default index, reuse it.
@@ -451,23 +486,22 @@ impl PyProjectTomlMut {
             .unwrap_or_default();
 
         // If necessary, update the name.
-        if let Some(index) = index.name.as_deref() {
-            if table
+        if let Some(index) = index.name.as_deref()
+            && table
                 .get("name")
                 .and_then(|name| name.as_str())
                 .is_none_or(|name| name != index)
-            {
-                let mut formatted = Formatted::new(index.to_string());
-                if let Some(value) = table.get("name").and_then(Item::as_value) {
-                    if let Some(prefix) = value.decor().prefix() {
-                        formatted.decor_mut().set_prefix(prefix.clone());
-                    }
-                    if let Some(suffix) = value.decor().suffix() {
-                        formatted.decor_mut().set_suffix(suffix.clone());
-                    }
+        {
+            let mut formatted = Formatted::new(index.to_string());
+            if let Some(value) = table.get("name").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
                 }
-                table.insert("name", Value::String(formatted).into());
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
             }
+            table.insert("name", Value::String(formatted).into());
         }
 
         // If necessary, update the URL.
@@ -511,14 +545,13 @@ impl PyProjectTomlMut {
         // Remove any replaced tables.
         existing.retain(|table| {
             // If the index has the same name, skip it.
-            if let Some(index) = index.name.as_deref() {
-                if table
+            if let Some(index) = index.name.as_deref()
+                && table
                     .get("name")
                     .and_then(|name| name.as_str())
                     .is_some_and(|name| name == index)
-                {
-                    return false;
-                }
+            {
+                return false;
             }
 
             // If there's another default index, skip it.
@@ -545,17 +578,17 @@ impl PyProjectTomlMut {
 
         // Set the position to the minimum, if it's not already the first element.
         if let Some(min) = existing.iter().filter_map(Table::position).min() {
-            table.set_position(min);
+            table.set_position(Some(min));
 
             // Increment the position of all existing elements.
             for table in existing.iter_mut() {
                 if let Some(position) = table.position() {
-                    table.set_position(position + 1);
+                    table.set_position(Some(position + 1));
                 }
             }
         } else {
             let position = isize::try_from(size).expect("TOML table size fits in `isize`");
-            table.set_position(position);
+            table.set_position(Some(position));
         }
 
         // Push the item to the table.
@@ -1132,10 +1165,10 @@ impl PyProjectTomlMut {
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
-            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, marker, dependencies).is_empty() {
-                    types.push(DependencyType::Production);
-                }
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
+                && !find_dependencies(name, marker, dependencies).is_empty()
+            {
+                types.push(DependencyType::Production);
             }
 
             // Check `project.optional-dependencies`.
@@ -1183,10 +1216,9 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
+            && !find_dependencies(name, marker, dev_dependencies).is_empty()
         {
-            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
-                types.push(DependencyType::Dev);
-            }
+            types.push(DependencyType::Dev);
         }
 
         types
@@ -1251,7 +1283,7 @@ fn implicit() -> Item {
 /// Adds a dependency to the given `deps` array.
 ///
 /// Returns `true` if the dependency was added, `false` if it was updated.
-pub fn add_dependency(
+fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
@@ -1545,11 +1577,51 @@ fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool
 
 /// Removes all occurrences of dependencies with the given name from the given `deps` array.
 fn remove_dependency(name: &PackageName, deps: &mut Array) -> Vec<Requirement> {
-    // Remove matching dependencies.
+    // Remove in reverse to preserve indices. Before each removal, transfer the item's
+    // prefix (which may contain end-of-line comments belonging to the previous line) to
+    // the next item or array trailing so comments are not lost.
+    //
+    // For example, in:
+    // ```toml
+    // dependencies = [
+    //     "numpy>=2.4.3", # essential comment
+    //     "requests>=2.32.5",
+    // ]
+    // ```
+    //
+    // The comment `# essential comment` is stored by `toml_edit` in the prefix of
+    // `requests`. When `requests` is removed, we transfer it so it remains on the
+    // `numpy` line.
     let removed = find_dependencies(name, None, deps)
         .into_iter()
-        .rev() // Reverse to preserve indices as we remove them.
+        .rev()
         .filter_map(|(i, _)| {
+            if let Some(prefix) = deps
+                .get(i)
+                .and_then(|item| item.decor().prefix().and_then(|s| s.as_str()))
+                .filter(|s| !s.is_empty())
+            {
+                let prefix = prefix.to_string();
+                if let Some(next) = deps.get(i + 1)
+                    && let Some(existing) = next.decor().prefix().and_then(|s| s.as_str())
+                {
+                    // Transfer removed item's prefix to the next item's prefix.
+                    let existing = existing.to_string();
+                    deps.get_mut(i + 1)
+                        .unwrap()
+                        .decor_mut()
+                        .set_prefix(format!("{prefix}{existing}"));
+                } else if let Some(next) = deps.get_mut(i + 1) {
+                    // Next item exists but has no prefix; use ours directly.
+                    next.decor_mut().set_prefix(&prefix);
+                } else if let Some(existing) = deps.trailing().as_str() {
+                    // No next item; move comments to the array trailing.
+                    deps.set_trailing(format!("{prefix}{existing}"));
+                } else {
+                    deps.set_trailing(&prefix);
+                }
+            }
+
             deps.remove(i)
                 .as_str()
                 .and_then(|req| Requirement::from_str(req).ok())
@@ -1572,10 +1644,11 @@ fn find_dependencies(
 ) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
-                to_replace.push((i, req));
-            }
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement)
+            && marker.is_none_or(|m| *m == req.marker)
+            && *name == req.name
+        {
+            to_replace.push((i, req));
         }
     }
     to_replace
@@ -1750,10 +1823,17 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, split_specifiers};
+    use super::{
+        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        remove_dependency, split_specifiers,
+    };
+    use anyhow::Result;
+    use insta::assert_snapshot;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
+    use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_pep508::Requirement;
 
     #[test]
     fn split() {
@@ -1926,5 +2006,281 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn replace_dependency_preserves_source() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let requirement = Requirement::from_str("anyio")?;
+
+        let replaced = pyproject.replace_dependency(&requirement, false)?;
+        assert!(replaced.is_some());
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # this comment is clearly essential
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_end_of_line_comment_on_previous_item_middle() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "requests>=2.32.5",
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3", # numpy comment
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_preserves_own_line_comment_above_removed_item() {
+        let toml = r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+    "requests>=2.32.5",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "numpy>=2.4.3",
+    # This is a comment about requests
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_last() {
+        // When the removed item itself has an end-of-line comment and is the last item,
+        // toml_edit stores the comment in the array trailing. The comment is preserved
+        // (as an own-line comment in the trailing section) but moves position since it
+        // can no longer be on the removed item's line.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_last_item_with_trailing_comment_preserves_previous_comment() {
+        let toml = r#"
+[project]
+dependencies = [
+    "boto3", # this is boto3
+    "requests", # this is requests
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("requests").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "boto3", # this is boto3
+    # this is requests
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_item_with_trailing_comment_middle() {
+        // When the removed item has an end-of-line comment and is in the middle,
+        // toml_edit stores the comment in the next item's prefix. After removal,
+        // reformat_array_multiline repositions it as an own-line comment.
+        let toml = r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    "numpy>=2.4.3", # comment on numpy
+    "flask>=3.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("numpy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "requests>=2.32.5",
+    # comment on numpy
+    "flask>=3.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_first_item_with_trailing_comment_preserves_leading_comments() {
+        let toml = r#"
+[project]
+dependencies = [
+    # should be in alphabetical order
+    "basedmypy[faster-cache]>=2.8.1", # this is a comment
+    "basedpyright>=1.18.2,<2.0.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("basedmypy").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    # should be in alphabetical order
+    # this is a comment
+    "basedpyright>=1.18.2,<2.0.0",
+]
+"#
+        );
+    }
+
+    #[test]
+    fn remove_multiple_adjacent_matches_preserves_comment_order() {
+        let toml = r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    "typing-extensions>=4.0.0 ; python_version < '3.11'", # comment on first typing-extensions
+    "typing-extensions>=4.0.0 ; python_version >= '3.11'",
+    "sniffio>=1.3.0",
+]
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        let deps = doc["project"]["dependencies"]
+            .as_array_mut()
+            .expect("dependencies array");
+
+        let name = PackageName::from_str("typing-extensions").unwrap();
+        remove_dependency(&name, deps);
+
+        assert_snapshot!(
+            doc.to_string(),
+            @r#"
+[project]
+dependencies = [
+    "iniconfig>=2.0.0", # comment on iniconfig
+    # comment on first typing-extensions
+    "sniffio>=1.3.0",
+]
+"#
+        );
     }
 }

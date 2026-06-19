@@ -218,7 +218,7 @@ impl InternerGuard<'_> {
             //
             // Note that in the presence of the `in` operator, we may not be able to simplify
             // some marker trees to a constant `true` or `false`. For example, it is not trivial to
-            // detect that `os_name > 'z' and os_name in 'Linux'` is unsatisfiable.
+            // detect that `os_name == 'Windows' and os_name in 'Linux'` is unsatisfiable.
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::In,
@@ -313,7 +313,10 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                (Variable::String(key), Edges::from_string(operator, value))
+                (
+                    Variable::String(key),
+                    Edges::from_string(key, operator, value),
+                )
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -558,27 +561,46 @@ impl InternerGuard<'_> {
     /// `((os_name == ... and extra == foo) or (sys_platform == ... and extra != foo))`,
     /// this would return a marker
     /// `os_name == ... or sys_platform == ...`.
-    pub(crate) fn without_extras(&mut self, mut i: NodeId) -> NodeId {
+    pub(crate) fn without_extras(&mut self, i: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.without_extras_cached(i, &mut cache)
+    }
+
+    fn without_extras_cached(
+        &mut self,
+        mut i: NodeId,
+        cache: &mut FxHashMap<NodeId, NodeId>,
+    ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
 
+        if let Some(&cached) = cache.get(&i) {
+            return cached;
+        }
+
+        let original = i;
         let parent = i;
         let node = self.shared.node(i);
-        if matches!(node.var, Variable::Extra(_)) {
+        let result = if matches!(node.var, Variable::Extra(_)) {
             i = NodeId::FALSE;
             for child in node.children.nodes() {
                 i = self.or(i, child.negate(parent));
             }
             if i.is_true() {
-                return NodeId::TRUE;
+                NodeId::TRUE
+            } else {
+                self.without_extras_cached(i, cache)
             }
-            self.without_extras(i)
         } else {
             // Restrict all nodes recursively.
-            let children = node.children.map(i, |node| self.without_extras(node));
+            let children = node
+                .children
+                .map(i, |node| self.without_extras_cached(node, cache));
             self.create_node(node.var.clone(), children)
-        }
+        };
+        cache.insert(original, result);
+        result
     }
 
     /// Returns a new tree where the only nodes remaining are `extra` nodes.
@@ -1161,7 +1183,6 @@ type SmallVec<T> = smallvec::SmallVec<[T; 5]>;
 
 /// The edges of a decision node.
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
-#[allow(clippy::large_enum_variant)] // Nodes are interned.
 pub(crate) enum Edges {
     // The edges of a version variable, representing a disjoint set of ranges that cover
     // the output space.
@@ -1207,15 +1228,47 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
-        let range: Ranges<ArcStr> = match operator {
-            MarkerOperator::Equal => Ranges::singleton(value),
-            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
-            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Ranges::lower_than(value),
-            MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
+    fn from_string(
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        value: ArcStr,
+    ) -> Self {
+        let range: Ranges<ArcStr> = match (key, operator) {
+            // `platform_release` and `platform_version` are `Version | String` fields. Preserve
+            // their existing lexicographic behavior here; their version-aware semantics are
+            // outside the pure string field behavior handled by this change.
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterThan,
+            ) => Ranges::strictly_higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterEqual,
+            ) => Ranges::higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessThan,
+            ) => Ranges::strictly_lower_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessEqual,
+            ) => Ranges::lower_than(value),
+            (_, MarkerOperator::Equal) => Ranges::singleton(value),
+            (_, MarkerOperator::NotEqual) => Ranges::singleton(value).complement(),
+            // The marker specification defines strict ordering comparisons for string-valued
+            // fields as always false, while inclusive ordering comparisons are equivalent to
+            // equality.
+            (_, MarkerOperator::GreaterThan | MarkerOperator::LessThan) => Ranges::empty(),
+            (_, MarkerOperator::GreaterEqual | MarkerOperator::LessEqual) => {
+                Ranges::singleton(value)
+            }
+            (_, MarkerOperator::TildeEqual) => {
+                unreachable!("string comparisons with ~= are ignored")
+            }
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 
@@ -1766,15 +1819,17 @@ mod tests {
         assert!(m().or(extra_foo, extra_not_foo).is_true());
 
         let os_geq_bar = expr("os_name >= 'bar'");
-        assert!(!os_geq_bar.is_false());
+        assert_eq!(os_geq_bar, expr("os_name == 'bar'"));
 
-        let os_le_bar = expr("os_name < 'bar'");
-        assert!(m().and(os_geq_bar, os_le_bar).is_false());
-        assert!(m().or(os_geq_bar, os_le_bar).is_true());
+        let os_lt_bar = expr("os_name < 'bar'");
+        assert!(os_lt_bar.is_false());
+        assert!(m().and(os_geq_bar, os_lt_bar).is_false());
+        assert_eq!(m().or(os_geq_bar, os_lt_bar), os_geq_bar);
 
         let os_leq_bar = expr("os_name <= 'bar'");
-        assert!(!m().and(os_geq_bar, os_leq_bar).is_false());
-        assert!(m().or(os_geq_bar, os_leq_bar).is_true());
+        assert_eq!(os_leq_bar, os_geq_bar);
+        assert_eq!(m().and(os_geq_bar, os_leq_bar), os_geq_bar);
+        assert_eq!(m().or(os_geq_bar, os_leq_bar), os_geq_bar);
     }
 
     #[test]
@@ -1814,5 +1869,26 @@ mod tests {
         let a = m().and(x86, windows);
         let b = m().and(not_x86, windows);
         assert_eq!(m().or(a, b), windows);
+    }
+
+    /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+    #[test]
+    fn python_version_marker_u64_max() {
+        // The parse error is converted to a warning and the condition is ignored.
+        assert_eq!(
+            MarkerExpression::from_str("python_version > '3.18446744073709551615'").unwrap(),
+            None,
+        );
+        assert_eq!(
+            MarkerExpression::from_str("python_version <= '3.18446744073709551615'").unwrap(),
+            None,
+        );
+
+        // `u64::MAX - 1` accepted
+        assert!(
+            MarkerExpression::from_str("python_version > '3.18446744073709551614'")
+                .unwrap()
+                .is_some()
+        );
     }
 }

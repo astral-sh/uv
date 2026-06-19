@@ -1,12 +1,12 @@
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use uv_preview::Preview;
+use uv_fs::Simplified;
 use uv_python::{Interpreter, PythonEnvironment};
 
-pub use virtualenv::{OnExisting, RemovalReason, remove_virtualenv};
+pub use virtualenv::{ClearNonVirtualenv, OnExisting, RemovalReason};
 
 mod virtualenv;
 
@@ -20,6 +20,32 @@ pub enum Error {
     NotFound(String),
     #[error(transparent)]
     Python(#[from] uv_python::managed::Error),
+    #[error("A {name} already exists at: {}", path.user_display())]
+    Exists {
+        /// The type of environment (e.g., "virtual environment" or "directory").
+        name: &'static str,
+        /// The path to the existing environment.
+        path: PathBuf,
+    },
+    #[error("uv will not clear a directory that is not a virtual environment")]
+    ClearNonVirtualenv {
+        /// The non-virtual environment directory that would have been cleared.
+        path: PathBuf,
+    },
+}
+
+impl uv_errors::Hint for Error {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Exists { name, .. } => uv_errors::Hints::from(format!(
+                "Use the `--clear` flag or set `UV_VENV_CLEAR=1` to replace the existing {name}",
+            )),
+            Self::ClearNonVirtualenv { .. } => uv_errors::Hints::from(
+                "Use the `--force` flag to remove the existing directory anyway",
+            ),
+            _ => uv_errors::Hints::none(),
+        }
+    }
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
@@ -46,7 +72,7 @@ impl Prompt {
 }
 
 /// Create a virtualenv.
-#[allow(clippy::fn_params_excessive_bools)]
+#[expect(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
     location: &Path,
     interpreter: Interpreter,
@@ -56,7 +82,6 @@ pub fn create_venv(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
-    preview: Preview,
 ) -> Result<PythonEnvironment, Error> {
     // Create the virtualenv at the given location.
     let virtualenv = virtualenv::create(
@@ -68,7 +93,6 @@ pub fn create_venv(
         relocatable,
         seed,
         upgradeable,
-        preview,
     )?;
 
     // Create the corresponding `PythonEnvironment`.

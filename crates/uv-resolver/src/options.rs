@@ -14,7 +14,7 @@ pub struct Options {
     pub fork_strategy: ForkStrategy,
     pub exclude_newer: ExcludeNewer,
     pub index_strategy: IndexStrategy,
-    pub required_environments: SupportedEnvironments,
+    pub artifact_environments: SupportedEnvironments,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
     pub torch_backend: Option<TorchStrategy>,
@@ -29,7 +29,7 @@ pub struct OptionsBuilder {
     fork_strategy: ForkStrategy,
     exclude_newer: ExcludeNewer,
     index_strategy: IndexStrategy,
-    required_environments: SupportedEnvironments,
+    artifact_environments: SupportedEnvironments,
     flexibility: Flexibility,
     build_options: BuildOptions,
     torch_backend: Option<TorchStrategy>,
@@ -83,10 +83,10 @@ impl OptionsBuilder {
         self
     }
 
-    /// Sets the required platforms.
+    /// Sets the environments that require artifact coverage.
     #[must_use]
-    pub fn required_environments(mut self, required_environments: SupportedEnvironments) -> Self {
-        self.required_environments = required_environments;
+    pub fn artifact_environments(mut self, artifact_environments: SupportedEnvironments) -> Self {
+        self.artifact_environments = artifact_environments;
         self
     }
 
@@ -120,7 +120,7 @@ impl OptionsBuilder {
             fork_strategy: self.fork_strategy,
             exclude_newer: self.exclude_newer,
             index_strategy: self.index_strategy,
-            required_environments: self.required_environments,
+            artifact_environments: self.artifact_environments,
             flexibility: self.flexibility,
             build_options: self.build_options,
             torch_backend: self.torch_backend,

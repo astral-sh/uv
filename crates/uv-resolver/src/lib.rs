@@ -1,31 +1,36 @@
 pub use dependency_mode::DependencyMode;
 pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::{
-    ExcludeNewer, ExcludeNewerPackage, ExcludeNewerPackageEntry, ExcludeNewerTimestamp,
+    ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
+    ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,
+    ExcludeNewerValueWithSpanRef, serialize_exclude_newer_package_with_spans,
 };
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
-    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
-    VERSION, cyclonedx_json,
+    Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap, PylockToml,
+    PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
+    TreeDisplay, VERSION, cyclonedx_json,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;
+pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{
     AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{
-    BuildId, DefaultResolverProvider, DerivationChainBuilder, InMemoryIndex, MetadataResponse,
-    PackageVersionsResult, Reporter as ResolverReporter, Resolver, ResolverEnvironment,
-    ResolverProvider, VersionsResponse, WheelMetadataResult,
+    DefaultResolverProvider, InMemoryIndex, MetadataResponse, PackageVersionsResult,
+    Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
+    VersionsResponse, WheelMetadataResult,
 };
 pub use universal_marker::{ConflictMarker, UniversalMarker};
+pub use upgrade::UpgradePackages;
+pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 pub use version_map::VersionMap;
 pub use yanks::AllowedYanks;
 
@@ -63,5 +68,6 @@ mod resolution;
 mod resolution_mode;
 mod resolver;
 mod universal_marker;
+mod upgrade;
 mod version_map;
 mod yanks;

@@ -1,11 +1,10 @@
 [package]
 name = "uv-cache"
-version = "0.0.1"
-description = "This is a component crate of uv"
+version = "0.0.55"
+description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
-documentation = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
@@ -21,6 +20,7 @@ uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-fastid = { workspace = true, features = ["serde"] }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
 uv-pypi-types = { workspace = true }
@@ -29,11 +29,11 @@ uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"], optional = true }
 fs-err = { workspace = true, features = ["tokio"] }
-nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }

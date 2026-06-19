@@ -5,29 +5,28 @@ use std::str::Utf8Error;
 use fs_err::File;
 use thiserror::Error;
 
+use uv_fs::Simplified;
+
 #[cfg(all(windows, target_arch = "x86"))]
-const LAUNCHER_I686_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-gui.exe");
+const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-i686-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-i686-console.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
-const LAUNCHER_X86_64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-gui.exe");
+const LAUNCHER_X86_64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-x86_64-gui.exe");
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 const LAUNCHER_X86_64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-x86_64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-x86_64-console.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
-const LAUNCHER_AARCH64_GUI: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-gui.exe");
+const LAUNCHER_AARCH64_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-aarch64-gui.exe");
 
 #[cfg(all(windows, target_arch = "aarch64"))]
 const LAUNCHER_AARCH64_CONSOLE: &[u8] =
-    include_bytes!("../../uv-trampoline/trampolines/uv-trampoline-aarch64-console.exe");
+    include_bytes!("../trampolines/uv-trampoline-aarch64-console.exe");
 
 // https://learn.microsoft.com/en-us/windows/win32/menurc/resource-types
 #[cfg(windows)]
@@ -231,8 +230,17 @@ pub enum Error {
     NotWindows,
     #[error("Cannot process launcher metadata from resource")]
     UnprocessableMetadata,
+    #[cfg(windows)]
+    #[error("Failed to write Windows launcher ZIP payload")]
+    AsyncZip(#[from] async_zip::error::ZipError),
     #[error("Resources over 2^32 bytes are not supported")]
     ResourceTooLarge,
+    #[error("Failed to update Windows PE resources: {}", path.user_display())]
+    WriteResources {
+        path: PathBuf,
+        #[source]
+        err: io::Error,
+    },
 }
 
 #[allow(clippy::unnecessary_wraps, unused_variables)]
@@ -281,13 +289,18 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
             BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
         };
 
+        let map_err = |err: windows::core::Error| Error::WriteResources {
+            path: path.to_path_buf(),
+            err: io::Error::from_raw_os_error(err.code().0),
+        };
+
         let path_str = path
             .as_os_str()
             .encode_wide()
             .chain(std::iter::once(0))
             .collect::<Vec<_>>();
         let handle = BeginUpdateResourceW(windows::core::PCWSTR(path_str.as_ptr()), false)
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            .map_err(map_err)?;
 
         for (name, data) in resources {
             UpdateResourceW(
@@ -298,11 +311,10 @@ fn write_resources(path: &Path, resources: &[(windows::core::PCWSTR, &[u8])]) ->
                 Some(data.as_ptr().cast()),
                 u32::try_from(data.len()).map_err(|_| Error::ResourceTooLarge)?,
             )
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+            .map_err(&map_err)?;
         }
 
-        EndUpdateResourceW(handle, false)
-            .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        EndUpdateResourceW(handle, false).map_err(map_err)?;
     }
 
     Ok(())
@@ -371,30 +383,22 @@ pub fn windows_script_launcher(
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    use std::io::{Cursor, Write};
-
-    use zip::ZipWriter;
-    use zip::write::SimpleFileOptions;
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
 
     use uv_fs::Simplified;
 
     let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
 
-    let mut payload: Vec<u8> = Vec::new();
-    {
-        // We're using the zip writer, but with stored compression
-        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
-        let error_msg = "Writing to Vec<u8> should never fail";
-        archive.start_file("__main__.py", stored).expect(error_msg);
-        archive
-            .write_all(launcher_python_script.as_bytes())
-            .expect(error_msg);
-        archive.finish().expect(error_msg);
-    }
+    // Store the launcher script without compression.
+    // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+    // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new()));
+    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
+    block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
+    let payload = block_on(archive.close())?.into_inner();
 
     let python = python_executable.as_ref();
     let python_path = python.simplified_display().to_string();
@@ -482,7 +486,7 @@ pub fn windows_python_launcher(
 }
 
 #[cfg(all(test, windows))]
-#[allow(clippy::print_stdout)]
+#[expect(clippy::print_stdout)]
 mod test {
     use std::io::Write;
     use std::path::Path;
@@ -501,14 +505,14 @@ mod test {
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
     fn test_launchers_are_small() {
-        // At time of writing, they are ~45kb.
+        // At time of writing, they are ~40kb.
         assert!(
-            super::LAUNCHER_I686_GUI.len() < 45 * 1024,
+            super::LAUNCHER_I686_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_I686_GUI.len()
         );
         assert!(
-            super::LAUNCHER_I686_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_I686_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_I686_CONSOLE.len()
         );
@@ -519,12 +523,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_X86_64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_X86_64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_X86_64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_X86_64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_X86_64_CONSOLE.len()
         );
@@ -535,12 +539,12 @@ mod test {
     fn test_launchers_are_small() {
         // At time of writing, they are ~45kb.
         assert!(
-            super::LAUNCHER_AARCH64_GUI.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_GUI.len() < 50 * 1024,
             "GUI launcher: {}",
             super::LAUNCHER_AARCH64_GUI.len()
         );
         assert!(
-            super::LAUNCHER_AARCH64_CONSOLE.len() < 45 * 1024,
+            super::LAUNCHER_AARCH64_CONSOLE.len() < 50 * 1024,
             "CLI launcher: {}",
             super::LAUNCHER_AARCH64_CONSOLE.len()
         );

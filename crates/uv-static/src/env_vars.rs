@@ -19,6 +19,14 @@ impl EnvVars {
     #[attr_added_in("0.6.0")]
     pub const UV: &'static str = "UV";
 
+    /// The path to the Ruff binary used by `uv format`.
+    #[attr_added_in("0.11.22")]
+    pub const RUFF: &'static str = "RUFF";
+
+    /// The path to the ty binary used by `uv check`.
+    #[attr_added_in("0.11.22")]
+    pub const TY: &'static str = "TY";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     #[attr_added_in("0.5.9")]
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
@@ -108,9 +116,17 @@ impl EnvVars {
     pub const UV_BREAK_SYSTEM_PACKAGES: &'static str = "UV_BREAK_SYSTEM_PACKAGES";
 
     /// Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
-    /// use the system's trust store instead of the bundled `webpki-roots` crate.
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
+    /// (Deprecated: use `UV_SYSTEM_CERTS` instead.)
     #[attr_added_in("0.1.19")]
     pub const UV_NATIVE_TLS: &'static str = "UV_NATIVE_TLS";
+
+    /// Equivalent to the `--system-certs` command-line argument. If set to `true`, uv will
+    /// load TLS certificates from the platform's native certificate store instead of the
+    /// bundled Mozilla root certificates.
+    #[attr_added_in("0.11.0")]
+    pub const UV_SYSTEM_CERTS: &'static str = "UV_SYSTEM_CERTS";
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///
@@ -179,6 +195,10 @@ impl EnvVars {
     #[attr_added_in("0.2.30")]
     pub const UV_NO_CONFIG: &'static str = "UV_NO_CONFIG";
 
+    /// If set, uv will not read system-level configuration files.
+    #[attr_added_in("0.11.16")]
+    pub const UV_NO_SYSTEM_CONFIG: &'static str = "UV_NO_SYSTEM_CONFIG";
+
     /// Equivalent to the `--isolated` command-line argument. If set, uv will avoid discovering
     /// a `pyproject.toml` or `uv.toml` file.
     #[attr_added_in("0.8.14")]
@@ -208,7 +228,8 @@ impl EnvVars {
     pub const UV_PYTHON_DOWNLOADS: &'static str = "UV_PYTHON_DOWNLOADS";
 
     /// Overrides the environment-determined libc on linux systems when filling in the current platform
-    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`, and `none`.
+    /// within Python version requests. Options are: `gnu`, `gnueabi`, `gnueabihf`, `musl`,
+    /// `musleabi`, `musleabihf`, and `none`.
     #[attr_added_in("0.7.22")]
     pub const UV_LIBC: &'static str = "UV_LIBC";
 
@@ -247,6 +268,38 @@ impl EnvVars {
     #[attr_added_in("0.9.9")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
+    /// Equivalent to the `--no-install-project` command-line argument. If set, uv will
+    /// install the project's dependencies but not the project itself.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_PROJECT: &'static str = "UV_NO_INSTALL_PROJECT";
+
+    /// Equivalent to the `--no-install-workspace` command-line argument. If set, uv will
+    /// install workspace dependencies but not workspace members (including the current
+    /// project).
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_WORKSPACE: &'static str = "UV_NO_INSTALL_WORKSPACE";
+
+    /// Equivalent to the `--no-install-local` command-line argument. If set, uv will skip
+    /// the current project, workspace members, and any other local (path or editable)
+    /// packages, installing only remote dependencies.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_LOCAL: &'static str = "UV_NO_INSTALL_LOCAL";
+
+    /// Equivalent to the hidden `--only-install-project` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_PROJECT: &'static str = "UV_ONLY_INSTALL_PROJECT";
+
+    /// Equivalent to the hidden `--only-install-workspace` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_WORKSPACE: &'static str = "UV_ONLY_INSTALL_WORKSPACE";
+
+    /// Equivalent to the hidden `--only-install-local` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_LOCAL: &'static str = "UV_ONLY_INSTALL_LOCAL";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
@@ -268,6 +321,11 @@ impl EnvVars {
     #[attr_added_in("0.6.5")]
     pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
 
+    /// Equivalent to the `--no-sources-package` command line argument. If set, uv will
+    /// ignore the `tool.uv.sources` table for the given space-delimited list of packages.
+    #[attr_added_in("0.9.26")]
+    pub const UV_NO_SOURCES_PACKAGE: &'static str = "UV_NO_SOURCES_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     #[attr_added_in("0.4.16")]
@@ -279,7 +337,7 @@ impl EnvVars {
     pub const UV_PUBLISH_TOKEN: &'static str = "UV_PUBLISH_TOKEN";
 
     /// Equivalent to the `--index` command-line argument in `uv publish`. If
-    /// set, uv the index with this name in the configuration for publishing.
+    /// set, uv will use the index with this name in the configuration for publishing.
     #[attr_added_in("0.5.8")]
     pub const UV_PUBLISH_INDEX: &'static str = "UV_PUBLISH_INDEX";
 
@@ -293,9 +351,15 @@ impl EnvVars {
     #[attr_added_in("0.4.16")]
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Equivalent to the `--check-url` command-line argument in `uv publish`.
     /// Don't upload a file if it already exists on the index. The value is the URL of the index.
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
+
+    /// Equivalent to the `--no-attestations` command-line argument in `uv publish`. If set,
+    /// uv will skip uploading any collected attestations for the published distributions.
+    #[attr_added_in("0.9.12")]
+    pub const UV_PUBLISH_NO_ATTESTATIONS: &'static str = "UV_PUBLISH_NO_ATTESTATIONS";
 
     /// Equivalent to the `--no-sync` command-line argument. If set, uv will skip updating
     /// the environment.
@@ -370,6 +434,11 @@ impl EnvVars {
     #[attr_added_in("0.3.0")]
     pub const UV_TOOL_BIN_DIR: &'static str = "UV_TOOL_BIN_DIR";
 
+    /// Equivalent to the `--bare` argument for `uv init`. If set, uv will only create a
+    /// `pyproject.toml`.
+    #[attr_added_in("0.10.7")]
+    pub const UV_INIT_BARE: &'static str = "UV_INIT_BARE";
+
     /// Equivalent to the `--build-backend` argument for `uv init`. Determines the default backend
     /// to use when creating a new project.
     #[attr_added_in("0.8.2")]
@@ -398,6 +467,14 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_PYTHON_INSTALL_REGISTRY: &'static str = "UV_PYTHON_INSTALL_REGISTRY";
 
+    /// Disable use of the Windows registry for Python discovery and registration.
+    ///
+    /// When set, uv will not discover Python interpreters from the Windows registry or Microsoft
+    /// Store locations, and managed Python installations will not be registered in the Windows
+    /// registry.
+    #[attr_added_in("0.11.8")]
+    pub const UV_PYTHON_NO_REGISTRY: &'static str = "UV_PYTHON_NO_REGISTRY";
+
     /// Managed Python installations information is hardcoded in the `uv` binary.
     ///
     /// This variable can be set to a local path or URL pointing to
@@ -420,6 +497,9 @@ impl EnvVars {
     /// The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
     /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    ///
+    /// This more-specific mirror takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for CPython downloads.
     #[attr_added_in("0.2.35")]
     pub const UV_PYTHON_INSTALL_MIRROR: &'static str = "UV_PYTHON_INSTALL_MIRROR";
 
@@ -432,6 +512,26 @@ impl EnvVars {
     /// Distributions can be read from a local directory by using the `file://` URL scheme.
     #[attr_added_in("0.2.35")]
     pub const UV_PYPY_INSTALL_MIRROR: &'static str = "UV_PYPY_INSTALL_MIRROR";
+
+    /// Replaces the `https://releases.astral.sh` base URL for all Astral-mirrored
+    /// metadata and artifact downloads.
+    ///
+    /// When set, uv uses only the configured mirror URL and does not fall back to
+    /// GitHub or raw GitHub. Path components in the URL are preserved: only
+    /// trailing slashes are trimmed before appending the normal path suffix
+    /// (e.g., `/github/versions/main/v1/uv.ndjson`).
+    ///
+    /// This is useful for proxy repositories (e.g., Artifactory, Nexus) that
+    /// mirror `releases.astral.sh`.
+    ///
+    /// More-specific sources take precedence:
+    /// [`UV_PYTHON_INSTALL_MIRROR`](Self::UV_PYTHON_INSTALL_MIRROR) and
+    /// `python-install-mirror` override this variable for CPython downloads, while
+    /// [`UV_INSTALLER_GITHUB_BASE_URL`](Self::UV_INSTALLER_GITHUB_BASE_URL) and
+    /// [`UV_INSTALLER_GHE_BASE_URL`](Self::UV_INSTALLER_GHE_BASE_URL) override this
+    /// variable for `uv self update`.
+    #[attr_added_in("0.11.14")]
+    pub const UV_ASTRAL_MIRROR_URL: &'static str = "UV_ASTRAL_MIRROR_URL";
 
     /// Pin managed CPython versions to a specific build version.
     ///
@@ -462,6 +562,11 @@ impl EnvVars {
     #[attr_added_in("0.8.0")]
     pub const UV_VENV_CLEAR: &'static str = "UV_VENV_CLEAR";
 
+    /// Equivalent to the `--relocatable` command-line argument. If set, the virtual
+    /// environment will be relocatable.
+    #[attr_added_in("0.10.8")]
+    pub const UV_VENV_RELOCATABLE: &'static str = "UV_VENV_RELOCATABLE";
+
     /// Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment
     /// created by `uv venv`.
     ///
@@ -469,10 +574,12 @@ impl EnvVars {
     #[attr_added_in("0.5.21")]
     pub const UV_VENV_SEED: &'static str = "UV_VENV_SEED";
 
-    /// Used to override `PATH` to limit Python executable availability in the test suite.
-    #[attr_hidden]
-    #[attr_added_in("0.0.5")]
-    pub const UV_TEST_PYTHON_PATH: &'static str = "UV_TEST_PYTHON_PATH";
+    /// Used to override `PATH` for Python executable discovery.
+    ///
+    /// When set, uv will search for Python interpreters in the directories specified by this
+    /// variable instead of `PATH`.
+    #[attr_added_in("0.11.8")]
+    pub const UV_PYTHON_SEARCH_PATH: &'static str = "UV_PYTHON_SEARCH_PATH";
 
     /// Include resolver and installer output related to environment modifications.
     #[attr_hidden]
@@ -487,6 +594,19 @@ impl EnvVars {
     /// Use to disable line wrapping for diagnostics.
     #[attr_added_in("0.0.5")]
     pub const UV_NO_WRAP: &'static str = "UV_NO_WRAP";
+
+    /// Set to `1` to enable the automatic malware check that runs after `uv sync`.
+    ///
+    /// When enabled, uv performs a lightweight check against the OSV database for known
+    /// malware advisories after every lockfile sync. Set this variable to `0` to opt out.
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK: &'static str = "UV_MALWARE_CHECK";
+
+    /// Override the vulnerability service URL for the automatic malware check.
+    ///
+    /// Defaults to the OSV API endpoint (`https://api.osv.dev/`).
+    #[attr_added_in("0.11.16")]
+    pub const UV_MALWARE_CHECK_URL: &'static str = "UV_MALWARE_CHECK_URL";
 
     /// Provides the HTTP Basic authentication username for a named index.
     ///
@@ -538,6 +658,11 @@ impl EnvVars {
     #[attr_added_in("0.2.0")]
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
 
+    /// Used to identify the source tree when invoking PEP 517 build hooks.
+    #[attr_hidden]
+    #[attr_added_in("0.11.22")]
+    pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
+
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
     #[attr_added_in("0.3.0")]
@@ -548,10 +673,53 @@ impl EnvVars {
     #[attr_added_in("0.3.4")]
     pub const UV_INTERNAL__TEST_DIR: &'static str = "UV_INTERNAL__TEST_DIR";
 
+    /// Path to a directory on a filesystem that supports copy-on-write, e.g., btrfs or APFS.
+    ///
+    /// When populated, uv will run additional tests that require this functionality.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_COW_FS: &'static str = "UV_INTERNAL__TEST_COW_FS";
+
+    /// Path to a directory on a filesystem that does **not** support copy-on-write.
+    ///
+    /// When populated, uv will run additional tests that verify fallback behavior
+    /// when copy-on-write is unavailable.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_NOCOW_FS: &'static str = "UV_INTERNAL__TEST_NOCOW_FS";
+
+    /// Path to a directory on an alternative filesystem for testing.
+    ///
+    /// This filesystem must be a different device than the default for the test suite.
+    ///
+    /// When populated, uv will run additional tests that cover cross-filesystem linking.
+    #[attr_hidden]
+    #[attr_added_in("0.10.5")]
+    pub const UV_INTERNAL__TEST_ALT_FS: &'static str = "UV_INTERNAL__TEST_ALT_FS";
+
+    /// Network path to a directory on an SMB filesystem for testing.
+    ///
+    /// When populated, uv will run additional tests that cover SMB-specific filesystem behavior.
+    #[attr_hidden]
+    #[attr_added_in("0.11.16")]
+    pub const UV_INTERNAL__TEST_SMB_FS: &'static str = "UV_INTERNAL__TEST_SMB_FS";
+
+    /// Path to a directory on a filesystem with a low hardlink limit (e.g., minix with ~250).
+    ///
+    /// When populated, uv will run additional tests that exercise EMLINK recovery.
+    #[attr_hidden]
+    #[attr_added_in("0.10.9")]
+    pub const UV_INTERNAL__TEST_LOWLINKS_FS: &'static str = "UV_INTERNAL__TEST_LOWLINKS_FS";
+
     /// Used to force treating an interpreter as "managed" during tests.
     #[attr_hidden]
     #[attr_added_in("0.8.0")]
     pub const UV_INTERNAL__TEST_PYTHON_MANAGED: &'static str = "UV_INTERNAL__TEST_PYTHON_MANAGED";
+
+    /// Used to force ignoring Git LFS commands as `git-lfs` detection cannot be overridden via PATH.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const UV_INTERNAL__TEST_LFS_DISABLED: &'static str = "UV_INTERNAL__TEST_LFS_DISABLED";
 
     /// Path to system-level configuration directory on Unix systems.
     #[attr_added_in("0.4.26")]
@@ -585,17 +753,31 @@ impl EnvVars {
     #[attr_added_in("0.2.16")]
     pub const XDG_BIN_HOME: &'static str = "XDG_BIN_HOME";
 
-    /// Custom certificate bundle file path for SSL connections.
+    /// Path to a CA certificate bundle file for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Requires a PEM-encoded certificate file (e.g., `certs.pem`, `ca-bundle.crt`). DER-encoded
+    /// files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this file will be trusted.
     #[attr_added_in("0.1.14")]
     pub const SSL_CERT_FILE: &'static str = "SSL_CERT_FILE";
 
-    /// Custom path for certificate bundles for SSL connections.
-    /// Multiple entries are supported separated using a platform-specific
-    /// delimiter (`:` on Unix, `;` on Windows).
+    /// Path to a directory containing PEM-encoded CA certificate files for TLS connections.
     ///
-    /// Takes precedence over `UV_NATIVE_TLS` when set.
+    /// Multiple entries are supported, separated using a platform-specific delimiter (`:` on Unix,
+    /// `;` on Windows).
+    ///
+    /// Certificates are usually stored with `.pem`, `.crt`, or `.cer` extensions, but uv will
+    /// attempt to read a certificate from any regular file in the provided `SSL_CERT_DIR`.
+    ///
+    /// Files that cannot be parsed as PEM certificates are ignored. uv resolves symlinks and
+    /// ignores dangling symlinks.
+    ///
+    /// Only PEM-encoded files are supported, i.e., DER-encoded files are not supported.
+    ///
+    /// When set, this overrides the default certificate source (bundled Mozilla roots or system
+    /// certificates). Only the certificates in this directory will be trusted.
     #[attr_added_in("0.9.10")]
     pub const SSL_CERT_DIR: &'static str = "SSL_CERT_DIR";
 
@@ -624,9 +806,15 @@ impl EnvVars {
     #[attr_added_in("0.9.1")]
     pub const UV_UPLOAD_HTTP_TIMEOUT: &'static str = "UV_UPLOAD_HTTP_TIMEOUT";
 
-    /// Timeout (in seconds) for HTTP requests. (default: 30 s)
+    /// Timeout (in seconds) for HTTP reads. (default: 30 s)
     #[attr_added_in("0.1.7")]
     pub const UV_HTTP_TIMEOUT: &'static str = "UV_HTTP_TIMEOUT";
+
+    /// Timeout (in seconds) to connect to a server. (default: 10 s)
+    ///
+    /// If `UV_HTTP_TIMEOUT` is lower than this value, `UV_HTTP_TIMEOUT` will be used instead.
+    #[attr_added_in("0.10.0")]
+    pub const UV_HTTP_CONNECT_TIMEOUT: &'static str = "UV_HTTP_CONNECT_TIMEOUT";
 
     /// The number of retries for HTTP requests. (default: 3)
     #[attr_added_in("0.7.21")]
@@ -698,6 +886,10 @@ impl EnvVars {
     /// Used to detect Ksh shell usage.
     #[attr_added_in("0.2.33")]
     pub const KSH_VERSION: &'static str = "KSH_VERSION";
+
+    /// Used to detect PowerShell usage (set by PowerShell on all platforms).
+    #[attr_added_in("0.10.0")]
+    pub const PS_MODULE_PATH: &'static str = "PSModulePath";
 
     /// Used with `--python-platform macos` and related variants to set the
     /// deployment target (i.e., the minimum supported macOS version).
@@ -804,6 +996,16 @@ impl EnvVars {
     #[attr_added_in("0.6.4")]
     pub const GIT_TERMINAL_PROMPT: &'static str = "GIT_TERMINAL_PROMPT";
 
+    /// Skip Smudge LFS Filter.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const GIT_LFS_SKIP_SMUDGE: &'static str = "GIT_LFS_SKIP_SMUDGE";
+
+    /// Used in tests to set the user global git config location.
+    #[attr_hidden]
+    #[attr_added_in("0.9.15")]
+    pub const GIT_CONFIG_GLOBAL: &'static str = "GIT_CONFIG_GLOBAL";
+
     /// Used in tests for better git isolation.
     ///
     /// For example, we run some tests in ~/.local/share/uv/tests.
@@ -815,6 +1017,12 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.4.29")]
     pub const GIT_CEILING_DIRECTORIES: &'static str = "GIT_CEILING_DIRECTORIES";
+
+    /// Cleared for uv's git invocations to ensure git behaves correctly in
+    /// spite of an odd environment.
+    #[attr_hidden]
+    #[attr_added_in("0.11.8")]
+    pub const GIT_COMMON_DIR: &'static str = "GIT_COMMON_DIR";
 
     /// Indicates that the current process is running in GitHub Actions.
     ///
@@ -829,6 +1037,16 @@ impl EnvVars {
     /// to `true`.
     #[attr_added_in("0.8.18")]
     pub const GITLAB_CI: &'static str = "GITLAB_CI";
+
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const PYPI_ID_TOKEN: &'static str = "PYPI_ID_TOKEN";
+
+    /// Used for testing GitLab CI trusted publishing.
+    #[attr_hidden]
+    #[attr_added_in("0.8.18")]
+    pub const TESTPYPI_ID_TOKEN: &'static str = "TESTPYPI_ID_TOKEN";
 
     /// Sets the encoding for standard I/O streams (e.g., PYTHONIOENCODING=utf-8).
     #[attr_hidden]
@@ -848,6 +1066,16 @@ impl EnvVars {
     /// Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
     #[attr_added_in("0.1.22")]
     pub const PYTHONPATH: &'static str = "PYTHONPATH";
+
+    /// Used to set the location of Python stdlib when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYTHONHOME: &'static str = "PYTHONHOME";
+
+    /// Used to correctly detect virtual environments when using trampolines.
+    #[attr_hidden]
+    #[attr_added_in("0.7.13")]
+    pub const PYVENV_LAUNCHER: &'static str = "__PYVENV_LAUNCHER__";
 
     /// Used in tests to enforce a consistent locale setting.
     #[attr_hidden]
@@ -969,6 +1197,16 @@ impl EnvVars {
     #[attr_added_in("0.0.5")]
     pub const CARGO_TARGET_DIR: &'static str = "CARGO_TARGET_DIR";
 
+    /// Set by cargo when compiling for Windows-like platforms.
+    #[attr_hidden]
+    #[attr_added_in("0.0.5")]
+    pub const CARGO_CFG_WINDOWS: &'static str = "CARGO_CFG_WINDOWS";
+
+    /// Specifies the directory where Cargo stores intermediate build artifacts.
+    #[attr_hidden]
+    #[attr_added_in("0.8.25")]
+    pub const OUT_DIR: &'static str = "OUT_DIR";
+
     /// Used in tests for environment substitution testing in `requirements.in`.
     #[attr_hidden]
     #[attr_added_in("0.1.18")]
@@ -1010,11 +1248,6 @@ impl EnvVars {
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
 
-    /// Used to set a packse index url for tests.
-    #[attr_hidden]
-    #[attr_added_in("0.2.12")]
-    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
-
     /// Used for testing named indexes in tests.
     #[attr_hidden]
     #[attr_added_in("0.5.21")]
@@ -1035,6 +1268,25 @@ impl EnvVars {
     #[attr_added_in("0.5.29")]
     pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
 
+    /// Used to mock the current timestamp for relative `--exclude-newer` times in tests.
+    /// Should be set to an RFC 3339 timestamp (e.g., `2025-11-21T12:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.9.8")]
+    pub const UV_TEST_CURRENT_TIMESTAMP: &'static str = "UV_TEST_CURRENT_TIMESTAMP";
+
+    /// When set to a timestamp, applies an `exclude-newer` filter to the versions
+    /// considered available from indexes.
+    ///
+    /// This is used for reproducible resolver error messages. When `exclude-newer`
+    /// is used, we retain information about the available versions to improve error
+    /// messages. In contrast, versions published after this cutoff are considered
+    /// non-existent.
+    ///
+    /// Should be set to an RFC 3339 timestamp (e.g., `2024-03-25T00:00:00Z`).
+    #[attr_hidden]
+    #[attr_added_in("0.11.7")]
+    pub const UV_TEST_AVAILABLE_VERSION_CUTOFF: &'static str = "UV_TEST_AVAILABLE_VERSION_CUTOFF";
+
     /// `.env` files from which to load environment variables when executing `uv run` commands.
     #[attr_added_in("0.4.30")]
     pub const UV_ENV_FILE: &'static str = "UV_ENV_FILE";
@@ -1045,11 +1297,17 @@ impl EnvVars {
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GITHUB_BASE_URL: &'static str = "UV_INSTALLER_GITHUB_BASE_URL";
 
     /// The URL from which to download uv using the standalone installer and `self update` feature,
     /// in lieu of the default GitHub Enterprise URL.
+    ///
+    /// This more-specific installer source takes precedence over
+    /// [`UV_ASTRAL_MIRROR_URL`](Self::UV_ASTRAL_MIRROR_URL) for `uv self update`.
     #[attr_added_in("0.5.0")]
     pub const UV_INSTALLER_GHE_BASE_URL: &'static str = "UV_INSTALLER_GHE_BASE_URL";
 
@@ -1119,7 +1377,17 @@ impl EnvVars {
     #[attr_added_in("0.4.4")]
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
 
+    /// Equivalent to the `--no-project` command-line argument.
+    #[attr_added_in("0.11.8")]
+    pub const UV_NO_PROJECT: &'static str = "UV_NO_PROJECT";
+
+    /// Equivalent to the `--directory` command-line argument. `UV_WORKING_DIRECTORY` (added in
+    /// v0.9.1) is also supported for backwards compatibility.
+    #[attr_added_in("0.9.14")]
+    pub const UV_WORKING_DIR: &'static str = "UV_WORKING_DIR";
+
     /// Equivalent to the `--directory` command-line argument.
+    #[attr_hidden]
     #[attr_added_in("0.9.1")]
     pub const UV_WORKING_DIRECTORY: &'static str = "UV_WORKING_DIRECTORY";
 
@@ -1141,6 +1409,18 @@ impl EnvVars {
     /// `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, and `AWS_CONFIG_FILE` environment variables.
     #[attr_added_in("0.8.21")]
     pub const UV_S3_ENDPOINT_URL: &'static str = "UV_S3_ENDPOINT_URL";
+
+    /// The URL to treat as a GCS-compatible storage endpoint. Requests to this endpoint
+    /// will be signed using Google Cloud authentication based on the `GOOGLE_APPLICATION_CREDENTIALS`
+    /// environment variable or Application Default Credentials.
+    #[attr_added_in("0.9.26")]
+    pub const UV_GCS_ENDPOINT_URL: &'static str = "UV_GCS_ENDPOINT_URL";
+
+    /// The URL to treat as an Azure Blob Storage endpoint. Requests to this endpoint will be signed
+    /// using Azure credentials from the default credential chain, including Azure CLI credentials
+    /// and workload identity.
+    #[attr_added_in("0.11.14")]
+    pub const UV_AZURE_ENDPOINT_URL: &'static str = "UV_AZURE_ENDPOINT_URL";
 
     /// The URL of the pyx Simple API server.
     #[attr_added_in("0.8.15")]
@@ -1210,4 +1490,15 @@ impl EnvVars {
     /// around invalid artifacts in rare cases.
     #[attr_added_in("0.8.23")]
     pub const UV_SKIP_WHEEL_FILENAME_CHECK: &'static str = "UV_SKIP_WHEEL_FILENAME_CHECK";
+
+    /// Suppress output from the build backend when building source distributions, even in the event
+    /// of build failures.
+    #[attr_added_in("0.9.15")]
+    pub const UV_HIDE_BUILD_OUTPUT: &'static str = "UV_HIDE_BUILD_OUTPUT";
+
+    /// The time in seconds uv waits for a file lock to become available.
+    ///
+    /// Defaults to 300s (5 min).
+    #[attr_added_in("0.9.4")]
+    pub const UV_LOCK_TIMEOUT: &'static str = "UV_LOCK_TIMEOUT";
 }

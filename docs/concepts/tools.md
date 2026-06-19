@@ -18,8 +18,8 @@ Because it is very common to run tools without installing them, a `uvx` alias is
 refer to `uvx` instead of `uv tool run`.
 
 Tools can also be installed with `uv tool install`, in which case their executables are
-[available on the `PATH`](#the-path) — an isolated virtual environment is still used, but it is not
-removed when the command completes.
+[available on the `PATH`](#tool-executables) — an isolated virtual environment is still used, but it
+is not removed when the command completes.
 
 ## Execution vs installation
 

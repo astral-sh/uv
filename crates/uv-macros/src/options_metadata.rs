@@ -49,14 +49,14 @@ pub(crate) fn derive_impl(input: DeriveInput) -> syn::Result<TokenStream> {
                     // by calling `Type::record` instead of `visitor.visit_set`
                     if let (Type::Path(ty), Meta::List(list)) = (&field.ty, &serde.meta) {
                         for token in list.tokens.clone() {
-                            if let TokenTree::Ident(ident) = token {
-                                if ident == "flatten" {
-                                    output.push(quote_spanned!(
-                                        ty.span() => (<#ty>::record(visit))
-                                    ));
+                            if let TokenTree::Ident(ident) = token
+                                && ident == "flatten"
+                            {
+                                output.push(quote_spanned!(
+                                    ty.span() => (<#ty>::record(visit))
+                                ));
 
-                                    break;
-                                }
+                                break;
                             }
                         }
                     }
@@ -195,6 +195,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
         example,
         scope,
         possible_values,
+        uv_toml_only,
     } = parse_field_attributes(attr)?;
     let kebab_name = LitStr::new(&ident.to_string().replace('_', "-"), ident.span());
 
@@ -254,6 +255,7 @@ fn handle_option(field: &Field, attr: &Attribute) -> syn::Result<TokenStream> {
                 scope: #scope,
                 deprecated: #deprecated,
                 possible_values: #possible_values,
+                uv_toml_only: #uv_toml_only,
             })
         }
     ))
@@ -266,6 +268,7 @@ struct FieldAttributes {
     example: String,
     scope: Option<String>,
     possible_values: Option<bool>,
+    uv_toml_only: bool,
 }
 
 fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes> {
@@ -274,6 +277,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
     let mut example = None;
     let mut scope = None;
     let mut possible_values = None;
+    let mut uv_toml_only = None;
 
     attribute.parse_nested_meta(|meta| {
         if meta.path.is_ident("default") {
@@ -287,6 +291,8 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
             example = Some(dedent(&example_text).trim_matches('\n').to_string());
         } else if meta.path.is_ident("possible_values") {
             possible_values = get_bool_literal(&meta, "possible_values", "option")?;
+        } else if meta.path.is_ident("uv_toml_only") {
+            uv_toml_only = get_bool_literal(&meta, "uv_toml_only", "option")?;
         } else {
             return Err(syn::Error::new(
                 meta.path.span(),
@@ -327,6 +333,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
         example,
         scope,
         possible_values,
+        uv_toml_only: uv_toml_only.unwrap_or(false),
     })
 }
 
@@ -354,18 +361,15 @@ fn parse_deprecated_attribute(attribute: &Attribute) -> syn::Result<DeprecatedAt
 }
 
 fn get_inner_type_if_option(ty: &Type) -> Option<&Type> {
-    if let Type::Path(type_path) = ty {
-        if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option" {
-            if let PathArguments::AngleBracketed(angle_bracketed_args) =
-                &type_path.path.segments[0].arguments
-            {
-                if angle_bracketed_args.args.len() == 1 {
-                    if let GenericArgument::Type(inner_type) = &angle_bracketed_args.args[0] {
-                        return Some(inner_type);
-                    }
-                }
-            }
-        }
+    if let Type::Path(type_path) = ty
+        && type_path.path.segments.len() == 1
+        && type_path.path.segments[0].ident == "Option"
+        && let PathArguments::AngleBracketed(angle_bracketed_args) =
+            &type_path.path.segments[0].arguments
+        && angle_bracketed_args.args.len() == 1
+        && let GenericArgument::Type(inner_type) = &angle_bracketed_args.args[0]
+    {
+        return Some(inner_type);
     }
     None
 }
