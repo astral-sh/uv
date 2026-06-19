@@ -53,8 +53,8 @@ use crate::commands::project::{
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
-    FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
-    ResolverSettings,
+    FrozenSource, InstallerSettingsRef, IsolatedLock, LockCheck, LockCheckSource,
+    ResolverInstallerSettings, ResolverSettings,
 };
 
 /// Sync the project environment.
@@ -62,7 +62,7 @@ pub(crate) async fn sync(
     project_dir: &Path,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
-    isolated_lock: bool,
+    isolated_lock: IsolatedLock,
     dry_run: DryRun,
     active: Option<bool>,
     all_packages: bool,
@@ -337,7 +337,7 @@ pub(crate) async fn sync(
         LockMode::Frozen(frozen_source.into())
     } else if let LockCheck::Enabled(lock_check) = lock_check {
         LockMode::Locked(environment.interpreter(), lock_check)
-    } else if isolated_lock || dry_run.enabled() {
+    } else if isolated_lock.enabled() || dry_run.enabled() {
         LockMode::DryRun(environment.interpreter())
     } else {
         LockMode::Write(environment.interpreter())

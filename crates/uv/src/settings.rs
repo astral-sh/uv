@@ -1771,7 +1771,7 @@ impl PythonPinSettings {
 pub(crate) struct SyncSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
-    pub(crate) isolated_lock: bool,
+    pub(crate) isolated_lock: IsolatedLock,
     pub(crate) dry_run: DryRun,
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
@@ -1789,6 +1789,19 @@ pub(crate) struct SyncSettings {
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) output_format: SyncFormat,
     pub(crate) malware_settings: MalwareCheckSettings,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) enum IsolatedLock {
+    #[default]
+    Disabled,
+    Enabled,
+}
+
+impl IsolatedLock {
+    pub(crate) fn enabled(self) -> bool {
+        matches!(self, Self::Enabled)
+    }
 }
 
 impl SyncSettings {
@@ -1930,7 +1943,11 @@ impl SyncSettings {
             output_format,
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
-            isolated_lock,
+            isolated_lock: if isolated_lock {
+                IsolatedLock::Enabled
+            } else {
+                IsolatedLock::Disabled
+            },
             dry_run,
             script,
             active: flag(active, no_active, "active"),
