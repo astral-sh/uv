@@ -2677,6 +2677,7 @@ mod tests {
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         python_requirement: PythonRequirement,
         workspace_members: BTreeSet<PackageName>,
+        constraints: Constraints,
     }
 
     impl FormatterFixture {
@@ -2703,6 +2704,7 @@ mod tests {
                     RequiresPython::greater_than_equal_version(&Version::new([3_u64, 12])),
                 ),
                 workspace_members: BTreeSet::default(),
+                constraints: Constraints::default(),
             }
         }
 
@@ -2712,6 +2714,7 @@ mod tests {
                 available_versions: &self.available_versions,
                 python_requirement: &self.python_requirement,
                 workspace_members: &self.workspace_members,
+                constraints: &self.constraints,
                 tags: None,
             }
         }
