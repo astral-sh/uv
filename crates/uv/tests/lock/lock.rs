@@ -20747,6 +20747,75 @@ fn lock_default_index() -> Result<()> {
     Ok(())
 }
 
+/// Re-locking must not fail when a preferred (locked) version is available on
+/// multiple indexes and the higher-priority index's distribution is filtered by
+/// `exclude-newer`.
+///
+/// `jinja2==3.1.3` exists on both the PyTorch mirror and PyPI. Under the test
+/// harness's default `exclude-newer` of `2024-03-25`, PyPI's wheel (uploaded
+/// 2024-01) is kept, but the mirror's copy (whose wheels are all stamped
+/// `2025-01-29`) is filtered out. The initial lock resolves `jinja2` from PyPI and
+/// records it as a preference; re-locking feeds that version back, and the
+/// preferred-version selection must skip the filtered mirror entry and fall back
+/// to PyPI rather than failing with "was published after the exclude newer time".
+#[test]
+fn lock_preference_exclude_newer_across_indexes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.3"]
+
+        [tool.uv]
+        index-strategy = "unsafe-best-match"
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        "#,
+    )?;
+
+    // The initial lock succeeds, pinning `jinja2` to PyPI's copy and seeding it as
+    // a preference for subsequent resolutions.
+    context.lock().assert().success();
+
+    // Introduce an unrelated dependency to force a re-resolution that carries the
+    // locked `jinja2==3.1.3` forward as a preference.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["jinja2==3.1.3", "iniconfig"]
+
+        [tool.uv]
+        index-strategy = "unsafe-best-match"
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://astral-sh.github.io/pytorch-mirror/whl/cu121"
+        "#,
+    )?;
+
+    // Re-locking previously failed because the preferred `jinja2==3.1.3` bound to
+    // the exclude-newer-filtered mirror entry; it must now fall back to PyPI.
+    context.lock().assert().success();
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock"))?;
+    assert!(
+        !lock.contains("download.pytorch.org"),
+        "jinja2 should resolve from PyPI, not the exclude-newer-filtered mirror:\n{lock}"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn lock_named_index_cli() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
