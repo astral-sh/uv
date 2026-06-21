@@ -18341,7 +18341,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         version = "0.1.0"
         source = { directory = "dependency" }
         dependencies = [
-            { name = "iniconfig", marker = "python_full_version >= '3.10'" },
+            { name = "iniconfig" },
         ]
 
         [package.metadata]
@@ -18361,7 +18361,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "dependency", marker = "python_full_version >= '3.10'" },
+            { name = "dependency" },
         ]
 
         [package.metadata]
@@ -18660,11 +18660,11 @@ fn lock_constrained_environment() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "sys_platform != 'win32'" },
-            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
-            { name = "packaging", marker = "sys_platform != 'win32'" },
-            { name = "pathspec", marker = "sys_platform != 'win32'" },
-            { name = "platformdirs", marker = "sys_platform != 'win32'" },
+            { name = "click" },
+            { name = "mypy-extensions" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "platformdirs" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
         wheels = [
@@ -18724,7 +18724,7 @@ fn lock_constrained_environment() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "black", marker = "sys_platform != 'win32'" },
+            { name = "black" },
         ]
 
         [package.metadata]
@@ -18989,11 +18989,11 @@ fn lock_constrained_environment_non_project() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "sys_platform != 'win32'" },
-            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
-            { name = "packaging", marker = "sys_platform != 'win32'" },
-            { name = "pathspec", marker = "sys_platform != 'win32'" },
-            { name = "platformdirs", marker = "sys_platform != 'win32'" },
+            { name = "click" },
+            { name = "mypy-extensions" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "platformdirs" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
         wheels = [
@@ -19008,7 +19008,7 @@ fn lock_constrained_environment_non_project() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "child" }
         dependencies = [
-            { name = "black", marker = "sys_platform != 'win32'" },
+            { name = "black" },
         ]
 
         [package.metadata]
@@ -30468,7 +30468,7 @@ fn lock_arm() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'arm64'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -30544,7 +30544,7 @@ fn lock_x86_64() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'x86_64'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -30617,7 +30617,7 @@ fn lock_x86() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'i686'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -35788,7 +35788,7 @@ fn lock_android() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "deltachat-rpc-server", marker = "sys_platform == 'android'" },
+            { name = "deltachat-rpc-server" },
         ]
 
         [package.metadata]
@@ -35891,7 +35891,7 @@ fn lock_required_intersection() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -36560,7 +36560,7 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "abi3-package", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "abi3-package" },
         ]
 
         [package.metadata]
