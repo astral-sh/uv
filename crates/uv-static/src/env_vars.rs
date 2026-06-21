@@ -205,7 +205,8 @@ impl EnvVars {
     pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
 
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
-    /// exclude distributions published after the specified date.
+    /// exclude distributions published after the specified date. Set to `false` to disable
+    /// `exclude-newer`.
     #[attr_added_in("0.2.12")]
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 

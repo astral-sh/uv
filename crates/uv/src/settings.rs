@@ -52,8 +52,8 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerPackage, ForkStrategy,
-    PrereleaseMode, ResolutionMode,
+    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
+    ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, Options, PipOptions,
@@ -2968,7 +2968,9 @@ impl FormatSettings {
             diff,
             extra_args,
             version,
-            exclude_newer: exclude_newer.map(|v| v.timestamp()),
+            exclude_newer: exclude_newer
+                .and_then(ExcludeNewerOverride::into_value)
+                .map(|value| value.timestamp()),
             no_project,
             show_version,
         }
@@ -4367,7 +4369,15 @@ impl From<ResolverOptions> for ResolverSettings {
             build_isolation: value.build_isolation.unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-            exclude_newer: value.exclude_newer,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
             cuda_driver_version: None,

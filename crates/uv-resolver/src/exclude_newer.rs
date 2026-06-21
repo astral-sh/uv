@@ -433,9 +433,10 @@ impl ExcludeNewer {
 
     /// Create from CLI arguments.
     pub fn from_args(
-        global: Option<ExcludeNewerValue>,
+        global: Option<ExcludeNewerOverride>,
         package: Vec<ExcludeNewerPackageEntry>,
     ) -> Self {
+        let global = global.and_then(ExcludeNewerOverride::into_value);
         let package: ExcludeNewerPackage = package.into_iter().collect();
 
         Self { global, package }
