@@ -380,7 +380,7 @@ impl<'de> serde::Deserialize<'de> for ExcludeNewerOverride {
             {
                 ExcludeNewerValue::from_str(v)
                     .map(ExcludeNewerOverride::from)
-                    .map_err(|e| E::custom(format!("failed to parse exclude-newer value: {e}")))
+                    .map_err(E::custom)
             }
 
             fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
