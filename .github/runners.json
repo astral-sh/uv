@@ -35,6 +35,10 @@
     { "label": "macos-15-intel", "free": true }
   ],
   "windows-x86_64": [{ "label": "windows-latest", "free": true }],
+  "windows-x86_64-4": [
+    { "label": "namespace-profile-windows-2022-x86-64-4", "free": false },
+    { "label": "windows-latest", "free": true }
+  ],
   "windows-x86_64-8": [
     { "label": "github-windows-2025-x86_64-8", "free": false },
     { "label": "windows-latest", "free": true }

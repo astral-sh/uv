@@ -46,6 +46,7 @@ jobs:
       runner-macos-x86_64: ${{ steps.runners.outputs.runner_macos_x86_64 }}
       runner-macos-x86_64-12: ${{ steps.runners.outputs.runner_macos_x86_64_12 }}
       runner-windows-x86_64: ${{ steps.runners.outputs.runner_windows_x86_64 }}
+      runner-windows-x86_64-4: ${{ steps.runners.outputs.runner_windows_x86_64_4 }}
       runner-windows-x86_64-16: ${{ steps.runners.outputs.runner_windows_x86_64_16 }}
       runner-windows-aarch64: ${{ steps.runners.outputs.runner_windows_aarch64 }}
       runner-windows-x86_64-8: ${{ steps.runners.outputs.runner_windows_x86_64_8 }}
@@ -177,27 +178,11 @@ jobs:
 
       - name: "Determine runners"
         id: runners
-        shell: bash
-        env:
-          GH_REPOSITORY: ${{ github.repository }}
         run: |
-          if [[ "$GH_REPOSITORY" == "astral-sh/uv" ]]; then
-            # Use the first runner for each role
-            jq -r '
-              to_entries[] |
-              .key as $role |
-              .value[0].label as $label |
-              "runner_\($role | gsub("-";"_"))=\($label)"
-            ' .github/runners.json >> "$GITHUB_OUTPUT"
-          else
-            # Use the first free runner for each role
-            jq -r '
-              to_entries[] |
-              .key as $role |
-              (.value | map(select(.free)) | .[0].label) as $label |
-              "runner_\($role | gsub("-";"_"))=\($label)"
-            ' .github/runners.json >> "$GITHUB_OUTPUT"
-          fi
+          python3 scripts/ci/resolve-ci-runners.py \
+            --free-only="${{ github.repository != 'astral-sh/uv' }}" \
+            .github/runners.json \
+            >> "$GITHUB_OUTPUT"
 
   check-fmt:
     uses: ./.github/workflows/check-fmt.yml
@@ -209,6 +194,7 @@ jobs:
       code-changed: ${{ needs.plan.outputs.test-code }}
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
       runner-ubuntu-x86_64-1: ${{ needs.plan.outputs.runner-ubuntu-x86_64-1 }}
+      runner-windows-x86_64-4: ${{ needs.plan.outputs.runner-windows-x86_64-4 }}
       is-fork: ${{ needs.plan.outputs.is-fork == 'true' }}
 
   check-docs:
@@ -360,7 +346,6 @@ jobs:
     secrets: inherit
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
-      is-fork: ${{ needs.plan.outputs.is-fork == 'true' }}
       runner-ubuntu-22-04-aarch64-4: ${{ needs.plan.outputs.runner-ubuntu-22-04-aarch64-4 }}
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading

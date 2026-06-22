@@ -11,6 +11,9 @@ on:
       runner-ubuntu-x86_64-1:
         required: true
         type: string
+      runner-windows-x86_64-4:
+        required: true
+        type: string
       is-fork:
         required: true
         type: boolean
@@ -36,6 +39,8 @@ jobs:
         with:
           version: "0.11.23"
       - run: uvx ruff check .
+      - name: "Validate runner configuration"
+        run: python3 -m unittest scripts.ci.test_resolve_runners
 
   ty:
     timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
@@ -122,7 +127,7 @@ jobs:
     name: "clippy on windows"
     timeout-minutes: ${{ inputs.is-fork && 30 || 15 }}
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
-    runs-on: namespace-profile-windows-2022-x86-64-4
+    runs-on: ${{ inputs.runner-windows-x86_64-4 }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
