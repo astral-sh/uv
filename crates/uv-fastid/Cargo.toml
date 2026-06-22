@@ -14,7 +14,6 @@ doctest = false
 
 [dependencies]
 rand = { workspace = true }
-fastrand = { workspace = true }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]
