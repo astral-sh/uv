@@ -300,7 +300,7 @@ impl PreviewFeature {
             Self::VenvSafeClear => "venv-safe-clear",
             Self::Check => "check-command",
             Self::PackagedInit => "packaged-init",
-            Self::ContentAddressedCache => "content-addressed-archives",
+            Self::ContentAddressedCache => "content-addressed-cache",
         }
     }
 }
@@ -355,7 +355,7 @@ impl FromStr for PreviewFeature {
             "venv-safe-clear" => Self::VenvSafeClear,
             "check" | "check-command" => Self::Check,
             "packaged-init" => Self::PackagedInit,
-            "content-addressed-archives" => Self::ContentAddressedCache,
+            "content-addressed-cache" => Self::ContentAddressedCache,
             _ => return Err(PreviewFeatureParseError),
         })
     }

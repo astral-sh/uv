@@ -3053,6 +3053,7 @@ fn preview_features() {
     +            VenvSafeClear,
     +            Check,
     +            PackagedInit,
+    +            ContentAddressedCache,
     +        ],
          },
          python_preference: Managed,

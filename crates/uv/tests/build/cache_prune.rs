@@ -373,18 +373,18 @@ fn prune_stale_revision() -> Result<()> {
     prune_stale_revision_inner(false)
 }
 
-/// Content-addressed archives should remain reachable across equivalent stale revisions.
+/// Content-addressed cache entries should remain reachable across equivalent stale revisions.
 #[test]
-fn prune_stale_revision_content_addressed_archives() -> Result<()> {
+fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     prune_stale_revision_inner(true)
 }
 
-fn prune_stale_revision_inner(content_addressed_archives: bool) -> Result<()> {
+fn prune_stale_revision_inner(content_addressed_cache: bool) -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let pip_install = || {
         let mut command = context.pip_install();
-        if content_addressed_archives {
-            command.env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-archives");
+        if content_addressed_cache {
+            command.env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-cache");
         }
         command
     };
@@ -461,7 +461,7 @@ fn prune_stale_revision_inner(content_addressed_archives: bool) -> Result<()> {
 
     // Pruning should remove the unused revision. Without content-addressing, the archive from that
     // revision is dangling too. With content-addressing, the current revision shares that archive.
-    if content_addressed_archives {
+    if content_addressed_cache {
         uv_snapshot!(&filters, context.prune().arg("--verbose"), @"
     success: true
     exit_code: 0
