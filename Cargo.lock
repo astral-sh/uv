@@ -6582,7 +6582,6 @@ dependencies = [
  "async-compression",
  "blake2",
  "blake3",
- "data-encoding",
  "flate2",
  "fs-err",
  "futures",

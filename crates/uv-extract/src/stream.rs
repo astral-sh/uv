@@ -24,6 +24,8 @@ const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 struct LocalHeaderEntry {
     /// The relative path of the entry, as computed from the local file header.
     relpath: SanitizedArchivePath,
+    /// Whether the local file header identifies the entry as a directory.
+    is_dir: bool,
     /// The computed CRC32 checksum of the entry.
     crc32: u32,
     /// The computed compressed size of the entry.
@@ -397,6 +399,7 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
             std::collections::hash_map::Entry::Vacant(entry) => {
                 entry.insert(LocalHeaderEntry {
                     relpath,
+                    is_dir,
                     crc32: computed.crc32,
                     uncompressed_size: computed.uncompressed_size,
                     compressed_size: expected_compressed_size,
@@ -469,6 +472,14 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
                                     offset: entry.file_offset(),
                                     local_path: local_header.relpath.to_path_buf(),
                                     central_directory_path: relpath.to_path_buf(),
+                                });
+                            }
+                        }
+                        if local_header.is_dir != is_dir {
+                            if !skip_validation {
+                                return Err(Error::ConflictingEntryTypes {
+                                    path: relpath.to_path_buf(),
+                                    offset: entry.file_offset(),
                                 });
                             }
                         }
