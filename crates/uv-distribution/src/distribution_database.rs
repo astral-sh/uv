@@ -1,6 +1,7 @@
+use std::fmt::Display;
 use std::future::Future;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -28,6 +29,7 @@ use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
@@ -40,6 +42,11 @@ use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
+
+struct ExtractedWheel {
+    files: Vec<(PathBuf, u64)>,
+    digest: Option<DirectoryDigest>,
+}
 
 /// A cached high-level interface to convert distributions (a requirement resolved to a location)
 /// to a wheel or wheel metadata.
@@ -740,45 +747,47 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let (files, digest) = match progress {
+                let ExtractedWheel { files, digest } = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
-                            WheelExtension::Whl => {
-                                let (files, digest) = uv_extract::stream::unzip_and_hash(
-                                    query_url,
-                                    &mut reader,
-                                    temp_dir.path(),
-                                )
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                (files, Some(digest))
-                            }
+                            WheelExtension::Whl => unzip_streaming_wheel(
+                                query_url,
+                                &mut reader,
+                                temp_dir.path(),
+                                uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+                            )
+                            .await
+                            .map_err(|err| Error::Extract(filename.to_string(), err))?,
                             WheelExtension::WhlZst => {
                                 let files =
                                     uv_extract::stream::untar_zst(&mut reader, temp_dir.path())
                                         .await
                                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                (files, None)
+                                ExtractedWheel {
+                                    files,
+                                    digest: None,
+                                }
                             }
                         }
                     }
                     None => match extension {
-                        WheelExtension::Whl => {
-                            let (files, digest) = uv_extract::stream::unzip_and_hash(
-                                query_url,
-                                &mut hasher,
-                                temp_dir.path(),
-                            )
-                            .await
-                            .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, Some(digest))
-                        }
+                        WheelExtension::Whl => unzip_streaming_wheel(
+                            query_url,
+                            &mut hasher,
+                            temp_dir.path(),
+                            uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+                        )
+                        .await
+                        .map_err(|err| Error::Extract(filename.to_string(), err))?,
                         WheelExtension::WhlZst => {
                             let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            (files, None)
+                            ExtractedWheel {
+                                files,
+                                digest: None,
+                            }
                         }
                     },
                 };
@@ -951,21 +960,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
 
                 let target = temp_dir.path().to_owned();
-                let (files, digest) = match extension {
+                let ExtractedWheel { files, digest } = match extension {
                     WheelExtension::Whl => {
                         let file = file.into_std().await;
-                        let (files, digest) = tokio::task::spawn_blocking(move || {
-                            uv_extract::unzip_and_hash(file, &target)
+                        tokio::task::spawn_blocking(move || {
+                            unzip_seekable_wheel(
+                                file,
+                                &target,
+                                uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+                            )
                         })
                         .await?
-                        .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        (files, Some(digest))
+                        .map_err(|err| Error::Extract(filename.to_string(), err))?
                     }
                     WheelExtension::WhlZst => {
                         let files = uv_extract::stream::untar_zst(file, &target)
                             .await
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        (files, None)
+                        ExtractedWheel {
+                            files,
+                            digest: None,
+                        }
                     }
                 };
                 let hashes = hashers.into_iter().map(HashDigest::from).collect();
@@ -1144,22 +1159,23 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let (files, digest) = match extension {
-                WheelExtension::Whl => {
-                    let (files, digest) = uv_extract::stream::unzip_and_hash(
-                        path.display(),
-                        &mut hasher,
-                        temp_dir.path(),
-                    )
-                    .await
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    (files, Some(digest))
-                }
+            let ExtractedWheel { files, digest } = match extension {
+                WheelExtension::Whl => unzip_streaming_wheel(
+                    path.display(),
+                    &mut hasher,
+                    temp_dir.path(),
+                    uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+                )
+                .await
+                .map_err(|err| Error::Extract(filename.to_string(), err))?,
                 WheelExtension::WhlZst => {
                     let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    (files, None)
+                    ExtractedWheel {
+                        files,
+                        digest: None,
+                    }
                 }
             };
 
@@ -1210,19 +1226,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         target: &Path,
         dist: DistRef<'_>,
     ) -> Result<ArchiveId, Error> {
-        let (temp_dir, files, digest) = tokio::task::spawn_blocking({
+        let (temp_dir, extracted) = tokio::task::spawn_blocking({
             let path = path.to_owned();
             let root = self.build_context.cache().root().to_path_buf();
             move || -> Result<_, Error> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                let (files, digest) = uv_extract::unzip_and_hash(reader, temp_dir.path())
-                    .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
-                Ok((temp_dir, files, digest))
+                let extracted = unzip_seekable_wheel(
+                    reader,
+                    temp_dir.path(),
+                    uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+                )
+                .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
+                Ok((temp_dir, extracted))
             }
         })
         .await??;
+        let ExtractedWheel { files, digest } = extracted;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
         validate_and_heal_record(temp_dir.path(), files.iter(), dist)
@@ -1230,7 +1251,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         // Persist the temporary directory to the directory store.
         let id = self
-            .persist_extracted_wheel(temp_dir, target, Some(digest))
+            .persist_extracted_wheel(temp_dir, target, digest)
             .await?;
 
         Ok(id)
@@ -1279,6 +1300,54 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Return the [`ManagedClient`] used by this resolver.
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
+    }
+}
+
+/// Extract a wheel from a streaming reader, optionally computing its directory digest.
+async fn unzip_streaming_wheel<D, R>(
+    source_hint: D,
+    reader: R,
+    target: &Path,
+    content_addressed: bool,
+) -> Result<ExtractedWheel, uv_extract::Error>
+where
+    D: Display,
+    R: AsyncRead + Unpin,
+{
+    if content_addressed {
+        let (files, digest) =
+            uv_extract::stream::unzip_and_hash(source_hint, reader, target).await?;
+        Ok(ExtractedWheel {
+            files,
+            digest: Some(digest),
+        })
+    } else {
+        let files = uv_extract::stream::unzip(source_hint, reader, target).await?;
+        Ok(ExtractedWheel {
+            files,
+            digest: None,
+        })
+    }
+}
+
+/// Extract a wheel from a seekable file, optionally computing its directory digest.
+fn unzip_seekable_wheel(
+    reader: fs_err::File,
+    target: &Path,
+    content_addressed: bool,
+) -> Result<ExtractedWheel, uv_extract::Error> {
+    if content_addressed {
+        let (files, digest) = uv_extract::unzip_and_hash(reader, target)?;
+        Ok(ExtractedWheel {
+            files,
+            digest: Some(digest),
+        })
+    } else {
+        let files = uv_extract::unzip(reader, target)?;
+        Ok(ExtractedWheel {
+            files,
+            digest: None,
+        })
     }
 }
 
