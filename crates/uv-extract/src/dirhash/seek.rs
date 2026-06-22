@@ -85,7 +85,9 @@ fn unzip_inner(
     let archive = block_on(ZipFileReader::new(AllowStdIo::new(
         CloneableSeekableReader::new(reader),
     )))?;
-    validate_unique_output_paths(archive.file().entries())?;
+    if hash_contents {
+        validate_unique_output_paths(archive.file().entries())?;
+    }
 
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
@@ -171,7 +173,7 @@ fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error>
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
         let file_name = entry_file_name(entry, file_number)?;
-        let Some(path) = crate::stream::enclosed_name(file_name) else {
+        let Some(path) = digest_enclosed_name(file_name) else {
             continue;
         };
         if !paths.insert(path.clone()) {
@@ -206,7 +208,12 @@ where
         }
     }
 
-    let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+    let enclosed_name = if hash_contents {
+        digest_enclosed_name(file_name)
+    } else {
+        crate::stream::enclosed_name(file_name)
+    };
+    let Some(enclosed_name) = enclosed_name else {
         warn!("Skipping unsafe file name: {file_name}");
         return Ok(None);
     };
@@ -214,7 +221,9 @@ where
     let path = target.join(&enclosed_name);
     if entry.dir()? {
         create_directory_once(directories, &path)?;
-        validate_directory_entry(&entry, &enclosed_name, skip_validation)?;
+        if hash_contents {
+            validate_directory_entry(&entry, &enclosed_name, skip_validation)?;
+        }
         return Ok(Some(ExtractedEntry::Directory(enclosed_name)));
     }
 
@@ -244,6 +253,22 @@ fn entry_file_name(entry: &StoredZipEntry, file_number: usize) -> Result<&str, E
         }),
         Err(err) => Err(err.into()),
     }
+}
+
+/// Normalize a file name for use in an extracted-directory digest.
+fn digest_enclosed_name(file_name: &str) -> Option<PathBuf> {
+    let path = crate::stream::enclosed_name(file_name)?;
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(component) => normalized.push(component),
+            std::path::Component::CurDir => {}
+            std::path::Component::Prefix(_)
+            | std::path::Component::RootDir
+            | std::path::Component::ParentDir => return None,
+        }
+    }
+    Some(normalized)
 }
 
 /// Warn for compression methods that uv still accepts but does not recommend.
@@ -318,11 +343,15 @@ where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
 {
-    let outfile = fs_err::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(Error::Io)?;
+    let outfile = if hash_contents {
+        fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+    } else {
+        fs_err::File::create(path)
+    }
+    .map_err(Error::Io)?;
     let size = entry.uncompressed_size();
     let unix_permissions = entry.unix_permissions();
     let executable = unix_permissions.is_some_and(|mode| mode & 0o111 != 0);
