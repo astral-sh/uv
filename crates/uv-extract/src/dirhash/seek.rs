@@ -109,34 +109,45 @@ fn unzip_inner(
     let skip_validation = insecure_no_validate();
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
+    let extract = |file_number| {
+        let mut archive = archive.clone();
+        extract_entry(
+            &mut archive,
+            file_number,
+            target,
+            &directories,
+            skip_validation,
+            &filename,
+            hash_contents,
+        )
+    };
+
+    if !hash_contents {
+        let files = (0..archive.file().entries().len())
+            .into_par_iter()
+            .map(extract)
+            .filter_map(|result| match result {
+                Ok(Some(ExtractedEntry::File { path, size, .. })) => {
+                    Some(Ok((path.into_path_buf(), size)))
+                }
+                Ok(Some(ExtractedEntry::Directory(_)) | None) => None,
+                Err(err) => Some(Err(err)),
+            })
+            .collect::<Result<_, Error>>()?;
+        return Ok(UnzipOutput {
+            files,
+            digest: None,
+        });
+    }
+
     let extracted = (0..archive.file().entries().len())
         .into_par_iter()
-        .map(|file_number| {
-            let mut archive = archive.clone();
-            extract_entry(
-                &mut archive,
-                file_number,
-                target,
-                &directories,
-                skip_validation,
-                &filename,
-                hash_contents,
-            )
-        })
+        .map(extract)
         // Filter out skipped dangerous paths, then collect files and directory candidates.
         .filter_map(Result::transpose)
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let mut files = if hash_contents {
-        Vec::new()
-    } else {
-        Vec::with_capacity(extracted.len())
-    };
-    let mut extracted_files = if hash_contents {
-        Vec::with_capacity(extracted.len())
-    } else {
-        Vec::new()
-    };
+    let mut extracted_files = Vec::with_capacity(extracted.len());
     let mut digest_directories = FxHashSet::default();
     for extracted in extracted {
         match extracted {
@@ -148,37 +159,27 @@ fn unzip_inner(
             } => {
                 if let Some(digest) = digest {
                     extracted_files.push(ExtractedFile::new(path, size, executable, digest));
-                } else {
-                    files.push((path.into_path_buf(), size));
                 }
             }
             ExtractedEntry::Directory(path) => {
-                if hash_contents {
-                    digest_directories.insert(path);
-                }
+                digest_directories.insert(path);
             }
         }
     }
-    let digest = if hash_contents {
-        let hash_directories = empty_directory_paths(
-            &digest_directories,
-            extracted_files.iter().map(ExtractedFile::path),
-        );
-        Some(directory_digest_from_extracted(
-            &extracted_files,
-            hash_directories,
-        ))
-    } else {
-        None
-    };
-    if hash_contents {
-        files = extracted_files
-            .into_iter()
-            .map(ExtractedFile::into_record)
-            .collect();
-    }
+    let hash_directories = empty_directory_paths(
+        &digest_directories,
+        extracted_files.iter().map(ExtractedFile::path),
+    );
+    let digest = directory_digest_from_extracted(&extracted_files, hash_directories);
+    let files = extracted_files
+        .into_iter()
+        .map(ExtractedFile::into_record)
+        .collect();
 
-    Ok(UnzipOutput { files, digest })
+    Ok(UnzipOutput {
+        files,
+        digest: Some(digest),
+    })
 }
 
 /// Reject entries that would write to the same sanitized output path.
