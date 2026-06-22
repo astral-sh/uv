@@ -521,7 +521,7 @@ fn tool_list_show_with() {
         .tool_install()
         .arg("ruff==0.3.4")
         .arg("--with")
-        .arg("requests")
+        .arg("requests>=2")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
@@ -537,9 +537,9 @@ fn tool_list_show_with() {
     black v24.2.0
     - black
     - blackd
-    flask v3.0.2 [with: requests, black==24.2.0]
+    flask v3.0.2 [with: requests==2.31.0, black==24.2.0]
     - flask
-    ruff v0.3.4 [with: requests]
+    ruff v0.3.4 [with: requests>=2 (installed: 2.31.0)]
     - ruff
 
     ----- stderr -----
@@ -555,9 +555,9 @@ fn tool_list_show_with() {
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [with: requests==2.31.0, black==24.2.0] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-    ruff v0.3.4 [with: requests] ([TEMP_DIR]/tools/ruff)
+    ruff v0.3.4 [with: requests>=2 (installed: 2.31.0)] ([TEMP_DIR]/tools/ruff)
     - ruff ([TEMP_DIR]/bin/ruff)
 
     ----- stderr -----
@@ -573,9 +573,9 @@ fn tool_list_show_with() {
     black v24.2.0 [required: ==24.2.0]
     - black
     - blackd
-    flask v3.0.2 [with: requests, black==24.2.0]
+    flask v3.0.2 [with: requests==2.31.0, black==24.2.0]
     - flask
-    ruff v0.3.4 [required: ==0.3.4] [with: requests]
+    ruff v0.3.4 [required: ==0.3.4] [with: requests>=2 (installed: 2.31.0)]
     - ruff
 
     ----- stderr -----
@@ -594,9 +594,9 @@ fn tool_list_show_with() {
     black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [with: requests==2.31.0, black==24.2.0] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
-    ruff v0.3.4 [required: ==0.3.4] [with: requests] ([TEMP_DIR]/tools/ruff)
+    ruff v0.3.4 [required: ==0.3.4] [with: requests>=2 (installed: 2.31.0)] ([TEMP_DIR]/tools/ruff)
     - ruff ([TEMP_DIR]/bin/ruff)
 
     ----- stderr -----
@@ -655,7 +655,7 @@ fn tool_list_show_extras() {
     black v24.2.0
     - black
     - blackd
-    flask v3.0.2 [extras: async, dotenv] [with: requests]
+    flask v3.0.2 [extras: async, dotenv] [with: requests==2.31.0]
     - flask
 
     ----- stderr -----
@@ -707,7 +707,7 @@ fn tool_list_show_extras() {
     black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [extras: async, dotenv] [with: requests] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [extras: async, dotenv] [with: requests==2.31.0] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----
@@ -785,7 +785,7 @@ fn tool_list_show_all() {
     black v24.2.0 [required: ==24.2.0] [CPython 3.12.[X]] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [extras: async, dotenv] [with: requests] [CPython 3.12.[X]] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [extras: async, dotenv] [with: requests==2.31.0] [CPython 3.12.[X]] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----
