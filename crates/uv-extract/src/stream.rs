@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 
 use uv_distribution_filename::{LegacySourceDistExtension, SourceDistExtension};
 
-use crate::archive_path::{SanitizedArchivePath, enclosed_name};
+use crate::archive_path::SanitizedArchivePath;
 use crate::dirhash::{
     DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
 };
@@ -126,7 +126,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
 
         // Sanitize the file name to prevent directory traversal attacks.
-        let Some(relpath) = enclosed_name(path) else {
+        let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
             warn!("Skipping unsafe file name: {path}");
 
             // Close current file prior to proceeding, as per:
@@ -434,7 +434,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 }
 
                 // Sanitize the file name to prevent directory traversal attacks.
-                let Some(relpath) = enclosed_name(path) else {
+                let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
                     continue;
                 };
                 let is_dir = entry.dir()?;

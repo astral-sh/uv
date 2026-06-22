@@ -22,8 +22,8 @@ const FRAME_EXECUTABLE: u8 = 5;
 const FRAME_CONTENT_BLAKE3: u8 = 6;
 
 /// The platform-independent representation of a sanitized archive path used by the digest.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct DigestPath(String);
+#[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct DigestPath(Box<str>);
 
 impl DigestPath {
     fn as_bytes(&self) -> &[u8] {
@@ -51,14 +51,7 @@ impl From<&SanitizedArchivePath> for DigestPath {
             }
             canonical.push_str(component.to_string_lossy().as_ref());
         }
-        Self(canonical)
-    }
-}
-
-#[cfg(test)]
-impl From<&str> for DigestPath {
-    fn from(path: &str) -> Self {
-        Self(path.to_string())
+        Self(canonical.into_boxed_str())
     }
 }
 
@@ -147,16 +140,6 @@ pub(crate) struct DirectoryDigestFile {
 }
 
 impl DirectoryDigestFile {
-    #[cfg(test)]
-    pub(crate) fn new(path: DigestPath, size: u64, executable: bool, digest: blake3::Hash) -> Self {
-        Self {
-            path,
-            size,
-            executable,
-            digest,
-        }
-    }
-
     fn from_extracted(file: &ExtractedFile) -> Self {
         Self {
             path: DigestPath::from(&file.path),
@@ -255,7 +238,7 @@ pub(crate) fn empty_directory_paths<'a>(
 fn mark_canonical_parent_directories(non_empty: &mut FxHashSet<DigestPath>, path: &DigestPath) {
     let mut path = path.as_str();
     while let Some((parent, _child)) = path.rsplit_once('/') {
-        non_empty.insert(DigestPath(parent.to_string()));
+        non_empty.insert(DigestPath(parent.into()));
         path = parent;
     }
 }
@@ -281,7 +264,7 @@ fn frame_header(frame_type: u8, length: usize) -> [u8; 9] {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::archive_path::enclosed_name;
+    use crate::archive_path::SanitizedArchivePath;
 
     use super::{
         DigestPath, DirectoryDigest, DirectoryDigestFile, FRAME_CONTENT_BLAKE3,
@@ -308,7 +291,7 @@ mod tests {
     fn directory_digest_is_versioned_and_stable() {
         let digest = DirectoryDigest::from_contents(
             vec![digest_file("example/data.txt", b"contents", false)],
-            vec![DigestPath::from("example/empty")],
+            vec![DigestPath("example/empty".into())],
         );
 
         assert_eq!(digest.as_str(), "Y7xwQkyoSQmbHQkyVBHha2v4");
@@ -317,7 +300,7 @@ mod tests {
 
     #[test]
     fn digest_path_uses_normalized_archive_path() {
-        let path = enclosed_name("example/../package/./data.txt");
+        let path = SanitizedArchivePath::from_archive_member("example/../package/./data.txt");
         let digest_path = path.as_ref().map(DigestPath::from);
 
         assert_eq!(
@@ -344,11 +327,11 @@ mod tests {
     }
 
     fn digest_file(path: &str, contents: &[u8], executable: bool) -> DirectoryDigestFile {
-        DirectoryDigestFile::new(
-            DigestPath::from(path),
-            u64::try_from(contents.len()).unwrap_or(u64::MAX),
+        DirectoryDigestFile {
+            path: DigestPath(path.into()),
+            size: u64::try_from(contents.len()).unwrap_or(u64::MAX),
             executable,
-            blake3::hash(contents),
-        )
+            digest: blake3::hash(contents),
+        }
     }
 }
