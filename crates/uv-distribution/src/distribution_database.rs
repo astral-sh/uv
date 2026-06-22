@@ -1250,7 +1250,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let temp_dir = temp_dir.keep();
         let id = match digest {
             Some(digest) => {
-                let id = ArchiveId::from_directory_digest(digest.as_str());
+                let id = ArchiveId::from_digest(digest.into());
                 cache.persist_with_id(temp_dir, target, id).await
             }
             None => cache.persist(temp_dir, target).await,
