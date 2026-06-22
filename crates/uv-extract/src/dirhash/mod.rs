@@ -2,7 +2,6 @@
 
 use std::path::{Component, PathBuf};
 
-use data_encoding::BASE64URL_NOPAD;
 use rustc_hash::FxHashSet;
 
 use crate::archive_path::SanitizedArchivePath;
@@ -12,14 +11,19 @@ mod seek;
 pub(crate) use seek::{unzip, unzip_and_hash};
 
 const DIRECTORY_DIGEST_CONTEXT: &str = "uv directory digest v1";
-const DIRECTORY_DIGEST_BYTES: usize = 18;
+const DIRECTORY_DIGEST_LENGTH: usize = 24;
+const BASE36_ALPHABET: &[u8; 36] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+const BASE36_RADIX: u16 = 36;
 
-const FRAME_EMPTY_DIRECTORY: u8 = 1;
-const FRAME_FILE: u8 = 2;
-const FRAME_PATH: u8 = 3;
-const FRAME_SIZE: u8 = 4;
-const FRAME_EXECUTABLE: u8 = 5;
-const FRAME_CONTENT_BLAKE3: u8 = 6;
+#[repr(u8)]
+enum FrameKind {
+    EmptyDirectory = 1,
+    File = 2,
+    Path = 3,
+    Size = 4,
+    Executable = 5,
+    ContentBlake3 = 6,
+}
 
 /// The platform-independent representation of a sanitized archive path used by the digest.
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -69,8 +73,8 @@ impl From<&SanitizedArchivePath> for DigestPath {
 /// import namespace
 /// ```
 ///
-/// The digest is formatted as 144 bits of the BLAKE3 digest, encoded as unpadded URL-safe base64.
-/// The 24-byte representation fits within Minix's 30-byte filesystem component limit.
+/// The digest is formatted as 24 lowercase base-36 characters, providing approximately 124 bits
+/// of output entropy. Its alphabet is safe for case-insensitive filesystems.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DirectoryDigest(String);
 
@@ -104,19 +108,22 @@ impl DirectoryDigest {
         let mut entry = Vec::new();
         for directory in directories {
             entry.clear();
-            append_frame(&mut entry, FRAME_PATH, directory.as_bytes());
-            update_frame(&mut hasher, FRAME_EMPTY_DIRECTORY, &entry);
+            append_frame(&mut entry, FrameKind::Path, directory.as_bytes());
+            update_frame(&mut hasher, FrameKind::EmptyDirectory, &entry);
         }
         for file in files {
             entry.clear();
-            append_frame(&mut entry, FRAME_PATH, file.path.as_bytes());
-            append_frame(&mut entry, FRAME_SIZE, &file.size.to_le_bytes());
-            append_frame(&mut entry, FRAME_EXECUTABLE, &[u8::from(file.executable)]);
-            append_frame(&mut entry, FRAME_CONTENT_BLAKE3, file.digest.as_bytes());
-            update_frame(&mut hasher, FRAME_FILE, &entry);
+            append_frame(&mut entry, FrameKind::Path, file.path.as_bytes());
+            append_frame(&mut entry, FrameKind::Size, &file.size.to_le_bytes());
+            append_frame(
+                &mut entry,
+                FrameKind::Executable,
+                &[u8::from(file.executable)],
+            );
+            append_frame(&mut entry, FrameKind::ContentBlake3, file.digest.as_bytes());
+            update_frame(&mut hasher, FrameKind::File, &entry);
         }
-        let digest = hasher.finalize();
-        Self(BASE64URL_NOPAD.encode(&digest.as_bytes()[..DIRECTORY_DIGEST_BYTES]))
+        Self(encode_digest(&hasher.finalize()))
     }
 
     /// Return the complete versioned, path-safe digest string.
@@ -243,49 +250,48 @@ fn mark_canonical_parent_directories(non_empty: &mut FxHashSet<DigestPath>, path
     }
 }
 
-fn append_frame(output: &mut Vec<u8>, frame_type: u8, value: &[u8]) {
-    output.extend_from_slice(&frame_header(frame_type, value.len()));
+fn append_frame(output: &mut Vec<u8>, frame_kind: FrameKind, value: &[u8]) {
+    output.extend_from_slice(&frame_header(frame_kind, value.len() as u64));
     output.extend_from_slice(value);
 }
 
-fn update_frame(hasher: &mut blake3::Hasher, frame_type: u8, value: &[u8]) {
-    hasher.update(&frame_header(frame_type, value.len()));
+fn update_frame(hasher: &mut blake3::Hasher, frame_kind: FrameKind, value: &[u8]) {
+    hasher.update(&frame_header(frame_kind, value.len() as u64));
     hasher.update(value);
 }
 
-fn frame_header(frame_type: u8, length: usize) -> [u8; 9] {
+fn frame_header(frame_kind: FrameKind, length: u64) -> [u8; 9] {
     let mut header = [0; 9];
-    header[0] = frame_type;
-    header[1..].copy_from_slice(&u64::try_from(length).unwrap_or(u64::MAX).to_le_bytes());
+    header[0] = frame_kind as u8;
+    header[1..].copy_from_slice(&length.to_le_bytes());
     header
+}
+
+fn encode_digest(digest: &blake3::Hash) -> String {
+    let mut value = *digest.as_bytes();
+    let mut encoded = [b'0'; DIRECTORY_DIGEST_LENGTH];
+
+    for digit in encoded.iter_mut().rev() {
+        let mut remainder = 0u16;
+        for byte in &mut value {
+            let dividend = (remainder << 8) | u16::from(*byte);
+            let quotient = dividend / BASE36_RADIX;
+            // The quotient is at most 255 because the previous remainder is less than 36.
+            debug_assert!(u8::try_from(quotient).is_ok());
+            *byte = quotient.to_le_bytes()[0];
+            remainder = dividend % BASE36_RADIX;
+        }
+        *digit = BASE36_ALPHABET[usize::from(remainder)];
+    }
+
+    encoded.into_iter().map(char::from).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use crate::archive_path::SanitizedArchivePath;
 
-    use super::{
-        DigestPath, DirectoryDigest, DirectoryDigestFile, FRAME_CONTENT_BLAKE3,
-        FRAME_EMPTY_DIRECTORY, FRAME_EXECUTABLE, FRAME_FILE, FRAME_PATH, FRAME_SIZE,
-    };
-
-    #[test]
-    fn directory_digest_frame_types_are_distinct() {
-        let frame_types = [
-            FRAME_EMPTY_DIRECTORY,
-            FRAME_FILE,
-            FRAME_PATH,
-            FRAME_SIZE,
-            FRAME_EXECUTABLE,
-            FRAME_CONTENT_BLAKE3,
-        ];
-        assert_eq!(
-            frame_types.into_iter().collect::<HashSet<_>>().len(),
-            frame_types.len()
-        );
-    }
+    use super::{DIRECTORY_DIGEST_LENGTH, DigestPath, DirectoryDigest, DirectoryDigestFile};
 
     #[test]
     fn directory_digest_is_versioned_and_stable() {
@@ -294,8 +300,14 @@ mod tests {
             vec![DigestPath("example/empty".into())],
         );
 
-        assert_eq!(digest.as_str(), "Y7xwQkyoSQmbHQkyVBHha2v4");
-        assert!(digest.as_str().len() <= 30);
+        assert_eq!(digest.as_str(), "3y7hwgwy7eapwsx3hddwy2pj");
+        assert_eq!(digest.as_str().len(), DIRECTORY_DIGEST_LENGTH);
+        assert!(
+            digest
+                .as_str()
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        );
     }
 
     #[test]
