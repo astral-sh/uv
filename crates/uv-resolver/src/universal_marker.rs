@@ -379,6 +379,35 @@ impl UniversalMarker {
             marker: self.marker.only_extras(),
         }
     }
+
+    /// Returns the conflict marker that remains after evaluating all PEP 508 expressions in the
+    /// given environment.
+    ///
+    /// Unlike [`UniversalMarker::conflict`], this preserves the relationship between PEP 508 and
+    /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
+    /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
+    pub(crate) fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+        let mut remaining = MarkerTree::FALSE;
+
+        'conjunctions: for conjunction in self.marker.to_dnf() {
+            let mut conflict = MarkerTree::TRUE;
+            for expression in conjunction {
+                match expression {
+                    expression @ MarkerExpression::Extra { .. } => {
+                        conflict.and(MarkerTree::expression(expression));
+                    }
+                    expression => {
+                        if !MarkerTree::expression(expression).evaluate(env, &[]) {
+                            continue 'conjunctions;
+                        }
+                    }
+                }
+            }
+            remaining.or(conflict);
+        }
+
+        ConflictMarker { marker: remaining }
+    }
 }
 
 impl std::fmt::Debug for UniversalMarker {
@@ -493,6 +522,11 @@ impl ConflictMarker {
     /// Returns true if this conflict marker will always evaluate to `true`.
     pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
+    }
+
+    /// Returns true if this conflict marker always evaluates to the same value.
+    pub(crate) fn is_constant(self) -> bool {
+        self.marker.is_true() || self.marker.is_false()
     }
 
     /// Returns inclusion and exclusion (respectively) conflict items parsed

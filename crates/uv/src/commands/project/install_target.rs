@@ -129,16 +129,16 @@ impl<'lock> InstallTarget<'lock> {
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
-        // Project and workspace targets have package-backed roots, so materialize them through the
-        // concrete-root API. Non-project workspaces can also have package roots, but their root
-        // dependencies live on the lock manifest, so they need the generic path. Scripts and
-        // invalid or ambiguous roots also use that path.
-        let use_concrete_roots = match self {
-            Self::Project { workspace, .. }
-            | Self::Projects { workspace, .. }
-            | Self::Workspace { workspace, .. } => !workspace.is_non_project(),
-            Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
-        };
+        // Package-backed project and workspace targets without conflicts can use concrete roots.
+        // Other targets need the generic path to include manifest dependencies or evaluate
+        // conflict markers from project roots.
+        let use_concrete_roots = self.lock().conflicts().is_empty()
+            && match self {
+                Self::Project { workspace, .. }
+                | Self::Projects { workspace, .. }
+                | Self::Workspace { workspace, .. } => !workspace.is_non_project(),
+                Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
+            };
         if use_concrete_roots
             && let Some(roots) = self
                 .roots()

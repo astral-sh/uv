@@ -14,7 +14,7 @@ use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOption
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
 use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, TagPolicy};
 use crate::{Lock, LockError};
@@ -180,6 +180,8 @@ trait InstallableExt<'lock>: Installable<'lock> {
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
+        let validate_conflicts = !include_manifest && !self.lock().conflicts().is_empty();
+        let mut dependencies_for_conflict_validation = vec![];
 
         let root = petgraph.add_node(Node::Root);
 
@@ -252,6 +254,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
+                if validate_conflicts {
+                    dependencies_for_conflict_validation.push((dist, dep));
+                }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
                 if !dep.complexified_marker.evaluate(
                     marker_env,
@@ -575,6 +580,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
+                if validate_conflicts {
+                    dependencies_for_conflict_validation.push((package, dep));
+                }
                 if !dep.complexified_marker.evaluate(
                     marker_env,
                     activated_projects.iter().copied(),
@@ -626,6 +634,50 @@ trait InstallableExt<'lock>: Installable<'lock> {
             }
         }
 
+        // Evaluate conflict markers from concrete roots, not from workspace members that depend on
+        // them. Reject markers that still depend on conflict items outside the resulting subgraph.
+        if validate_conflicts {
+            let subgraph_packages = inverse
+                .keys()
+                .map(|package_id| &package_id.name)
+                .collect::<FxHashSet<_>>();
+
+            for (package, dependency) in dependencies_for_conflict_validation {
+                let mut marker = dependency.complexified_marker;
+                for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
+                    if !subgraph_packages.contains(item.package()) {
+                        continue;
+                    }
+
+                    let active = match item.kind() {
+                        ConflictKind::Project => activated_projects.contains(&item.package()),
+                        ConflictKind::Extra(extra) => {
+                            activated_extras.contains(&(item.package(), extra))
+                        }
+                        ConflictKind::Group(group) => {
+                            activated_groups.contains(&(item.package(), group))
+                        }
+                    };
+                    if active {
+                        marker.assume_conflict_item(item);
+                    } else {
+                        marker.assume_not_conflict_item(item);
+                    }
+                }
+
+                let conflict = marker.conflict_for_environment(marker_env);
+                // All in-subgraph conflict items were resolved above, so a non-constant marker
+                // still depends on a package outside the subgraph.
+                if !conflict.is_constant() {
+                    return Err(LockErrorKind::DependencyConflictOutsideSubgraph {
+                        package: package.id.clone(),
+                        dependency: dependency.package_id.clone(),
+                    }
+                    .into());
+                }
+            }
+        }
+
         Ok(Resolution::new(petgraph))
     }
 }
@@ -663,9 +715,15 @@ impl Lock {
     /// Each root must be a [`Package`] from this lock. Unlike [`Installable::to_resolution`], this
     /// method does not include requirements or dependency groups attached directly to the lock
     /// manifest. Extras and dependency groups on the concrete roots are still included according
-    /// to `extras` and `groups`. `project_name` identifies the project for project-specific
-    /// [`InstallOptions`] filters, if applicable. Callers are responsible for selecting roots that
-    /// apply to `marker_env`.
+    /// to `extras` and `groups`.
+    ///
+    /// Conflict-marker evaluation starts from `roots` and their requested `extras` and `groups`,
+    /// not from workspace members that depend on those roots. The method returns an error if a
+    /// dependency marker still depends on a conflict item outside the resulting subgraph. Use
+    /// [`Installable::to_resolution`] when materializing an existing lock target.
+    ///
+    /// `project_name` identifies the project for project-specific [`InstallOptions`] filters, if
+    /// applicable. Callers are responsible for selecting roots that apply to `marker_env`.
     pub fn to_resolution<'lock>(
         &'lock self,
         install_path: &'lock Path,
@@ -727,6 +785,7 @@ mod tests {
     use uv_normalize::{DefaultExtras, DefaultGroups};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
+    use uv_warnings::anstream;
 
     use super::*;
 
@@ -856,6 +915,91 @@ sdist = { url = "https://example.com/unrelated-1.0.0.tar.gz", hash = "sha256:888
         .expect("valid lock")
     }
 
+    fn conflict_lock() -> Lock {
+        toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.11"
+conflicts = [
+    [
+        { package = "tool", extra = "cpu" },
+        { package = "tool", extra = "gpu" },
+    ],
+    [
+        { package = "project", extra = "foo" },
+        { package = "project", extra = "bar" },
+    ],
+]
+
+[[package]]
+name = "contextual-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/contextual_dependency-1.0.0.tar.gz", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "contextual-tool"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [
+    { name = "contextual-dependency", marker = "sys_platform == 'linux' or (sys_platform == 'darwin' and extra == 'extra-7-project-foo')" },
+]
+sdist = { url = "https://example.com/contextual_tool-1.0.0.tar.gz", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+
+[[package]]
+name = "cpu-backend"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/cpu_backend-1.0.0.tar.gz", hash = "sha256:3333333333333333333333333333333333333333333333333333333333333333" }
+
+[[package]]
+name = "gpu-backend"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/gpu_backend-1.0.0.tar.gz", hash = "sha256:4444444444444444444444444444444444444444444444444444444444444444" }
+
+[[package]]
+name = "project"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/project-1.0.0.tar.gz", hash = "sha256:5555555555555555555555555555555555555555555555555555555555555555" }
+
+[package.optional-dependencies]
+foo = []
+bar = []
+
+[package.metadata]
+provides-extras = ["foo", "bar"]
+
+[[package]]
+name = "runtime"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [
+    { name = "cpu-backend", marker = "extra == 'extra-4-tool-cpu'" },
+    { name = "gpu-backend", marker = "extra == 'extra-4-tool-gpu'" },
+]
+sdist = { url = "https://example.com/runtime-1.0.0.tar.gz", hash = "sha256:6666666666666666666666666666666666666666666666666666666666666666" }
+
+[[package]]
+name = "tool"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [{ name = "runtime" }]
+sdist = { url = "https://example.com/tool-1.0.0.tar.gz", hash = "sha256:7777777777777777777777777777777777777777777777777777777777777777" }
+
+[package.optional-dependencies]
+cpu = []
+gpu = []
+
+[package.metadata]
+provides-extras = ["cpu", "gpu"]
+"#,
+        )
+        .expect("valid lock")
+    }
+
     fn package<'lock>(lock: &'lock Lock, name: &str, version: &str) -> &'lock Package {
         lock.packages()
             .iter()
@@ -887,6 +1031,27 @@ sdist = { url = "https://example.com/unrelated-1.0.0.tar.gz", hash = "sha256:888
             &InstallOptions::default(),
         )
         .expect("valid resolution")
+    }
+
+    fn materialize_with_extras(
+        lock: &Lock,
+        roots: &[&Package],
+        marker_env: &ResolverMarkerEnvironment,
+        extras: &ExtrasSpecification,
+    ) -> Result<Resolution, LockError> {
+        let extras = extras.with_defaults(DefaultExtras::default());
+        let groups = DependencyGroupsWithDefaults::none();
+        lock.to_resolution(
+            Path::new("."),
+            roots.iter().copied(),
+            None,
+            marker_env,
+            &TAGS,
+            &extras,
+            &groups,
+            &BuildOptions::default(),
+            &InstallOptions::default(),
+        )
     }
 
     struct OverridingInstallable<'lock> {
@@ -1064,6 +1229,73 @@ sdist = { url = "https://example.com/unrelated-1.0.0.tar.gz", hash = "sha256:888
             ],
         )
             "#);
+        });
+    }
+
+    #[test]
+    fn materializes_conflicting_extras_within_the_synthetic_root() {
+        let lock = conflict_lock();
+        let extras =
+            ExtrasSpecification::from_extra(vec!["cpu".parse().expect("valid extra name")]);
+        let resolution = materialize_with_extras(
+            &lock,
+            &[package(&lock, "tool", "1.0.0")],
+            &DARWIN_MARKERS,
+            &extras,
+        )
+        .expect("conflict markers are resolved within the subgraph");
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "cpu-backend==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+                "runtime==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+            [
+                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "runtime==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> cpu-backend==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> runtime==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
+        });
+    }
+
+    #[test]
+    fn rejects_conflicts_outside_the_synthetic_root() {
+        let lock = conflict_lock();
+        let root = package(&lock, "contextual-tool", "1.0.0");
+        let extras = ExtrasSpecification::default();
+
+        let error = materialize_with_extras(&lock, &[root], &DARWIN_MARKERS, &extras)
+            .expect_err("Darwin dependency depends on the project extra");
+        let error = error.to_string();
+        let error = anstream::adapter::strip_str(&error);
+        insta::assert_snapshot!(error, @"Cannot materialize dependency `contextual-dependency==1.0.0 @ registry+https://example.com/simple` of `contextual-tool==1.0.0 @ registry+https://example.com/simple` because its conflict marker depends on a package outside the selected subgraph");
+
+        let linux = materialize_with_extras(&lock, &[root], &LINUX_MARKERS, &extras)
+            .expect("the dependency is unconditional on Linux");
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&linux), @r#"
+        (
+            [
+                "contextual-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "contextual-tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+            ],
+            [
+                "contextual-tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> contextual-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root --Prod--> contextual-tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
         });
     }
 
