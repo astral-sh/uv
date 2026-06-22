@@ -325,6 +325,8 @@ pub enum PreviewFeature {
     IndexHashAlgorithm,
     /// Rejects non-canonical lockfile formatting when using `--locked` or `--check`.
     LockfileFormatCheck,
+    /// Enables content-addressed wheel archives in the cache.
+    ContentAddressedCache,
 }
 
 impl Display for PreviewFeature {
