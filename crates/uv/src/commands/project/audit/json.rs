@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub(crate) struct Report {
     schema: Schema,
     summary: Summary,
@@ -55,19 +55,19 @@ impl Report {
     }
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Serialize, Default)]
 struct Schema {
     version: SchemaVersion,
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 enum SchemaVersion {
     #[default]
     Preview,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct Summary {
     audited_packages: usize,
     vulnerabilities: usize,

@@ -43,7 +43,6 @@ const RESOURCE_PYTHON_PATH: windows::core::PCWSTR = windows::core::w!("UV_PYTHON
 #[cfg(windows)]
 const RESOURCE_SCRIPT_DATA: windows::core::PCWSTR = windows::core::w!("UV_SCRIPT_DATA");
 
-#[derive(Debug)]
 pub struct Launcher {
     pub kind: LauncherKind,
     pub python_path: PathBuf,
@@ -188,7 +187,7 @@ impl Launcher {
 /// The kind of trampoline launcher to create.
 ///
 /// See [`uv-trampoline::bounce::TrampolineKind`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum LauncherKind {
     /// The trampoline should execute itself, it's a zipped Python script.
     Script,

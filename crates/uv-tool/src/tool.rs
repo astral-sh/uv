@@ -12,7 +12,7 @@ use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
 
 /// A tool entry.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(try_from = "ToolWire", into = "ToolWire")]
 pub struct Tool {
     /// The requirements requested by the user during installation.
@@ -36,7 +36,7 @@ pub struct Tool {
     options: ToolOptions,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolWire {
     #[serde(default)]
@@ -55,7 +55,7 @@ struct ToolWire {
     options: ToolOptionsWire,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(PartialEq, Deserialize)]
 #[serde(untagged)]
 enum RequirementWire {
     /// A [`Requirement`] following our uv-specific schema.
@@ -108,7 +108,7 @@ impl TryFrom<ToolWire> for Tool {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ToolEntrypoint {
     pub name: String,

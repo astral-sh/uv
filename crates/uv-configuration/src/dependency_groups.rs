@@ -326,7 +326,7 @@ impl std::ops::Deref for DependencyGroupsWithDefaults {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum DevMode {
     /// Include development dependencies.
     #[default]

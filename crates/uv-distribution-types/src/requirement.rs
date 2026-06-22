@@ -864,7 +864,7 @@ impl Display for RequirementSource {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 enum RequirementSourceWire {
     /// Ex) `source = { git = "<https://github.com/astral-test/uv-public-pypackage?rev=0.0.1#0dacfd662c64cb4ceb16e6cf65a157a8b715b979>" }`

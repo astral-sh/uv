@@ -49,7 +49,7 @@ pub enum LibcDetectionError {
 }
 
 /// We support glibc (manylinux) and musl (musllinux) on linux.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum LibcVersion {
     Manylinux { major: u32, minor: u32 },
     Musllinux { major: u32, minor: u32 },

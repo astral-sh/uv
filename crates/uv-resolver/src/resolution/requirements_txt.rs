@@ -192,7 +192,7 @@ impl<'dist> RequirementsTxtDist<'dist> {
 }
 
 /// A comparator for sorting requirements in a `requirements.txt` file.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum RequirementsTxtComparator<'a> {
     /// Sort by URL for editable requirements.
     Url(Cow<'a, str>),

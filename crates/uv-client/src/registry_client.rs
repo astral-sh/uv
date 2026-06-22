@@ -49,7 +49,7 @@ use crate::{
 };
 
 /// A builder for an [`RegistryClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
@@ -229,7 +229,6 @@ impl<'a> RegistryClientBuilder<'a> {
 }
 
 /// A client for fetching packages from a `PyPI`-compatible index.
-#[derive(Debug, Clone)]
 pub struct RegistryClient {
     /// The index URLs to use for fetching packages.
     index_urls: IndexUrls,
@@ -939,7 +938,6 @@ impl RegistryClient {
     ) -> Result<ResolutionMetadata, Error> {
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
-                #[derive(Debug, Clone)]
                 enum WheelLocation {
                     /// A local file path.
                     Path(PathBuf),
@@ -1332,7 +1330,6 @@ impl RegistryClient {
     }
 }
 
-#[derive(Debug)]
 enum SimpleMetadataSearchOutcome {
     /// Simple metadata was found
     Found(OwnedArchive<SimpleDetailMetadata>),
@@ -1354,7 +1351,7 @@ impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
 
 /// A map from [`IndexUrl`] to [`FlatIndexEntry`] entries found at the given URL, indexed by
 /// [`PackageName`].
-#[derive(Default, Debug)]
+#[derive(Default)]
 struct FlatIndexCache(FxHashMap<IndexUrl, FlatIndexSlot>);
 
 impl FlatIndexCache {
@@ -1414,7 +1411,7 @@ pub struct VersionSourceDist {
 }
 
 /// The list of projects available in a Simple API index.
-#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleIndexMetadata {
     /// The list of project names available in the index.
@@ -1458,7 +1455,7 @@ impl SimpleIndexMetadata {
 /// Detail response for a Python package from a Simple API index.
 ///
 /// Abstracts over both HTML and JSON index formats.
-#[derive(Default, Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Debug, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub struct SimpleDetailMetadata {
     project_status: ProjectStatus,
@@ -1642,7 +1639,6 @@ impl ArchivedSimpleDetailMetadata {
     }
 }
 
-#[derive(Debug)]
 enum MediaType {
     PyxV1Msgpack,
     PyxV1Json,
@@ -1691,10 +1687,9 @@ impl std::fmt::Display for MediaType {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Connectivity {
     /// Allow access to the network.
-    #[default]
     Online,
 
     /// Do not allow access to the network.

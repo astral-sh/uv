@@ -1,8 +1,7 @@
 use uv_normalize::PackageName;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EditableMode {
-    #[default]
     Editable,
     NonEditable,
     NonEditablePackages(Vec<PackageName>),

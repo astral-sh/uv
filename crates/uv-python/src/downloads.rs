@@ -226,7 +226,7 @@ pub enum ArchRequest {
     Environment(Arch),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct PlatformRequest {
     os: Option<Os>,
     arch: Option<ArchRequest>,
@@ -751,7 +751,6 @@ impl FromStr for PythonDownloadRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        #[derive(Debug, Clone)]
         enum Position {
             Start,
             Implementation,
@@ -776,7 +775,6 @@ impl FromStr for PythonDownloadRequest {
             }
         }
 
-        #[derive(Debug)]
         struct State<'a, P: Iterator<Item = &'a str>> {
             parts: P,
             part: Option<&'a str>,
@@ -945,7 +943,7 @@ pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize)]
 struct JsonPythonDownload {
     name: String,
     arch: JsonArch,
@@ -961,13 +959,12 @@ struct JsonPythonDownload {
     build: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize)]
 struct JsonArch {
     family: String,
     variant: Option<String>,
 }
 
-#[derive(Debug, Clone)]
 pub enum DownloadResult {
     AlreadyAvailable(PathBuf),
     Fetched(PathBuf),
@@ -1676,7 +1673,7 @@ impl Display for ManagedPythonDownload {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Direction {
     Download,
     Extract,

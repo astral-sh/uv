@@ -135,7 +135,6 @@ pub enum DirectBuildIncompatibility {
     IncompatibleRange(VersionSpecifiers),
 }
 
-#[derive(Debug, Clone)]
 struct ImportEntry {
     base: String,
     is_private: bool,
@@ -330,7 +329,7 @@ pub fn check_direct_build(
 }
 
 /// A package name as provided in a `pyproject.toml`.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct VerbatimPackageName {
     /// The package name as given in the `pyproject.toml`.
     given: String,
@@ -353,7 +352,7 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(
     rename_all = "kebab-case",
     expecting = "The project table needs to follow \
@@ -946,7 +945,7 @@ impl PyProjectToml {
 ///
 /// This struct does not have schema export; the schema is shared between all Python tools, and we
 /// should update the shared schema instead.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project.
@@ -1016,7 +1015,7 @@ struct Project {
 
 /// The optional `project.readme` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#readme>.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged, rename_all_fields = "kebab-case")]
 pub(crate) enum Readme {
     /// Relative path to the README.
@@ -1048,7 +1047,7 @@ impl Readme {
 
 /// The optional `project.license` key in a pyproject.toml as specified in
 /// <https://packaging.python.org/en/latest/specifications/pyproject-toml/#license>.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub(crate) enum License {
     /// An SPDX Expression.
@@ -1080,7 +1079,7 @@ impl License {
 ///
 /// The entry is derived from the email format of `John Doe <john.doe@example.net>`. You need to
 /// provide at least name or email.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 // deny_unknown_fields prevents using the name field when the email is not a string.
 #[serde(
     untagged,
@@ -1140,7 +1139,7 @@ impl Classifier {
 }
 
 /// The `tool` section as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct Tool {
     /// uv-specific configuration
@@ -1148,7 +1147,7 @@ pub(crate) struct Tool {
 }
 
 /// The `tool.uv` section with build configuration.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct ToolUv {
     /// Configuration for building source distributions and wheels with the uv build backend
@@ -1156,7 +1155,7 @@ pub(crate) struct ToolUv {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.

@@ -627,7 +627,6 @@ impl CandidateSelector {
     }
 }
 
-#[derive(Debug, Clone)]
 pub(crate) enum CandidateDist<'a> {
     Compatible(CompatibleDist<'a>),
     Incompatible {
@@ -677,7 +676,7 @@ impl<'a> From<&'a PrioritizedDist> for CandidateDist<'a> {
 
 /// The reason why we selected the version of the candidate version, either a preference or being
 /// compatible.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) enum VersionChoiceKind {
     /// A preference from an output file such as `-o requirements.txt` or `uv.lock`.
     Preference,
@@ -697,7 +696,6 @@ impl Display for VersionChoiceKind {
     }
 }
 
-#[derive(Debug, Clone)]
 pub(crate) struct Candidate<'a> {
     /// The name of the package.
     name: &'a PackageName,

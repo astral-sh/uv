@@ -20,10 +20,9 @@ use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 /// Most dependency edges are source-agnostic and use [`DependencySource::Unspecified`]. Direct
 /// URLs and group-scoped explicit indexes use a concrete source so fork construction can keep
 /// that source information attached to the edge that introduced it.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum DependencySource {
     /// The dependency does not carry an edge-local source constraint.
-    #[default]
     Unspecified,
     /// The dependency was introduced by a direct URL-like requirement.
     Url(Box<VerbatimParsedUrl>),
@@ -241,7 +240,6 @@ impl PubGrubDependency {
 }
 
 /// A PubGrub-compatible package and version range.
-#[derive(Debug, Clone)]
 struct PubGrubRequirement {
     package: PubGrubPackage,
     version: Ranges<Version>,

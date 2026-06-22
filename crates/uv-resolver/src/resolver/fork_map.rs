@@ -23,7 +23,7 @@ struct Entry<T> {
 }
 
 /// The fork visibility of an entry.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 struct ForkScope {
     marker: MarkerTree,
     conflict: Option<ConflictItem>,

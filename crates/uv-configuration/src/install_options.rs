@@ -5,7 +5,7 @@ use tracing::debug;
 use uv_normalize::PackageName;
 
 /// Minimal view of a package used to apply install filters.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct InstallTarget<'a> {
     /// The package name.
     pub name: &'a PackageName,
@@ -13,7 +13,7 @@ pub struct InstallTarget<'a> {
     pub is_local: bool,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct InstallOptions {
     /// Omit the project itself from the resolution.
     no_install_project: bool,

@@ -22,7 +22,6 @@ pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 
 /// The response when requesting versions for a package
-#[derive(Debug)]
 pub enum VersionsResponse {
     /// The package was found in the registry with the included versions
     Found(Vec<VersionMap>),
@@ -34,7 +33,6 @@ pub enum VersionsResponse {
     Offline,
 }
 
-#[derive(Debug)]
 pub enum MetadataResponse {
     /// The wheel metadata was found and parsed successfully.
     Found(ArchiveMetadata),

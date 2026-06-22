@@ -17,7 +17,7 @@ use uv_warnings::warn_user;
 use crate::{commands::ExitStatus, printer::Printer};
 
 /// Request format for the Bazel credential helper protocol.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct BazelCredentialRequest {
     uri: DisplaySafeUrl,
 }
@@ -38,7 +38,7 @@ impl BazelCredentialRequest {
 }
 
 /// Response format for the Bazel credential helper protocol.
-#[derive(Debug, Serialize, Default)]
+#[derive(Serialize, Default)]
 struct BazelCredentialResponse {
     headers: HashMap<String, Vec<String>>,
 }

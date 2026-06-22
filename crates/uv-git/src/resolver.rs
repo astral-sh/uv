@@ -36,7 +36,7 @@ pub enum GitResolverError {
 }
 
 /// HTTP settings for fetching a Git repository.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct GitHttpSettings {
     disable_ssl: bool,
     offline: bool,
@@ -282,7 +282,6 @@ impl GitResolver {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResolvedRepositoryReference {
     /// An abstract reference to a Git repository, including the URL and the commit (e.g., a branch,
     /// tag, or revision).

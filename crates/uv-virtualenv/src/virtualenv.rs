@@ -627,7 +627,7 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum ClearNonVirtualenv {
     /// Allow clearing a non-virtual environment directory.
     Allow,
@@ -637,7 +637,7 @@ pub enum ClearNonVirtualenv {
     Error,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum RemovalReason {
     /// The removal was explicitly requested, i.e., with `--clear`.
     UserRequest(ClearNonVirtualenv),
@@ -659,12 +659,11 @@ impl std::fmt::Display for RemovalReason {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum OnExisting {
     /// Prompt before removing an existing directory.
     ///
     /// If a TTY is not available, fail.
-    #[default]
     Prompt,
     /// Fail if the directory already exists and is non-empty.
     Fail,
@@ -694,7 +693,7 @@ impl OnExisting {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum WindowsExecutable {
     /// The `python.exe` executable (or `venvlauncher.exe` launcher shim).
     Python,

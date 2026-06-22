@@ -8,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 
 /// Whether to enforce build isolation when building source distributions.
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub enum BuildIsolation<'a> {
     #[default]
     Isolated,
@@ -46,7 +46,7 @@ impl BuildIsolation<'_> {
 
 /// A key for the build cache, which includes the interpreter, source root, subdirectory, source
 /// strategy, and build kind.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct BuildKey {
     pub base_python: Box<Path>,
     pub source_root: Box<Path>,
@@ -56,7 +56,6 @@ pub struct BuildKey {
 }
 
 /// An arena of in-process builds.
-#[derive(Debug)]
 pub struct BuildArena<T>(Arc<HashMap<BuildKey, Arc<T>>>);
 
 impl<T> Default for BuildArena<T> {

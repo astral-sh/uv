@@ -163,7 +163,7 @@ impl Display for SourceDistFilename {
     }
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug)]
 pub struct SourceDistFilenameError {
     filename: String,
     kind: SourceDistFilenameErrorKind,
@@ -179,7 +179,7 @@ impl Display for SourceDistFilenameError {
     }
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, Debug)]
 enum SourceDistFilenameErrorKind {
     #[error("Name doesn't start with package name {0}")]
     Filename(PackageName),

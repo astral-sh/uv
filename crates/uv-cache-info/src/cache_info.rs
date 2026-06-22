@@ -317,25 +317,25 @@ impl CacheInfo {
 }
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
     tool: Option<Tool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Tool {
     uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolUv {
     cache_keys: Option<Vec<CacheKey>>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CacheKey {
@@ -351,7 +351,7 @@ pub enum CacheKey {
     Environment { env: String },
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum GitPattern {
@@ -359,7 +359,7 @@ pub enum GitPattern {
     Set(GitSet),
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Clone, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GitSet {

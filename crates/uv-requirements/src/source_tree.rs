@@ -46,7 +46,6 @@ impl SourceTree {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
     requirements: Box<[Requirement]>,

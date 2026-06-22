@@ -120,7 +120,6 @@ mod specified_requirement;
 mod status_code_strategy;
 mod traits;
 
-#[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),
@@ -146,7 +145,7 @@ impl std::fmt::Display for VersionOrUrlRef<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstalledVersion<'a> {
     /// A PEP 440 version specifier, used to identify a distribution in a registry.
     Version(&'a Version),
@@ -184,7 +183,7 @@ pub enum Dist {
 }
 
 /// A reference to a built or source distribution.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum DistRef<'a> {
     Built(&'a BuiltDist),
     Source(&'a SourceDist),

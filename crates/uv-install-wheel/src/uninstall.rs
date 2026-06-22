@@ -413,7 +413,6 @@ pub fn uninstall_legacy_editable(egg_link: &Path) -> Result<Uninstall, Error> {
     })
 }
 
-#[derive(Debug, Default)]
 pub struct Uninstall {
     /// The number of files that were removed during the uninstallation.
     pub file_count: usize,

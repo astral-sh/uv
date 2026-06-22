@@ -5,7 +5,7 @@ use serde::ser::SerializeSeq;
 use uv_pep508::MarkerTree;
 
 /// A list of supported marker environments.
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct SupportedEnvironments(Vec<MarkerTree>);
 
 impl SupportedEnvironments {

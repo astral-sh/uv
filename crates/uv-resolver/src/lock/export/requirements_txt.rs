@@ -20,7 +20,6 @@ use crate::lock::{Package, PackageId, Source};
 use crate::{Installable, LockError};
 
 /// An export of a [`Lock`] that renders in `requirements.txt` format.
-#[derive(Debug)]
 pub struct RequirementsTxtExport<'lock> {
     nodes: Vec<ExportableRequirement<'lock>>,
     hashes: bool,
@@ -201,7 +200,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum RequirementComparator<'lock> {
     Editable(&'lock Path),
     Path(&'lock Path),

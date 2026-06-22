@@ -6,7 +6,7 @@ use crate::Cache;
 use clap::{Parser, ValueHint};
 use tracing::{debug, warn};
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser)]
 #[command(next_help_heading = "Cache options")]
 pub struct CacheArgs {
     /// Avoid reading from or writing to the cache, instead using a temporary directory for the

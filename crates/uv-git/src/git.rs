@@ -75,7 +75,7 @@ enum RefspecStrategy {
 }
 
 /// A Git reference (like a tag or branch) or a specific commit.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone)]
 enum ReferenceOrOid<'reference> {
     /// A Git reference, like a tag or branch.
     Reference(&'reference GitReference),
@@ -152,7 +152,7 @@ impl Display for ReferenceOrOid<'_> {
 }
 
 /// A remote repository. It gets cloned into a local [`GitDatabase`].
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct GitRemote {
     /// URL to a remote repository.
     url: DisplaySafeUrl,

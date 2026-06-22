@@ -22,13 +22,12 @@ use uv_workspace::WorkspaceCache;
 use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum SourceTreeEditablePolicy {
     /// Use project-style semantics when lowering workspace members.
     ///
     /// Explicit source-tree editable settings are ignored, preserving the existing implicit
     /// editable default for workspace members.
-    #[default]
     Project,
 
     /// Use tool-style semantics when lowering workspace members.

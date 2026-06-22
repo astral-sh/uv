@@ -1,12 +1,10 @@
 /// Replacement mode for sysconfig values.
-#[derive(Debug)]
 pub(crate) enum ReplacementMode {
     Partial { from: String },
     Full,
 }
 
 /// A replacement entry to patch in sysconfig data.
-#[derive(Debug)]
 pub(crate) struct ReplacementEntry {
     pub(crate) mode: ReplacementMode,
     pub(crate) to: String,

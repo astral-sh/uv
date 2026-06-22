@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::fmt::Debug;
 
 use same_file::is_same_file;
 use tracing::{debug, trace};
@@ -21,7 +20,7 @@ use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 use crate::InstallationStrategy;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
     Satisfied,

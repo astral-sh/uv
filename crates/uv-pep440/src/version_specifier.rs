@@ -227,14 +227,14 @@ impl Serialize for VersionSpecifiers {
 }
 
 /// Error with span information (unicode width) inside the parsed line
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionSpecifiersParseError {
     // Clippy complains about this error type being too big (at time of
     // writing, over 150 bytes). That does seem a little big, so we box things.
     inner: Box<VersionSpecifiersParseErrorInner>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq)]
 struct VersionSpecifiersParseErrorInner {
     /// The underlying error that occurred.
     err: VersionSpecifierParseError,
@@ -792,7 +792,7 @@ impl std::fmt::Display for VersionSpecifier {
 }
 
 /// An error that can occur when constructing a version specifier.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionSpecifierBuildError {
     // We box to shrink the error type's size. This in turn keeps Result<T, E>
     // smaller and should lead to overall better codegen.
@@ -831,7 +831,7 @@ impl std::fmt::Display for VersionSpecifierBuildError {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct VersionOperatorBuildError {
     version_pattern: Option<VersionPattern>,
 }
@@ -852,7 +852,7 @@ impl std::fmt::Display for VersionOperatorBuildError {
 
 /// The specific kind of error that can occur when building a version specifier
 /// from an operator and version pair.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum BuildErrorKind {
     /// Occurs when one attempts to build a version specifier with
     /// a version containing a non-empty local segment with and an
@@ -883,7 +883,7 @@ impl From<BuildErrorKind> for VersionSpecifierBuildError {
 }
 
 /// An error that can occur when parsing or constructing a version specifier.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionSpecifierParseError {
     // We box to shrink the error type's size. This in turn keeps Result<T, E>
     // smaller and should lead to overall better codegen.
@@ -916,7 +916,7 @@ impl std::fmt::Display for VersionSpecifierParseError {
 
 /// The specific kind of error that occurs when parsing a single version
 /// specifier from a string.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum ParseErrorKind {
     InvalidOperator(OperatorParseError),
     InvalidVersion(VersionPatternParseError),
@@ -968,7 +968,6 @@ fn parse_version_specifiers(
 
 /// A simple `~=` version specifier with a major, minor and (optional) patch version, e.g., `~=3.13`
 /// or `~=3.13.0`.
-#[derive(Clone, Debug)]
 pub struct TildeVersionSpecifier<'a> {
     inner: Cow<'a, VersionSpecifier>,
 }

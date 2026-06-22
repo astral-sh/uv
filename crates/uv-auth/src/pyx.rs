@@ -44,20 +44,20 @@ fn read_pyx_auth_token() -> Option<AccessToken> {
 ///
 /// Refresh tokens are single-use tokens that can be exchanged for a renewed access token
 /// and a new refresh token.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct PyxOAuthTokens {
     access_token: AccessToken,
     refresh_token: String,
 }
 
 /// An access token with an accompanying API key.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct PyxApiKeyTokens {
     pub access_token: AccessToken,
     pub api_key: String,
 }
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub enum PyxTokens {
     /// An access token with an accompanying refresh token.
     ///
@@ -98,7 +98,6 @@ impl From<AccessToken> for Credentials {
 }
 
 /// Reason why a token is considered expired and needs refresh.
-#[derive(Debug, Clone)]
 enum ExpiredTokenReason {
     /// The token has no expiration claim.
     MissingExpiration,
@@ -160,7 +159,6 @@ impl PyxTokens {
 /// The default tolerance for the access token expiration.
 pub const DEFAULT_TOLERANCE_SECS: u64 = 60 * 5;
 
-#[derive(Debug, Clone)]
 struct PyxDirectories {
     /// The root directory for the token store (e.g., `/Users/ferris/.local/share/pyx/credentials`).
     root: PathBuf,
@@ -207,7 +205,6 @@ impl PyxDirectories {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct PyxTokenStore {
     /// The root directory for the token store (e.g., `/Users/ferris/.local/share/pyx/credentials`).
     root: PathBuf,
@@ -403,7 +400,7 @@ impl PyxTokenStore {
         &self,
         client: &ClientWithMiddleware,
     ) -> Result<Option<PyxTokens>, TokenStoreError> {
-        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+        #[derive(serde::Deserialize, serde::Serialize)]
         struct Payload {
             access_token: AccessToken,
         }
@@ -502,7 +499,7 @@ impl PyxTokenStore {
                 PyxTokens::OAuth(tokens)
             }
             PyxTokens::ApiKey(PyxApiKeyTokens { api_key, .. }) => {
-                #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+                #[derive(serde::Deserialize, serde::Serialize)]
                 struct Payload {
                     access_token: AccessToken,
                 }
@@ -580,7 +577,7 @@ impl TokenStoreError {
 }
 
 /// The payload of the JWT.
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct PyxJwt {
     /// The expiration time of the JWT, as a Unix timestamp.
     pub exp: Option<i64>,

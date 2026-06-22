@@ -208,7 +208,6 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
     }
 }
 
-#[derive(Debug, Clone)]
 pub(crate) enum ResolverVersion {
     /// A version that is not usable for some reason
     Unavailable(Version, UnavailableVersion),

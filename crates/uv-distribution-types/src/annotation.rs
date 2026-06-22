@@ -5,7 +5,7 @@ use uv_normalize::PackageName;
 use uv_pep508::RequirementOrigin;
 
 /// Source of a dependency, e.g., a `-r requirements.txt` file.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum SourceAnnotation {
     /// A `-c constraints.txt` file.
     Constraint(RequirementOrigin),
@@ -68,7 +68,7 @@ impl std::fmt::Display for SourceAnnotation {
 }
 
 /// A collection of source annotations.
-#[derive(Default, Debug, Clone)]
+#[derive(Default)]
 pub struct SourceAnnotations(BTreeMap<PackageName, BTreeSet<SourceAnnotation>>);
 
 impl SourceAnnotations {

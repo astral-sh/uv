@@ -18,13 +18,12 @@ pub enum VersionControlError {
 }
 
 /// The version control system to use.
-#[derive(Clone, Copy, Debug, PartialEq, Default, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum VersionControlSystem {
     /// Use Git for version control.
-    #[default]
     Git,
     /// Do not use any version control system.
     None,
@@ -97,10 +96,9 @@ wheels/
 ";
 
 /// Setting for Git LFS (Large File Storage) support.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GitLfsSetting {
     /// Git LFS is disabled (default).
-    #[default]
     Disabled,
     /// Git LFS is enabled. Tracks whether it came from an environment variable.
     Enabled { from_env: bool },

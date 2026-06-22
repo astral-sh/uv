@@ -18,7 +18,7 @@ use uv_static::EnvVars;
 use tracing::debug;
 
 /// Shells for which virtualenv activation scripts are available.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 #[expect(clippy::doc_markdown)]
 pub enum Shell {
     /// Bourne Again SHell (bash)

@@ -42,7 +42,7 @@ fn has_attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> bool {
 }
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct SimpleDetailHTML {
     /// The PEP 792 project status information.
     #[allow(dead_code)]
@@ -312,7 +312,7 @@ impl SimpleDetailHTML {
 }
 
 /// A parsed structure from PyPI "HTML" index format listing all available packages.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct SimpleIndexHtml {
     /// The list of project names available in the index.
     pub(crate) projects: Vec<PackageName>,

@@ -65,7 +65,7 @@ use crate::{PythonRequirement, ResolveError};
 /// explicitly by the resolver. (Perhaps a future refactor can incorporate
 /// `requires-python` into this type as well, but it's not totally clear at
 /// time of writing if that's a good idea or not.)
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ResolverEnvironment {
     kind: Kind,
 }
@@ -77,7 +77,7 @@ pub struct ResolverEnvironment {
 /// analysis on this type, and instead try to encapsulate the case analysis via
 /// higher level routines on `ResolverEnvironment` itself. (This goal may prove
 /// intractable, so don't treat it like gospel.)
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Kind {
     /// We're solving for one specific marker environment only.
     ///
@@ -529,7 +529,6 @@ impl std::fmt::Display for ResolverEnvironment {
 ///
 /// This enum encapsulates those possibilities. In the first case, a helper is
 /// returned to help management the nuts and bolts of forking.
-#[derive(Debug)]
 pub(crate) enum ForkingPossibility<'d> {
     Possible(Forker<'d>),
     DependencyAlwaysExcluded,
@@ -554,7 +553,6 @@ impl<'d> ForkingPossibility<'d> {
 }
 
 /// An encapsulation of forking based on a single dependency.
-#[derive(Debug)]
 pub(crate) struct Forker<'d> {
     package: &'d PubGrubPackage,
     marker: MarkerTree,

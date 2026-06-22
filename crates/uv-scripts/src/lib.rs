@@ -22,7 +22,6 @@ use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
 /// A PEP 723 item, either read from a script on disk or provided via `stdin`.
-#[derive(Debug)]
 pub enum Pep723Item {
     /// A PEP 723 script read from disk.
     Script(Pep723Script),
@@ -52,7 +51,7 @@ impl Pep723Item {
 }
 
 /// A reference to a PEP 723 item.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script read from disk.
     Script(&'item Pep723Script),
@@ -139,7 +138,7 @@ impl<'item> From<&'item Pep723Script> for Pep723ItemRef<'item> {
 }
 
 /// A PEP 723 script, including its [`Pep723Metadata`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Pep723Script {
     /// The path to the Python script.
     pub path: PathBuf,
@@ -340,7 +339,7 @@ impl Pep723Script {
 /// PEP 723 metadata as parsed from a `script` comment block.
 ///
 /// See: <https://peps.python.org/pep-0723/>
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
     pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
@@ -399,13 +398,13 @@ impl FromStr for Pep723Metadata {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Tool {
     pub uv: Option<ToolUv>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolUv {
     #[serde(flatten)]
@@ -440,7 +439,7 @@ pub enum Pep723Error {
     InvalidFilename(String),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ScriptTag {
     /// The content of the script before the metadata block.
     prelude: String,

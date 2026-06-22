@@ -18,7 +18,7 @@ use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use crate::commands::project::ProjectError;
 
 /// A target that can be installed from a lockfile.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub(crate) enum InstallTarget<'lock> {
     /// A project (which could be a workspace root or member).
     Project {

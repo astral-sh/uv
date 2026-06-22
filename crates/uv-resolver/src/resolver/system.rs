@@ -9,7 +9,7 @@ use uv_torch::TorchBackend;
 
 use crate::pubgrub::{DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub(super) struct SystemDependency {
     /// The name of the system dependency (e.g., `cuda`).
     name: PackageName,

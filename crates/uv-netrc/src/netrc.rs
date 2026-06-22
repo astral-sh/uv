@@ -16,7 +16,7 @@ impl std::fmt::Display for ParsingError {
 }
 
 /// Authenticators for host.
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Authenticator {
     /// Identify a user on the remote machine.
     pub login: String,

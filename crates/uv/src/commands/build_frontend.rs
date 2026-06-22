@@ -180,7 +180,7 @@ pub(crate) async fn build_frontend(
 }
 
 /// Represents the overall result of a build process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum BuildResult {
     /// Indicates that at least one of the builds failed.
     Failure,
@@ -907,7 +907,7 @@ async fn build_package(
     Ok(build_results)
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 enum BuildAction {
     /// Only list the files that would be included, don't actually build.
     List,
@@ -1243,7 +1243,7 @@ impl Source<'_> {
 
 /// We run all builds in parallel, so we wait until all builds are done to show the success messages
 /// in order.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum BuildMessage {
     /// A built wheel or source distribution.
     Build {
@@ -1337,7 +1337,7 @@ impl BuildMessage {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 enum BuildPlan {
     /// Build a source distribution from source, then build the wheel from the source distribution.
     SdistToWheel,

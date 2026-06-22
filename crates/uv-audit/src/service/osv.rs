@@ -49,7 +49,7 @@ pub enum Error {
 }
 
 /// Package specification for OSV queries.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Serialize)]
 struct Package {
     /// The package's name.
     name: String,
@@ -59,7 +59,7 @@ struct Package {
 }
 
 /// Query request for a single package.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Serialize)]
 struct QueryRequest {
     package: Package,
     version: String,
@@ -103,7 +103,7 @@ enum RangeType {
 }
 
 /// Version range for affected packages.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Range {
     #[serde(rename = "type")]
     range_type: RangeType,
@@ -111,7 +111,7 @@ struct Range {
 }
 
 /// Package affected by a vulnerability.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Affected {
     ranges: Option<Vec<Range>>,
     // TODO: Enable these fields if/when they contain information that's
@@ -122,7 +122,7 @@ struct Affected {
 }
 
 /// The type of a reference in an OSV vulnerability record.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 enum ReferenceType {
     Advisory,
@@ -142,7 +142,7 @@ enum ReferenceType {
 }
 
 /// A reference for more information about a vulnerability.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Reference {
     #[serde(rename = "type")]
     reference_type: ReferenceType,
@@ -150,7 +150,7 @@ struct Reference {
 }
 
 /// A full vulnerability record from OSV.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Vulnerability {
     id: String,
     modified: Timestamp,
@@ -170,20 +170,20 @@ struct Vulnerability {
 }
 
 /// Request body for the batch query API.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Serialize)]
 struct QueryBatchRequest {
     queries: Vec<QueryRequest>,
 }
 
 /// A summary of a vulnerability returned by the batch query API.
 /// Note: the batch query API only returns IDs and modification timestamps, not full records.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 struct VulnSummary {
     id: String,
 }
 
 /// One result entry in a batch query response, corresponding to one input query.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 struct QueryBatchResult {
     #[serde(default)]
     vulns: Vec<VulnSummary>,
@@ -191,13 +191,13 @@ struct QueryBatchResult {
 }
 
 /// Response from a batch query.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 struct QueryBatchResponse {
     results: Vec<QueryBatchResult>,
 }
 
 /// Filter for OSV queries.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum Filter {
     /// Return all vulnerabilities.
     All,

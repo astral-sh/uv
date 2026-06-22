@@ -20,7 +20,6 @@ use crate::{
 ///
 /// Distributions can _also_ point to URLs in lieu of a registry; however, the primary distinction
 /// here is that a distribution will always include a package name, while a URL will not.
-#[derive(Debug, Clone)]
 pub enum BuildableSource<'a> {
     Dist(&'a SourceDist),
     Url(SourceUrl<'a>),
@@ -96,7 +95,6 @@ impl std::fmt::Display for BuildableSource<'_> {
 }
 
 /// A reference to a source distribution defined by a URL.
-#[derive(Debug, Clone)]
 pub enum SourceUrl<'a> {
     Direct(DirectSourceUrl<'a>),
     GitDirectory(GitDirectorySourceUrl<'a>),
@@ -149,7 +147,6 @@ impl std::fmt::Display for SourceUrl<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct DirectSourceUrl<'a> {
     pub url: &'a DisplaySafeUrl,
     pub subdirectory: Option<&'a Path>,
@@ -162,7 +159,6 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct GitPathSourceUrl<'a> {
     /// The URL with the revision and path fragment.
     pub url: &'a VerbatimUrl,
@@ -188,7 +184,6 @@ impl<'a> From<&'a GitPathSourceDist> for GitPathSourceUrl<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct GitDirectorySourceUrl<'a> {
     /// The URL with the revision and subdirectory fragment.
     pub url: &'a VerbatimUrl,
@@ -213,7 +208,6 @@ impl<'a> From<&'a GitDirectorySourceDist> for GitDirectorySourceUrl<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct PathSourceUrl<'a> {
     pub url: &'a DisplaySafeUrl,
     pub path: Cow<'a, Path>,
@@ -236,7 +230,6 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a DisplaySafeUrl,
     pub install_path: &'a Path,

@@ -5,7 +5,6 @@ use uv_distribution_types::IndexUrl;
 use uv_redacted::DisplaySafeUrl;
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
-#[derive(Debug, Clone)]
 pub enum WheelCache<'a> {
     /// Either PyPI or an alternative index, which we key by index URL.
     Index(&'a IndexUrl),
@@ -52,7 +51,7 @@ impl WheelCache<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) enum WheelCacheKind {
     /// A cache of data from PyPI.
     Pypi,

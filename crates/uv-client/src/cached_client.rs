@@ -46,7 +46,7 @@ pub(crate) trait Cacheable: Sized {
 
 /// A wrapper type that makes anything with Serde support automatically
 /// implement `Cacheable`.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(transparent)]
 struct SerdeCacheable<T> {
     inner: T,
@@ -94,7 +94,6 @@ where
 }
 
 /// Dispatch type: Either a cached client error or a (user specified) error from the callback.
-#[derive(Debug)]
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
     /// The client tracks retries internally.
     Client(Error),
@@ -167,7 +166,7 @@ impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum CacheControl {
     /// Respect the `cache-control` header from the response.
     None,
@@ -204,7 +203,6 @@ impl From<Freshness> for CacheControl {
 ///
 /// Again unlike `http-cache`, the caller gets full control over the cache key with the assumption
 /// that it's a file.
-#[derive(Debug, Clone)]
 pub struct CachedClient(BaseClient);
 
 impl CachedClient {
@@ -721,7 +719,6 @@ impl CachedClient {
     }
 }
 
-#[derive(Debug)]
 enum CachedResponse {
     /// The cached response is fresh without an HTTP request (e.g. age < max-age).
     FreshCache(DataWithCachePolicy),

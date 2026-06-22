@@ -952,11 +952,11 @@ impl FromStr for PlatformTag {
     }
 }
 
-#[derive(Debug, Clone, Copy, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, thiserror::Error, PartialEq)]
 #[error("release and architecture must contain only ASCII letters, digits, and underscores")]
 pub struct ParseReleaseArchError;
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ParsePlatformTagError {
     #[error("Unknown platform tag format: {0}")]
     UnknownFormat(String),

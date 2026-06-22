@@ -143,7 +143,6 @@ impl TextStoreMode {
     }
 }
 
-#[derive(Debug, Clone)]
 enum TokenState {
     /// The token state has not yet been initialized from the store.
     Uninitialized,
@@ -152,7 +151,6 @@ enum TokenState {
     Initialized(Option<AccessToken>),
 }
 
-#[derive(Clone)]
 enum S3CredentialState {
     /// The S3 credential state has not yet been initialized.
     Uninitialized,
@@ -161,7 +159,6 @@ enum S3CredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
-#[derive(Clone)]
 enum GcsCredentialState {
     /// The GCS credential state has not yet been initialized.
     Uninitialized,
@@ -170,7 +167,6 @@ enum GcsCredentialState {
     Initialized(Option<Arc<Authentication>>),
 }
 
-#[derive(Clone)]
 enum AzureCredentialState {
     /// The Azure credential state has not yet been initialized.
     Uninitialized,

@@ -10,7 +10,7 @@ use uv_pypi_types::{HashDigest, HashDigests};
 /// (e.g.) the version number of the distribution itself. For example, a source distribution hosted
 /// at a URL or a local file path may have multiple revisions, each representing a unique state of
 /// the distribution, despite the reported version number remaining the same.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Revision {
     id: RevisionId,
     hashes: HashDigests,
@@ -59,7 +59,7 @@ impl Hashed for Revision {
 /// Note: for compatibility with the existing `sdists-v9` bucket, this is a newtype around a
 /// `String` rather than a newtype around `uv_fastid::Id`. In the future, we may want to bump
 /// to `sdists-v10` and switch to using `uv_fastid::Id` directly.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct RevisionId(String);
 
 impl RevisionId {

@@ -15,7 +15,6 @@ use uv_warnings::warn_user_once;
 ///
 /// The returned distribution is guaranteed to be compatible with the provided tags and Python
 /// requirement (if specified).
-#[derive(Debug, Clone)]
 pub(crate) struct LatestClient<'env> {
     pub(crate) client: &'env RegistryClient,
     pub(crate) capabilities: &'env IndexCapabilities,

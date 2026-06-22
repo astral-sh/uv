@@ -13,7 +13,6 @@ static UV_SERVICE_PREFIX: &str = "uv:";
 ///
 /// See pip's implementation for reference
 /// <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L102>
-#[derive(Debug)]
 pub struct KeyringProvider {
     backend: KeyringProviderBackend,
 }
@@ -30,7 +29,6 @@ pub enum Error {
     RemoveUnsupported(&'static str),
 }
 
-#[derive(Debug)]
 enum KeyringProviderBackend {
     /// Use a native system keyring integration for credentials.
     Native,

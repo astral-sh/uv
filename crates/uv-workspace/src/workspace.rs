@@ -46,7 +46,7 @@ type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
 ///   traversing into an external cache if `cache` is accidentally included in the workspace member
 ///   glob.
 /// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct WorkspaceCache {
     workspaces: Arc<FxOnceMap<PathBuf, CachedWorkspaceResult>>,
 }
@@ -201,7 +201,7 @@ pub enum WorkspaceErrorKind {
     Normalize(#[source] std::io::Error),
 }
 
-#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+#[derive(Default, PartialEq)]
 pub enum MemberDiscovery {
     /// Discover all workspace members.
     #[default]
@@ -214,7 +214,7 @@ pub enum MemberDiscovery {
     Ignore(BTreeSet<PathBuf>),
 }
 
-#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+#[derive(Default)]
 pub struct DiscoveryOptions {
     /// The path to stop discovery at.
     ///
@@ -1321,7 +1321,7 @@ impl Workspace {
 }
 
 /// A project in a workspace.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub struct WorkspaceMember {
     /// The path to the project root.
@@ -1949,7 +1949,7 @@ fn is_included_in_workspace(
 ///
 /// The project could be a package within a workspace, a real workspace root, or a non-project
 /// workspace root, which can define its own dev dependencies.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum VirtualProject {
     /// A project (which could be a workspace root or member).
     Project(ProjectWorkspace),

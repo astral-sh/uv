@@ -17,7 +17,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspac
 use crate::Metadata;
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Box<[Requirement]>,
@@ -352,7 +352,7 @@ impl From<Metadata> for RequiresDist {
 ///
 /// The [`FlatRequiresDist`] struct is used to flatten out the recursive dependencies, i.e., convert
 /// from the former to the latter.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct FlatRequiresDist(Box<[Requirement]>);
 
 impl FlatRequiresDist {

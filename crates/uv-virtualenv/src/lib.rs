@@ -49,7 +49,6 @@ impl uv_errors::Hint for Error {
 }
 
 /// The value to use for the shell prompt when inside a virtual environment.
-#[derive(Debug)]
 pub enum Prompt {
     /// Use the current directory name as the prompt.
     CurrentDirectoryName,

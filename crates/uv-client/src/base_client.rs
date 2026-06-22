@@ -74,7 +74,7 @@ pub enum ClientBuildError {
 }
 
 /// Selectively skip parts or the entire auth middleware.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub enum AuthIntegration {
     /// Run the full auth middleware, including sending an unauthenticated request first.
     #[default]
@@ -87,7 +87,7 @@ pub enum AuthIntegration {
 }
 
 /// A builder for an [`BaseClient`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BaseClientBuilder<'a> {
     keyring: KeyringProviderType,
     preview: Preview,
@@ -124,7 +124,7 @@ pub struct BaseClientBuilder<'a> {
 }
 
 /// The policy for handling HTTP redirects.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub enum RedirectPolicy {
     /// Use reqwest's built-in redirect handling. This bypasses our custom middleware
     /// on redirect.
@@ -670,7 +670,6 @@ impl<'a> BaseClientBuilder<'a> {
 }
 
 /// A base client for HTTP requests
-#[derive(Debug, Clone)]
 pub struct BaseClient {
     /// The underlying HTTP client that enforces valid certificates.
     client: RedirectClientWithMiddleware,
@@ -696,7 +695,7 @@ pub struct BaseClient {
     credentials_cache: Arc<CredentialsCache>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum Security {
     /// The client should use secure settings, i.e., valid certificates.
     Secure,
@@ -763,7 +762,7 @@ impl BaseClient {
 }
 
 /// Wrapper around [`ClientWithMiddleware`] that manages redirects.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RedirectClientWithMiddleware {
     client: ClientWithMiddleware,
     redirect_policy: RedirectPolicy,
@@ -1003,10 +1002,9 @@ fn make_referer(
     referer.as_str().parse().ok()
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum CrossOriginCredentialsPolicy {
     /// Do not propagate credentials on cross-origin requests.
-    #[default]
     Secure,
 
     /// Propagate credentials on cross-origin requests.
@@ -1022,7 +1020,6 @@ pub(crate) enum CrossOriginCredentialsPolicy {
 ///
 /// This wraps [`reqwest_middleware::RequestBuilder`] to ensure that the [`BaseClient`]
 /// redirect policy is respected if `send()` is called.
-#[derive(Debug)]
 #[must_use]
 pub struct RequestBuilder<'a> {
     builder: reqwest_middleware::RequestBuilder,

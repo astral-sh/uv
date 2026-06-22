@@ -52,7 +52,7 @@ impl Display for AuthPolicy {
 // TODO(john): We are not using `uv_distribution_types::Index` directly
 // here because it would cause circular crate dependencies. However, this
 // could potentially make sense for a future refactor.
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct Index {
     pub url: DisplaySafeUrl,
     /// The root endpoint where authentication is applied.
@@ -94,10 +94,14 @@ pub(crate) fn is_path_prefix(prefix: &str, path: &str) -> bool {
 // all the indexes in the set. There are probably not many URLs to
 // iterate through, but we could use a trie instead of a HashSet here
 // for more efficient search.
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Indexes(FxHashSet<Index>);
 
 impl Indexes {
+    #[expect(
+        clippy::new_without_default,
+        reason = "no call site requires a Default implementation"
+    )]
     pub fn new() -> Self {
         Self(FxHashSet::default())
     }

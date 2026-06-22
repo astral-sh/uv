@@ -9,7 +9,7 @@ use uv_macros::OptionsMetadata;
 ///
 /// All options that accept globs use the portable glob patterns from
 /// [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
-#[derive(Deserialize, Serialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, OptionsMetadata, Debug, Clone, PartialEq)]
 #[serde(default, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct BuildBackendSettings {
@@ -189,7 +189,7 @@ impl Default for BuildBackendSettings {
 }
 
 /// Whether to include a single module or multiple modules.
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub enum ModuleName {
@@ -202,7 +202,7 @@ pub enum ModuleName {
 /// Data includes for wheels.
 ///
 /// See `BuildBackendSettings::data`.
-#[derive(Default, Deserialize, Serialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Deserialize, Serialize, OptionsMetadata, Debug, Clone, PartialEq)]
 // `deny_unknown_fields` to catch typos such as `header` vs `headers`.
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

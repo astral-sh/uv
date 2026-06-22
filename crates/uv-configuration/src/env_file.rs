@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 /// A collection of `.env` file paths.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq)]
 pub struct EnvFile(Vec<PathBuf>);
 
 impl EnvFile {

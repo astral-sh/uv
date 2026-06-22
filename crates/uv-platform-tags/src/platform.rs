@@ -27,7 +27,7 @@ pub enum PlatformError {
     InvalidIosDeviceArch(Arch),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Platform {
     os: Os,
     arch: Arch,
@@ -71,7 +71,7 @@ impl Platform {
 }
 
 /// All supported operating systems.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "name", rename_all = "lowercase")]
 pub enum Os {
     Manylinux {

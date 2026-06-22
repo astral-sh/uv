@@ -11,7 +11,6 @@ pub(crate) static GITHUB_RATE_LIMIT_STATUS: GitHubRateLimitStatus = GitHubRateLi
 ///
 /// The rate limit timeout duration is much longer than the runtime of a `uv` command.
 /// And so we do not need to invalidate this state based on `x-ratelimit-reset`.
-#[derive(Debug)]
 pub(crate) struct GitHubRateLimitStatus(AtomicBool);
 
 impl GitHubRateLimitStatus {

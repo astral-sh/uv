@@ -8,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 /// A set of constraints for a set of requirements.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Constraints(FxHashMap<PackageName, Vec<Requirement>>);
 
 impl Constraints {

@@ -81,7 +81,6 @@ impl schemars::JsonSchema for PackageNameSpecifier {
 /// A repeated specifier used for (e.g.) pip's `--no-binary` flag.
 ///
 /// This is a superset of the package name format, allowing for special values `:all:` and `:none:`.
-#[derive(Debug, Clone)]
 pub enum PackageNameSpecifiers {
     All,
     None,

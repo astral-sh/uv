@@ -41,7 +41,7 @@ use security_framework::os::macos::passwords::find_generic_password;
 /// The actual credentials can have lots of attributes
 /// not represented here.  There's no way to use this
 /// module to get at those attributes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct MacCredential {
     pub domain: MacKeychainDomain,
     pub service: String,
@@ -256,7 +256,7 @@ impl CredentialBuilderApi for MacCredentialBuilder {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 /// The four pre-defined Mac keychains.
 pub enum MacKeychainDomain {
     User,

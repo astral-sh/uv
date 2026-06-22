@@ -380,7 +380,7 @@ fn format_header(
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum ConfigurationFile {
     PyprojectToml,
     UvToml,

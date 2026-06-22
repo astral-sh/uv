@@ -22,7 +22,7 @@ use uv_redacted::DisplaySafeUrl;
 ///
 /// This structure represents the standard format for machine-readable details
 /// of errors in HTTP response bodies as defined in RFC 9457.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ProblemDetails {
     /// A URI reference that identifies the problem type.
     /// When dereferenced, it SHOULD provide human-readable documentation for the problem type.

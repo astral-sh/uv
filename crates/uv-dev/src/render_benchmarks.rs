@@ -117,12 +117,12 @@ fn load_fonts() -> fontdb::Database {
     fontdb
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct BenchmarkResults {
     results: Vec<BenchmarkResult>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct BenchmarkResult {
     command: String,
     mean: f64,

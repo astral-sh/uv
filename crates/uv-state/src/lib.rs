@@ -6,7 +6,6 @@ use tempfile::{TempDir, tempdir};
 ///
 /// This is appropriate for storing persistent data that is not user-facing, such as managed Python
 /// installations or tool environments.
-#[derive(Debug, Clone)]
 pub struct StateStore {
     /// The state storage.
     root: PathBuf,
@@ -65,7 +64,7 @@ impl StateStore {
 
 /// The different kinds of data in the state store are stored in different bucket, which in our case
 /// are subdirectories of the state store root.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum StateBucket {
     /// Managed Python installations
     ManagedPython,

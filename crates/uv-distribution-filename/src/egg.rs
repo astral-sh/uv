@@ -26,7 +26,6 @@ pub enum EggInfoFilenameError {
 /// ```
 ///
 /// See: <https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#filename-embedded-metadata>
-#[derive(Debug, Clone)]
 pub struct EggInfoFilename {
     pub name: PackageName,
     pub version: Option<Version>,

@@ -191,7 +191,7 @@ where
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
     #[serde(deserialize_with = "deserialize_lock_version")]
@@ -225,7 +225,7 @@ where
     Ok(version)
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockTomlPackage {
     pub name: PackageName,
@@ -255,12 +255,12 @@ pub struct PylockTomlPackage {
     wheels: Option<Vec<PylockTomlWheel>>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[expect(clippy::empty_structs_with_brackets)]
 struct PylockTomlDependency {}
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlDirectory {
     path: PortablePathBuf,
@@ -270,7 +270,7 @@ struct PylockTomlDirectory {
     subdirectory: Option<PortablePathBuf>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlVcs {
     r#type: VcsKind,
@@ -285,7 +285,7 @@ struct PylockTomlVcs {
     subdirectory: Option<PortablePathBuf>,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlArchive {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -306,7 +306,7 @@ struct PylockTomlArchive {
     hashes: Hashes,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlSdist {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -348,7 +348,7 @@ struct PylockTomlWheel {
     hashes: Hashes,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlAttestationIdentity {
     kind: String,

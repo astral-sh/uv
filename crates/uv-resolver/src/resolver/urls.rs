@@ -21,7 +21,6 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 ///
 /// This type contains all URLs without checking, the validation happens in
 /// [`crate::fork_urls::ForkUrls`].
-#[derive(Debug, Default)]
 pub(crate) struct Urls {
     /// URL requirements in overrides. An override URL replaces all requirements and constraints
     /// URLs. There can be multiple URLs for the same package as long as they are in different

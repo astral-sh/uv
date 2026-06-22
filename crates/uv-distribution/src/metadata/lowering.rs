@@ -26,10 +26,9 @@ use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
-#[derive(Debug, Clone)]
 pub struct LoweredRequirement(Requirement);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum RequirementOrigin {
     /// The `tool.uv.sources` were read from the project.
     Project,

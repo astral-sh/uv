@@ -36,7 +36,6 @@ use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsRe
 
 type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
-#[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
     /// See [`crate::error::NoSolutionError::included_versions`].
     pub(crate) included_versions: &'a FxHashMap<PackageName, BTreeSet<Version>>,
@@ -1372,14 +1371,14 @@ fn is_compatible_release_upper_bound(version: &Version) -> bool {
     version.dev() == Some(0) && !version.is_pre() && !version.is_post() && !version.is_local()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExcludeNewerVersionDetail {
     version: Version,
     publish_date: Option<String>,
     singleton: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum PubGrubHint {
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
@@ -1570,7 +1569,7 @@ pub enum PubGrubHint {
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
 /// used for `Eq` and `Hash` implementations. It is used to derive `PartialEq` and
 /// `Hash` implementations for [`PubGrubHint`].
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Hash)]
 enum PubGrubHintCore {
     PrereleaseAvailable {
         package: PackageName,
@@ -2245,7 +2244,7 @@ impl PackageTerm<'_> {
 }
 
 /// The kind of version ranges being displayed in [`PackageRange`]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum PackageRangeKind {
     Dependency,
     Compatibility,
@@ -2253,7 +2252,6 @@ enum PackageRangeKind {
 }
 
 /// A [`Range`] and [`PubGrubPackage`] combination for display.
-#[derive(Debug)]
 struct PackageRange<'a> {
     package: &'a PubGrubPackage,
     range: &'a Range<Version>,
@@ -2515,7 +2513,6 @@ impl PackageRange<'_> {
 }
 
 /// A representation of A depends on B (and C).
-#[derive(Debug)]
 struct DependsOn<'a> {
     package: &'a PackageRange<'a>,
     dependency1: PackageRange<'a>,

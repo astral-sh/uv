@@ -109,7 +109,7 @@ impl std::fmt::Display for InstallRequest<'_> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct Changelog {
     existing: FxHashSet<PythonInstallationKey>,
     installed: FxHashSet<PythonInstallationKey>,
@@ -144,7 +144,7 @@ impl Changelog {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum InstallErrorKind {
     DownloadUnpack,
     Bin,

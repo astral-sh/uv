@@ -1,5 +1,5 @@
 /// An encoded JWT access token.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(transparent)]
 pub struct AccessToken(String);
 

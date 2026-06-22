@@ -4,10 +4,9 @@ use uv_normalize::PackageName;
 
 use crate::{PackageNameSpecifier, PackageNameSpecifiers};
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum BuildKind {
     /// A PEP 517 wheel build.
-    #[default]
     Wheel,
     /// A PEP 517 source distribution build.
     Sdist,
@@ -25,7 +24,7 @@ impl Display for BuildKind {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum BuildOutput {
     /// Send the build backend output to `stderr`.
     Stderr,
@@ -35,7 +34,7 @@ pub enum BuildOutput {
     Quiet,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct BuildOptions {
     no_binary: NoBinary,
@@ -104,7 +103,7 @@ impl BuildOptions {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NoBinary {
     /// Allow installation of any wheel.
@@ -200,7 +199,7 @@ impl NoBinary {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NoBuild {
     /// Allow building wheels from any source distribution.
@@ -300,7 +299,7 @@ impl NoBuild {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

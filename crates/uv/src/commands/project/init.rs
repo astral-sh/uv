@@ -727,11 +727,10 @@ pub(crate) enum InitKind {
 }
 
 /// The kind of Python project to initialize (either an application or a library).
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) enum InitProjectKind {
     /// A python package with a `main` function in a `__init__.py` and a script entrypoint pointing
     /// to that.
-    #[default]
     ApplicationWithLibrary,
     /// A flat application with a `main.py`.
     Application,
@@ -1054,7 +1053,6 @@ impl InitProjectKind {
     }
 }
 
-#[derive(Debug)]
 enum Author {
     Name(String),
     Email(String),
@@ -1393,7 +1391,6 @@ fn generate_package_scripts(
     Ok(())
 }
 
-#[derive(Debug, Clone)]
 enum GitDiscoveryResult {
     /// Git is initialized at the path.
     Repository,

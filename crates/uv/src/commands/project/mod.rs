@@ -369,7 +369,6 @@ pub(crate) enum ProjectError {
 }
 
 /// Vulnerability identifiers grouped by dependency.
-#[derive(Debug)]
 pub(crate) struct MalwareFindings(pub(crate) Vec<(Dependency, Vec<VulnerabilityID>)>);
 
 impl std::fmt::Display for MalwareFindings {
@@ -509,7 +508,7 @@ impl std::fmt::Display for ConflictError {
 impl std::error::Error for ConflictError {}
 
 /// A [`SharedState`] instance to use for universal resolution.
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub(crate) struct UniversalState(SharedState);
 
 impl std::ops::Deref for UniversalState {
@@ -680,7 +679,6 @@ fn validate_script_requires_python(
 }
 
 /// An interpreter suitable for a PEP 723 script.
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptInterpreter {
     /// An interpreter to use to create a new script environment.
@@ -997,7 +995,6 @@ fn environment_is_usable(
 }
 
 /// An interpreter suitable for the project.
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum ProjectInterpreter {
     /// An interpreter from outside the project, to create a new project virtual environment.
@@ -1183,7 +1180,6 @@ pub(crate) async fn lock_project_environment(
 }
 
 /// The source of a `Requires-Python` specifier.
-#[derive(Debug, Clone)]
 enum RequiresPythonSource {
     /// From the PEP 723 inline script metadata.
     Script,
@@ -1191,7 +1187,6 @@ enum RequiresPythonSource {
     Project,
 }
 
-#[derive(Debug, Clone)]
 pub(crate) enum PythonRequestSource {
     /// The request was provided by the user.
     UserRequest,
@@ -1214,7 +1209,6 @@ impl std::fmt::Display for PythonRequestSource {
 }
 
 /// The resolved Python request and requirement for a [`Workspace`].
-#[derive(Debug, Clone)]
 pub(crate) struct WorkspacePython {
     /// The source of the Python request.
     pub(crate) source: PythonRequestSource,
@@ -1296,7 +1290,6 @@ impl WorkspacePython {
 }
 
 /// The resolved Python request and requirement for a [`Pep723Script`]
-#[derive(Debug, Clone)]
 struct ScriptPython {
     /// The source of the Python request.
     source: PythonRequestSource,
@@ -1405,7 +1398,6 @@ impl ScriptPython {
 }
 
 /// The Python environment for a project.
-#[derive(Debug)]
 pub(crate) enum ProjectEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the project's requirements.
     Existing(PythonEnvironment),
@@ -1643,7 +1635,6 @@ impl std::ops::Deref for ProjectEnvironment {
 }
 
 /// The Python environment for a script.
-#[derive(Debug)]
 pub(crate) enum ScriptEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
     Existing(PythonEnvironment),
@@ -1995,7 +1986,7 @@ pub(crate) async fn resolve_names(
     Ok(requirements)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum PreferenceLocation<'lock> {
     /// The preferences should be extracted from a lockfile.
     Lock {
@@ -2006,7 +1997,7 @@ pub(crate) enum PreferenceLocation<'lock> {
     Entries(Vec<Preference>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
@@ -2395,7 +2386,6 @@ pub(crate) async fn sync_environment(
 }
 
 /// The result of updating a [`PythonEnvironment`] to satisfy a set of [`RequirementsSource`]s.
-#[derive(Debug)]
 pub(crate) struct EnvironmentUpdate {
     /// The updated [`PythonEnvironment`].
     pub(crate) environment: PythonEnvironment,

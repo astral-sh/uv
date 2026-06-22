@@ -8,7 +8,6 @@ use std::fmt::{Display, Formatter};
 /// characters, etc.
 ///
 /// See: <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_vendor/packaging/utils.py#L45>
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DistInfoName<'a>(Cow<'a, str>);
 
 impl<'a> DistInfoName<'a> {

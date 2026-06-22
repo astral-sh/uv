@@ -54,7 +54,7 @@ where
 }
 
 /// The full `uv workspace metadata` JSON object
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 pub struct Metadata {
     /// Format information
     schema: SchemaReport,
@@ -92,30 +92,29 @@ pub struct Metadata {
 }
 
 /// The schema version for the metadata report.
-#[derive(serde::Serialize, Debug, Default)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SchemaVersion {
     /// An unstable, experimental schema.
-    #[default]
     Preview,
 }
 
 /// The schema metadata for the metadata report.
-#[derive(serde::Serialize, Debug, Default)]
+#[derive(serde::Serialize)]
 struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
 }
 
 /// Information about the environment synchronized for the workspace.
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataEnvironment {
     /// Absolute path to the environment root.
     root: PortablePathBuf,
 }
 
 /// The script entry-point.
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataScript {
     /// Absolute path to the script.
     path: PortablePathBuf,
@@ -124,7 +123,7 @@ struct MetadataScript {
 }
 
 /// The workspace entry-point.
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataWorkspace {
     /// Absolute path to the workspace root.
     path: PortablePathBuf,
@@ -133,7 +132,7 @@ struct MetadataWorkspace {
 }
 
 /// Info for looking up workspace members, most information is stored in the node behind `id`
-#[derive(Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataWorkspaceMember {
     /// Package name
     name: PackageName,
@@ -196,7 +195,7 @@ struct MetadataModuleOwner {
 /// Note that `mypackage[cli]` has a dependency edge on `mypackage` while `mypackage:dev` does not.
 /// This is because `mypackage[cli]` is fundamentally an augmentation of `mypackage` while `mypackage:dev`
 /// is just a list of packages that happens to be defined by `mypackage`'s pyproject.toml.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataNode {
     /// A unique id for this node that will be used to refer to it
     #[serde(flatten)]
@@ -302,18 +301,18 @@ impl MetadataNode {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MetadataWorkspaceNodeKind {
     Workspace,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MetadataWorkspaceGroupNodeKind {
     Group(GroupName),
 }
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MetadataScriptNodeKind {
     Script,
@@ -375,7 +374,7 @@ fn root_dependencies<'lock>(
 }
 
 /// The unique key for every node in the graph.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(untagged)]
 enum MetadataNodeId {
     Package(MetadataPackageNodeId),
@@ -387,7 +386,7 @@ enum MetadataNodeId {
 /// The unique key for a package-derived node.
 ///
 /// (It's not entirely clear to me that two nodes can differ only by `source` but it doesn't hurt.)
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 struct MetadataPackageNodeId {
     /// The name of the package
     name: PackageName,
@@ -401,7 +400,7 @@ struct MetadataPackageNodeId {
 }
 
 /// The unique key for a script node.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataScriptNodeId {
     kind: MetadataScriptNodeKind,
     /// Absolute path to the script.
@@ -409,7 +408,7 @@ struct MetadataScriptNodeId {
 }
 
 /// The unique key for a workspace node.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataWorkspaceNodeId {
     kind: MetadataWorkspaceNodeKind,
     /// Absolute path to the workspace root.
@@ -417,7 +416,7 @@ struct MetadataWorkspaceNodeId {
 }
 
 /// The unique key for a dependency group defined on the workspace root.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataWorkspaceGroupNodeId {
     kind: MetadataWorkspaceGroupNodeKind,
     /// Absolute path to the workspace root.
@@ -480,7 +479,7 @@ impl Display for MetadataNodeId {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataDependency {
     id: MetadataNodeIdFlat,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -490,7 +489,7 @@ struct MetadataDependency {
 type MetadataMarker = String;
 
 /// The kind a node can have in the dependency graph
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
+#[derive(Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MetadataNodeKind {
     /// The node is the package itself
@@ -520,7 +519,7 @@ impl Display for MetadataNodeKind {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 enum MetadataSource {
     Registry {
@@ -631,7 +630,7 @@ fn normalize_workspace_relative_path(
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 enum MetadataRegistrySource {
     /// Ex) `https://pypi.org/simple`
@@ -640,7 +639,7 @@ enum MetadataRegistrySource {
     Path(PortablePathBuf),
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 enum MetadataSourceDist {
     Url {
@@ -677,7 +676,7 @@ impl MetadataSourceDist {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 struct MetadataSourceDistMetadata {
     /// A hash of the source distribution.
@@ -717,7 +716,7 @@ impl MetadataSourceDistMetadata {
         }
     }
 }
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataWheel {
     /// A URL or file path (via `file://`) where the wheel that was locked
     /// against was found. The location does not need to exist in the future,
@@ -767,7 +766,7 @@ impl MetadataWheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 #[serde(untagged, rename_all = "snake_case")]
 enum MetadataWheelWireSource {
     Url { url: UrlString },
@@ -787,7 +786,7 @@ impl MetadataWheelWireSource {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataZstdWheel {
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     hashes: BTreeMap<HashAlgorithm, Hash>,
@@ -804,19 +803,19 @@ impl MetadataZstdWheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataExtra {
     name: ExtraName,
     id: MetadataNodeIdFlat,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataGroup {
     name: GroupName,
     id: MetadataNodeIdFlat,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataBuildSystem {
     /// The `build-backend` specified in the pyproject.toml
     build_backend: String,
@@ -824,7 +823,7 @@ struct MetadataBuildSystem {
 }
 
 /// Conflicts
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct MetadataConflicts {
     sets: Vec<MetadataConflictSet>,
 }

@@ -15,7 +15,7 @@ use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum CertificateSource {
     SslCertFile(PathBuf),
     SslCertDir(PathBuf),
@@ -36,7 +36,6 @@ impl CertificateSource {
     }
 }
 
-#[derive(Debug, Clone)]
 struct DiagnosticCertificate(CertificateDer<'static>);
 
 impl DiagnosticCertificate {
@@ -51,14 +50,12 @@ impl DiagnosticCertificate {
     }
 }
 
-#[derive(Debug)]
 struct InvalidCertificateWarning {
     source: CertificateSource,
     certificate: DiagnosticCertificate,
     reason: InvalidCertificateReason,
 }
 
-#[derive(Debug)]
 enum InvalidCertificateReason {
     UnsupportedCriticalExtension,
     BadDer,
@@ -191,7 +188,7 @@ impl Display for InvalidCertificateWarning {
 }
 
 /// A collection of TLS certificates in DER form.
-#[derive(Debug, Clone, Default)]
+#[derive(Default)]
 pub(crate) struct Certificates(Vec<CertificateDer<'static>>);
 
 impl Certificates {

@@ -178,7 +178,6 @@ struct CacheConfig {
 /// The main idea of a builder is that it manages the flow of data needed to
 /// construct a `CachePolicy`. That is, you start with an HTTP request, then
 /// you get a response and finally a new `CachePolicy`.
-#[derive(Debug)]
 pub(crate) struct CachePolicyBuilder {
     /// The configuration controlling the behavior of the cache.
     config: CacheConfig,
@@ -991,7 +990,6 @@ impl ArchivedCachePolicy {
 ///
 /// This dictates what the caller should do next by indicating whether the
 /// cached response is stale or not.
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum BeforeRequest {
     /// The cached response is still fresh, and the caller may return the
@@ -1014,7 +1012,6 @@ pub(crate) enum BeforeRequest {
 /// not. If it was, then a `AfterResponse::NotModified` is returned. Otherwise,
 /// the server determined the cached response was truly stale and in need of
 /// updated.
-#[derive(Debug)]
 pub(crate) enum AfterResponse {
     /// The cached response is still fresh.
     NotModified(CachePolicy),

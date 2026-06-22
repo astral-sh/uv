@@ -61,7 +61,7 @@ use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
 
 /// The user-facing command used to invoke a tool run.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum ToolRunCommand {
     /// via the `uvx` alias
     Uvx,
@@ -488,7 +488,6 @@ async fn show_help(
 }
 
 /// A set of hints about the packages that provide an executable.
-#[derive(Debug)]
 struct ExecutableProviderHints<'a> {
     /// The requested executable for the command
     executable: &'a str,
@@ -638,7 +637,6 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 
 // Clippy isn't happy about the difference in size between these variants, but
 // [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 enum ToolRequirement {
     Python {

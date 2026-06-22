@@ -41,7 +41,7 @@ impl Remover {
 }
 
 /// A removal operation with statistics on the number of files and directories removed.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Removal {
     /// The number of files removed.
     pub num_files: u64,

@@ -12,7 +12,7 @@ use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 /// The configuration layer that supplied the effective `exclude-newer` cutoff for a package.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Hash)]
 pub enum EffectiveExcludeNewerSource {
     /// The global `exclude-newer` setting.
     Global,
@@ -22,7 +22,7 @@ pub enum EffectiveExcludeNewerSource {
     Index,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum ExcludeNewerValueChange {
     /// A relative span changed to a new value
     SpanChanged(ExcludeNewerSpan, ExcludeNewerSpan),
@@ -70,7 +70,7 @@ impl std::fmt::Display for ExcludeNewerValueChange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum ExcludeNewerChange {
     GlobalChanged(ExcludeNewerValueChange),
     GlobalAdded(ExcludeNewerValue),
@@ -106,7 +106,7 @@ impl std::fmt::Display for ExcludeNewerChange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum ExcludeNewerPackageChange {
     PackageAdded(PackageName, ExcludeNewerOverride),
     PackageRemoved(PackageName),
@@ -261,7 +261,7 @@ where
     map.end()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum ExcludeNewerOverrideChange {
     Disabled { was: ExcludeNewerValue },
     Enabled { now: ExcludeNewerValue },
@@ -402,7 +402,7 @@ impl ExcludeNewerPackage {
 }
 
 /// A setting that excludes files newer than a timestamp, at a global level or per-package.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExcludeNewer {
     /// Global timestamp that applies to all packages if no package-specific timestamp is set.

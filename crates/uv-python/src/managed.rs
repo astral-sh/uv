@@ -95,7 +95,6 @@ pub fn compare_build_versions(a: &str, b: &str) -> Ordering {
 }
 
 /// A collection of uv-managed Python installations installed on the current system.
-#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ManagedPythonInstallations {
     /// The path to the top-level directory of the installed Python versions.
     root: PathBuf,
@@ -293,7 +292,7 @@ Error=This Python installation is managed by uv and should not be modified.
 ";
 
 /// A uv-managed Python installation on the current system.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ManagedPythonInstallation {
     /// The path to the top-level directory of the installed Python.
     path: PathBuf,
@@ -703,7 +702,6 @@ impl ManagedPythonInstallation {
 
 /// A representation of a minor version symlink directory (or junction on Windows)
 /// linking to the home directory of a Python installation.
-#[derive(Clone, Debug)]
 pub struct PythonMinorVersionLink {
     /// The symlink directory (or junction on Windows).
     pub symlink_directory: PathBuf,

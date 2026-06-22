@@ -252,7 +252,7 @@ impl Deref for IndexUrl {
 ///
 /// This type merges the legacy `--index-url`, `--extra-index-url`, and `--find-links` options,
 /// along with the uv-specific `--index` and `--default-index`.
-#[derive(Default, Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct IndexLocations {
     indexes: Vec<Index>,
@@ -510,7 +510,6 @@ impl From<&IndexLocations> for uv_auth::Indexes {
 ///
 /// This type merges the legacy `--index-url` and `--extra-index-url` options, along with the
 /// uv-specific `--index` and `--default-index`.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct IndexUrls {
     indexes: Vec<Index>,
     flat_indexes: Vec<Index>,

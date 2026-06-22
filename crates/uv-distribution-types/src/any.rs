@@ -73,7 +73,7 @@ impl PartialEq for LocalDist {
 }
 
 /// Like [`InstalledVersion`], but with [`CanonicalUrl`] to ensure robust URL comparisons.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CanonicalVersion {
     Version(Version),
     Url(CanonicalUrl, Version),

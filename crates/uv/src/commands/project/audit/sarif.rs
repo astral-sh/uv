@@ -11,7 +11,7 @@ use serde_json::Value;
 use uv_audit::{AdverseStatus, ProjectStatus, Vulnerability};
 
 /// Top-level SARIF log object (SARIF §3.13).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub(crate) struct Report {
     #[serde(rename = "$schema")]
     schema: String,
@@ -90,7 +90,7 @@ impl Report {
 }
 
 /// A single tool invocation's results (SARIF §3.14).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Run {
     invocations: Vec<Invocation>,
@@ -99,13 +99,13 @@ struct Run {
 }
 
 /// Tool metadata wrapper (SARIF §3.18).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct Tool {
     driver: ToolComponent,
 }
 
 /// Tool driver metadata (SARIF §3.19).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ToolComponent {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,7 +122,7 @@ struct ToolComponent {
 }
 
 /// Invocation describing the tool execution (SARIF §3.20).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Invocation {
     execution_successful: bool,
@@ -223,7 +223,7 @@ struct PropertyBag {
 }
 
 /// A single finding within a run (SARIF §3.27).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Result {
     kind: ResultKind,
@@ -359,13 +359,13 @@ impl Result {
 }
 
 /// A human-readable message (SARIF §3.11).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct Message {
     text: String,
 }
 
 /// A location (SARIF §3.28).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Location {
     logical_locations: Vec<LogicalLocation>,
@@ -398,7 +398,7 @@ impl Location {
 }
 
 /// A physical location (SARIF §3.29).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PhysicalLocation {
     artifact_location: ArtifactLocation,
@@ -406,20 +406,20 @@ struct PhysicalLocation {
 }
 
 /// Pointer to a single artifact (SARIF §3.4).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ArtifactLocation {
     uri: String,
 }
 
 /// A region within an artifact (SARIF §3.30).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Region {
     start_line: u32,
 }
 
 /// A logical location (SARIF §3.33).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LogicalLocation {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -431,14 +431,14 @@ struct LogicalLocation {
 }
 
 /// Classification of a result (SARIF §3.27.9).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 enum ResultKind {
     Fail,
 }
 
 /// Severity of a result (SARIF §3.27.10).
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 enum ResultLevel {
     Warning,

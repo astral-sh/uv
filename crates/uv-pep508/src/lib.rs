@@ -120,7 +120,7 @@ impl<T: Pep508Url> Display for Pep508Error<T> {
 impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<T> {}
 
 /// A PEP 508 dependency specifier.
-#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -400,11 +400,10 @@ impl<T: Pep508Url> Requirement<T> {
 }
 
 /// A list of [`ExtraName`] that can be attached to a [`Requirement`].
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct Extras(Vec<ExtraName>);
+pub struct Extras(#[allow(dead_code)] Vec<ExtraName>);
 
 /// The actual version specifier or URL to install.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
@@ -422,7 +421,7 @@ impl<T: Pep508Url> Display for VersionOrUrl<T> {
 }
 
 /// Unowned version specifier or URL to install.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(&'a VersionSpecifiers),

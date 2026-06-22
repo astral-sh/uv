@@ -17,7 +17,7 @@ pub static PYTHON_VERSION_FILENAME: &str = ".python-version";
 pub static PYTHON_VERSIONS_FILENAME: &str = ".python-versions";
 
 /// A `.python-version` or `.python-versions` file.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PythonVersionFile {
     /// The path to the version file.
     path: PathBuf,
@@ -26,14 +26,14 @@ pub struct PythonVersionFile {
 }
 
 /// Whether to prefer the `.python-version` or `.python-versions` file.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub enum FilePreference {
     #[default]
     Version,
     Versions,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct DiscoveryOptions<'a> {
     /// The path to stop discovery at.
     stop_discovery_at: Option<&'a Path>,

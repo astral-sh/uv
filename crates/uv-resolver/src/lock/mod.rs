@@ -254,7 +254,7 @@ pub(crate) struct HashedDist {
     hashes: HashDigests,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
 #[serde(try_from = "LockWire")]
 pub struct Lock {
     /// The (major) version of the lockfile format.
@@ -2365,7 +2365,6 @@ impl Lock {
 /// audit sources (e.g. per-version vulnerability databases and per-project
 /// status markers) can share one walk rather than each re-traversing the
 /// lockfile.
-#[derive(Debug)]
 pub struct Auditable<'lock> {
     /// Packages deduplicated by `(name, version)` and sorted by the same key.
     packages: Vec<(&'lock Package, &'lock Version)>,
@@ -2411,7 +2410,7 @@ impl<'lock> Auditable<'lock> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum TagPolicy<'tags> {
     /// Exclusively consider wheels that match the specified platform tags.
     Required(&'tags Tags),
@@ -2430,7 +2429,6 @@ impl<'tags> TagPolicy<'tags> {
 }
 
 /// The result of checking if a lockfile satisfies a set of requirements.
-#[derive(Debug)]
 pub enum SatisfiesResult<'lock> {
     /// The lockfile satisfies the requirements.
     Satisfied,
@@ -2493,7 +2491,7 @@ pub enum SatisfiesResult<'lock> {
 }
 
 /// We discard the lockfile if these options match.
-#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 struct ResolverOptions {
     /// The [`ResolutionMode`] used to generate this lock.
@@ -2511,7 +2509,7 @@ struct ResolverOptions {
 }
 
 #[expect(clippy::struct_field_names)]
-#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 struct ExcludeNewerWire {
     exclude_newer: Option<Timestamp>,
@@ -2554,7 +2552,7 @@ impl From<ExcludeNewer> for ExcludeNewerWire {
     }
 }
 
-#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct ResolverManifest {
     /// The workspace members included in the lockfile.
@@ -2661,7 +2659,7 @@ impl ResolverManifest {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
     version: u32,
@@ -2752,7 +2750,7 @@ impl TryFrom<LockWire> for Lock {
 /// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
 /// to the version field, we can verify compatibility for lockfiles that may otherwise be
 /// unparsable.
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LockVersion {
     version: u32,
@@ -3768,7 +3766,7 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
     Ok(path)
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageWire {
     #[serde(flatten)]
@@ -3918,7 +3916,7 @@ impl Display for PackageId {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(PartialEq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageIdForDependency {
     name: PackageName,
@@ -4373,7 +4371,7 @@ impl Source {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 enum SourceWire {
     Registry {
@@ -4457,7 +4455,6 @@ impl Display for RegistrySource {
     }
 }
 
-#[derive(Clone, Debug)]
 enum RegistrySourceWire {
     /// Ex) `https://pypi.org/simple`
     Url(UrlString),
@@ -4534,7 +4531,7 @@ struct GitSource {
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(PartialEq)]
 enum GitSourceError {
     InvalidSha,
     MissingSha,
@@ -4871,7 +4868,7 @@ impl SourceDist {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 enum SourceDistWire {
     Url {
@@ -5322,7 +5319,7 @@ impl Wheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelWire {
     #[serde(flatten)]
@@ -5576,7 +5573,7 @@ impl Display for Dependency {
 }
 
 /// A single dependency of a package in a lockfile.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[derive(PartialEq, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DependencyWire {
     #[serde(flatten)]
@@ -5992,7 +5989,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 #[expect(clippy::enum_variant_names)]
 enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
@@ -6690,7 +6687,7 @@ enum SourceParseError {
 }
 
 /// An error that occurs when a hash digest could not be parsed.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 struct HashParseError(&'static str);
 
 impl std::error::Error for HashParseError {}

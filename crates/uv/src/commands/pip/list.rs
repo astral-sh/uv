@@ -311,7 +311,6 @@ pub(crate) async fn pip_list(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug)]
 enum FileType {
     /// A wheel distribution (i.e., a `.whl` file).
     Wheel,
@@ -350,7 +349,7 @@ impl From<&DistFilename> for FileType {
 }
 
 /// An entry in a JSON list of installed packages.
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct Entry {
     name: PackageName,
     version: Version,
@@ -363,7 +362,6 @@ struct Entry {
 }
 
 /// A column in a table.
-#[derive(Debug)]
 struct Column {
     /// The header of the column.
     header: String,
@@ -397,7 +395,6 @@ impl<'a> Column {
 /// Zip an unknown number of iterators.
 ///
 /// A combination of [`itertools::multizip`] and [`itertools::izip`].
-#[derive(Debug)]
 struct MultiZip<T>(Vec<T>);
 
 impl<T> Iterator for MultiZip<T>

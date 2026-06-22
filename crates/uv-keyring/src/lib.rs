@@ -192,7 +192,7 @@ pub mod windows;
 pub mod credential;
 pub mod error;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct EntryBuilder {
     inner: Option<Box<CredentialBuilder>>,
 }
@@ -249,7 +249,6 @@ fn build_default_credential(target: Option<&str>, service: &str, user: &str) -> 
     Ok(Entry { inner: credential })
 }
 
-#[derive(Debug)]
 pub struct Entry {
     inner: Box<Credential>,
 }

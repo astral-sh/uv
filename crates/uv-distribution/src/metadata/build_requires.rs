@@ -16,7 +16,6 @@ use uv_workspace::{
 use crate::metadata::{LoweredRequirement, MetadataError};
 
 /// Lowered requirements from a `[build-system.requires]` field in a `pyproject.toml` file.
-#[derive(Debug, Clone)]
 pub struct BuildRequires {
     pub name: Option<PackageName>,
     pub requires_dist: Vec<Requirement>,
@@ -245,7 +244,6 @@ impl BuildRequires {
 ///
 /// This is a wrapper around [`ExtraBuildRequires`] that provides methods to lower
 /// [`ExtraBuildDependencies`] from a workspace context or from already lowered dependencies.
-#[derive(Debug, Clone, Default)]
 pub struct LoweredExtraBuildDependencies(ExtraBuildRequires);
 
 impl LoweredExtraBuildDependencies {

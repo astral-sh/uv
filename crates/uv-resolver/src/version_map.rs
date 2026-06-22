@@ -701,7 +701,6 @@ struct SimplePrioritizedDist {
 }
 
 /// A range that can be used to iterate over a subset of a [`BTreeMap`].
-#[derive(Debug)]
 struct BoundingRange<'a> {
     min: Bound<&'a Version>,
     max: Bound<&'a Version>,

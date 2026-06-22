@@ -26,7 +26,6 @@ mod receipt;
 mod tool;
 
 /// A wrapper around [`PythonEnvironment`] for tools that provides additional functionality.
-#[derive(Debug, Clone)]
 pub struct ToolEnvironment {
     environment: PythonEnvironment,
     name: PackageName,
@@ -112,7 +111,6 @@ impl Error {
 }
 
 /// A collection of uv-managed tools installed on the current system.
-#[derive(Debug, Clone)]
 pub struct InstalledTools {
     /// The path to the top-level directory of the tools.
     root: PathBuf,

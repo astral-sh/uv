@@ -5,7 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 /// The operating system type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum OsType {
     /// Linux, with the kernel type from `/proc/sys/kernel/ostype` (typically `"Linux"`).
     Linux(String),
@@ -52,7 +52,6 @@ impl fmt::Display for OsType {
 }
 
 /// The OS kernel release version.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OsRelease {
     /// Unix kernel release from `uname -r` (e.g., `"6.8.0-90-generic"`).
     Unix(String),
@@ -108,7 +107,7 @@ impl fmt::Display for OsRelease {
 }
 
 /// Parsed fields from `/etc/os-release`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct LinuxOsRelease {
     /// Distribution name (e.g., `"Ubuntu"`).
     pub name: Option<String>,

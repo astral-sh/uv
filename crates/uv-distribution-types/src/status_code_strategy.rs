@@ -9,13 +9,10 @@ use url::Url;
 
 use crate::{IndexCapabilities, IndexUrl};
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum IndexStatusCodeStrategy {
-    #[default]
     Default,
-    IgnoreErrorCodes {
-        status_codes: FxHashSet<StatusCode>,
-    },
+    IgnoreErrorCodes { status_codes: FxHashSet<StatusCode> },
 }
 
 impl IndexStatusCodeStrategy {
@@ -92,7 +89,7 @@ impl IndexStatusCodeStrategy {
 }
 
 /// Decision on whether to continue searching the next index.
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum IndexStatusCodeDecision {
     Ignore,
     Fail(StatusCode),

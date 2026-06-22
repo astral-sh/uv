@@ -8,13 +8,13 @@ use crate::{CanonicalMarkerValueString, CanonicalMarkerValueVersion, StringVersi
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
-#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MarkerEnvironment {
     #[serde(flatten)]
     inner: Arc<MarkerEnvironmentInner>,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 struct MarkerEnvironmentInner {
     implementation_name: String,
     implementation_version: StringVersion,
@@ -282,7 +282,6 @@ impl MarkerEnvironment {
 /// The main utility of this type is for constructing dummy or test environment
 /// values.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct MarkerEnvironmentBuilder<'a> {
     pub implementation_name: &'a str,
     pub implementation_version: &'a str,

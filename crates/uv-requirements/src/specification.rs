@@ -53,7 +53,7 @@ use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct RequirementsSpecification {
     /// The name of the project specifying requirements.
     pub project: Option<PackageName>,
@@ -706,7 +706,6 @@ impl RequirementsSpecification {
     }
 }
 
-#[derive(Debug, Default, Clone)]
 pub struct GroupsSpecification {
     /// The path to the project root, relative to which the default `pyproject.toml` file is
     /// located.

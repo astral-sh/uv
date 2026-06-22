@@ -1268,7 +1268,6 @@ fn drop_root_dependency_on_project(tree: ErrorTree, project: &PackageName) -> Er
 }
 
 /// A version range that may include local version sentinels (`+[max]`).
-#[derive(Debug)]
 pub struct SentinelRange<'range>(&'range Range<Version>);
 
 impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
@@ -1396,7 +1395,6 @@ impl SentinelRange<'_> {
 }
 
 /// A prefix match, e.g., `==2.4.*`, which is desugared to a range like `>=2.4.dev0,<2.5.dev0`.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PrefixMatch<'a> {
     version: &'a Version,
 }
@@ -1458,7 +1456,6 @@ impl std::fmt::Display for PrefixMatch<'_> {
     }
 }
 
-#[derive(Debug)]
 pub struct NoSolutionHeader {
     /// The [`ResolverEnvironment`] that caused the failure.
     env: ResolverEnvironment,

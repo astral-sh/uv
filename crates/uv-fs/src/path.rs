@@ -493,7 +493,6 @@ pub fn verbatim_path(path: &Path) -> Cow<'_, Path> {
 /// backslashes to forward slashes, and using a `.` for an empty path.
 ///
 /// This implementation assumes that the path is valid UTF-8; otherwise, it won't roundtrip.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortablePath<'a>(&'a Path);
 
 #[derive(Debug, Clone, PartialEq, Eq)]

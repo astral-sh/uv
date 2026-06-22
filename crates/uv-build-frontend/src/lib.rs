@@ -60,7 +60,7 @@ static DEFAULT_BACKEND: LazyLock<Pep517Backend> = LazyLock::new(|| Pep517Backend
 });
 
 /// A `pyproject.toml` as specified in PEP 517.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectToml {
     /// Build-related data
@@ -75,7 +75,7 @@ struct PyProjectToml {
 ///
 /// This representation only includes a subset of the fields defined in PEP 621 necessary for
 /// informing wheel builds.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Project {
     /// The name of the project
@@ -88,7 +88,7 @@ struct Project {
 }
 
 /// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
@@ -99,13 +99,13 @@ struct BuildSystem {
     backend_path: Option<BackendPath>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Tool {
     uv: Option<ToolUv>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolUv {
     workspace: Option<de::IgnoredAny>,
@@ -120,7 +120,7 @@ impl BackendPath {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 struct BackendPath(Vec<String>);
 
 impl<'de> Deserialize<'de> for BackendPath {
@@ -162,7 +162,7 @@ impl<'de> Deserialize<'de> for BackendPath {
 }
 
 /// `[build-backend]` from pyproject.toml
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 struct Pep517Backend {
     /// The build backend string such as `setuptools.build_meta:__legacy__` or `maturin` from
     /// `build-backend.backend` in pyproject.toml
@@ -218,7 +218,7 @@ impl Pep517Backend {
 }
 
 /// Uses an [`Arc`] internally, clone freely.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SourceBuildContext {
     /// An in-memory resolution of the default backend's requirements for PEP 517 builds.
     default_resolution: Arc<Mutex<Option<ResolvedRequirements>>>,
@@ -1167,13 +1167,11 @@ async fn create_pep517_build_environment(
 
 /// A runner that manages the execution of external python processes with a
 /// concurrency limit.
-#[derive(Debug)]
 struct PythonRunner {
     concurrent_build_slots: Arc<Semaphore>,
     level: BuildOutput,
 }
 
-#[derive(Debug)]
 struct PythonRunnerOutput {
     stdout: Vec<String>,
     stderr: Vec<String>,
@@ -1284,7 +1282,7 @@ impl PythonRunner {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Printer {
     /// Send the build backend output to `stderr`.
     Stderr,

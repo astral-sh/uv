@@ -141,7 +141,7 @@ impl ExtraBuildRequires {
 pub type BuildVariables = BTreeMap<String, String>;
 
 /// Extra environment variables to set during builds, on a per-package basis.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExtraBuildVariables(BTreeMap<PackageName, BuildVariables>);
 

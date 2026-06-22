@@ -20,7 +20,6 @@ use crate::source::{
 };
 
 /// A local index of built distributions for a specific source distribution.
-#[derive(Debug)]
 pub struct BuiltWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,

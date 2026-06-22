@@ -12,7 +12,6 @@ use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
 
 /// The information about the wheel we either just built or got from the cache.
-#[derive(Debug, Clone)]
 pub(crate) struct BuiltWheelMetadata {
     /// The path to the built wheel.
     pub(crate) path: Box<Path>,
@@ -54,7 +53,6 @@ impl Hashed for BuiltWheelMetadata {
 }
 
 /// The path to a built wheel file, along with its parsed filename.
-#[derive(Debug, Clone)]
 pub(crate) struct BuiltWheelFile {
     /// The path to the built wheel.
     path: Box<Path>,

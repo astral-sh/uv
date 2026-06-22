@@ -36,7 +36,7 @@ pub(crate) struct Args {
     no_snapshot_update: bool,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, ValueEnum)]
 enum TemplateKind {
     Install,
     Compile,

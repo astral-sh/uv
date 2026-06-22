@@ -6,7 +6,7 @@ use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 
 /// A custom error type for the offline middleware.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct OfflineError {
     url: DisplaySafeUrl,
 }

@@ -103,7 +103,7 @@ impl PartialEq for InstalledDist {
 impl Eq for InstalledDist {}
 
 /// A built distribution (wheel) that is installed in a virtual environment.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum InstalledDistKind {
     /// The distribution was derived from a registry, like `PyPI`.
     Registry(InstalledRegistryDist),
@@ -117,7 +117,7 @@ pub enum InstalledDistKind {
     LegacyEditable(InstalledLegacyEditable),
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
@@ -126,7 +126,7 @@ pub struct InstalledRegistryDist {
     pub build_info: Option<BuildInfo>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct InstalledDirectUrlDist {
     pub name: PackageName,
     pub version: Version,
@@ -138,21 +138,21 @@ pub struct InstalledDirectUrlDist {
     pub build_info: Option<BuildInfo>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
     pub path: Box<Path>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
     pub path: Box<Path>,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,

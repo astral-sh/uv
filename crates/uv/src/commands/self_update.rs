@@ -735,7 +735,7 @@ async fn run_custom_updater(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct StandaloneInstallReceipt {
     #[serde(default = "default_modify_path")]
     modify_path: bool,

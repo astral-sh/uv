@@ -15,7 +15,6 @@ use uv_static::EnvVars;
 use crate::PythonVersion;
 
 /// The layout of a virtual environment.
-#[derive(Debug)]
 pub struct VirtualEnvironment {
     /// The absolute path to the root of the virtualenv, e.g., `/path/to/.venv`.
     pub root: PathBuf,
@@ -32,7 +31,6 @@ pub struct VirtualEnvironment {
 }
 
 /// A parsed `pyvenv.cfg`
-#[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
     /// The `PYTHONHOME` directory containing the base Python executable.
     pub(crate) home: Option<PathBuf>,
@@ -71,7 +69,7 @@ pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
     None
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum CondaEnvironmentKind {
     /// The base Conda environment; treated like a system Python environment.
     Base,

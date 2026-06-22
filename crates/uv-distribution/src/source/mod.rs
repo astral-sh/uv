@@ -70,7 +70,6 @@ pub struct StaticMetadataDatabase<'a, 'client> {
 }
 
 /// A direct source tree materialized on disk for static metadata inspection.
-#[derive(Debug)]
 struct MaterializedSourceTree(Box<Path>);
 
 impl MaterializedSourceTree {
@@ -3308,7 +3307,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
 }
 
 /// The result of extracting statically available metadata from a source distribution.
-#[derive(Debug)]
 enum StaticMetadata {
     /// The metadata was found and successfully read.
     Some(ResolutionMetadata),
@@ -3501,7 +3499,7 @@ fn validate_filename(filename: &WheelFilename, metadata: &ResolutionMetadata) ->
 /// A pointer to a source distribution revision in the cache, fetched from an HTTP archive.
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.http` file.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct HttpRevisionPointer {
     revision: Revision,
 }
@@ -3529,7 +3527,7 @@ impl HttpRevisionPointer {
 /// A pointer to a source distribution revision in the cache, fetched from a local path.
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct LocalRevisionPointer {
     cache_info: CacheInfo,
     revision: Revision,
@@ -3574,7 +3572,7 @@ impl LocalRevisionPointer {
 /// A pointer to a source distribution revision in the cache, fetched from a local path.
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct RevisionHashes {
     hashes: Vec<HashDigest>,
 }
@@ -3662,7 +3660,6 @@ async fn read_pyproject_toml(
 }
 
 /// Wheel metadata stored in the source distribution cache.
-#[derive(Debug, Clone)]
 struct CachedMetadata(ResolutionMetadata);
 
 impl CachedMetadata {

@@ -12,7 +12,6 @@ use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 use crate::archive::Archive;
 use crate::{HttpArchivePointer, PathArchivePointer};
 
-#[derive(Debug, Clone)]
 pub(crate) struct ResolvedWheel {
     /// The filename of the wheel.
     pub filename: WheelFilename,
@@ -36,7 +35,6 @@ impl ResolvedWheel {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct CachedWheel {
     /// The filename of the wheel.
     pub(crate) filename: WheelFilename,

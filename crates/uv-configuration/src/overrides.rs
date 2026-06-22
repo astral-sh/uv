@@ -8,7 +8,7 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
 /// A set of overrides for a set of requirements.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Overrides(FxHashMap<PackageName, Vec<Requirement>>);
 
 impl Overrides {

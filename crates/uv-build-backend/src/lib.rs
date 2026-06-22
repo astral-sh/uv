@@ -523,7 +523,7 @@ mod tests {
     /// source tree -> wheel
     /// and a build with
     /// source tree -> source dist -> wheel.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Debug, PartialEq)]
     struct BuildResults {
         source_dist_list_files: FileList,
         source_dist_filename: SourceDistFilename,

@@ -11,7 +11,7 @@ use uv_redacted::DisplaySafeUrl;
 pub(crate) static GIT_STORE: LazyLock<GitStore> = LazyLock::new(GitStore::default);
 
 /// A store for Git credentials.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct GitStore(RwLock<HashMap<RepositoryUrl, Arc<Credentials>>>);
 
 impl GitStore {

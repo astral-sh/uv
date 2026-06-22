@@ -13,7 +13,7 @@ pub(crate) struct Args {
     mode: Mode,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, clap::ValueEnum, Default)]
+#[derive(Copy, Clone, PartialEq, clap::ValueEnum, Default)]
 pub(crate) enum Mode {
     /// Update the content in the `configuration.md`.
     #[default]

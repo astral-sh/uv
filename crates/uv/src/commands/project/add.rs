@@ -1316,7 +1316,6 @@ fn resolve_requirement(
 }
 
 /// A Python [`Interpreter`] or [`PythonEnvironment`] for a project.
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 pub(super) enum PythonTarget {
     Interpreter(Interpreter),
@@ -1334,7 +1333,6 @@ impl PythonTarget {
 }
 
 /// Represents the destination where dependencies are added, either to a project or a script.
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 pub(super) enum AddTarget {
     /// A PEP 723 script, with inline metadata.
@@ -1441,7 +1439,7 @@ impl AddTarget {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[expect(clippy::large_enum_variant)]
 enum AddTargetSnapshot {
     Script(Pep723Script, Option<Vec<u8>>),
@@ -1501,7 +1499,6 @@ impl AddTargetSnapshot {
     }
 }
 
-#[derive(Debug, Clone)]
 struct DependencyEdit {
     dependency_type: DependencyType,
     requirement: uv_pep508::Requirement,

@@ -232,7 +232,6 @@ impl uv_errors::Hint for IncompatibleWheelError {
 }
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
-#[derive(Debug)]
 pub struct Planner<'a> {
     resolution: &'a Resolution,
 }
@@ -830,7 +829,6 @@ fn generate_wheel_compatibility_hint(
     }
 }
 
-#[derive(Debug, Default)]
 pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
     /// available in the local cache.

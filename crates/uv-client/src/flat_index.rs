@@ -57,7 +57,7 @@ impl FlatIndexEntry {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct FlatIndexEntries {
     /// The list of `--find-links` entries.
     entries: Vec<FlatIndexEntry>,
@@ -107,7 +107,6 @@ impl FlatIndexEntries {
 
 /// A client for reading distributions from `--find-links` entries (either local directories or
 /// remote HTML indexes).
-#[derive(Debug, Clone)]
 pub struct FlatIndexClient<'a> {
     client: &'a CachedClient,
     connectivity: Connectivity,

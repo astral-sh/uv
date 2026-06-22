@@ -19,7 +19,6 @@ use crate::service::Service;
 use crate::{Credentials, KeyringProvider};
 
 /// The storage backend to use in `uv auth` commands.
-#[derive(Debug)]
 pub enum AuthBackend {
     // TODO(zanieb): Right now, we're using a keyring provider for the system store but that's just
     // where the native implementation is living at the moment. We should consider refactoring these
@@ -55,7 +54,7 @@ impl AuthBackend {
 }
 
 /// Authentication scheme to use.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthScheme {
     /// HTTP Basic Authentication
@@ -130,7 +129,7 @@ pub enum LookupError {
 }
 
 /// A single credential entry in a TOML credentials file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(try_from = "TomlCredentialWire", into = "TomlCredentialWire")]
 struct TomlCredential {
     /// The service URL for this credential.
@@ -139,7 +138,7 @@ struct TomlCredential {
     credentials: Credentials,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct TomlCredentialWire {
     /// The service URL for this credential.
     service: Service,
@@ -228,7 +227,7 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 struct TomlCredentials {
     /// Array of credential entries.
     #[serde(default, rename = "credential")]
@@ -236,7 +235,7 @@ struct TomlCredentials {
 }
 
 /// A credential store with a plain text storage backend.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct TextCredentialStore {
     credentials: FxHashMap<(Service, Username), Credentials>,
 }

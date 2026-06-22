@@ -676,7 +676,7 @@ fn write_dist_info(
 }
 
 /// The contents of the `WHEEL` and `WHEEL.json` files.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct WheelInfo {
     wheel_version: String,

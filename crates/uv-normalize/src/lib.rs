@@ -108,7 +108,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
 }
 
 /// Invalid [`PackageName`] or [`ExtraName`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct InvalidNameError(String);
 
 impl Display for InvalidNameError {
@@ -125,7 +125,7 @@ impl Display for InvalidNameError {
 impl Error for InvalidNameError {}
 
 /// Path didn't end with `pyproject.toml`
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct InvalidPipGroupPathError(String);
 
 impl Display for InvalidPipGroupPathError {
@@ -140,7 +140,7 @@ impl Display for InvalidPipGroupPathError {
 impl Error for InvalidPipGroupPathError {}
 
 /// Possible errors from reading a [`PipGroupName`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum InvalidPipGroupError {
     Name(InvalidNameError),
     Path(InvalidPipGroupPathError),

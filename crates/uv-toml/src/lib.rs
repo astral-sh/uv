@@ -68,7 +68,7 @@ pub fn has_toml11_features(source: &str) -> bool {
 }
 
 /// Structure state in a TOML document
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum State {
     /// Regular table (e.g. `[foo]`)
     StdTable,

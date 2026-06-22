@@ -61,7 +61,7 @@ impl uv_errors::Hint for PortableGlobError {
 ///
 /// The variant determines whether the parser strictly adheres to PEP 639 rules or allows extensions
 /// such as backslash escapes.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum PortableGlobParser {
     /// Follow the PEP 639 rules strictly.
     Pep639,

@@ -437,7 +437,7 @@ fn create_dependencies(
         .collect()
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 enum PackageType<'a> {
     Root,
     Workspace(&'a Path),

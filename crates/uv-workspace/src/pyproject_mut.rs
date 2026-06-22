@@ -57,7 +57,7 @@ pub enum Error {
 }
 
 /// The result of editing an array in a TOML document.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone)]
 pub enum ArrayEdit {
     /// An existing entry (at the given index) was updated.
     Update(usize),
@@ -65,7 +65,7 @@ pub enum ArrayEdit {
     Add(usize),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 enum CommentType {
     /// A comment that appears on its own line.
     OwnLine,
@@ -73,7 +73,6 @@ enum CommentType {
     EndOfLine { leading_whitespace: String },
 }
 
-#[derive(Debug, Clone)]
 struct Comment {
     text: String,
     kind: CommentType,
@@ -83,7 +82,7 @@ struct Comment {
 // While PEP 440 allows an arbitrary number of version digits, the `major` and `minor` build on
 // most projects sticking to two or three components and a SemVer-ish versioning system, so can
 // bump the major or minor version of a major.minor or major.minor.patch input version.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -243,7 +242,7 @@ impl AddBoundsKind {
 }
 
 /// Specifies whether dependencies are added to a script file or a `pyproject.toml` file.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum DependencyTarget {
     /// A PEP 723 script, with inline metadata.
     Script,
@@ -1293,7 +1292,7 @@ fn add_dependency(
 
     match to_replace.as_slice() {
         [] => {
-            #[derive(Debug, Copy, Clone)]
+            #[derive(Copy, Clone)]
             enum Sort {
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,

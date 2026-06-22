@@ -103,7 +103,7 @@ impl serde::Serialize for PythonRequest {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -124,7 +124,7 @@ pub enum PythonPreference {
     OnlySystem,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -158,10 +158,9 @@ impl From<bool> for PythonDownloads {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnvironmentPreference {
     /// Only use virtual environments, never allow a system environment.
-    #[default]
     OnlyVirtual,
     /// Prefer virtual environments and allow a system environment if explicitly requested.
     ExplicitSystem,
@@ -171,7 +170,6 @@ pub enum EnvironmentPreference {
     Any,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct DiscoveryPreferences {
     python_preference: PythonPreference,
     environment_preference: EnvironmentPreference,
@@ -212,7 +210,7 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// The result of failed Python installation discovery.
 ///
 /// See [`FindPythonResult`].
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub struct PythonNotFound {
     pub(crate) request: PythonRequest,
     pub(crate) python_preference: PythonPreference,
@@ -220,7 +218,7 @@ pub struct PythonNotFound {
 }
 
 /// A location for discovery of a Python installation or interpreter.
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, PartialOrd)]
 pub enum PythonSource {
     /// The path was provided directly
     ProvidedPath,
@@ -740,7 +738,7 @@ fn find_all_minor(
 }
 
 /// How to query discovered Python executables.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum QueryStrategy {
     /// Query each executable as it is requested by the consumer.
     Sequential,
@@ -2538,7 +2536,7 @@ impl EnvironmentPreference {
     }
 }
 
-#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
+#[derive(Clone, Default, Copy, PartialEq, Eq)]
 pub(crate) struct ExecutableName {
     implementation: Option<ImplementationName>,
     major: Option<u8>,
@@ -2548,7 +2546,7 @@ pub(crate) struct ExecutableName {
     variant: PythonVariant,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 struct ExecutableNameComparator<'a> {
     name: ExecutableName,
     request: &'a VersionRequest,

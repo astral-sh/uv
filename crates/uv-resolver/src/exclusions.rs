@@ -4,7 +4,7 @@ use crate::UpgradePackages;
 use uv_normalize::PackageName;
 
 /// Tracks locally installed packages that should not be selected during resolution.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Exclusions {
     reinstall: Reinstall,
     upgrade: UpgradePackages,

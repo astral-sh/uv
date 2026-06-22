@@ -205,7 +205,7 @@ pub struct Project {
     scripts: Option<serde::de::IgnoredAny>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ProjectWire {
     name: Option<PackageName>,
@@ -248,7 +248,7 @@ impl TryFrom<ProjectWire> for Project {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct Tool {
@@ -291,7 +291,7 @@ where
 
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
-#[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -696,7 +696,7 @@ pub struct ToolUv {
     build_backend: Option<BuildBackendSettingsSchema>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
@@ -709,24 +709,24 @@ where
     Ok(None)
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PyProjectTomlSourcesWire {
     tool: Option<ToolSourcesWire>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct ToolSourcesWire {
     uv: Option<ToolUvSourcesOnlyWire>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ToolUvSourcesOnlyWire {
     sources: Option<ToolUvSourcesWire>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 struct ToolUvSourcesWire(BTreeMap<PackageName, SourcesWire>);
 
 impl ToolUvSources {
@@ -780,7 +780,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub(crate) struct ToolUvDependencyGroups(BTreeMap<GroupName, DependencyGroupSettings>);
@@ -805,7 +805,7 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvDependencyGroups {
     }
 }
 
-#[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Default, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
@@ -815,7 +815,7 @@ pub(crate) struct DependencyGroupSettings {
     pub(crate) requires_python: Option<VersionSpecifiers>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(untagged, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 enum ExtraBuildDependencyWire {
@@ -872,7 +872,7 @@ impl From<ExtraBuildDependency> for ExtraBuildDependencyWire {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ExtraBuildDependencies(BTreeMap<PackageName, Vec<ExtraBuildDependency>>);
 
@@ -920,7 +920,7 @@ impl<'de> serde::de::Deserialize<'de> for ExtraBuildDependencies {
     }
 }
 
-#[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -955,7 +955,7 @@ pub(crate) struct ToolUvWorkspace {
 }
 
 /// (De)serialize globs as strings.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct SerdePattern(Pattern);
 
 impl serde::ser::Serialize for SerdePattern {
@@ -1039,7 +1039,7 @@ impl IntoIterator for Sources {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 enum SourcesWire {
     One(Source),
@@ -1248,7 +1248,7 @@ impl<'de> Deserialize<'de> for Source {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize, Debug, Clone)]
+        #[derive(Deserialize)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
             git: Option<DisplaySafeUrl>,
@@ -1925,7 +1925,7 @@ impl Source {
 }
 
 /// The type of a dependency in a `pyproject.toml`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DependencyType {
     /// A dependency in `project.dependencies`.
     Production,
@@ -1951,7 +1951,7 @@ impl DependencyType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 pub(crate) struct BuildBackendSettingsSchema;
 

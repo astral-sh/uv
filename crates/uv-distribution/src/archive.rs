@@ -4,7 +4,7 @@ use uv_distribution_types::Hashed;
 use uv_pypi_types::{HashDigest, HashDigests};
 
 /// An archive (unzipped wheel) that exists in the local cache.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Archive {
     /// The unique ID of the entry in the wheel's archive bucket.
     pub id: ArchiveId,

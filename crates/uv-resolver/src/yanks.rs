@@ -10,7 +10,7 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
 /// A set of package versions that are permitted, even if they're marked as yanked by the
 /// relevant index.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {

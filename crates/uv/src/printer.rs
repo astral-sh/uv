@@ -1,7 +1,7 @@
 use anstream::{eprint, print};
 use indicatif::ProgressDrawTarget;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Printer {
     /// A printer that suppresses all output.
     Silent,
@@ -76,7 +76,7 @@ impl Printer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Stdout {
     Enabled,
     Disabled,
@@ -95,7 +95,7 @@ impl std::fmt::Write for Stdout {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Stderr {
     Enabled,
     Disabled,

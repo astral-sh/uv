@@ -25,7 +25,7 @@ use crate::{
 };
 
 /// Ways in which marker evaluation can fail
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone)]
 pub enum MarkerWarningKind {
     /// Using an old name from PEP 345 instead of the modern equivalent
     /// <https://peps.python.org/pep-0345/#environment-markers>
@@ -50,7 +50,7 @@ pub enum MarkerWarningKind {
 }
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
     ImplementationVersion,
@@ -71,7 +71,7 @@ impl Display for MarkerValueVersion {
 }
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -148,7 +148,7 @@ impl Display for MarkerValueList {
 /// One of the predefined environment values
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(PartialEq)]
 pub enum MarkerValue {
     /// Those environment markers with a PEP 440 version as value such as `python_version`
     MarkerEnvVersion(MarkerValueVersion),
@@ -219,7 +219,7 @@ impl Display for MarkerValue {
 }
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -462,7 +462,7 @@ impl Deref for StringVersion {
 }
 
 /// The [`ExtraName`] value used in `extra` and `extras` markers.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueExtra {
     /// A valid [`ExtraName`].
     Extra(ExtraName),
@@ -498,7 +498,7 @@ impl Display for MarkerValueExtra {
 }
 
 /// Represents one clause such as `python_version > "3.8"`.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
@@ -543,7 +543,7 @@ pub enum MarkerExpression {
 }
 
 /// The kind of a [`MarkerExpression`].
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) enum MarkerExpressionKind {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
     Version(MarkerValueVersion),
@@ -558,7 +558,7 @@ pub(crate) enum MarkerExpressionKind {
 }
 
 /// The operator for an extra expression, either '==' or '!='.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum ExtraOperator {
     /// `==`
     Equal,
@@ -597,7 +597,7 @@ impl Display for ExtraOperator {
 }
 
 /// The operator for a container expression, either 'in' or 'not in'.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum ContainerOperator {
     /// `in`
     In,
@@ -713,7 +713,7 @@ impl Display for MarkerExpression {
 }
 
 /// The extra and dependency group names to use when evaluating a marker tree.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum ExtrasEnvironment<'a> {
     /// E.g., `extra == '...'`
     Extras(&'a [ExtraName]),
@@ -1445,7 +1445,7 @@ impl Ord for MarkerTree {
 /// A marker tree is represented as an algebraic decision tree with two terminal nodes
 /// `True` or `False`. The edges of a given node correspond to a particular assignment of
 /// a value to that variable.
-#[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum MarkerTreeKind<'a> {
     /// An empty marker that always evaluates to `true`.
     True,
@@ -1466,7 +1466,7 @@ pub enum MarkerTreeKind<'a> {
 }
 
 /// A version marker node, such as `python_version < '3.7'`.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct VersionMarkerTree<'a> {
     id: NodeId,
     key: CanonicalMarkerValueVersion,
@@ -1502,7 +1502,7 @@ impl Ord for VersionMarkerTree<'_> {
 }
 
 /// A string marker node, such as `os_name == 'Linux'`.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: CanonicalMarkerValueString,
@@ -1538,7 +1538,7 @@ impl Ord for StringMarkerTree<'_> {
 }
 
 /// A string marker node with the `in` operator, such as `os_name in 'WindowsLinux'`.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct InMarkerTree<'a> {
     key: CanonicalMarkerValueString,
     value: &'a ArcStr,
@@ -1588,7 +1588,7 @@ impl Ord for InMarkerTree<'_> {
 }
 
 /// A string marker node with inverse of the `in` operator, such as `'nux' in os_name`.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct ContainsMarkerTree<'a> {
     key: CanonicalMarkerValueString,
     value: &'a str,
@@ -1637,7 +1637,7 @@ impl Ord for ContainsMarkerTree<'_> {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct ListMarkerTree<'a> {
     // No separate canonical type, the type is already canonical.
     pair: &'a CanonicalMarkerListPair,
@@ -1691,7 +1691,7 @@ impl Ord for ListMarkerTree<'_> {
 }
 
 /// A node representing the existence or absence of a given extra, such as `extra == 'bar'`.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq)]
 pub struct ExtraMarkerTree<'a> {
     name: &'a CanonicalMarkerValueExtra,
     high: NodeId,
@@ -1736,7 +1736,7 @@ impl Ord for ExtraMarkerTree<'_> {
 /// A marker tree that contains at least one expression.
 ///
 /// See [`MarkerTree::contents`] for details.
-#[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Debug)]
+#[derive(Debug)]
 pub struct MarkerTreeContents(MarkerTree);
 
 impl From<MarkerTreeContents> for MarkerTree {

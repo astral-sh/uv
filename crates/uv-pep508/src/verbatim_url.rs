@@ -605,7 +605,7 @@ fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum Scheme {
     /// `file://...`
     File,

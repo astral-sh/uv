@@ -85,7 +85,7 @@ impl Serialize for IndexCacheControl {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct IndexCacheControlWire {
     api: Option<SmallString>,
@@ -620,7 +620,7 @@ impl IndexMetadata {
 }
 
 /// A reference to an [`IndexMetadata`].
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct IndexMetadataRef<'a> {
     /// The URL of the index.
     pub url: &'a IndexUrl,

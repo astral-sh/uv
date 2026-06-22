@@ -255,7 +255,7 @@ impl CompatArgs for PipSyncCompatArgs {
     }
 }
 
-#[derive(Debug, Copy, Clone, ValueEnum)]
+#[derive(Copy, Clone, ValueEnum)]
 enum Resolver {
     Backtracking,
     Legacy,

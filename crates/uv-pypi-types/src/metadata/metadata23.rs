@@ -12,7 +12,7 @@ use crate::metadata::Headers;
 
 /// Core Metadata 2.x as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Metadata23 {
     /// Version of the file format; legal values are `1.0`, `1.1`, `1.2`, `2.1`, `2.2`, `2.3`,
@@ -341,7 +341,7 @@ impl FromStr for Metadata23 {
 }
 
 /// Handle the different keywords representation between `METADATA` and `METADATA.json`.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Keywords(Vec<String>);
 
 impl Keywords {
@@ -370,7 +370,7 @@ impl Keywords {
 }
 
 /// Handle the different project URLs representation between `METADATA` and `METADATA.json`.
-#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectUrls(IndexMap<String, String>);
 
 impl ProjectUrls {

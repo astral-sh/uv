@@ -38,7 +38,7 @@ pub enum EditableError {
 ///
 /// Analog to `UnresolvedRequirement` but with `uv_pep508::Requirement` instead of
 /// `distribution_types::Requirement`.
-#[derive(Hash, Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RequirementsTxtRequirement {
     /// The uv-specific superset over PEP 508 requirements specifier incorporating
     /// `tool.uv.sources`.

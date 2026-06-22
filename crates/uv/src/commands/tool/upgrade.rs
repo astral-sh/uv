@@ -210,7 +210,7 @@ pub(crate) async fn upgrade(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum UpgradeOutcome {
     /// The tool itself was upgraded.
     UpgradeTool,
@@ -222,7 +222,7 @@ enum UpgradeOutcome {
     NoOp,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 enum UpgradeConstraint {
     /// The tool remains pinned to an exact version, so an upgrade was skipped.
     PinnedVersion { version: Version },
@@ -249,7 +249,6 @@ impl UpgradeConstraint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct UpgradeReport {
     outcome: UpgradeOutcome,
     constraint: Option<UpgradeConstraint>,

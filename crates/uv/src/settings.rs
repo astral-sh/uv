@@ -75,7 +75,7 @@ use crate::commands::{
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 
 /// The resolved global settings to use for any invocation of the CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
     pub(crate) quiet: u8,
@@ -262,7 +262,7 @@ pub(crate) fn resolve_preview(
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct NetworkSettings {
     pub(crate) connectivity: Connectivity,
     pub(crate) offline: Flag,
@@ -411,7 +411,7 @@ impl NetworkSettings {
 }
 
 /// The resolved cache settings to use for any invocation of the CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct CacheSettings {
     pub(crate) no_cache: bool,
     pub(crate) cache_dir: Option<PathBuf>,
@@ -433,7 +433,7 @@ impl CacheSettings {
 }
 
 /// The resolved settings to use for a `init` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct InitSettings {
     pub(crate) path: Option<PathBuf>,
     pub(crate) name: Option<PackageName>,
@@ -668,7 +668,7 @@ fn resolve_lock_check(flag: Flag) -> LockCheck {
 }
 
 /// The resolved settings to use for a `run` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RunSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
@@ -863,7 +863,7 @@ impl RunSettings {
 }
 
 /// The resolved settings to use for a `tool run` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolRunSettings {
     pub(crate) command: Option<ExternalCommand>,
     pub(crate) from: Option<String>,
@@ -1016,7 +1016,7 @@ impl ToolRunSettings {
 }
 
 /// The resolved settings to use for a `tool install` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolInstallSettings {
     pub(crate) package: String,
     pub(crate) from: Option<String>,
@@ -1142,7 +1142,7 @@ impl ToolInstallSettings {
 }
 
 /// The resolved settings to use for a `tool upgrade` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolUpgradeSettings {
     pub(crate) names: Vec<String>,
     pub(crate) python: Option<String>,
@@ -1258,7 +1258,7 @@ impl ToolUpgradeSettings {
 }
 
 /// The resolved settings to use for a `tool list` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
     pub(crate) show_version_specifiers: bool,
@@ -1309,7 +1309,7 @@ impl ToolListSettings {
 }
 
 /// The resolved settings to use for a `tool uninstall` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolUninstallSettings {
     pub(crate) name: Vec<PackageName>,
 }
@@ -1326,7 +1326,7 @@ impl ToolUninstallSettings {
 }
 
 /// The resolved settings to use for a `tool dir` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ToolDirSettings {
     pub(crate) bin: bool,
 }
@@ -1341,7 +1341,7 @@ impl ToolDirSettings {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) enum PythonListKinds {
     #[default]
     Default,
@@ -1352,7 +1352,7 @@ pub(crate) enum PythonListKinds {
 }
 
 /// The resolved settings to use for a `tool run` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PythonListSettings {
     pub(crate) request: Option<String>,
     pub(crate) kinds: PythonListKinds,
@@ -1443,7 +1443,7 @@ impl PythonListSettings {
 }
 
 /// The resolved settings to use for a `python dir` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PythonDirSettings {
     pub(crate) bin: bool,
 }
@@ -1459,7 +1459,7 @@ impl PythonDirSettings {
 }
 
 /// The resolved settings to use for a `python install` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PythonInstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
@@ -1551,7 +1551,7 @@ impl PythonInstallSettings {
 
 /// The resolved settings to use for a `python upgrade` invocation.
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PythonUpgradeSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
@@ -1631,7 +1631,7 @@ impl PythonUpgradeSettings {
 }
 
 /// The resolved settings to use for a `python uninstall` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PythonUninstallSettings {
     pub(crate) install_dir: Option<PathBuf>,
     pub(crate) targets: Vec<String>,
@@ -1659,7 +1659,6 @@ impl PythonUninstallSettings {
 }
 
 /// The resolved settings to use for a `python find` invocation.
-#[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
     pub(crate) show_version: bool,
@@ -1716,7 +1715,6 @@ impl PythonFindSettings {
 }
 
 /// The resolved settings to use for a `python pin` invocation.
-#[derive(Debug, Clone)]
 pub(crate) struct PythonPinSettings {
     pub(crate) request: Option<String>,
     pub(crate) resolved: bool,
@@ -1767,7 +1765,7 @@ impl PythonPinSettings {
 
 /// The resolved settings to use for a `sync` invocation.
 #[expect(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct SyncSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
@@ -1988,7 +1986,7 @@ impl SyncSettings {
 }
 
 /// The resolved settings to use for a `lock` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct LockSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
@@ -2057,7 +2055,7 @@ impl LockSettings {
 }
 
 /// The resolved settings to use for an `upgrade` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct UpgradeSettings {
     pub(crate) package: PackageName,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -2091,7 +2089,7 @@ impl UpgradeSettings {
 }
 
 /// The resolved settings to use for a `lock` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct MetadataSettings {
     #[expect(dead_code)]
     pub(crate) script: Option<PathBuf>,
@@ -2162,7 +2160,7 @@ impl MetadataSettings {
 
 /// The resolved settings to use for a `add` invocation.
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct AddSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
@@ -2451,7 +2449,7 @@ impl AddSettings {
 
 /// The resolved settings to use for a `remove` invocation.
 #[expect(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RemoveSettings {
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
@@ -2554,7 +2552,7 @@ impl RemoveSettings {
 }
 
 /// The resolved settings to use for a `version` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct VersionSettings {
     pub(crate) value: Option<String>,
     pub(crate) bump: Vec<VersionBumpSpec>,
@@ -2643,7 +2641,7 @@ impl VersionSettings {
 }
 
 /// The resolved settings to use for a `tree` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct TreeSettings {
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -2757,7 +2755,7 @@ impl TreeSettings {
 
 /// The resolved settings to use for an `export` invocation.
 #[expect(clippy::struct_excessive_bools, dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ExportSettings {
     pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
@@ -2933,7 +2931,7 @@ impl ExportSettings {
 }
 
 /// The resolved settings to use for a `format` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct FormatSettings {
     pub(crate) ruff_path: Option<PathBuf>,
     pub(crate) check: bool,
@@ -2978,7 +2976,7 @@ impl FormatSettings {
 }
 
 /// The resolved settings to use for a `check` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
     #[expect(dead_code)]
@@ -3102,7 +3100,7 @@ impl CheckSettings {
 }
 
 /// The resolved settings to use for an `audit` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct AuditSettings {
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
@@ -3223,7 +3221,7 @@ impl AuditSettings {
 }
 
 /// The resolved settings to use for a `pip compile` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipCompileSettings {
     pub(crate) format: Option<PipCompileFormat>,
     pub(crate) src_file: Vec<PathBuf>,
@@ -3445,7 +3443,7 @@ impl PipCompileSettings {
 }
 
 /// The resolved settings to use for a `pip sync` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipSyncSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
@@ -3548,7 +3546,7 @@ impl PipSyncSettings {
 }
 
 /// The resolved settings to use for a `pip install` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipInstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -3743,7 +3741,7 @@ impl PipInstallSettings {
 }
 
 /// The resolved settings to use for a `pip uninstall` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipUninstallSettings {
     pub(crate) package: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
@@ -3799,7 +3797,7 @@ impl PipUninstallSettings {
 }
 
 /// The resolved settings to use for a `pip freeze` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipFreezeSettings {
     pub(crate) exclude_editable: bool,
     pub(crate) exclude: FxHashSet<PackageName>,
@@ -3849,7 +3847,7 @@ impl PipFreezeSettings {
 }
 
 /// The resolved settings to use for a `pip list` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipListSettings {
     pub(crate) editable: Option<bool>,
     pub(crate) exclude: FxHashSet<PackageName>,
@@ -3905,7 +3903,7 @@ impl PipListSettings {
 }
 
 /// The resolved settings to use for a `pip show` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipShowSettings {
     pub(crate) package: Vec<PackageName>,
     pub(crate) files: bool,
@@ -3952,7 +3950,6 @@ impl PipShowSettings {
 }
 
 /// The resolved settings to use for a `pip tree` invocation.
-#[derive(Debug, Clone)]
 pub(crate) struct PipTreeSettings {
     pub(crate) show_version_specifiers: bool,
     pub(crate) depth: u8,
@@ -4006,7 +4003,7 @@ impl PipTreeSettings {
 }
 
 /// The resolved settings to use for a `pip check` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipCheckSettings {
     pub(crate) settings: PipSettings,
 }
@@ -4043,7 +4040,7 @@ impl PipCheckSettings {
 }
 
 /// The resolved settings to use for a `build` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct BuildSettings {
     pub(crate) src: Option<PathBuf>,
     pub(crate) package: Option<PackageName>,
@@ -4151,7 +4148,7 @@ impl BuildSettings {
 }
 
 /// The resolved settings to use for a `venv` invocation.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct VenvSettings {
     pub(crate) seed: bool,
     pub(crate) allow_existing: bool,
@@ -4255,7 +4252,6 @@ impl VenvSettings {
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`InstallerArgs`], represented as [`InstallerOptions`]).
-#[derive(Debug, Clone)]
 pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
@@ -4278,7 +4274,7 @@ pub(crate) struct InstallerSettingsRef<'a> {
 ///
 /// Combines the `[tool.uv]` persistent configuration with the command-line arguments
 /// ([`ResolverArgs`], represented as [`ResolverOptions`]).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 pub(crate) struct ResolverSettings {
     pub(crate) build_options: BuildOptions,
     pub(crate) config_setting: ConfigSettings,
@@ -4400,7 +4396,7 @@ impl From<ResolverOptions> for ResolverSettings {
 ///
 /// Represents the shared settings that are used across all uv commands outside the `pip` API.
 /// Analogous to the settings contained in the `[tool.uv]` table, combined with [`ResolverInstallerArgs`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug)]
 pub(crate) struct ResolverInstallerSettings {
     pub(crate) resolver: ResolverSettings,
     pub(crate) compile_bytecode: bool,
@@ -4521,7 +4517,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
 ///
 /// Represents the shared settings that are used across all `pip` commands. Analogous to the
 /// settings contained in the `[tool.uv.pip]` table.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct PipSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) python: Option<String>,
@@ -4972,7 +4968,6 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
 }
 
 /// The resolved settings to use for an invocation of the `uv publish` CLI.
-#[derive(Debug, Clone)]
 pub(crate) struct PublishSettings {
     // CLI only, see [`PublishArgs`] for docs.
     pub(crate) files: Vec<String>,
@@ -5057,7 +5052,7 @@ impl PublishSettings {
 }
 
 /// The resolved settings to use for an invocation of the `uv auth logout` CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct AuthLogoutSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
@@ -5074,7 +5069,7 @@ impl AuthLogoutSettings {
 }
 
 /// The resolved settings to use for an invocation of the `uv auth token` CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct AuthTokenSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,
@@ -5091,7 +5086,7 @@ impl AuthTokenSettings {
 }
 
 /// The resolved settings to use for an invocation of the `uv auth set` CLI.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct AuthLoginSettings {
     pub(crate) service: Service,
     pub(crate) username: Option<String>,

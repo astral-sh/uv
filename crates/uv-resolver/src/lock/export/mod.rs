@@ -41,7 +41,6 @@ struct ExportableRequirement<'lock> {
 }
 
 /// A set of flattened, exportable requirements, generated from a lockfile.
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct ExportableRequirements<'lock>(Vec<ExportableRequirement<'lock>>);
 
 impl<'lock> ExportableRequirements<'lock> {
@@ -347,14 +346,13 @@ impl<'lock> ExportableRequirements<'lock> {
 }
 
 /// A node in the graph.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 enum Node<'lock> {
     Root,
     Package(&'lock Package),
 }
 
 /// An edge in the resolution graph, along with the marker that must be satisfied to traverse it.
-#[derive(Debug, Clone)]
 enum Edge<'lock> {
     Prod {
         marker: MarkerTree,

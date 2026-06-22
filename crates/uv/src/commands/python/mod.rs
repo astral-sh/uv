@@ -6,7 +6,7 @@ pub(crate) mod pin;
 pub(crate) mod uninstall;
 pub(crate) mod update_shell;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) enum ChangeEventKind {
     /// The Python version was uninstalled.
     Removed,
@@ -16,7 +16,6 @@ pub(super) enum ChangeEventKind {
     Reinstalled,
 }
 
-#[derive(Debug)]
 pub(super) struct ChangeEvent {
     key: uv_python::PythonInstallationKey,
     kind: ChangeEventKind,

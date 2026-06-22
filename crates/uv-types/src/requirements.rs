@@ -4,7 +4,7 @@ use uv_normalize::ExtraName;
 use crate::HashStrategy;
 
 /// A resolved set of requirements, along with the hash policy discovered while resolving them.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ResolvedRequirements {
     /// The resolved distributions to install.
     resolution: Resolution,
@@ -34,7 +34,7 @@ impl ResolvedRequirements {
 /// For example, given `flask[dotenv]`, the `RequestedRequirements` would include the `dotenv`
 /// extra, along with all of the requirements that are included in the `flask` distribution
 /// including their unevaluated markers.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RequestedRequirements {
     /// The set of extras included on the originating requirement.
     extras: Box<[ExtraName]>,

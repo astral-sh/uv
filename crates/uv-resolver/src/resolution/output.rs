@@ -37,7 +37,6 @@ use crate::{
 ///
 /// Includes a complete resolution graph in which every node represents a pinned package and every
 /// edge represents a dependency between two pinned packages.
-#[derive(Debug)]
 pub struct ResolverOutput {
     /// The underlying graph.
     pub(crate) graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
@@ -58,7 +57,6 @@ pub struct ResolverOutput {
     pub(crate) options: Options,
 }
 
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum ResolutionGraphNode {
     Root,
@@ -110,7 +108,7 @@ impl Display for ResolutionGraphNode {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash)]
 struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
@@ -652,7 +650,7 @@ impl ResolverOutput {
         /// We only track the marker parameters that are referenced in a marker
         /// expression. We'll use references to the parameter later to generate
         /// values based on the current marker environment.
-        #[derive(Debug, Eq, Hash, PartialEq)]
+        #[derive(Eq, Hash, PartialEq)]
         enum MarkerParam {
             Version(CanonicalMarkerValueVersion),
             String(CanonicalMarkerValueString),

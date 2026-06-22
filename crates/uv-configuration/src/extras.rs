@@ -5,11 +5,11 @@ use uv_normalize::{DefaultExtras, ExtraName};
 /// Manager of all extra decisions and settings history.
 ///
 /// This is an Arc mostly just to avoid size bloat on things that contain these.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ExtrasSpecification(Arc<ExtrasSpecificationInner>);
 
 /// Manager of all dependency-group decisions and settings history.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ExtrasSpecificationInner {
     /// Extras to include.
     include: IncludeExtras,
@@ -244,7 +244,6 @@ impl ExtrasSpecificationHistory {
 }
 
 /// A trivial newtype wrapped around [`ExtrasSpecification`][] that signifies "defaults applied"
-#[derive(Debug, Clone)]
 pub struct ExtrasSpecificationWithDefaults {
     /// The active semantics
     cur: ExtrasSpecification,
@@ -257,7 +256,7 @@ impl std::ops::Deref for ExtrasSpecificationWithDefaults {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum IncludeExtras {
     /// Include dependencies from the specified extras.
     Some(Vec<ExtraName>),

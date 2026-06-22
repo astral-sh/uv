@@ -45,7 +45,6 @@ use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 ///
 /// (We used to shove this feature into that path, and then we would see there's no metadata
 /// and try to run setuptools to try to desperately find any metadata, and then error out.)
-#[derive(Debug, Clone)]
 pub struct SourcedDependencyGroups {
     pub name: Option<PackageName>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,

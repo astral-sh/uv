@@ -310,7 +310,7 @@ pub(crate) fn write_script_entrypoints(
 }
 
 /// A parsed `WHEEL` file.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct WheelFile(FxHashMap<String, Vec<String>>);
 
 impl WheelFile {
@@ -380,7 +380,7 @@ impl WheelFile {
 }
 
 /// Whether the wheel should be installed into the `purelib` or `platlib` directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum LibKind {
     /// Install into the `purelib` directory.
     Pure,

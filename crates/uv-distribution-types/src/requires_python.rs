@@ -13,7 +13,7 @@ use uv_platform_tags::{AbiTag, CPythonAbiVariants, LanguageTag};
 /// The `Requires-Python` requirement specifier.
 ///
 /// See: <https://packaging.python.org/en/latest/guides/dropping-older-python-versions/>
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct RequiresPython {
     /// The supported Python versions as provides by the user, usually through the `requires-python`
     /// field in `pyproject.toml`.
@@ -525,7 +525,7 @@ impl<'de> serde::Deserialize<'de> for RequiresPython {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct RequiresPythonRange(LowerBound, UpperBound);
 
 impl RequiresPythonRange {

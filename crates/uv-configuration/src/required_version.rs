@@ -5,7 +5,7 @@ use std::{fmt::Formatter, str::FromStr};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers, VersionSpecifiersParseError};
 
 /// A required version of uv, represented as a version specifier (e.g. `>=0.5.0`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RequiredVersion(VersionSpecifiers);
 
 impl RequiredVersion {

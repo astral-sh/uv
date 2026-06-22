@@ -722,7 +722,7 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/externally-managed-environments/>
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct ExternallyManaged {
     error: Option<String>,
 }
@@ -900,7 +900,7 @@ impl uv_errors::Hint for BrokenLink {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
     Error(InterpreterInfoError),
@@ -934,7 +934,7 @@ pub enum InterpreterInfoError {
 }
 
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
     markers: MarkerEnvironment,

@@ -17,7 +17,7 @@ pub(super) enum Value {
 }
 
 /// The data extracted from a `_sysconfigdata_` file.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize)]
+#[derive(PartialEq, serde::Serialize)]
 pub(super) struct SysconfigData(BTreeMap<String, Value>);
 
 impl SysconfigData {

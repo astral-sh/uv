@@ -3506,7 +3506,6 @@ impl ForkState {
 }
 
 /// The resolution from a single fork including the virtual packages and the edges between them.
-#[derive(Debug)]
 pub(crate) struct Resolution {
     pub(crate) nodes: FxHashMap<ResolutionPackage, Version>,
     /// The directed connections between the nodes, where the marker is the node weight. We don't
@@ -3533,7 +3532,7 @@ pub(crate) struct ResolutionPackage {
 
 /// The `from_` fields and the `to_` fields allow mapping to the originating and target
 ///  [`ResolutionPackage`] respectively. The `marker` is the edge weight.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionDependencyEdge {
     /// This value is `None` if the dependency comes from the root package.
     pub(crate) from: Option<PackageName>,
@@ -3561,7 +3560,6 @@ impl ResolutionDependencyEdge {
 }
 
 /// Fetch the metadata for an item
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
@@ -3630,7 +3628,6 @@ impl Display for Request {
     }
 }
 
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 enum Response {
     /// The returned metadata for a package hosted on a registry.
@@ -3719,7 +3716,6 @@ impl Dependencies {
 /// This is like `Dependencies` but with an extra variant that only occurs when
 /// a `Dependencies` list has multiple dependency specifications with the same
 /// name and non-overlapping marker expressions (i.e., a fork occurs).
-#[derive(Debug)]
 enum ForkedDependencies {
     /// Package dependencies are not available.
     Unavailable(UnavailableVersion),
@@ -3743,7 +3739,6 @@ enum ForkedDependencies {
 ///
 /// Any time a marker expression is seen that is not true for all possible
 /// marker environments, it is possible for it to introduce a new fork.
-#[derive(Debug, Default)]
 struct Forks {
     /// The forks discovered among the dependencies.
     forks: Vec<Fork>,
@@ -3991,7 +3986,7 @@ impl Forks {
 /// have the same name and because the marker expressions are disjoint,
 /// a fork occurs. One fork will contain `a<2` but not `a>=2`, while
 /// the other fork will contain `a>=2` but not `a<2`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Fork {
     /// The list of dependencies for this fork, guaranteed to be conflict
     /// free. (i.e., There are no two packages with the same name with
@@ -4255,7 +4250,7 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     environments.remove(&id).unwrap_or(MarkerTree::FALSE)
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 struct ConflictTracker {
     /// How often a decision on the package was discarded due to another package decided earlier.
     affected: FxHashMap<Id<PubGrubPackage>, usize>,

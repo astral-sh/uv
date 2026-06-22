@@ -16,7 +16,6 @@ pub(crate) mod update_shell;
 pub(crate) mod upgrade;
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ToolRequest<'a> {
     // Running the interpreter directly e.g. `uvx python` or `uvx pypy@3.8`
     Python {
@@ -74,7 +73,7 @@ impl<'a> ToolRequest<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Target<'a> {
     /// e.g., `ruff`
     Unspecified(&'a str),

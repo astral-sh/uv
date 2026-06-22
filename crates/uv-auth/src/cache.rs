@@ -16,7 +16,7 @@ use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
     /// A full index URL
     Index(DisplaySafeUrl),
@@ -33,7 +33,7 @@ impl Display for FetchUrl {
     }
 }
 
-#[derive(Debug)] // All internal types are redacted.
+// All internal types are redacted.
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Authentication>>>,
@@ -278,7 +278,6 @@ impl<T> TrieState<T> {
     }
 }
 
-#[derive(Debug)]
 struct RealmUsername(Realm, Username);
 
 impl std::fmt::Display for RealmUsername {

@@ -230,7 +230,7 @@ pub(super) fn elapsed(duration: Duration) -> String {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) enum ChangeEventKind {
     /// The package was removed from the environment.
     Removed,
@@ -240,7 +240,6 @@ pub(super) enum ChangeEventKind {
     Reinstalled,
 }
 
-#[derive(Debug)]
 pub(super) struct ChangeEvent<'a> {
     dist: &'a ChangedDist,
     kind: ChangeEventKind,
@@ -392,7 +391,6 @@ pub(super) fn capitalize(s: &str) -> String {
 }
 
 /// A Python file that may or may not include an existing PEP 723 script tag.
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum ScriptPath {
     /// The Python file already includes a PEP 723 script tag.

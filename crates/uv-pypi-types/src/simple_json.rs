@@ -15,7 +15,7 @@ use crate::{ProjectStatus, VerbatimParsedUrl};
 
 /// A collection of "files" from `PyPI`'s JSON API for a single package, as served by the
 /// `vnd.pypi.simple.v1` media type.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleDetail {
     /// PEP 792 project status information.
@@ -130,7 +130,7 @@ impl<'de> Deserialize<'de> for PypiFile {
 }
 
 /// A collection of "files" from the Simple API.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleDetail {
     /// PEP 792 project status information.
@@ -145,7 +145,6 @@ pub struct PyxSimpleDetail {
 
 /// A single (remote) file belonging to a package, either a wheel or a source distribution,
 /// as served by the Simple API.
-#[derive(Debug, Clone)]
 pub struct PyxFile {
     pub core_metadata: Option<CoreMetadata>,
     pub filename: Option<SmallString>,
@@ -233,7 +232,7 @@ impl<'de> Deserialize<'de> for PyxFile {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CoreMetadatum {
     #[serde(default)]
@@ -329,7 +328,7 @@ impl Default for Yanked {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Zstd {
     pub hashes: Hashes,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -339,7 +338,7 @@ pub struct Zstd {
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
-#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct Hashes {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<SmallString>,
@@ -842,7 +841,7 @@ mod tests {
 /// as served by the `vnd.pypi.simple.v1` media type.
 ///
 /// <https://peps.python.org/pep-0691/#specification>
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PypiSimpleIndex {
     /// The list of projects available in the index.
@@ -851,7 +850,7 @@ pub struct PypiSimpleIndex {
 
 /// Response from the Pyx Simple API root endpoint listing all available projects,
 /// as served by the `vnd.pyx.simple.v1` media types.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PyxSimpleIndex {
     /// The list of projects available in the index.
@@ -859,7 +858,7 @@ pub struct PyxSimpleIndex {
 }
 
 /// A single project entry in the Simple API index.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 struct ProjectEntry {
     /// The name of the project.
     name: PackageName,

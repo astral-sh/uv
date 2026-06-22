@@ -19,10 +19,10 @@ use crate::{
 };
 
 /// A Python environment, consisting of a Python [`Interpreter`] and its associated paths.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PythonEnvironment(Arc<PythonEnvironmentShared>);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct PythonEnvironmentShared {
     root: PathBuf,
     interpreter: Interpreter,
@@ -31,18 +31,18 @@ struct PythonEnvironmentShared {
 /// The result of failed environment discovery.
 ///
 /// Generally this is cast from [`PythonNotFound`] by [`PythonEnvironment::find`].
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub struct EnvironmentNotFound {
     request: PythonRequest,
     preference: EnvironmentPreference,
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub struct InvalidEnvironment {
     path: PathBuf,
     pub kind: InvalidEnvironmentKind,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum InvalidEnvironmentKind {
     NotDirectory,
     Empty,
@@ -60,7 +60,7 @@ impl From<PythonNotFound> for EnvironmentNotFound {
 
 impl fmt::Display for EnvironmentNotFound {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        #[derive(Debug, Copy, Clone)]
+        #[derive(Copy, Clone)]
         enum SearchType {
             /// Only virtual environments were searched.
             Virtual,

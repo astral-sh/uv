@@ -2,7 +2,6 @@ use tracing::debug;
 use url::Url;
 
 /// A reference to a repository on GitHub.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GitHubRepository<'a> {
     /// The `owner` field for the repository, i.e., the user or organization that owns the
     /// repository, like `astral-sh`.

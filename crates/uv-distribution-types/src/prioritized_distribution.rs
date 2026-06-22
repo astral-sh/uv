@@ -48,7 +48,7 @@ impl Default for PrioritizedDistInner {
 }
 
 /// A distribution that can be used for both resolution and installation.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
@@ -293,7 +293,7 @@ pub enum PythonRequirementKind {
     Target,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum WheelCompatibility {
     Incompatible(IncompatibleWheel),
     Compatible(HashComparison, Option<TagPriority>, Option<BuildTag>),
@@ -315,7 +315,7 @@ pub enum IncompatibleWheel {
     MissingPlatform(MarkerTree),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum SourceDistCompatibility {
     Incompatible(IncompatibleSource),
     Compatible(HashComparison),
@@ -329,7 +329,7 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,

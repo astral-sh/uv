@@ -55,7 +55,6 @@ use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
 /// The result of running a lock operation.
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
@@ -282,7 +281,7 @@ pub(crate) async fn lock(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) enum LockMode<'env> {
     /// Write the lockfile to disk.
     Write(&'env Interpreter),
@@ -1020,7 +1019,6 @@ async fn do_lock(
     }
 }
 
-#[derive(Debug)]
 enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
     Unusable(Lock),
@@ -1450,7 +1448,7 @@ impl ValidatedLock {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct LockEventVersion<'lock> {
     /// The version of the package, or `None` if the package has a dynamic version.
     version: Option<&'lock Version>,
@@ -1479,7 +1477,6 @@ impl std::fmt::Display for LockEventVersion<'_> {
 }
 
 /// A modification to a lockfile.
-#[derive(Debug, Clone)]
 pub(super) enum LockEvent<'lock> {
     Update(
         DryRun,

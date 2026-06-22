@@ -1389,7 +1389,6 @@ fn can_skip_ephemeral(
     }
 }
 
-#[derive(Debug)]
 pub(crate) enum RunCommand {
     /// Execute `python`.
     Python(Vec<OsString>),
@@ -1419,7 +1418,6 @@ pub(crate) enum RunCommand {
 }
 
 /// A parsed `uv run` target before any remote script has been downloaded.
-#[derive(Debug)]
 pub(crate) enum ParsedRunCommand {
     /// A target that is already fully resolved and ready to execute.
     Ready(RunCommand),
@@ -1428,7 +1426,6 @@ pub(crate) enum ParsedRunCommand {
 }
 
 /// The information needed to fetch and execute a remote `uv run` target.
-#[derive(Debug)]
 pub(crate) struct PendingRemoteRunCommand {
     /// The remote URL to download.
     url: DisplaySafeUrl,

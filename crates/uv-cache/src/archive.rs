@@ -7,7 +7,7 @@ use std::str::FromStr;
 /// Note: for compatibility with the existing `archive-v0` bucket, this is a newtype
 /// around a `String` instead of a newtype around `uv_fastid::Id`. In the future,
 /// we may want to bump to `archive-v1` and switch to using `uv_fastid::Id` directly.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ArchiveId(String);
 
 impl Default for ArchiveId {

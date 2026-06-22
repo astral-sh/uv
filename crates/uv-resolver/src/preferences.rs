@@ -176,7 +176,7 @@ impl From<Option<IndexUrl>> for PreferenceIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum PreferenceSource {
     /// The preference is from an installed package in the environment.
     Environment,
@@ -224,7 +224,7 @@ impl Entry {
 ///
 /// Preferences should be prioritized first by whether their marker matches and then by the order
 /// they are stored, so that a lockfile has higher precedence than sibling forks.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct Preferences(FxHashMap<PackageName, Vec<Entry>>);
 
 impl Preferences {

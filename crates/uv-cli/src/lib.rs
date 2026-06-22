@@ -164,7 +164,7 @@ pub struct TopLevelArgs {
     version: Option<bool>,
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser)]
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 pub struct GlobalArgs {
     #[arg(
@@ -587,7 +587,7 @@ pub enum Commands {
     Help(HelpArgs),
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct HelpArgs {
     /// Disable pager when printing help
     #[arg(long)]
@@ -810,7 +810,7 @@ impl ValueParserFactory for VersionBumpSpec {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct VersionBumpSpecValueParser;
 
 impl TypedValueParser for VersionBumpSpecValueParser {
@@ -862,7 +862,7 @@ pub enum SelfCommand {
     },
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct SelfUpdateArgs {
     /// Update to the specified version. If not provided, uv will update to the latest version.
     #[arg(value_hint = ValueHint::Other)]
@@ -953,7 +953,7 @@ pub struct PruneArgs {
     pub force: bool,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct SizeArgs {
     /// Display the cache size in human-readable format (e.g., `1.2 GiB` instead of raw bytes).
     #[arg(long = "human", short = 'H', alias = "human-readable")]
@@ -1233,7 +1233,7 @@ pub enum ProjectCommand {
 
 /// A re-implementation of `Option`, used to avoid Clap's automatic `Option` flattening in
 /// [`parse_index_url`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Maybe<T> {
     Some(T),
     None,
@@ -3327,7 +3327,7 @@ pub struct VenvArgs {
     pub compat_args: compat::VenvCompatArgs,
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug)]
 pub enum ExternalCommand {
     #[command(external_subcommand)]
     Cmd(Vec<OsString>),
@@ -7106,7 +7106,7 @@ pub struct AuthHelperArgs {
 }
 
 /// Credential helper protocols supported by uv
-#[derive(Debug, Copy, Clone, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Copy, Clone, PartialEq, clap::ValueEnum)]
 pub enum AuthHelperProtocol {
     /// Bazel credential helper protocol as described in [the
     /// spec](https://github.com/bazelbuild/proposals/blob/main/designs/2022-06-07-bazel-credential-helpers.md)
@@ -8361,14 +8361,14 @@ pub struct MetadataArgs {
     pub python: Option<Maybe<String>>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct WorkspaceDirArgs {
     /// Display the path to a specific package in the workspace.
     #[arg(long, value_hint = ValueHint::Other)]
     pub package: Option<PackageName>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 pub struct WorkspaceListArgs {
     /// Show paths instead of names.
     #[arg(long)]

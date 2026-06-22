@@ -73,7 +73,6 @@ impl From<Pep508Error<VerbatimParsedUrl>> for MetadataError {
 }
 
 /// The headers of a distribution metadata file.
-#[derive(Debug)]
 struct Headers<'a> {
     headers: Vec<mailparse::MailHeader<'a>>,
     body_start: usize,

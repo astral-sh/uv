@@ -25,7 +25,7 @@ use crate::{FxHashbrownMap, SentinelRange};
 /// Our main priority is the package name, the earlier we encounter a package, the higher its
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
 /// determinism, we also track the discovery order of virtual packages as secondary order.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
     virtual_package_tiebreaker: FxHashbrownMap<PubGrubPackage, PubGrubTiebreaker>,

@@ -109,7 +109,7 @@ impl AsRef<str> for GroupName {
 ///
 /// Either <groupname> or <path>:<groupname>.
 /// If <path> is omitted it defaults to "pyproject.toml".
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PipGroupName {
     pub path: Option<PathBuf>,
@@ -173,7 +173,7 @@ impl Display for PipGroupName {
 }
 
 /// Either the literal "all" or a list of groups
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DefaultGroups {
     /// All groups are defaulted
     All,

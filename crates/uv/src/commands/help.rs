@@ -264,14 +264,12 @@ fn find_command<'a>(
     find_command(&query[1..], subcommand)
 }
 
-#[derive(Debug)]
 enum PagerKind {
     Less,
     More,
     Other(String),
 }
 
-#[derive(Debug)]
 struct Pager {
     kind: PagerKind,
     args: Vec<String>,

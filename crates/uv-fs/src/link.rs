@@ -58,7 +58,7 @@ impl LinkMode {
 }
 
 /// Behavior when the destination directory already exists.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum OnExistingDirectory {
     /// Fail if the destination directory already exists.
     #[default]
@@ -96,7 +96,7 @@ where
 ///
 /// The intended pattern for usage is to create a [`CopyLocks`] instance then share it across all
 /// [`link_dir`] invocations that may conflict via [`LinkOptions::with_copy_locks`].
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct CopyLocks {
     dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
 }
@@ -129,7 +129,6 @@ impl CopyLocks {
 }
 
 /// Options for directory link operations.
-#[derive(Debug)]
 pub struct LinkOptions<'a, F = fn(&Path) -> bool> {
     /// The linking strategy to use.
     mode: LinkMode,
@@ -222,7 +221,7 @@ impl<'a, F> LinkOptions<'a, F> {
 /// filesystem, but we can't always detect this ahead of time. We try the operation on the
 /// first file — if it succeeds, we know later errors are real failures. If it fails, we
 /// switch to the next fallback strategy for the rest of the operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum LinkAttempt {
     /// The strategy has not yet been attempted on any file.
     Initial,
@@ -237,7 +236,7 @@ enum LinkAttempt {
 /// When the attempt is [`LinkAttempt::Subsequent`] and a file fails, it is
 /// either a hard error (the strategy was confirmed to work, so this is a real failure) or,
 /// for reflink, a transition to the next fallback.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 struct LinkState {
     /// The linking strategy currently in use.
     mode: LinkMode,

@@ -25,7 +25,7 @@ pub enum TagsError {
     DebugIsACPythonProblem(String),
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct TagsOptions {
     pub manylinux_compatible: bool,
     pub gil_disabled: bool,
@@ -53,7 +53,7 @@ pub enum IncompatibleTag {
 /// compared to other wheels.
 ///
 /// A higher tag compatibility means higher priority.
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub enum TagCompatibility {
     Incompatible(IncompatibleTag),
     Compatible(TagPriority),
@@ -482,7 +482,7 @@ impl std::fmt::Display for Tags {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 enum Implementation {
     CPython { variant: CPythonAbiVariants },
     PyPy,

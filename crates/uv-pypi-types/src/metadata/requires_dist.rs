@@ -14,7 +14,6 @@ use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
 /// This is a subset of [`ResolutionMetadata`]; specifically, it omits the `version` and `requires-python`
 /// fields, which aren't necessary when extracting the requirements of a package without installing
 /// the package itself.
-#[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
     pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,

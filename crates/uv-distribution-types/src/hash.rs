@@ -1,6 +1,6 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HashPolicy<'a> {
     /// No hash policy is specified.
     None,
@@ -104,7 +104,7 @@ impl HashPolicy<'_> {
 }
 
 /// The context in which hashes should be generated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum HashGeneration {
     /// Generate hashes for direct URL distributions.
     Url,

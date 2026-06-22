@@ -1332,7 +1332,7 @@ where
 /// A pointer to an archive in the cache, fetched from an HTTP archive.
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.http` file.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct HttpArchivePointer {
     archive: Archive,
 }
@@ -1370,7 +1370,7 @@ impl HttpArchivePointer {
 /// A pointer to an archive in the cache, fetched from a local path.
 ///
 /// Encoded with `MsgPack`, and represented on disk by a `.rev` file.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct PathArchivePointer {
     timestamp: Timestamp,
     archive: Archive,
@@ -1414,7 +1414,6 @@ impl PathArchivePointer {
     }
 }
 
-#[derive(Debug, Clone)]
 struct WheelTarget {
     /// The URL from which the wheel can be downloaded.
     url: DisplaySafeUrl,
@@ -1446,7 +1445,7 @@ impl TryFrom<&File> for WheelTarget {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 enum WheelExtension {
     /// A `.whl` file.
     Whl,

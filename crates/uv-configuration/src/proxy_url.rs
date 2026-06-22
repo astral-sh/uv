@@ -12,11 +12,11 @@ use uv_redacted::DisplaySafeUrl;
 /// A validated proxy URL.
 ///
 /// This type validates that the [`Url`] is valid for a [`reqwest::Proxy`] on construction.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProxyUrl(DisplaySafeUrl);
 
 /// Mapping to [`reqwest::proxy::Intercept`] kinds which are not public API.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum ProxyUrlKind {
     Http,
     Https,

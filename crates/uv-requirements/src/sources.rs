@@ -7,7 +7,6 @@ use console::Term;
 use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
 
-#[derive(Debug, Clone)]
 pub enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
     Package(RequirementsTxtRequirement),

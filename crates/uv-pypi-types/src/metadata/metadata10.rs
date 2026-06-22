@@ -9,7 +9,7 @@ use crate::metadata::Headers;
 /// fields that have been consistent across all versions of the specification.
 ///
 /// Core Metadata 1.0 is specified in <https://peps.python.org/pep-0241/>.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Metadata10 {
     pub name: PackageName,

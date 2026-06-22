@@ -40,7 +40,6 @@ static HUGGING_FACE_TOKEN: LazyLock<Option<Vec<u8>>> = LazyLock::new(|| {
 });
 
 /// A provider for authentication credentials for the Hugging Face platform.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HuggingFaceProvider;
 
 impl HuggingFaceProvider {
@@ -65,7 +64,6 @@ static S3_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
 });
 
 /// A provider for authentication credentials for S3 endpoints.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct S3EndpointProvider;
 
 impl S3EndpointProvider {
@@ -114,7 +112,6 @@ static GCS_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
 });
 
 /// A provider for authentication credentials for GCS endpoints.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GcsEndpointProvider;
 
 impl GcsEndpointProvider {
@@ -154,7 +151,6 @@ static AZURE_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
 });
 
 /// A provider for authentication credentials for Azure endpoints.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AzureEndpointProvider;
 
 impl AzureEndpointProvider {

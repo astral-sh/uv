@@ -58,7 +58,7 @@ pub(crate) trait InstallLogger {
 }
 
 /// The default logger for install operations.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct DefaultInstallLogger;
 
 impl InstallLogger for DefaultInstallLogger {
@@ -244,7 +244,7 @@ impl InstallLogger for DefaultInstallLogger {
 
 /// A logger that only shows installs and uninstalls, the minimal logging necessary to understand
 /// environment changes.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct SummaryInstallLogger;
 
 impl InstallLogger for SummaryInstallLogger {
@@ -300,7 +300,6 @@ impl InstallLogger for SummaryInstallLogger {
 }
 
 /// A logger that shows special output for the modification of the given target.
-#[derive(Debug, Clone)]
 pub(crate) struct UpgradeInstallLogger {
     target: PackageName,
 }
@@ -476,7 +475,7 @@ pub(crate) trait ResolveLogger {
 }
 
 /// The default logger for resolve operations.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct DefaultResolveLogger;
 
 impl ResolveLogger for DefaultResolveLogger {
@@ -509,7 +508,7 @@ impl ResolveLogger for DefaultResolveLogger {
 }
 
 /// A logger that doesn't show any output.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct SummaryResolveLogger;
 
 impl ResolveLogger for SummaryResolveLogger {

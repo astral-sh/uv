@@ -4,7 +4,7 @@ use crate::{BuildVariables, ConfigSettings, ExtraBuildRequirement};
 
 /// A digest representing the build settings, such as build dependencies or other build-time
 /// configuration.
-#[derive(Default, Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct BuildInfo {
     #[serde(default, skip_serializing_if = "ConfigSettings::is_empty")]
     config_settings: ConfigSettings,

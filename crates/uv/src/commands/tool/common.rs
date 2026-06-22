@@ -139,7 +139,6 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
 }
 
 /// The resolved Python request for a tool invocation.
-#[derive(Debug, Clone)]
 pub(crate) struct ToolPython {
     /// The source of the Python request.
     source: PythonRequestSource,

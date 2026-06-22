@@ -115,7 +115,7 @@ fn parse_with_fixups<Err, T: FromStr<Err = Err>>(input: &str, type_name: &str) -
 }
 
 /// Like [`Requirement`], but attempts to correct some common errors in user-provided requirements.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Serialize, Deserialize)]
 pub struct LenientRequirement<T: Pep508Url = VerbatimParsedUrl>(Requirement<T>);
 
 impl<T: Pep508Url> FromStr for LenientRequirement<T> {
@@ -135,7 +135,7 @@ impl<T: Pep508Url> From<LenientRequirement<T>> for Requirement<T> {
 /// Like [`VersionSpecifiers`], but attempts to correct some common errors in user-provided requirements.
 ///
 /// For example, we turn `>=3.x.*` into `>=3.x`.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq)]
+#[derive(Serialize)]
 pub struct LenientVersionSpecifiers(VersionSpecifiers);
 
 impl FromStr for LenientVersionSpecifiers {

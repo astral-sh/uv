@@ -63,7 +63,7 @@ impl uv_errors::Hint for MetadataError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Metadata {
     // Mandatory fields
     pub name: PackageName,
@@ -146,7 +146,6 @@ impl Metadata {
 }
 
 /// The metadata associated with an archive.
-#[derive(Debug, Clone)]
 pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
@@ -175,7 +174,6 @@ impl From<Metadata> for ArchiveMetadata {
 }
 
 /// A workspace member from a checked-out Git repo.
-#[derive(Debug, Clone)]
 pub struct GitWorkspaceMember<'a> {
     /// The root of the checkout, which may be the root of the workspace or may be above the
     /// workspace root.

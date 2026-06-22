@@ -10,7 +10,7 @@ use crate::Lock;
 /// This combines explicitly named packages (from `--upgrade-package`) with packages belonging to
 /// upgraded dependency groups (from `--upgrade-group`), providing a single `contains` check that
 /// accounts for both.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct UpgradePackages {
     /// Whether all packages should be upgraded.
     all: bool,

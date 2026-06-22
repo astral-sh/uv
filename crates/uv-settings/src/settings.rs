@@ -32,39 +32,39 @@ use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct PyProjectToml {
     pub(crate) tool: Option<Tools>,
 }
 
 /// A `[tool]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct Tools {
     pub(crate) uv: Option<Options>,
 }
 
 /// A `pyproject.toml` with an (optional) `[tool.uv.required-version]`.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct PyProjectRequiredVersionToml {
     pub(crate) tool: Option<RequiredVersionTools>,
 }
 
 /// A `[tool]` section containing only the fields required for `required-version` discovery.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct RequiredVersionTools {
     pub(crate) uv: Option<RequiredVersionOptions>,
 }
 
 /// The minimal `[tool.uv]` subset required to enforce `required-version` before full parsing.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct RequiredVersionOptions {
     pub(crate) required_version: Option<RequiredVersion>,
 }
 
 /// A `uv.toml` containing only the fields required for `required-version` discovery.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct UvRequiredVersionToml {
     pub(crate) required_version: Option<RequiredVersion>,
@@ -72,7 +72,7 @@ pub(crate) struct UvRequiredVersionToml {
 
 /// A `[tool.uv]` section.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(try_from = "OptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(!try_from))]
@@ -249,7 +249,7 @@ impl Options {
 }
 
 /// Global settings, relevant to all invocations.
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(try_from = "GlobalOptionsWire", rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(!try_from))]
@@ -438,7 +438,7 @@ pub struct GlobalOptions {
 
 /// Like [`GlobalOptions`], but with any `#[serde(flatten)]` fields inlined.
 /// This improves line/column information in error messages.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct GlobalOptionsWire {
     required_version: Option<RequiredVersion>,
@@ -509,7 +509,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
 }
 
 /// Settings relevant to all installer operations.
-#[derive(Debug, Clone, Default, CombineOptions)]
+#[derive(CombineOptions)]
 pub struct InstallerOptions {
     index: Option<Vec<Index>>,
     index_url: Option<PipIndex>,
@@ -533,7 +533,7 @@ pub struct InstallerOptions {
 }
 
 /// Settings relevant to all resolver operations.
-#[derive(Debug, Clone, Default, CombineOptions)]
+#[derive(Default, CombineOptions)]
 pub struct ResolverOptions {
     pub index: Option<Vec<Index>>,
     pub index_url: Option<PipIndex>,
@@ -721,7 +721,7 @@ impl ResolverInstallerSchema {
 }
 
 /// The JSON schema for the `[tool.uv]` section of a `pyproject.toml` file.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ResolverInstallerSchema {
@@ -1200,7 +1200,7 @@ pub struct ResolverInstallerSchema {
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -1267,7 +1267,7 @@ impl PythonInstallMirrors {
 ///
 /// These values will be ignored when running commands outside the `uv pip` namespace (e.g.,
 /// `uv lock`, `uvx`).
-#[derive(Debug, Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PipOptions {
@@ -2196,9 +2196,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
 ///
 /// A mirror of [`ResolverInstallerSchema`], without upgrades and reinstalls, which shouldn't be
 /// persisted in a tool receipt.
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
-)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolOptions {
@@ -2232,7 +2230,7 @@ pub struct ToolOptions {
 }
 
 /// The on-disk representation of [`ToolOptions`] in a tool receipt.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolOptionsWire {
     index: Option<Vec<Index>>,
@@ -2442,7 +2440,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
 
 /// Like [`Options]`, but with any `#[serde(flatten)]` fields inlined. This leads to far, far
 /// better error messages when deserializing.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 struct OptionsWire {
     // #[serde(flatten)]
@@ -2716,7 +2714,7 @@ impl TryFrom<OptionsWire> for Options {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PublishOptions {
@@ -2769,7 +2767,7 @@ pub struct PublishOptions {
     pub check_url: Option<IndexUrl>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct AddOptions {
@@ -2794,7 +2792,7 @@ pub struct AddOptions {
     pub add_bounds: Option<AddBoundsKind>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Clone, Default, PartialEq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct AuditOptions {
@@ -2826,7 +2824,7 @@ pub struct AuditOptions {
     pub ignore_until_fixed: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MalwareCheckSettings {
     /// Whether the malware check is enabled.
     pub enabled: bool,
@@ -2844,7 +2842,7 @@ impl From<&crate::EnvironmentOptions> for MalwareCheckSettings {
 }
 
 /// Represents the `preview-features` configuration option.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(untagged))]
 pub enum PreviewFeaturesOption {
@@ -2898,7 +2896,7 @@ struct PreviewOptionsDefinition {
 }
 
 /// Represents the user's preview configuration from either `preview` or `preview-features`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum PreviewOption {
     /// Whether to enable all experimental, preview features.
     Preview(bool),

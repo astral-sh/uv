@@ -16,7 +16,7 @@
 //! See the License for the specific language governing permissions and
 //! limitations under the License.
 //! ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum UnquoteError {
     UnterminatedSingleQuote {

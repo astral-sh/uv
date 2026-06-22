@@ -49,7 +49,6 @@ pub enum Error {
 }
 
 /// A [`CacheEntry`] which may or may not exist yet.
-#[derive(Debug, Clone)]
 pub struct CacheEntry(PathBuf);
 
 impl CacheEntry {
@@ -111,7 +110,6 @@ impl AsRef<Path> for CacheEntry {
 }
 
 /// A subdirectory within the cache.
-#[derive(Debug, Clone)]
 pub struct CacheShard(PathBuf);
 
 impl CacheShard {
@@ -160,7 +158,7 @@ impl Deref for CacheShard {
 /// The main cache abstraction.
 ///
 /// While the cache is active, it holds a read (shared) lock that prevents cache cleaning
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Cache {
     /// The cache directory.
     root: PathBuf,
@@ -866,7 +864,6 @@ impl Cache {
 }
 
 /// An archive (unzipped wheel) that exists in the local cache.
-#[derive(Debug, Clone)]
 #[allow(unused)]
 struct Link {
     /// The unique ID of the entry in the archive bucket.
@@ -939,7 +936,7 @@ pub trait CleanReporter: Send + Sync {
 
 /// The different kinds of data in the cache are stored in different bucket, which in our case
 /// are subdirectories of the cache root.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum CacheBucket {
     /// Wheels (excluding built wheels), alongside their metadata and cache policy.
     ///
@@ -1355,7 +1352,7 @@ impl Display for CacheBucket {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Freshness {
     /// The cache entry is fresh according to the [`Refresh`] policy.
     Fresh,

@@ -91,7 +91,7 @@ impl LockedFileError {
 }
 
 /// Whether to acquire a shared (read) lock or exclusive (write) lock.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum LockedFileMode {
     Shared,
     Exclusive,

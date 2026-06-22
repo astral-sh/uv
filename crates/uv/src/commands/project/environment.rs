@@ -25,7 +25,6 @@ use uv_types::SourceTreeEditablePolicy;
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
-#[derive(Debug)]
 pub(crate) struct EphemeralEnvironment(PythonEnvironment);
 
 impl From<PythonEnvironment> for EphemeralEnvironment {
@@ -99,7 +98,6 @@ impl EphemeralEnvironment {
 }
 
 /// A [`PythonEnvironment`] stored in the cache.
-#[derive(Debug)]
 pub(crate) struct CachedEnvironment(PythonEnvironment);
 
 impl From<CachedEnvironment> for PythonEnvironment {

@@ -5,7 +5,7 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PythonRequirement {
     source: PythonRequirementSource,
     /// The exact installed version of Python.
@@ -175,7 +175,7 @@ impl PythonRequirement {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash)]
 pub enum PythonRequirementSource {
     /// `--python-version`
     PythonVersion,

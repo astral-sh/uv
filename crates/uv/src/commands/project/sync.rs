@@ -496,7 +496,6 @@ pub(crate) async fn sync(
 }
 
 /// The outcome of a `lock` operation within a `sync` operation.
-#[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
@@ -580,7 +579,6 @@ fn identify_installation_target<'a>(
     }
 }
 
-#[derive(Debug, Clone)]
 #[expect(clippy::large_enum_variant)]
 enum SyncTarget {
     /// Sync a project environment.
@@ -605,7 +603,6 @@ impl SyncTarget {
     }
 }
 
-#[derive(Debug)]
 enum SyncEnvironment {
     /// A Python environment for a project.
     Project(ProjectEnvironment),
@@ -1071,7 +1068,7 @@ fn store_credentials_from_target(
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 struct WorkspaceReport {
     /// The workspace directory path.
@@ -1085,7 +1082,7 @@ impl From<&Workspace> for WorkspaceReport {
         }
     }
 }
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 struct ProjectReport {
     //
@@ -1111,7 +1108,7 @@ impl From<&SyncTarget> for TargetName {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 struct ScriptReport {
     /// The path to the script.
     path: PortablePathBuf,
@@ -1125,7 +1122,7 @@ impl From<&Pep723Script> for ScriptReport {
     }
 }
 
-#[derive(Serialize, Debug, Default)]
+#[derive(Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 enum SchemaVersion {
     /// An unstable, experimental schema.
@@ -1133,14 +1130,14 @@ enum SchemaVersion {
     Preview,
 }
 
-#[derive(Serialize, Debug, Default)]
+#[derive(Serialize, Default)]
 struct SchemaReport {
     /// The version of the schema.
     version: SchemaVersion,
 }
 
 /// A report of the uv sync operation
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 struct Report {
     /// The schema of this report.
@@ -1162,7 +1159,7 @@ struct Report {
 }
 
 /// The kind of target
-#[derive(Debug, Serialize, Clone, Copy)]
+#[derive(Serialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 enum TargetName {
     Project,
@@ -1179,7 +1176,7 @@ impl std::fmt::Display for TargetName {
 }
 
 /// Represents the action taken during a sync.
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 enum SyncAction {
     /// The environment was checked and required no updates.
@@ -1236,7 +1233,7 @@ impl SyncAction {
 }
 
 /// Represents the action taken during a lock.
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 enum LockAction {
     /// The lockfile was used without checking.
@@ -1265,7 +1262,7 @@ impl LockAction {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 struct PythonReport {
     path: PortablePathBuf,
     version: uv_pep508::StringVersion,
@@ -1291,7 +1288,7 @@ impl PythonReport {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 struct EnvironmentReport {
     /// The path to the environment.
     path: PortablePathBuf,
@@ -1336,7 +1333,7 @@ impl EnvironmentReport {
 }
 
 /// The report for a sync operation.
-#[derive(Serialize, Debug)]
+#[derive(Serialize)]
 struct SyncReport {
     /// The environment.
     environment: EnvironmentReport,
@@ -1387,7 +1384,7 @@ impl SyncReport {
 }
 
 /// A summary of all package changes performed during sync.
-#[derive(Serialize, Debug, Clone, Default)]
+#[derive(Serialize, Default)]
 struct PackageChangesReport(Vec<PackageChangeReport>);
 
 impl PackageChangesReport {
@@ -1447,7 +1444,7 @@ enum PackageChangeAction {
 }
 
 /// The report for a lock operation.
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct LockReport {
     /// The path to the lockfile
     path: PortablePathBuf,

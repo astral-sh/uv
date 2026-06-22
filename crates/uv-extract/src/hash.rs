@@ -6,7 +6,6 @@ use tokio::io::{AsyncReadExt, ReadBuf};
 
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
-#[derive(Debug)]
 pub enum Hasher {
     Md5(md5::Md5),
     Sha256(sha2::Sha256),

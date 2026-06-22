@@ -20,7 +20,7 @@ use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
 /// ```
 ///
 /// This type stores those expanded tags.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExpandedTags(smallvec::SmallVec<[WheelTag; 1]>);
 
 impl ExpandedTags {

@@ -13,7 +13,7 @@ use crate::{Identifier, IdentifierParseError};
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModuleName(Box<str>);
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Error)]
 pub enum ModuleNameParseError {
     #[error("A module name must not be empty")]
     Empty,

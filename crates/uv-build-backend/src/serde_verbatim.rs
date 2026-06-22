@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 /// Preserves the verbatim string representation when deserializing `T`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct SerdeVerbatim<T> {
     verbatim: String,
     inner: T,

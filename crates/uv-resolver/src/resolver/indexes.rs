@@ -16,7 +16,6 @@ use uv_normalize::PackageName;
 /// ```
 ///
 /// [`Indexes`] would contain a single entry mapping `torch` to `https://download.pytorch.org/whl/cu130`.
-#[derive(Debug, Default, Clone)]
 pub(crate) struct Indexes(ForkMap<IndexMetadata>);
 
 impl Indexes {

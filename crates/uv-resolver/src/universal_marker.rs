@@ -391,7 +391,7 @@ impl std::fmt::Debug for UniversalMarker {
 ///
 /// This encapsulates the encoding of extras and groups into PEP 508
 /// markers.
-#[derive(Default, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy)]
 pub struct ConflictMarker {
     marker: MarkerTree,
 }
@@ -573,7 +573,6 @@ fn encode_project(package: &PackageName) -> ExtraName {
     ExtraName::from_owned(format!("project-{package_len}-{package}")).unwrap()
 }
 
-#[derive(Debug)]
 enum ParsedRawExtra<'a> {
     Project { package: &'a str },
     Extra { package: &'a str, extra: &'a str },

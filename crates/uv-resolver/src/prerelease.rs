@@ -5,7 +5,7 @@ use uv_pep440::Operator;
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -131,7 +131,7 @@ impl PrereleaseStrategy {
 }
 
 /// The pre-release strategy for a given package.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) enum AllowPrerelease {
     /// Allow all pre-release versions.
     Yes,

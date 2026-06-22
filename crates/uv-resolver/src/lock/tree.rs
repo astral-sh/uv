@@ -20,7 +20,6 @@ use uv_pypi_types::ResolverMarkerEnvironment;
 use crate::lock::{Package, PackageId};
 use crate::{ConflictMarker, Lock, PackageMap, UniversalMarker};
 
-#[derive(Debug)]
 pub struct TreeDisplay<'env> {
     /// The constructed dependency graph.
     graph: petgraph::graph::Graph<Node<'env>, Edge<'env>, petgraph::Directed>,
@@ -733,14 +732,14 @@ impl<'env> TreeDisplay<'env> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct VisitedNode<'env> {
     package_id: &'env PackageId,
     expanded_extras: BTreeSet<&'env ExtraName>,
     marker: Option<UniversalMarker>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
 enum Node<'env> {
     /// The synthetic root node.
     Root,
@@ -748,7 +747,6 @@ enum Node<'env> {
     Package(&'env PackageId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum Edge<'env> {
     Prod(Option<RequestedExtras<'env>>, UniversalMarker),
     Optional(
@@ -800,7 +798,7 @@ impl<'env> Edge<'env> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 enum RequestedExtras<'env> {
     Dependency(&'env BTreeSet<ExtraName>),
     Requirement(&'env [ExtraName]),
@@ -849,7 +847,7 @@ impl<'env> RequestedExtras<'env> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
 enum EdgeKind<'env> {
     Prod,
     Optional(&'env ExtraName),

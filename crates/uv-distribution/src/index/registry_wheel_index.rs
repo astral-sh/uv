@@ -19,7 +19,6 @@ use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// An entry in the [`RegistryWheelIndex`].
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct IndexEntry<'index> {
     /// The cached distribution.
     dist: CachedRegistryDist,
@@ -47,7 +46,6 @@ impl<'index> IndexEntry<'index> {
 }
 
 /// A local index of distributions that originate from a registry, like `PyPI`.
-#[derive(Debug)]
 pub struct RegistryWheelIndex<'a> {
     cache: &'a Cache,
     tags: &'a Tags,

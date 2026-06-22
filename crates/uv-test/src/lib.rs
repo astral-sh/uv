@@ -2153,7 +2153,7 @@ fn python_installations_for_versions(
     Ok(selected_pythons)
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum WindowsFilters {
     Platform,
     Universal,

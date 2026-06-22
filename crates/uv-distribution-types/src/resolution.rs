@@ -11,7 +11,7 @@ use crate::{
 /// This is similar to [`ResolverOutput`], but represents a resolution for a subset of all
 /// marker environments. For example, the resolution is guaranteed to contain at most one version
 /// for a given package.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Resolution {
     graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,

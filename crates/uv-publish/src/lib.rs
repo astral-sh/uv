@@ -743,7 +743,7 @@ pub async fn upload_two_phase(
     credentials: &Credentials,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
-    #[derive(Debug, Deserialize)]
+    #[derive(Deserialize)]
     struct ReserveResponse {
         upload_url: Option<String>,
         upload_headers: Option<FxHashMap<String, String>>,
@@ -1148,7 +1148,6 @@ async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, Pu
     Ok(Metadata23::parse(&contents)?)
 }
 
-#[derive(Debug, Clone)]
 pub struct FormMetadata(Vec<(&'static str, String)>);
 
 impl FormMetadata {

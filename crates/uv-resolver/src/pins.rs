@@ -5,7 +5,7 @@ use uv_normalize::PackageName;
 
 use crate::candidate_selector::Candidate;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct FilePin {
     /// The concrete distribution chosen for installation and locking.
     dist: ResolvedDist,
@@ -18,7 +18,7 @@ struct FilePin {
 /// For example, given `Flask==3.0.0`, the [`FilePins`] would contain a mapping from `Flask` to
 /// `3.0.0` to the specific wheel or source distribution archive that was pinned for installation,
 /// along with the concrete distribution whose metadata was used during resolution.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub(crate) struct FilePins(FxHashMap<(PackageName, uv_pep440::Version), FilePin>);
 
 // Inserts are common (every time we select a version) while reads are rare (converting the

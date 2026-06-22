@@ -12,7 +12,7 @@ use crate::preferences::Preferences;
 use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 
 /// A manifest of requirements, constraints, and preferences.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Manifest {
     /// The direct requirements for the project.
     pub(crate) requirements: Vec<Requirement>,

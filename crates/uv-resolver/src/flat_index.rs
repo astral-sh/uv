@@ -19,7 +19,7 @@ use uv_types::HashStrategy;
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry, indexed by [`PackageName`]
 /// and [`Version`].
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct FlatIndex {
     /// The list of [`FlatDistributions`] from the `--find-links` entries, indexed by package name.
     index: FxHashMap<PackageName, FlatDistributions>,
@@ -64,7 +64,7 @@ impl FlatIndex {
 
 /// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
 /// by [`Version`].
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
 
 impl FlatDistributions {

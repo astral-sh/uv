@@ -40,7 +40,7 @@ pub fn flag(yes: bool, no: bool, name: &str) -> Option<bool> {
 }
 
 /// The source of a boolean flag value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FlagSource {
     /// The flag was set via command-line argument.
     Cli,

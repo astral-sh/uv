@@ -18,7 +18,7 @@ use uv_workspace::{Editability, Workspace, WorkspaceMember};
 use crate::commands::project::{ProjectError, find_requires_python};
 
 /// A target that can be resolved into a lockfile.
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub(crate) enum LockTarget<'lock> {
     Workspace(&'lock Workspace),
     Script(&'lock Pep723Script),

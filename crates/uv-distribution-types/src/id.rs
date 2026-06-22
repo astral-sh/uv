@@ -14,7 +14,6 @@ use uv_redacted::DisplaySafeUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PackageId {
     /// The identifier consists of a package name.
     Name(PackageName),
@@ -49,7 +48,7 @@ impl Display for PackageId {
 /// while preserving semantic `subdirectory` information. Git URLs preserve semantic
 /// `subdirectory` information while ignoring unrelated fragments. Local file URLs are keyed by
 /// their resolved path and kind.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VersionId {
     /// The identifier consists of a package name and version.
     NameVersion(PackageName, Version),
@@ -219,7 +218,7 @@ pub enum DistributionId {
 }
 
 /// A unique identifier for a resource, like a URL or a Git repository.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone)]
 pub enum ResourceId {
     Url(RepositoryUrl),
     PathBuf(PathBuf),

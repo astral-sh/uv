@@ -8,7 +8,7 @@ use uv_static::EnvVars;
 /// system.
 ///
 /// See: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]

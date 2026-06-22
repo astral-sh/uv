@@ -1,10 +1,9 @@
 /// The format to use when exporting a `uv.lock` file.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum ExportFormat {
     /// Export in `requirements.txt` format.
-    #[default]
     #[serde(rename = "requirements.txt", alias = "requirements-txt")]
     #[cfg_attr(
         feature = "clap",
@@ -25,12 +24,11 @@ pub enum ExportFormat {
 }
 
 /// The output format to use in `uv pip compile`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum PipCompileFormat {
     /// Export in `requirements.txt` format.
-    #[default]
     #[serde(rename = "requirements.txt", alias = "requirements-txt")]
     #[cfg_attr(
         feature = "clap",

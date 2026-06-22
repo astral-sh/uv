@@ -175,7 +175,7 @@ impl std::fmt::Display for Operator {
 }
 
 /// An error that occurs when parsing an invalid version specifier operator.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OperatorParseError {
     pub(crate) got: String,
 }
@@ -1056,7 +1056,7 @@ impl FromStr for Version {
 }
 
 /// Various ways to "bump" a version
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum BumpCommand {
     /// Bump or set the release component
     BumpRelease {
@@ -1600,7 +1600,7 @@ struct VersionFull {
 /// * `1.2.3.*` -> wildcard pattern
 /// * `1.2.*.4` -> invalid
 /// * `1.0-dev1.*` -> invalid
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionPattern {
     version: Version,
     wildcard: bool,
@@ -1739,7 +1739,7 @@ impl std::fmt::Display for Prerelease {
 
 /// Either a sequence of local segments or [`LocalVersion::Sentinel`], an internal-only value that
 /// compares greater than all other local versions.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 #[cfg_attr(
     feature = "rkyv",
     derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
@@ -1753,7 +1753,7 @@ pub enum LocalVersion {
 }
 
 /// Like [`LocalVersion`], but using a slice
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Eq, PartialEq, Debug, Hash)]
 pub enum LocalVersionSlice<'a> {
     /// Like [`LocalVersion::Segments`]
     Segments(&'a [LocalSegment]),
@@ -1930,7 +1930,6 @@ impl Ord for LocalSegment {
 /// parsing a version, but permits a trailing wildcard. e.g., `1.2.*`.
 ///
 /// [pep440]: https://packaging.python.org/en/latest/specifications/version-specifiers/
-#[derive(Debug)]
 struct Parser<'a> {
     /// The version string we are parsing.
     v: &'a [u8],
@@ -2420,7 +2419,6 @@ impl<'a> Parser<'a> {
 /// Stores the numbers found in the release portion of a version.
 ///
 /// We use this in the version parser to avoid allocating in the 90+% case.
-#[derive(Debug)]
 enum ReleaseNumbers {
     Inline { numbers: [u64; 4], len: usize },
     Vec(Vec<u64>),
@@ -2579,7 +2577,7 @@ impl std::fmt::Debug for ByteSet {
 }
 
 /// An error that occurs when parsing a [`Version`] string fails.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionParseError {
     kind: Box<ErrorKind>,
 }
@@ -2650,7 +2648,7 @@ impl std::fmt::Display for VersionParseError {
 }
 
 /// The kind of error that occurs when parsing a `Version`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ErrorKind {
     /// Occurs when a version pattern is found but a normal verbatim version is
     /// expected.
@@ -2697,7 +2695,7 @@ impl From<ErrorKind> for VersionParseError {
 }
 
 /// An error that occurs when parsing a [`VersionPattern`] string fails.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VersionPatternParseError {
     kind: Box<PatternErrorKind>,
 }
@@ -2716,7 +2714,7 @@ impl std::fmt::Display for VersionPatternParseError {
 }
 
 /// The kind of error that occurs when parsing a `VersionPattern`.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum PatternErrorKind {
     Version(VersionParseError),
     WildcardNotTrailing,

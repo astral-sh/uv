@@ -32,7 +32,7 @@ use uv_platform::Platform;
 use uv_redacted::DisplaySafeUrl;
 
 /// Binary tools that can be installed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Binary {
     Ruff,
     Ty,
@@ -211,7 +211,7 @@ impl fmt::Display for Binary {
 }
 
 /// Archive formats for binary downloads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum ArchiveFormat {
     Zip,
     TarGz,
@@ -237,7 +237,7 @@ impl From<ArchiveFormat> for SourceDistExtension {
 }
 
 /// Specifies which version of a binary to use.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 pub enum BinVersion {
     /// Use the binary's default pinned version.
     Default,
@@ -303,7 +303,7 @@ fn parse_url(url: String) -> Result<DisplaySafeUrl, Error> {
 }
 
 /// Binary version information from the versions manifest.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct BinVersionInfo {
     #[serde(deserialize_with = "deserialize_version")]
     version: Version,
@@ -320,7 +320,7 @@ where
 }
 
 /// Binary artifact information.
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct BinArtifact {
     platform: String,
     url: String,

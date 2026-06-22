@@ -424,7 +424,7 @@ pub(crate) async fn publish(
 }
 
 /// Whether to allow prompting for username and password.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Prompt {
     Enabled,
     #[allow(dead_code)]

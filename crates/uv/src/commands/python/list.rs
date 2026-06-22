@@ -23,7 +23,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::PythonListKinds;
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Eq, PartialEq, PartialOrd, Ord)]
 enum Kind {
     Download,
     Managed,

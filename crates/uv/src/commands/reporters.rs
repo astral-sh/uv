@@ -27,14 +27,12 @@ use uv_static::EnvVars;
 static HAS_UV_TEST_NO_CLI_PROGRESS: LazyLock<bool> =
     LazyLock::new(|| env::var(EnvVars::UV_TEST_NO_CLI_PROGRESS).is_ok());
 
-#[derive(Debug)]
 struct ProgressReporter {
     printer: Printer,
     root: ProgressBar,
     mode: ProgressMode,
 }
 
-#[derive(Debug)]
 enum ProgressMode {
     /// Reports top-level progress.
     Single,
@@ -104,7 +102,7 @@ impl BarState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Direction {
     Upload,
     Download,
@@ -438,7 +436,6 @@ impl ProgressReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct PrepareReporter {
     reporter: ProgressReporter,
 }
@@ -509,7 +506,6 @@ impl uv_installer::PrepareReporter for PrepareReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct ResolverReporter {
     reporter: ProgressReporter,
 }
@@ -615,7 +611,6 @@ impl uv_distribution::Reporter for ResolverReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct InstallReporter {
     progress: ProgressBar,
 }
@@ -651,7 +646,6 @@ impl uv_installer::InstallReporter for InstallReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct PythonDownloadReporter {
     reporter: ProgressReporter,
 }
@@ -691,7 +685,6 @@ impl uv_python::downloads::Reporter for PythonDownloadReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct PublishReporter {
     reporter: ProgressReporter,
 }
@@ -741,7 +734,6 @@ impl uv_publish::Reporter for PublishReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct LatestVersionReporter {
     progress: ProgressBar,
 }
@@ -779,7 +771,6 @@ impl LatestVersionReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct AuditReporter {
     progress: ProgressBar,
 }
@@ -805,7 +796,6 @@ impl AuditReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct CleaningDirectoryReporter {
     bar: ProgressBar,
 }
@@ -834,7 +824,6 @@ impl uv_cache::CleanReporter for CleaningDirectoryReporter {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct CleaningPackageReporter {
     bar: ProgressBar,
 }

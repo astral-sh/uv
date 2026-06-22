@@ -81,7 +81,7 @@ pub struct Project {
     pub dynamic: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PyprojectTomlWire {
     name: Option<PackageName>,

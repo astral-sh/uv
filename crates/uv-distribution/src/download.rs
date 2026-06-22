@@ -9,7 +9,6 @@ use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 use crate::Error;
 
 /// A locally available wheel.
-#[derive(Debug, Clone)]
 pub struct LocalWheel {
     /// The remote distribution from which this wheel was downloaded.
     pub(crate) dist: Dist,

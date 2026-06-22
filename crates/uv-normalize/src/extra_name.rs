@@ -10,7 +10,7 @@ use uv_small_str::SmallString;
 use crate::{InvalidNameError, validate_and_normalize_ref};
 
 /// Either the literal "all" or a list of extras
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum DefaultExtras {
     /// All extras are defaulted

@@ -4,7 +4,7 @@ use std::str::Chars;
 use crate::{Pep508Error, Pep508ErrorSource, Pep508Url};
 
 /// A [`Cursor`] over a string.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,

@@ -1,4 +1,4 @@
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum DryRun {
     /// The operation should execute in dry run mode.
     Enabled,

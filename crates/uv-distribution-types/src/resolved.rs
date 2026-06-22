@@ -27,7 +27,6 @@ pub enum ResolvedDist {
 }
 
 /// A variant of [`ResolvedDist`] with borrowed inner distributions.
-#[derive(Debug, Clone)]
 pub enum ResolvedDistRef<'a> {
     Installed {
         dist: &'a InstalledDist,

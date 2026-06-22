@@ -119,7 +119,7 @@ pub struct PackageMetadata {
 }
 
 /// A validated three-component compatibility tag for generated wheels.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct WheelTag(String);
 
 impl WheelTag {

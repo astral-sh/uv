@@ -23,7 +23,7 @@ use uv_static::EnvVars;
 
 const AZURE_STORAGE_VERSION: &str = "2023-11-03";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Credentials {
     /// RFC 7617 HTTP Basic Authentication
     Basic {
@@ -47,7 +47,7 @@ pub enum CredentialsFromUrlError {
     InvalidPasswordUtf8(#[source] Utf8Error),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Username(Option<String>);
 
@@ -89,7 +89,7 @@ impl From<Option<String>> for Username {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Password(String);
 
@@ -110,7 +110,7 @@ impl fmt::Debug for Password {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct Token(Vec<u8>);
 

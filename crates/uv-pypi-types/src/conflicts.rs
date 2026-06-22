@@ -16,7 +16,7 @@ use crate::dependency_groups::{DependencyGroupSpecifier, DependencyGroups};
 /// This is useful to force the resolver to fork according to extras that have
 /// unavoidable conflicts with each other. (The alternative is that resolution
 /// will fail.)
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Deserialize)]
 pub struct Conflicts(Vec<ConflictSet>);
 
 impl Conflicts {
@@ -357,7 +357,7 @@ impl From<(PackageName, GroupName)> for ConflictItem {
 ///
 /// Each item is a pair of a package and a corresponding extra name for that
 /// package.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq)]
 pub struct ConflictItemRef<'a> {
     package: &'a PackageName,
     kind: ConflictKindRef<'a>,
@@ -455,7 +455,7 @@ impl ConflictKind {
 /// The actual conflicting data for a package, by reference.
 ///
 /// That is, either a borrowed extra name or a borrowed group name.
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq)]
 pub enum ConflictKindRef<'a> {
     Extra(&'a ExtraName),
     Group(&'a GroupName),
@@ -503,7 +503,7 @@ impl hashbrown::Equivalent<ConflictKind> for ConflictKindRef<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ConflictEntry {
     package: Option<PackageName>,
     extra: Option<ExtraName>,
@@ -565,7 +565,7 @@ pub enum ConflictError {
 ///
 /// N.B. `Conflicts` is still used for (de)serialization. Specifically, in the
 /// lock file, where the package name is required.
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct SchemaConflicts(Vec<SchemaConflictSet>);
 
@@ -624,7 +624,7 @@ impl SchemaConflicts {
 /// schema format does not allow specifying the package name (or will make it
 /// optional in the future), where as the in-memory format needs the package
 /// name.
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
@@ -685,7 +685,7 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
 ///
 /// Each item is a pair of an (optional) package and a corresponding extra or group name for that
 /// package.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct ConflictItemWire {
@@ -832,7 +832,7 @@ impl From<SchemaConflictItem> for ConflictItemWire {
 /// won't happen.
 ///
 /// We then use these inferences to simplify the conflict markers.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Eq, PartialEq, PartialOrd, Ord)]
 pub struct Inference {
     pub included: bool,
     pub item: ConflictItem,

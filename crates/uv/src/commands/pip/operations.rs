@@ -421,7 +421,7 @@ impl Name for ChangedDist {
 }
 
 /// The [`Version`] or [`VerbatimUrl`] for a changed dist.
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) enum ShortSpecifier<'a> {
     Version(&'a Version),
     Url(&'a VerbatimUrl),
@@ -437,7 +437,7 @@ impl std::fmt::Display for ShortSpecifier<'_> {
 }
 
 /// The [`InstalledVersion`] or [`VerbatimUrl`] for a changed dist.
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(PartialOrd, Ord, PartialEq, Eq)]
 pub(crate) enum LongSpecifier<'a> {
     InstalledVersion(InstalledVersion<'a>),
     Url(&'a VerbatimUrl),
@@ -484,7 +484,7 @@ impl ChangedDist {
 }
 
 /// A summary of the changes made to the environment during an installation.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct Changelog {
     /// The distributions that were installed.
     pub(crate) installed: HashSet<ChangedDist>,
@@ -716,7 +716,7 @@ pub(crate) async fn install(
     Ok(changelog)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum InstallPhase {
     /// A dedicated phase for building and installing packages with build-isolation disabled.
     Shared,

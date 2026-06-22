@@ -155,7 +155,6 @@ pub mod test {
 
     /// A scope guard which ensures that the global preview state is configured
     /// and consistent for the duration of its lifetime.
-    #[derive(Debug)]
     #[expect(unused)]
     pub struct FeaturesGuard(MutexGuard<'static, ()>);
 
@@ -221,7 +220,7 @@ pub mod test {
 
 #[bitflags]
 #[repr(u64)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PreviewFeature {
     PythonInstallDefault = 1 << 0,
     PythonUpgrade = 1 << 1,
@@ -309,7 +308,7 @@ impl Display for PreviewFeature {
     }
 }
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Error)]
 #[error("Unknown feature flag")]
 pub struct PreviewFeatureParseError;
 
@@ -358,7 +357,7 @@ impl FromStr for PreviewFeature {
     }
 }
 
-#[derive(Debug, Error, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, Copy, PartialEq)]
 #[error("preview feature name cannot be empty")]
 pub struct EmptyPreviewFeatureNameError;
 
@@ -422,7 +421,7 @@ impl schemars::JsonSchema for MaybePreviewFeature {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub struct Preview {
     flags: BitFlags<PreviewFeature>,
 }

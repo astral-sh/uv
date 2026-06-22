@@ -14,7 +14,6 @@ use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 use crate::pyproject::{DependencyGroupSettings, PyProjectToml, ToolUvDependencyGroups};
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
-#[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
 
 #[derive(Debug, Default, Clone)]

@@ -3,7 +3,6 @@ use rustc_hash::FxHashMap;
 use crate::lock::{Package, PackageId};
 
 /// A map from package to values, indexed by [`PackageId`].
-#[derive(Debug, Clone)]
 pub struct PackageMap<T>(FxHashMap<PackageId, T>);
 
 impl<T> Default for PackageMap<T> {

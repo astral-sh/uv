@@ -575,7 +575,7 @@ impl SitePackages {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum InstallationStrategy {
     /// A permissive installation strategy, which accepts existing installations even if the source
     /// type differs, as in the `pip` and `uv pip` CLIs.
@@ -597,7 +597,6 @@ pub enum InstallationStrategy {
 }
 
 /// We check if all requirements are already satisfied, recursing through the requirements tree.
-#[derive(Debug)]
 pub enum SatisfiesResult {
     /// All requirements are recursively satisfied.
     Fresh {
@@ -618,7 +617,6 @@ impl IntoIterator for SitePackages {
     }
 }
 
-#[derive(Debug)]
 pub enum SitePackagesDiagnostic {
     MetadataUnavailable {
         /// The package that is missing metadata.

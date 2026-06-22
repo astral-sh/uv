@@ -7,7 +7,6 @@ use std::process::Command;
 
 pub struct WindowsRunnable;
 
-#[derive(Debug)]
 enum WindowsRunnableKind {
     /// Windows PE (.exe)
     Executable,

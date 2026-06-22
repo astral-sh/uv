@@ -20,7 +20,7 @@ fn is_glob_like(part: Component) -> bool {
         })
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 struct GlobParts {
     base: PathBuf,
     pattern: PathBuf,

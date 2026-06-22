@@ -20,7 +20,6 @@ use crate::Error;
 pub use uv_fs::link::LinkMode;
 
 /// Shared state for concurrent wheel installations.
-#[derive(Debug, Default)]
 pub struct InstallState {
     /// Directory-level locks to prevent concurrent write corruption.
     locks: CopyLocks,

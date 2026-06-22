@@ -7,7 +7,7 @@ use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 /// Metadata for a distribution that was installed via a direct URL.
 ///
 /// See: <https://packaging.python.org/en/latest/specifications/direct-url-data-structure/>
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", untagged)]
 pub enum DirectUrl {
     /// The direct URL is a local directory. For example:
@@ -48,14 +48,14 @@ pub enum DirectUrl {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DirInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub editable: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ArchiveInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,7 +64,7 @@ pub struct ArchiveInfo {
     pub(crate) hashes: Option<BTreeMap<String, String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct VcsInfo {
     pub vcs: VcsKind,
@@ -76,7 +76,7 @@ pub struct VcsInfo {
     pub git_lfs: Option<bool>, // Prefix lfs with VcsKind::Git per PEP 610
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VcsKind {
     Git,

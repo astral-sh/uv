@@ -13,7 +13,6 @@ use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
 
 /// A [`std::fmt::Display`] implementation for the resolution graph.
-#[derive(Debug)]
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolverOutput,
@@ -37,7 +36,6 @@ pub struct DisplayResolutionGraph<'a> {
     annotation_style: AnnotationStyle,
 }
 
-#[derive(Debug)]
 enum DisplayResolutionGraphNode<'dist> {
     Root,
     Dist(RequirementsTxtDist<'dist>),

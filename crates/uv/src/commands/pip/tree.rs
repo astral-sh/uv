@@ -191,7 +191,6 @@ pub(crate) async fn pip_tree(
     Ok(ExitStatus::Success)
 }
 
-#[derive(Debug)]
 pub(crate) struct DisplayDependencyGraph<'env> {
     /// The constructed dependency graph.
     graph: petgraph::graph::Graph<

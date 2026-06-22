@@ -58,7 +58,7 @@ impl VulnerabilityID {
 /// These are a subset of the possible project statuses defined in [PEP 792].
 ///
 /// [PEP 792]: https://peps.python.org/pep-0792/
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum AdverseStatus {
     /// The project is archived, meaning it is read-only and no longer maintained.
     Archived,

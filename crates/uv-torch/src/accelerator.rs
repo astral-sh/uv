@@ -34,7 +34,7 @@ pub enum AcceleratorError {
     UnknownAmdGpuArchitecture(String),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(PartialEq)]
 pub(crate) enum Accelerator {
     /// The CUDA driver version (e.g., `550.144.03`).
     ///

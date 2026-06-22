@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uv_redacted::DisplaySafeUrl;
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BaseUrl(
     #[serde(
         serialize_with = "DisplaySafeUrl::serialize_internal",

@@ -36,7 +36,7 @@ pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
     Some(path)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq)]
 struct LocalHeaderEntry {
     /// The relative path of the entry, as computed from the local file header.
     relpath: PathBuf,
@@ -50,7 +50,6 @@ struct LocalHeaderEntry {
     data_descriptor: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct ComputedEntry {
     /// The computed CRC32 checksum of the entry.
     crc32: u32,

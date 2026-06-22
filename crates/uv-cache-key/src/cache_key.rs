@@ -293,7 +293,6 @@ where
     }
 }
 
-#[derive(Clone)]
 pub struct CacheKeyHasher {
     inner: SeaHasher,
 }

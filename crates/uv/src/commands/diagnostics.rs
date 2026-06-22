@@ -39,7 +39,7 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 
 /// A rich reporter for operational diagnostics, i.e., errors that occur during resolution and
 /// installation.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct OperationDiagnostic {
     /// Caller-provided hints to render after the error output.
     hints: Vec<String>,

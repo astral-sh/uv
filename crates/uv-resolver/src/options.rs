@@ -6,7 +6,7 @@ use crate::fork_strategy::ForkStrategy;
 use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Options {
     pub resolution_mode: ResolutionMode,
     pub prerelease_mode: PrereleaseMode,
@@ -21,7 +21,7 @@ pub struct Options {
 }
 
 /// Builder for [`Options`].
-#[derive(Debug, Default, Clone)]
+#[derive(Default)]
 pub struct OptionsBuilder {
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
@@ -131,7 +131,7 @@ impl OptionsBuilder {
 /// Whether the [`Options`] are configurable or fixed.
 ///
 /// Applies to the [`ResolutionMode`], [`PrereleaseMode`], and [`DependencyMode`] fields.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum Flexibility {
     /// The setting is configurable.
     #[default]

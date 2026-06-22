@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 /// A comma-separated string of requirements, e.g., `"flask,anyio"`, that takes extras into account
 /// (i.e., treats `"psycopg[binary,pool]"` as a single requirement).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommaSeparatedRequirements(Vec<String>);
 
 impl IntoIterator for CommaSeparatedRequirements {

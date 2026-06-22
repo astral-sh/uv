@@ -6,7 +6,7 @@ use crate::Tool;
 
 /// A `uv-receipt.toml` file tracking the installation of a tool.
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct ToolReceipt {
     pub(crate) tool: Tool,
 

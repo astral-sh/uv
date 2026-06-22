@@ -24,7 +24,7 @@ mod combine;
 mod settings;
 
 /// The [`Options`] as loaded from a configuration file on disk.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct FilesystemOptions(Options);
 
 impl FilesystemOptions {
@@ -684,7 +684,7 @@ pub enum Error {
     InvalidEnvironmentVariable(#[from] InvalidEnvironmentVariable),
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Concurrency {
     pub downloads: Option<NonZeroUsize>,
     pub builds: Option<NonZeroUsize>,
@@ -694,7 +694,7 @@ pub struct Concurrency {
 /// A boolean flag parsed from an environment variable.
 ///
 /// Stores both the value and the environment variable name for use in error messages.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct EnvFlag {
     pub value: Option<bool>,
     pub env_var: &'static str,
@@ -714,7 +714,6 @@ impl EnvFlag {
 ///
 /// This is currently a subset of all respected environment variables, most are parsed via Clap at
 /// the CLI level, however there are limited semantics in that context.
-#[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
     pub ruff_path: Option<PathBuf>,
     pub ty_path: Option<PathBuf>,

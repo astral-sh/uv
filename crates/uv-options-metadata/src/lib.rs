@@ -172,7 +172,7 @@ impl Debug for OptionSet {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+#[derive(Serialize)]
 pub struct OptionField {
     pub doc: &'static str,
     /// Ex) `"false"`
@@ -188,7 +188,7 @@ pub struct OptionField {
     pub uv_toml_only: bool,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+#[derive(Serialize)]
 pub struct Deprecated {
     pub since: Option<&'static str>,
     pub message: Option<&'static str>,
@@ -235,7 +235,7 @@ impl Display for OptionField {
 
 /// A possible value for an enum, similar to Clap's `PossibleValue` type (but without a dependency
 /// on Clap).
-#[derive(Debug, Eq, PartialEq, Clone, Serialize)]
+#[derive(Serialize)]
 pub struct PossibleValue {
     pub name: String,
     pub help: Option<String>,

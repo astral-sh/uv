@@ -10,10 +10,10 @@ use thiserror::Error;
 /// (<https://docs.python.org/3.13/reference/lexical_analysis.html#identifiers>) exactly
 /// (we just use Rust's `is_alphabetic`) and we don't convert to NFKC, but it's good enough
 /// for our validation purposes.
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug)]
 pub struct Identifier(Box<str>);
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Error)]
 pub enum IdentifierParseError {
     #[error("An identifier must not be empty")]
     Empty,

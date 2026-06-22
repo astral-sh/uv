@@ -31,7 +31,7 @@ pub(crate) struct Args {
     pub(crate) mode: Mode,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct TargetConfig {
     host_cc: Option<String>,
     host_cxx: Option<String>,

@@ -146,7 +146,7 @@ pub struct ErrorOptions<'a, C = AnsiColors, W = Stderr> {
 }
 
 /// A standard-error writer for formatted error chains.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Stderr;
 
 impl fmt::Write for Stderr {

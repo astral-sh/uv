@@ -105,7 +105,7 @@ enum RequirementsTxtStatement {
 
 /// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
 /// the future also editable and similar information.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, PartialEq)]
 pub struct RequirementEntry {
     /// The actual PEP 508 requirement.
     pub requirement: RequirementsTxtRequirement,
@@ -142,7 +142,7 @@ impl From<RequirementsTxtRequirement> for UnresolvedRequirementSpecification {
 }
 
 /// Parsed and flattened requirements.txt with requirements and constraints
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct RequirementsTxt {
     /// The actual requirements with the hashes.
     pub requirements: Vec<RequirementEntry>,
@@ -612,7 +612,7 @@ impl RequirementsTxt {
 /// An unsupported option (e.g., `--trusted-host`).
 ///
 /// See: <https://pip.pypa.io/en/stable/reference/requirements-file-format/#global-options>
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum UnsupportedOption {
     PreferBinary,
     RequireHashes,
@@ -1496,7 +1496,6 @@ impl RequirementsTxtParserError {
 
 /// Avoid infinite recursion through recursive inclusions, while also being mindful of nested
 /// requirements and constraint inclusions.
-#[derive(Debug)]
 enum VisitedFiles<'a> {
     /// The requirements are included as regular requirements, and can recursively include both
     /// requirements and constraints.

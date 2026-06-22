@@ -52,7 +52,7 @@ use uv_static::EnvVars;
 use crate::accelerator::{Accelerator, AcceleratorError, AmdGpuArchitecture};
 
 /// The strategy to use when determining the appropriate PyTorch index.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
@@ -197,7 +197,7 @@ pub enum TorchMode {
     Xpu,
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum TorchSource {
     /// Download PyTorch builds from the official PyTorch index.
     #[default]
@@ -207,7 +207,7 @@ pub enum TorchSource {
 }
 
 /// The strategy to use when determining the appropriate PyTorch index.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum TorchStrategy {
     /// Select the appropriate PyTorch index based on the operating system and CUDA driver version (e.g., `550.144.03`).
     Cuda {
@@ -542,7 +542,7 @@ impl TorchStrategy {
 }
 
 /// The available backends for PyTorch.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TorchBackend {
     Cpu,
     Cu130,
