@@ -26,6 +26,24 @@ pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
     if file_name.contains('\0') {
         return None;
     }
+    let path = PathBuf::from(file_name);
+    let mut depth = 0usize;
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => return None,
+            Component::ParentDir => depth = depth.checked_sub(1)?,
+            Component::Normal(_) => depth += 1,
+            Component::CurDir => (),
+        }
+    }
+    Some(path)
+}
+
+/// Normalize a file name for use in an extracted-directory digest.
+fn digest_enclosed_name(file_name: &str) -> Option<PathBuf> {
+    if file_name.contains('\0') {
+        return None;
+    }
     let mut path = PathBuf::new();
     for component in Path::new(file_name).components() {
         match component {
@@ -35,6 +53,14 @@ pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
         }
     }
     Some(path)
+}
+
+fn enclosed_name_for_extraction(file_name: &str, hash_contents: bool) -> Option<PathBuf> {
+    if hash_contents {
+        digest_enclosed_name(file_name)
+    } else {
+        enclosed_name(file_name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,7 +189,7 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
 
         // Sanitize the file name to prevent directory traversal attacks.
-        let Some(relpath) = enclosed_name(path) else {
+        let Some(relpath) = enclosed_name_for_extraction(path, hash_contents) else {
             warn!("Skipping unsafe file name: {path}");
 
             // Close current file prior to proceeding, as per:
@@ -175,7 +201,7 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
             continue;
         };
-        if !output_paths.insert(relpath.clone()) {
+        if hash_contents && !output_paths.insert(relpath.clone()) {
             return Err(Error::DuplicateOutputPath { path: relpath });
         }
 
@@ -469,7 +495,7 @@ async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 }
 
                 // Sanitize the file name to prevent directory traversal attacks.
-                let Some(relpath) = enclosed_name(path) else {
+                let Some(relpath) = enclosed_name_for_extraction(path, hash_contents) else {
                     continue;
                 };
                 let is_dir = entry.dir()?;

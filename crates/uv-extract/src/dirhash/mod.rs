@@ -39,6 +39,50 @@ const FRAME_CONTENT_BLAKE3: u8 = 6;
 pub struct DirectoryDigest(String);
 
 impl DirectoryDigest {
+    /// Compute a deterministic digest for extracted file and empty-directory entries.
+    ///
+    /// The v1 construction uses BLAKE3's derive-key mode for scheme-level domain separation. Its
+    /// input is a sorted stream of type-length-value frames. Empty directories and files are
+    /// distinct top-level frame types, while each file contains separate path, size, executable,
+    /// and content digest frames. Each frame is encoded as a one-byte type, an eight-byte
+    /// little-endian length, and the frame value.
+    ///
+    /// Empty leaf directories are included because this digest identifies uv's extracted-wheel
+    /// cache, where an empty directory can affect Python namespace-package behavior. Non-empty
+    /// directories are implied by their children. ZIP entries are never followed as symlinks
+    /// during extraction; all non-directory entries are materialized and hashed as regular files.
+    pub(crate) fn from_contents(
+        mut files: Vec<DirectoryDigestFile>,
+        mut directories: Vec<String>,
+    ) -> Self {
+        directories.sort_unstable();
+        files.sort_unstable_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then_with(|| left.size.cmp(&right.size))
+                .then_with(|| left.executable.cmp(&right.executable))
+                .then_with(|| left.digest.as_bytes().cmp(right.digest.as_bytes()))
+        });
+
+        let mut hasher = blake3::Hasher::new_derive_key(DIRECTORY_DIGEST_CONTEXT);
+        let mut entry = Vec::new();
+        for directory in directories {
+            entry.clear();
+            append_frame(&mut entry, FRAME_PATH, directory.as_bytes());
+            update_frame(&mut hasher, FRAME_EMPTY_DIRECTORY, &entry);
+        }
+        for file in files {
+            entry.clear();
+            append_frame(&mut entry, FRAME_PATH, file.path.as_bytes());
+            append_frame(&mut entry, FRAME_SIZE, &file.size.to_le_bytes());
+            append_frame(&mut entry, FRAME_EXECUTABLE, &[u8::from(file.executable)]);
+            append_frame(&mut entry, FRAME_CONTENT_BLAKE3, file.digest.as_bytes());
+            update_frame(&mut hasher, FRAME_FILE, &entry);
+        }
+        let digest = hasher.finalize();
+        Self(BASE64URL_NOPAD.encode(&digest.as_bytes()[..DIRECTORY_DIGEST_BYTES]))
+    }
+
     /// Return the complete versioned, path-safe digest string.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -115,7 +159,7 @@ pub(crate) fn directory_digest_from_extracted(
     files: &[ExtractedFile],
     directories: Vec<String>,
 ) -> DirectoryDigest {
-    directory_digest(
+    DirectoryDigest::from_contents(
         files
             .iter()
             .map(DirectoryDigestFile::from_extracted)
@@ -157,50 +201,6 @@ pub(crate) fn empty_directory_paths<'a>(
         .into_iter()
         .filter(|path| !non_empty.contains(path))
         .collect()
-}
-
-/// Compute a deterministic digest for extracted file and empty-directory entries.
-///
-/// The v1 construction uses BLAKE3's derive-key mode for scheme-level domain separation. Its input
-/// is a sorted stream of type-length-value frames. Empty directories and files are distinct
-/// top-level frame types, while each file contains separate path, size, executable, and content
-/// digest frames. Each frame is encoded as a one-byte type, an eight-byte little-endian length,
-/// and the frame value.
-///
-/// Empty leaf directories are included because this digest identifies uv's extracted-wheel cache,
-/// where an empty directory can affect Python namespace-package behavior. Non-empty directories are
-/// implied by their children. ZIP entries are never followed as symlinks during extraction; all
-/// non-directory entries are materialized and hashed as regular files.
-pub(crate) fn directory_digest(
-    mut files: Vec<DirectoryDigestFile>,
-    mut directories: Vec<String>,
-) -> DirectoryDigest {
-    directories.sort_unstable();
-    files.sort_unstable_by(|left, right| {
-        left.path
-            .cmp(&right.path)
-            .then_with(|| left.size.cmp(&right.size))
-            .then_with(|| left.executable.cmp(&right.executable))
-            .then_with(|| left.digest.as_bytes().cmp(right.digest.as_bytes()))
-    });
-
-    let mut hasher = blake3::Hasher::new_derive_key(DIRECTORY_DIGEST_CONTEXT);
-    let mut entry = Vec::new();
-    for directory in directories {
-        entry.clear();
-        append_frame(&mut entry, FRAME_PATH, directory.as_bytes());
-        update_frame(&mut hasher, FRAME_EMPTY_DIRECTORY, &entry);
-    }
-    for file in files {
-        entry.clear();
-        append_frame(&mut entry, FRAME_PATH, file.path.as_bytes());
-        append_frame(&mut entry, FRAME_SIZE, &file.size.to_le_bytes());
-        append_frame(&mut entry, FRAME_EXECUTABLE, &[u8::from(file.executable)]);
-        append_frame(&mut entry, FRAME_CONTENT_BLAKE3, file.digest.as_bytes());
-        update_frame(&mut hasher, FRAME_FILE, &entry);
-    }
-    let digest = hasher.finalize();
-    DirectoryDigest(BASE64URL_NOPAD.encode(&digest.as_bytes()[..DIRECTORY_DIGEST_BYTES]))
 }
 
 /// Mark all canonical parent directories of a slash-separated path as non-empty.
@@ -250,8 +250,8 @@ mod tests {
     use std::path::Path;
 
     use super::{
-        DirectoryDigestFile, FRAME_CONTENT_BLAKE3, FRAME_EMPTY_DIRECTORY, FRAME_EXECUTABLE,
-        FRAME_FILE, FRAME_PATH, FRAME_SIZE, directory_digest,
+        DirectoryDigest, DirectoryDigestFile, FRAME_CONTENT_BLAKE3, FRAME_EMPTY_DIRECTORY,
+        FRAME_EXECUTABLE, FRAME_FILE, FRAME_PATH, FRAME_SIZE,
     };
 
     #[test]
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn directory_digest_is_versioned_and_stable() {
-        let digest = directory_digest(
+        let digest = DirectoryDigest::from_contents(
             vec![digest_file("example/data.txt", b"contents", false)],
             vec!["example/empty".to_string()],
         );
@@ -283,14 +283,14 @@ mod tests {
 
     #[test]
     fn directory_digest_frames_file_names() {
-        let separate_files = directory_digest(
+        let separate_files = DirectoryDigest::from_contents(
             vec![
                 digest_file("foo.txt", b"", false),
                 digest_file("bar.txt", b"", false),
             ],
             Vec::new(),
         );
-        let newline_file = directory_digest(
+        let newline_file = DirectoryDigest::from_contents(
             vec![digest_file("foo.txt\nbar.txt", b"", false)],
             Vec::new(),
         );

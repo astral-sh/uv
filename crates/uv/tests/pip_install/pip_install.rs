@@ -14398,6 +14398,22 @@ fn reject_invalid_streaming_zip() {
     Resolved 1 package in [TIME]
       × Failed to download `cbwheelstreamtest==0.0.1`
       ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
+      ╰─▶ ZIP file contains multiple entries with different contents for: cbwheelstreamtest/__init__.py
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheelstreamtest==0.0.1")
+        .arg("--preview-features")
+        .arg("content-addressed-archives"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `cbwheelstreamtest==0.0.1`
+      ├─▶ Failed to extract archive: cbwheelstreamtest-0.0.1-py2.py3-none-any.whl
       ╰─▶ ZIP file contains multiple entries for the same output path: cbwheelstreamtest/__init__.py
     "
     );
