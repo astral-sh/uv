@@ -3418,6 +3418,7 @@ fn preview_features() {
     +            LockfileFormatCheck,
     +            LockWithoutMetadata,
     +            TarCodec,
+    +            ContentAddressedCache,
     +        ],
          },
          python_preference: Managed,
