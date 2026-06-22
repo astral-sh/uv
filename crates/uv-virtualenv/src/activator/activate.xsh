@@ -22,8 +22,6 @@
 # This file must be used with "source bin/activate.xsh" *from xonsh*.
 # You cannot run it directly.
 
-from os.path import basename, dirname, join, realpath
-
 
 class _VirtualEnvActivator:
     """xonsh activation for virtualenv."""
@@ -34,6 +32,8 @@ class _VirtualEnvActivator:
     _UNSET_SENTINEL = "__virtualenv_was_not_set__"
 
     def __init__(self):
+        from os.path import dirname, realpath
+
         self.env = __xonsh__.env
         self.embedded_virtual_env = {{ VIRTUAL_ENV_DIR }}
         self.embedded_virtual_prompt = {{ VIRTUAL_PROMPT_LITERAL }}
@@ -62,6 +62,8 @@ class _VirtualEnvActivator:
         aliases.pop("pydoc", None)
 
     def activate(self):
+        from os.path import basename, join
+
         aliases["deactivate"] = self.deactivate
         self.deactivate(["nondestructive"]) # wipe any stale state from a prior activation
 
