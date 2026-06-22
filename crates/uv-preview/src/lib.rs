@@ -331,6 +331,8 @@ pub enum PreviewFeature {
     LockWithoutMetadata,
     /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
     TarCodec,
+    /// Enables content-addressed wheel archives in the cache.
+    ContentAddressedCache,
 }
 
 impl Display for PreviewFeature {
