@@ -372,6 +372,16 @@ fn prune_unzipped() -> Result<()> {
 /// `cache prune` should remove any stale source distribution revisions.
 #[test]
 fn prune_stale_revision() -> Result<()> {
+    prune_stale_revision_inner(false)
+}
+
+/// Content-addressed archives should remain reachable across equivalent stale revisions.
+#[test]
+fn prune_stale_revision_content_addressed_archives() -> Result<()> {
+    prune_stale_revision_inner(true)
+}
+
+fn prune_stale_revision_inner(content_addressed_archives: bool) -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_file_counts()
         .with_filtered_sizes_and_units()
@@ -380,6 +390,13 @@ fn prune_stale_revision() -> Result<()> {
             r"\[CACHE_DIR\](\\|\/)(.*?)(\\|\/).*",
             "[CACHE_DIR]/$2/[ENTRY]",
         ));
+    let pip_install = || {
+        let mut command = context.pip_install();
+        if content_addressed_archives {
+            command.env(EnvVars::UV_PREVIEW_FEATURES, "content-addressed-archives");
+        }
+        command
+    };
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -405,8 +422,7 @@ fn prune_stale_revision() -> Result<()> {
     context.temp_dir.child("README").touch()?;
 
     // Install the same package twice, with `--reinstall`.
-    uv_snapshot!(context.filters(), context
-        .pip_install()
+    uv_snapshot!(context.filters(), pip_install()
         .arg(".")
         .arg("--reinstall"), @"
     exit_code: 0 (success)
@@ -417,8 +433,7 @@ fn prune_stale_revision() -> Result<()> {
      + project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    uv_snapshot!(context.filters(), context
-        .pip_install()
+    uv_snapshot!(context.filters(), pip_install()
         .arg(".")
         .arg("--reinstall"), @"
     exit_code: 0 (success)
@@ -430,8 +445,10 @@ fn prune_stale_revision() -> Result<()> {
      ~ project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    // Pruning should remove the unused revision.
-    uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    // Pruning should remove the unused revision. Without content-addressing, the archive from that
+    // revision is dangling too. With content-addressing, the current revision shares that archive.
+    if content_addressed_archives {
+        uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
     exit_code: 0 (success)
     ----- stderr -----
     DEBUG Found workspace root: `[TEMP_DIR]/`
@@ -443,6 +460,21 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     Removed [N] files ([SIZE])
     ");
+    } else {
+        uv_snapshot!(context.filters(), context.prune().arg("--verbose"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG Skipping `pyproject.toml` in `[TEMP_DIR]/` (no `[tool]` section)
+    DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
+    DEBUG uv [VERSION] ([COMMIT] DATE)
+    Pruning cache at: [CACHE_DIR]/
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    Removed [N] files ([SIZE])
+    ");
+    }
 
     // Uninstall and reinstall the package. We should use the cached version.
     uv_snapshot!(context.filters(), context
@@ -454,8 +486,7 @@ fn prune_stale_revision() -> Result<()> {
      - project==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
-    uv_snapshot!(context.filters(), context
-        .pip_install()
+    uv_snapshot!(context.filters(), pip_install()
         .arg("."), @"
     exit_code: 0 (success)
     ----- stderr -----
