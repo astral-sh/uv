@@ -65,7 +65,6 @@ struct ComputedEntry {
 
 struct UnzipOutput {
     files: Vec<(PathBuf, u64)>,
-    extracted_files: Vec<ExtractedFile>,
     digest: Option<DirectoryDigest>,
 }
 
@@ -103,14 +102,7 @@ pub async fn unzip_and_hash<R: tokio::io::AsyncRead + Unpin>(
             "streaming ZIP digest was not computed",
         )));
     };
-    Ok((
-        output
-            .extracted_files
-            .into_iter()
-            .map(ExtractedFile::into_record)
-            .collect(),
-        digest,
-    ))
+    Ok((output.files, digest))
 }
 
 async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
@@ -669,11 +661,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         directory_digest_from_extracted(&extracted_files, hash_directories)
     });
 
-    Ok(UnzipOutput {
-        files,
-        extracted_files,
-        digest,
-    })
+    Ok(UnzipOutput { files, digest })
 }
 
 /// Unpack the given tar archive into the destination directory.

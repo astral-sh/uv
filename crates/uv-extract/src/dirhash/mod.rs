@@ -45,6 +45,12 @@ impl DirectoryDigest {
     }
 }
 
+impl From<DirectoryDigest> for String {
+    fn from(d: DirectoryDigest) -> Self {
+        d.0
+    }
+}
+
 /// The digest inputs for a regular file after ZIP extraction semantics have been applied.
 pub(crate) struct DirectoryDigestFile {
     path: String,
