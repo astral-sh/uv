@@ -43,9 +43,6 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 xz2 = { workspace = true }
 
-[dev-dependencies]
-tempfile = { workspace = true }
-
 [features]
 default = []
 # Avoid a liblzma.so dependency

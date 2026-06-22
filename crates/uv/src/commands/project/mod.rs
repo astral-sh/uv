@@ -2266,6 +2266,7 @@ pub(crate) async fn resolve_names(
                 &client,
                 &build_dispatch,
                 concurrency.downloads_semaphore.clone(),
+                preview,
             ),
         )
         .with_reporter(Arc::new(ResolverReporter::from(printer)))

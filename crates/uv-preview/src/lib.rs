@@ -306,7 +306,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
-            Self::ContentAddressedCache => "content-addressed-archives",
+            Self::ContentAddressedCache => "content-addressed-cache",
         }
     }
 }
@@ -364,7 +364,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
-            "content-addressed-archives" => Self::ContentAddressedCache,
+            "content-addressed-cache" => Self::ContentAddressedCache,
             _ => return Err(PreviewFeatureParseError),
         })
     }
