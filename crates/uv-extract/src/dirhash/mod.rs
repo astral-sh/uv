@@ -1,9 +1,11 @@
 //! Versioned directory hashes for extracted archives.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 
 use data_encoding::BASE64URL_NOPAD;
 use rustc_hash::FxHashSet;
+
+use crate::archive_path::SanitizedArchivePath;
 
 mod seek;
 
@@ -18,6 +20,47 @@ const FRAME_PATH: u8 = 3;
 const FRAME_SIZE: u8 = 4;
 const FRAME_EXECUTABLE: u8 = 5;
 const FRAME_CONTENT_BLAKE3: u8 = 6;
+
+/// The platform-independent representation of a sanitized archive path used by the digest.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct DigestPath(String);
+
+impl DigestPath {
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<&SanitizedArchivePath> for DigestPath {
+    fn from(path: &SanitizedArchivePath) -> Self {
+        let mut canonical = String::new();
+        for component in path.as_path().components() {
+            let Component::Normal(component) = component else {
+                continue;
+            };
+            if !canonical.is_empty() {
+                canonical.push('/');
+            }
+            canonical.push_str(component.to_string_lossy().as_ref());
+        }
+        Self(canonical)
+    }
+}
+
+#[cfg(test)]
+impl From<&str> for DigestPath {
+    fn from(path: &str) -> Self {
+        Self(path.to_string())
+    }
+}
 
 /// A versioned digest of the filesystem tree produced by extracting a ZIP archive.
 ///
@@ -53,7 +96,7 @@ impl DirectoryDigest {
     /// during extraction; all non-directory entries are materialized and hashed as regular files.
     pub(crate) fn from_contents(
         mut files: Vec<DirectoryDigestFile>,
-        mut directories: Vec<String>,
+        mut directories: Vec<DigestPath>,
     ) -> Self {
         directories.sort_unstable();
         files.sort_unstable_by(|left, right| {
@@ -97,7 +140,7 @@ impl From<DirectoryDigest> for String {
 
 /// The digest inputs for a regular file after ZIP extraction semantics have been applied.
 pub(crate) struct DirectoryDigestFile {
-    path: String,
+    path: DigestPath,
     size: u64,
     executable: bool,
     digest: blake3::Hash,
@@ -105,9 +148,9 @@ pub(crate) struct DirectoryDigestFile {
 
 impl DirectoryDigestFile {
     #[cfg(test)]
-    pub(crate) fn new(path: &Path, size: u64, executable: bool, digest: blake3::Hash) -> Self {
+    pub(crate) fn new(path: DigestPath, size: u64, executable: bool, digest: blake3::Hash) -> Self {
         Self {
-            path: canonical_path(path),
+            path,
             size,
             executable,
             digest,
@@ -116,7 +159,7 @@ impl DirectoryDigestFile {
 
     fn from_extracted(file: &ExtractedFile) -> Self {
         Self {
-            path: canonical_path(&file.path),
+            path: DigestPath::from(&file.path),
             size: file.size,
             executable: file.executable,
             digest: file.digest,
@@ -127,14 +170,19 @@ impl DirectoryDigestFile {
 /// A file extracted from an archive, along with the metadata used by the directory digest.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct ExtractedFile {
-    path: PathBuf,
+    path: SanitizedArchivePath,
     size: u64,
     executable: bool,
     digest: blake3::Hash,
 }
 
 impl ExtractedFile {
-    pub(crate) fn new(path: PathBuf, size: u64, executable: bool, digest: blake3::Hash) -> Self {
+    pub(crate) fn new(
+        path: SanitizedArchivePath,
+        size: u64,
+        executable: bool,
+        digest: blake3::Hash,
+    ) -> Self {
         Self {
             path,
             size,
@@ -144,20 +192,20 @@ impl ExtractedFile {
     }
 
     /// Return the path of the extracted file within the archive.
-    pub(crate) fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &SanitizedArchivePath {
         &self.path
     }
 
     /// Convert the extracted file into a `(path, size)` pair.
     pub(crate) fn into_record(self) -> (PathBuf, u64) {
-        (self.path, self.size)
+        (self.path.into_path_buf(), self.size)
     }
 }
 
 /// Compute a deterministic digest for extracted files and empty-directory paths.
 pub(crate) fn directory_digest_from_extracted(
     files: &[ExtractedFile],
-    directories: Vec<String>,
+    directories: Vec<DigestPath>,
 ) -> DirectoryDigest {
     DirectoryDigest::from_contents(
         files
@@ -173,14 +221,14 @@ pub(crate) fn directory_digest_from_extracted(
 /// Parent directories containing an explicit directory or extracted file are omitted because their
 /// presence is already implied by that child.
 pub(crate) fn empty_directory_paths<'a>(
-    directories: impl IntoIterator<Item = &'a Path>,
-    files: impl IntoIterator<Item = &'a Path>,
-) -> Vec<String> {
+    directories: impl IntoIterator<Item = &'a SanitizedArchivePath>,
+    files: impl IntoIterator<Item = &'a SanitizedArchivePath>,
+) -> Vec<DigestPath> {
     let mut candidates = FxHashSet::default();
     let mut non_empty = FxHashSet::default();
 
     for directory in directories {
-        let path = canonical_path(directory);
+        let path = DigestPath::from(directory);
         if path.is_empty() {
             continue;
         }
@@ -193,7 +241,7 @@ pub(crate) fn empty_directory_paths<'a>(
     }
 
     for file in files {
-        let path = canonical_path(file);
+        let path = DigestPath::from(file);
         mark_canonical_parent_directories(&mut non_empty, &path);
     }
 
@@ -204,10 +252,10 @@ pub(crate) fn empty_directory_paths<'a>(
 }
 
 /// Mark all canonical parent directories of a slash-separated path as non-empty.
-fn mark_canonical_parent_directories(non_empty: &mut FxHashSet<String>, path: &str) {
-    let mut path = path;
+fn mark_canonical_parent_directories(non_empty: &mut FxHashSet<DigestPath>, path: &DigestPath) {
+    let mut path = path.as_str();
     while let Some((parent, _child)) = path.rsplit_once('/') {
-        non_empty.insert(parent.to_string());
+        non_empty.insert(DigestPath(parent.to_string()));
         path = parent;
     }
 }
@@ -229,29 +277,15 @@ fn frame_header(frame_type: u8, length: usize) -> [u8; 9] {
     header
 }
 
-/// Convert a sanitized archive path to the platform-independent representation used by the digest.
-fn canonical_path(path: &Path) -> String {
-    let mut canonical = String::new();
-    for component in path.components() {
-        let Component::Normal(component) = component else {
-            continue;
-        };
-        if !canonical.is_empty() {
-            canonical.push('/');
-        }
-        canonical.push_str(component.to_string_lossy().as_ref());
-    }
-    canonical
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::path::Path;
+
+    use crate::archive_path::enclosed_name;
 
     use super::{
-        DirectoryDigest, DirectoryDigestFile, FRAME_CONTENT_BLAKE3, FRAME_EMPTY_DIRECTORY,
-        FRAME_EXECUTABLE, FRAME_FILE, FRAME_PATH, FRAME_SIZE,
+        DigestPath, DirectoryDigest, DirectoryDigestFile, FRAME_CONTENT_BLAKE3,
+        FRAME_EMPTY_DIRECTORY, FRAME_EXECUTABLE, FRAME_FILE, FRAME_PATH, FRAME_SIZE,
     };
 
     #[test]
@@ -274,11 +308,22 @@ mod tests {
     fn directory_digest_is_versioned_and_stable() {
         let digest = DirectoryDigest::from_contents(
             vec![digest_file("example/data.txt", b"contents", false)],
-            vec!["example/empty".to_string()],
+            vec![DigestPath::from("example/empty")],
         );
 
         assert_eq!(digest.as_str(), "Y7xwQkyoSQmbHQkyVBHha2v4");
         assert!(digest.as_str().len() <= 30);
+    }
+
+    #[test]
+    fn digest_path_uses_normalized_archive_path() {
+        let path = enclosed_name("example/../package/./data.txt");
+        let digest_path = path.as_ref().map(DigestPath::from);
+
+        assert_eq!(
+            digest_path.as_ref().map(DigestPath::as_str),
+            Some("package/data.txt")
+        );
     }
 
     #[test]
@@ -300,7 +345,7 @@ mod tests {
 
     fn digest_file(path: &str, contents: &[u8], executable: bool) -> DirectoryDigestFile {
         DirectoryDigestFile::new(
-            Path::new(path),
+            DigestPath::from(path),
             u64::try_from(contents.len()).unwrap_or(u64::MAX),
             executable,
             blake3::hash(contents),
