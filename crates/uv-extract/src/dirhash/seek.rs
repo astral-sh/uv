@@ -13,6 +13,7 @@ use futures::executor::block_on;
 use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
+use tokio::sync::{Semaphore, SemaphorePermit};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
@@ -29,12 +30,26 @@ const LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x0403_4b50;
 const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 8 * 1024 * 1024;
 #[cfg(test)]
 const STORED_HASH_FAST_PATH_THRESHOLD: u64 = 1;
-const STORED_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 const PARALLEL_HASH_THRESHOLD: u64 = 8 * 1024 * 1024;
 const PARALLEL_HASH_BUFFER_POOL_THRESHOLD: u64 = 64 * 1024 * 1024;
-const PARALLEL_HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
+const HASH_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 const PARALLEL_HASH_BUFFER_COUNT: usize = 2;
+const ALLOCATING_HASH_BUFFER_COUNT: usize = 3;
+const HASH_BUFFER_PERMIT_COUNT: usize = 4;
+const _: () = {
+    assert!(ALLOCATING_HASH_BUFFER_COUNT <= HASH_BUFFER_PERMIT_COUNT);
+    assert!(PARALLEL_HASH_BUFFER_COUNT <= HASH_BUFFER_PERMIT_COUNT);
+};
+static HASH_BUFFER_LIMITER: Semaphore = Semaphore::const_new(HASH_BUFFER_PERMIT_COUNT);
 static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
+
+/// Reserve 16 MiB hash-buffer slots from the process-wide 64 MiB budget.
+fn acquire_hash_buffers(count: usize) -> Result<SemaphorePermit<'static>, Error> {
+    let count = u32::try_from(count)
+        .map_err(|_| Error::Io(std::io::Error::other("invalid hash buffer count")))?;
+    block_on(HASH_BUFFER_LIMITER.acquire_many(count))
+        .map_err(|_| Error::Io(std::io::Error::other("hash buffer limiter closed")))
+}
 
 /// A successfully extracted file, or an explicit directory that can affect the digest.
 enum ExtractedEntry {
@@ -395,6 +410,7 @@ where
         && entry.compressed_size() == size;
 
     if use_stored_hash_fast_path {
+        let _permit = acquire_hash_buffers(1)?;
         let header_offset = entry.header_offset();
         let mut hash_archive = archive.clone();
         let (copied, stored_digest) = std::thread::scope(|scope| {
@@ -533,8 +549,10 @@ where
     R: std::io::BufRead + std::io::Seek + Unpin,
 {
     if size < PARALLEL_HASH_BUFFER_POOL_THRESHOLD {
+        let _permit = acquire_hash_buffers(ALLOCATING_HASH_BUFFER_COUNT)?;
         return copy_entry_with_allocating_hash_thread(archive, file_number, writer);
     }
+    let _permit = acquire_hash_buffers(PARALLEL_HASH_BUFFER_COUNT)?;
     copy_entry_with_buffer_pool_hash_thread(archive, file_number, writer)
 }
 
@@ -562,7 +580,7 @@ where
             let mut writer = AllowStdIo::new(writer);
             let mut copied = 0;
             loop {
-                let mut buffer = vec![0; PARALLEL_HASH_BUFFER_SIZE];
+                let mut buffer = vec![0; HASH_BUFFER_SIZE];
                 let read = file
                     .read(&mut buffer)
                     .await
@@ -609,14 +627,12 @@ where
         let (buffer_sender, buffer_receiver) =
             mpsc::sync_channel::<Vec<u8>>(PARALLEL_HASH_BUFFER_COUNT);
         for _ in 0..PARALLEL_HASH_BUFFER_COUNT {
-            buffer_sender
-                .send(vec![0; PARALLEL_HASH_BUFFER_SIZE])
-                .map_err(|_| {
-                    Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        "failed to initialize ZIP entry hash buffer",
-                    ))
-                })?;
+            buffer_sender.send(vec![0; HASH_BUFFER_SIZE]).map_err(|_| {
+                Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "failed to initialize ZIP entry hash buffer",
+                ))
+            })?;
         }
 
         let recycle_sender = buffer_sender.clone();
@@ -691,7 +707,7 @@ where
 
         let mut hasher = blake3::Hasher::new();
         let mut remaining = compressed_size;
-        let mut buffer = vec![0; STORED_HASH_BUFFER_SIZE];
+        let mut buffer = vec![0; HASH_BUFFER_SIZE];
         while remaining > 0 {
             let read_size = usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
                 Error::Io(std::io::Error::new(
