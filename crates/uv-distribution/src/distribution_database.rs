@@ -762,10 +762,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                     uv_extract::stream::untar_zst(&mut reader, temp_dir.path())
                                         .await
                                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                                ExtractedWheelManifest {
-                                    files,
-                                    digest: None,
-                                }
+                                ExtractedWheelManifest::without_digest(files)
                             }
                         }
                     }
@@ -782,10 +779,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                                 .await
                                 .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                            ExtractedWheelManifest {
-                                files,
-                                digest: None,
-                            }
+                            ExtractedWheelManifest::without_digest(files)
                         }
                     },
                 };
@@ -973,10 +967,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         let files = uv_extract::stream::untar_zst(file, &target)
                             .await
                             .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                        ExtractedWheelManifest {
-                            files,
-                            digest: None,
-                        }
+                        ExtractedWheelManifest::without_digest(files)
                     }
                 };
                 let hashes = hashers.into_iter().map(HashDigest::from).collect();
@@ -1168,10 +1159,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     let files = uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
                         .await
                         .map_err(|err| Error::Extract(filename.to_string(), err))?;
-                    ExtractedWheelManifest {
-                        files,
-                        digest: None,
-                    }
+                    ExtractedWheelManifest::without_digest(files)
                 }
             };
 
@@ -1263,16 +1251,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         digest: Option<DirectoryDigest>,
     ) -> Result<ArchiveId, Error> {
         let cache = self.build_context.cache();
-        let id = match digest {
+        match digest {
             Some(digest) => {
                 let id = ArchiveId::from_digest(digest.into());
                 cache.persist_with_id(temp_dir, target, id).await
             }
             None => cache.persist(temp_dir.keep(), target).await,
         }
-        .map_err(Error::CacheWrite)?;
-
-        Ok(id)
+        .map_err(Error::CacheWrite)
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
@@ -1317,10 +1303,7 @@ where
         })
     } else {
         let files = uv_extract::stream::unzip(source_hint, reader, target).await?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: None,
-        })
+        Ok(ExtractedWheelManifest::without_digest(files))
     }
 }
 
@@ -1338,10 +1321,7 @@ fn unzip_seekable_wheel(
         })
     } else {
         let files = uv_extract::unzip(reader, target)?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: None,
-        })
+        Ok(ExtractedWheelManifest::without_digest(files))
     }
 }
 
@@ -1349,6 +1329,15 @@ fn unzip_seekable_wheel(
 struct ExtractedWheelManifest {
     files: Vec<(PathBuf, u64)>,
     digest: Option<DirectoryDigest>,
+}
+
+impl ExtractedWheelManifest {
+    fn without_digest(files: Vec<(PathBuf, u64)>) -> Self {
+        Self {
+            files,
+            digest: None,
+        }
+    }
 }
 
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
