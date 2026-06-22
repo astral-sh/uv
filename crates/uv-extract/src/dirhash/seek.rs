@@ -20,7 +20,7 @@ use uv_warnings::warn_user_once;
 use super::{
     DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
 };
-use crate::archive_path::{SanitizedArchivePath, enclosed_name};
+use crate::archive_path::SanitizedArchivePath;
 
 const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
 const LOCAL_FILE_HEADER_LENGTH_USIZE: usize = 30;
@@ -174,7 +174,7 @@ fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error>
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
         let file_name = entry_file_name(entry, file_number)?;
-        let Some(path) = enclosed_name(file_name) else {
+        let Some(path) = SanitizedArchivePath::from_archive_member(file_name) else {
             continue;
         };
         if !paths.insert(path.clone()) {
@@ -211,7 +211,7 @@ where
         }
     }
 
-    let Some(enclosed_name) = enclosed_name(file_name) else {
+    let Some(enclosed_name) = SanitizedArchivePath::from_archive_member(file_name) else {
         warn!("Skipping unsafe file name: {file_name}");
         return Ok(None);
     };
