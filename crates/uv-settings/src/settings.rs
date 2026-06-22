@@ -22,8 +22,9 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerSpan, ExcludeNewerValue,
-    ForkStrategy, PrereleaseMode, ResolutionMode, serialize_exclude_newer_package_with_spans,
+    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan,
+    ExcludeNewerValue, ForkStrategy, PrereleaseMode, ResolutionMode,
+    serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -518,7 +519,7 @@ pub struct InstallerOptions {
     index_strategy: Option<IndexStrategy>,
     keyring_provider: Option<KeyringProviderType>,
     config_settings: Option<ConfigSettings>,
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
     reinstall: Option<Reinstall>,
@@ -547,7 +548,8 @@ pub struct ResolverOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
-    pub exclude_newer: ExcludeNewer,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
+    pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
@@ -582,7 +584,7 @@ pub struct ResolverInstallerOptions {
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
     pub exclude_newer_package: Option<ExcludeNewerPackage>,
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
@@ -1003,14 +1005,16 @@ pub struct ResolverInstallerSchema {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Set to `false` to disable `exclude-newer`.
     #[option(
         default = "None",
-        value_type = "str",
+        value_type = "str | false",
         example = r#"
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
     ///
@@ -1815,14 +1819,16 @@ pub struct PipOptions {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Set to `false` to disable `exclude-newer`.
     #[option(
         default = "None",
-        value_type = "str",
+        value_type = "str | false",
         example = r#"
             exclude-newer = "2006-12-02T02:07:43Z"
         "#
     )]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
     /// Limit candidate packages for specific packages to those that were uploaded prior to the given date.
     ///
     /// Accepts a dictionary format of `PACKAGE = "DATE"` pairs, where `DATE` is an RFC 3339
@@ -2124,15 +2130,8 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
-            exclude_newer: ExcludeNewer::from_args(
-                value.exclude_newer,
-                value
-                    .exclude_newer_package
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
-            ),
+            exclude_newer: value.exclude_newer,
+            exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
             upgrade: Upgrade::from_args(
                 value.upgrade,
@@ -2172,16 +2171,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
             index_strategy: value.index_strategy,
             keyring_provider: value.keyring_provider,
             config_settings: value.config_settings,
-            exclude_newer: ExcludeNewer::from_args(
-                value.exclude_newer,
-                value
-                    .exclude_newer_package
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Into::into)
-                    .collect(),
-            )
-            .global,
+            exclude_newer: value.exclude_newer,
             link_mode: value.link_mode,
             compile_bytecode: value.compile_bytecode,
             reinstall: Reinstall::from_args(
@@ -2228,7 +2218,7 @@ pub struct ToolOptions {
     build_isolation: Option<BuildIsolation>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,
@@ -2261,7 +2251,7 @@ pub struct ToolOptionsWire {
     build_isolation: Option<BuildIsolation>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
     exclude_newer_span: Option<ExcludeNewerSpan>,
     #[serde(serialize_with = "serialize_exclude_newer_package_with_spans")]
     exclude_newer_package: Option<ExcludeNewerPackage>,
@@ -2317,15 +2307,21 @@ impl From<ResolverInstallerOptions> for ToolOptions {
 
 impl From<ToolOptionsWire> for ToolOptions {
     fn from(value: ToolOptionsWire) -> Self {
-        let exclude_newer = value.exclude_newer.map(|exclude_newer| {
-            if let Some(span) = value.exclude_newer_span
-                && exclude_newer.span().is_none()
-            {
-                ExcludeNewerValue::relative(span)
-            } else {
-                exclude_newer
-            }
-        });
+        let exclude_newer = value
+            .exclude_newer
+            .map(|exclude_newer| match exclude_newer {
+                ExcludeNewerOverride::Disabled => ExcludeNewerOverride::Disabled,
+                ExcludeNewerOverride::Enabled(exclude_newer) => {
+                    let exclude_newer = *exclude_newer;
+                    if let Some(span) = value.exclude_newer_span
+                        && exclude_newer.span().is_none()
+                    {
+                        ExcludeNewerValue::relative(span).into()
+                    } else {
+                        exclude_newer.into()
+                    }
+                }
+            });
 
         Self {
             index: value.index,
@@ -2362,11 +2358,16 @@ impl From<ToolOptionsWire> for ToolOptions {
 impl From<ToolOptions> for ToolOptionsWire {
     fn from(value: ToolOptions) -> Self {
         let (exclude_newer, exclude_newer_span) = match &value.exclude_newer {
-            Some(value @ ExcludeNewerValue::Absolute(_)) => (Some(value.clone()), None),
-            Some(value @ ExcludeNewerValue::Relative(span)) => (
-                Some(ExcludeNewerValue::absolute(value.timestamp())),
-                Some(*span),
-            ),
+            Some(ExcludeNewerOverride::Disabled) => (Some(ExcludeNewerOverride::Disabled), None),
+            Some(ExcludeNewerOverride::Enabled(value)) => match value.as_ref() {
+                ExcludeNewerValue::Absolute(_) => {
+                    (Some(ExcludeNewerOverride::Enabled(value.clone())), None)
+                }
+                ExcludeNewerValue::Relative(span) => (
+                    Some(ExcludeNewerValue::absolute(value.timestamp()).into()),
+                    Some(*span),
+                ),
+            },
             None => (None, None),
         };
 
@@ -2483,7 +2484,7 @@ struct OptionsWire {
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
     exclude_newer_package: Option<ExcludeNewerPackage>,
     link_mode: Option<LinkMode>,
     compile_bytecode: Option<bool>,

@@ -16,8 +16,8 @@ use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewer, ExcludeNewerPackage, ExcludeNewerValue, ForkStrategy,
-    PrereleaseMode, ResolutionMode,
+    AnnotationStyle, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerValue,
+    ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
@@ -94,6 +94,7 @@ macro_rules! impl_combine_or {
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
+impl_combine_or!(ExcludeNewerOverride);
 impl_combine_or!(ExcludeNewerValue);
 impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);

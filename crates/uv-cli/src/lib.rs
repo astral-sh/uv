@@ -29,7 +29,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerValue, ForkStrategy, PrereleaseMode,
+    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackageEntry, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
@@ -3284,8 +3284,10 @@ pub struct VenvArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for a specific package to those that were uploaded prior to the
     /// given date.
@@ -5205,8 +5207,10 @@ pub struct FormatArgs {
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
     /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
     /// durations relative to "now" (e.g., `-1 week`).
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
     ///
@@ -6110,8 +6114,10 @@ pub struct ToolListArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -6373,8 +6379,10 @@ pub struct ToolUpgradeArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7444,8 +7452,10 @@ pub struct InstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7691,8 +7701,10 @@ pub struct ResolverArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7936,13 +7948,15 @@ pub struct ResolverInstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(
         long,
         env = EnvVars::UV_EXCLUDE_NEWER,
         help_heading = "Resolver options",
         value_hint = ValueHint::Other,
     )]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -8071,8 +8085,10 @@ pub struct FetchArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 }
 
 #[derive(Args)]

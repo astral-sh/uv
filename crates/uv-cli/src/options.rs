@@ -5,7 +5,7 @@ use anstream::eprintln;
 use uv_cache::Refresh;
 use uv_configuration::{BuildIsolation, Reinstall, Upgrade};
 use uv_distribution_types::{ConfigSettings, Index, PackageConfigSettings, Requirement};
-use uv_resolver::{ExcludeNewer, ExcludeNewerPackage, PrereleaseMode};
+use uv_resolver::{ExcludeNewerPackage, PrereleaseMode};
 use uv_settings::{Combine, EnvFlag, PipOptions, ResolverInstallerOptions, ResolverOptions};
 use uv_warnings::owo_colors::OwoColorize;
 
@@ -584,10 +584,8 @@ pub fn resolver_options(
         ),
         extra_build_dependencies: None,
         extra_build_variables: None,
-        exclude_newer: ExcludeNewer::from_args(
-            exclude_newer,
-            exclude_newer_package.unwrap_or_default(),
-        ),
+        exclude_newer,
+        exclude_newer_package: exclude_newer_package.map(ExcludeNewerPackage::from_iter),
         link_mode,
         torch_backend: None,
         no_build: flag(no_build, build, "build"),
