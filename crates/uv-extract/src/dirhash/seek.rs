@@ -173,7 +173,7 @@ fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error>
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
         let file_name = entry_file_name(entry, file_number)?;
-        let Some(path) = digest_enclosed_name(file_name) else {
+        let Some(path) = crate::stream::enclosed_name(file_name) else {
             continue;
         };
         if !paths.insert(path.clone()) {
@@ -208,12 +208,7 @@ where
         }
     }
 
-    let enclosed_name = if hash_contents {
-        digest_enclosed_name(file_name)
-    } else {
-        crate::stream::enclosed_name(file_name)
-    };
-    let Some(enclosed_name) = enclosed_name else {
+    let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
         warn!("Skipping unsafe file name: {file_name}");
         return Ok(None);
     };
@@ -253,22 +248,6 @@ fn entry_file_name(entry: &StoredZipEntry, file_number: usize) -> Result<&str, E
         }),
         Err(err) => Err(err.into()),
     }
-}
-
-/// Normalize a file name for use in an extracted-directory digest.
-fn digest_enclosed_name(file_name: &str) -> Option<PathBuf> {
-    let path = crate::stream::enclosed_name(file_name)?;
-    let mut normalized = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::Normal(component) => normalized.push(component),
-            std::path::Component::CurDir => {}
-            std::path::Component::Prefix(_)
-            | std::path::Component::RootDir
-            | std::path::Component::ParentDir => return None,
-        }
-    }
-    Some(normalized)
 }
 
 /// Warn for compression methods that uv still accepts but does not recommend.
