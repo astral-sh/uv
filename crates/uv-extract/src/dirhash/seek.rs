@@ -20,6 +20,7 @@ use uv_warnings::warn_user_once;
 use super::{
     DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
 };
+use crate::archive_path::{SanitizedArchivePath, enclosed_name};
 
 const LOCAL_FILE_HEADER_LENGTH: u64 = 30;
 const LOCAL_FILE_HEADER_LENGTH_USIZE: usize = 30;
@@ -38,12 +39,12 @@ static HASH_THREAD_POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
 /// A successfully extracted file, or an explicit directory that can affect the digest.
 enum ExtractedEntry {
     File {
-        path: PathBuf,
+        path: SanitizedArchivePath,
         size: u64,
         executable: bool,
         digest: Option<blake3::Hash>,
     },
-    Directory(PathBuf),
+    Directory(SanitizedArchivePath),
 }
 
 struct UnzipOutput {
@@ -133,7 +134,7 @@ fn unzip_inner(
                 if let Some(digest) = digest {
                     extracted_files.push(ExtractedFile::new(path, size, executable, digest));
                 } else {
-                    files.push((path, size));
+                    files.push((path.into_path_buf(), size));
                 }
             }
             ExtractedEntry::Directory(path) => {
@@ -145,7 +146,7 @@ fn unzip_inner(
     }
     let digest = if hash_contents {
         let hash_directories = empty_directory_paths(
-            digest_directories.iter().map(PathBuf::as_path),
+            &digest_directories,
             extracted_files.iter().map(ExtractedFile::path),
         );
         Some(directory_digest_from_extracted(
@@ -173,11 +174,13 @@ fn validate_unique_output_paths(entries: &[StoredZipEntry]) -> Result<(), Error>
     let mut paths = FxHashSet::default();
     for (file_number, entry) in entries.iter().enumerate() {
         let file_name = entry_file_name(entry, file_number)?;
-        let Some(path) = crate::stream::enclosed_name(file_name) else {
+        let Some(path) = enclosed_name(file_name) else {
             continue;
         };
         if !paths.insert(path.clone()) {
-            return Err(Error::DuplicateOutputPath { path });
+            return Err(Error::DuplicateOutputPath {
+                path: path.into_path_buf(),
+            });
         }
     }
     Ok(())
@@ -208,16 +211,16 @@ where
         }
     }
 
-    let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+    let Some(enclosed_name) = enclosed_name(file_name) else {
         warn!("Skipping unsafe file name: {file_name}");
         return Ok(None);
     };
 
-    let path = target.join(&enclosed_name);
+    let path = target.join(enclosed_name.as_path());
     if entry.dir()? {
         create_directory_once(directories, &path)?;
         if hash_contents {
-            validate_directory_entry(&entry, &enclosed_name, skip_validation)?;
+            validate_directory_entry(&entry, enclosed_name.as_path(), skip_validation)?;
         }
         return Ok(Some(ExtractedEntry::Directory(enclosed_name)));
     }
@@ -312,7 +315,7 @@ fn extract_file_entry<R>(
     archive: &mut ZipFileReader<AllowStdIo<R>>,
     entry: &StoredZipEntry,
     file_number: usize,
-    enclosed_name: PathBuf,
+    enclosed_name: SanitizedArchivePath,
     path: &Path,
     compression: &CompressionMethod,
     skip_validation: bool,
@@ -344,7 +347,7 @@ where
         block_on(copy_entry(archive, file_number, writer, false))?
     };
     validate_file_entry(
-        &enclosed_name,
+        enclosed_name.as_path(),
         copied,
         size,
         computed_crc32,
