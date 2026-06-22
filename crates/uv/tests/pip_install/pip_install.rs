@@ -14516,7 +14516,7 @@ fn reject_invalid_streaming_zip() {
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("cbwheelstreamtest==0.0.1")
         .arg("--preview-features")
-        .arg("content-addressed-archives"), @"
+        .arg("content-addressed-cache"), @"
     success: false
     exit_code: 1
     ----- stdout -----

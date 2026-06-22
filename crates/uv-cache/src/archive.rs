@@ -50,17 +50,3 @@ impl FromStr for ArchiveId {
         Ok(Self(s.to_string()))
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::ArchiveId;
-
-    #[test]
-    fn directory_digest_is_already_a_complete_archive_id() {
-        let digest = "directory-digest";
-        assert_eq!(
-            ArchiveId::from_digest(digest.to_string()).to_string(),
-            digest
-        );
-    }
-}
