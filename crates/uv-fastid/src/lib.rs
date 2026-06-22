@@ -24,7 +24,7 @@ impl Deref for Id {
 
     #[inline]
     fn deref(&self) -> &str {
-        // SAFETY: every `Id` constructor (`secure`, `insecure`, `FromStr`, and
+        // SAFETY: every `Id` constructor (`secure`, `FromStr`, and
         // transitively `serde::Deserialize`) guarantees the bytes are drawn from
         // `ALPHABET`, which is entirely ASCII. The bytes are therefore valid UTF-8.
         #[allow(unsafe_code)]
@@ -85,16 +85,6 @@ impl Id {
         Self(Self::reduce(&raw))
     }
 
-    /// Generate an [`Id`] from a fast, non-cryptographically secure RNG.
-    ///
-    /// The resulting ID is suitable for use in contexts where uniqueness is needed
-    /// but the risk of an adversarial collision is negligible (such as local cache keys).
-    pub fn insecure() -> Self {
-        let mut raw = [0u8; 16];
-        fastrand::fill(&mut raw);
-        Self(Self::reduce(&raw))
-    }
-
     /// Reduce a 16-byte array of random bytes to a 16-byte array of ASCII characters in our ID alphabet.
     fn reduce(raw: &[u8; 16]) -> [u8; 16] {
         raw.map(|byte| ALPHABET[(byte & MASK) as usize])
@@ -139,13 +129,6 @@ mod tests {
     }
 
     #[test]
-    fn test_insecure() {
-        let id = Id::insecure();
-        assert_eq!(id.len(), 16);
-        assert!(id.bytes().all(|byte| ALPHABET.contains(&byte)));
-    }
-
-    #[test]
     fn test_from_str() {
         for tc in ["", "short", "0123456789abcdefg", "invalid!"] {
             assert!(Id::from_str(tc).is_err(),);
@@ -164,11 +147,6 @@ mod tests {
         #[test]
         fn round_trip() {
             let id = Id::secure();
-            let json = serde_json::to_string(&id).unwrap();
-            let parsed: Id = serde_json::from_str(&json).unwrap();
-            assert_eq!(id, parsed);
-
-            let id = Id::insecure();
             let json = serde_json::to_string(&id).unwrap();
             let parsed: Id = serde_json::from_str(&json).unwrap();
             assert_eq!(id, parsed);
