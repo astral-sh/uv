@@ -7633,6 +7633,11 @@ impl Compiler {
         } else {
             self.record_folded_operands(expression)?;
         }
+        if matches!(expression, Expr::Tuple(_)) {
+            self.emit_folded_tuple_not_nops(expression)?;
+            self.assembler
+                .set_location(self.source_location(expression.range()));
+        }
         if let Constant::Int(value) = constant
             && let Ok(value) = u8::try_from(value)
         {
@@ -7674,6 +7679,25 @@ impl Compiler {
                 }
             }
             Expr::UnaryOp(unary) => self.record_folded_value(&unary.operand)?,
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Emits operand-load residue retained when CPython's flowgraph folds a tuple containing
+    /// constant boolean negations.
+    fn emit_folded_tuple_not_nops(&mut self, expression: &Expr) -> Result<(), CompileError> {
+        match expression {
+            Expr::Tuple(tuple) => {
+                for element in &tuple.elts {
+                    self.emit_folded_tuple_not_nops(element)?;
+                }
+            }
+            Expr::UnaryOp(unary) if unary.op == UnaryOp::Not => {
+                self.assembler
+                    .set_location(self.source_location(unary.operand.range()));
+                self.emit(NOP, 0, 0)?;
+            }
             _ => {}
         }
         Ok(())

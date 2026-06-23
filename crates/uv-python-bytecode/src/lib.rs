@@ -714,6 +714,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_folded_tuple_not_nops() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "multiline = (\n    not \"a\",\n    not \"b\",\n    (not \"c\",),\n)\nsame_line = (not \"a\", not \"b\")\nother_folds = (1 + 2, -3, ~4)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'folded_tuple.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "folded_tuple.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_a_redundant_nop_after_annotation_setup() {
         let Some(python) = python_314() else {
             return;
