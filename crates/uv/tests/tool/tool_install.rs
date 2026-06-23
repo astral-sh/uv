@@ -3297,6 +3297,59 @@ fn tool_install_no_entrypoints() {
         .assert(predicate::path::missing());
 }
 
+/// Test that a failed tool installation removes entrypoints installed from additional packages.
+#[test]
+fn tool_install_failure_removes_additional_entrypoints() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context.temp_dir.child("uv.toml").write_str(
+        r#"
+        exclude-dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--with-executables-from")
+        .arg("black")
+        .arg("iniconfig")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    No executables are provided by package `iniconfig`; removing tool
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + iniconfig==2.0.0
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    Installed 2 executables from `black`: black, blackd
+    error: Failed to install entrypoints for `iniconfig`
+    ");
+
+    tool_dir
+        .child("iniconfig")
+        .assert(predicate::path::missing());
+    bin_dir
+        .child(format!("black{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+    bin_dir
+        .child(format!("blackd{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
 #[test]
 fn tool_install_no_binary_package_env_var() {
     let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
