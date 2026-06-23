@@ -4270,9 +4270,15 @@ impl Compiler {
             } else if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
             }
-            let exit_exclusion_start = if self.active_overriding_finally_returns > 0
-                && body_noop_location.is_some()
+            let pass_only_handlers = statement.handlers.iter().all(|handler| {
+                handler
+                    .as_except_handler()
+                    .is_some_and(|handler| matches!(handler.body.as_slice(), [Stmt::Pass(_)]))
+            });
+            let exit_exclusion_start = if body_noop_location.is_some()
                 && !self.active_exception_region_exclusions.is_empty()
+                && (self.active_overriding_finally_returns > 0
+                    || (pass_only_handlers && !self.prevent_try_exit_inlining))
             {
                 let start = self.assembler.label();
                 self.assembler.mark(start);
@@ -4337,7 +4343,7 @@ impl Compiler {
                 self.emit(NOT_TAKEN, 0, 0)?;
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
-                if handler_index > 0 {
+                if handler_index > 0 || matches!(exception_type.as_ref(), Expr::If(_)) {
                     for exclusions in &mut self.active_exception_region_exclusions {
                         exclusions.push((exclusion_start, exclusion_end));
                     }
@@ -4587,6 +4593,12 @@ impl Compiler {
                     self.emit_deferred_implicit_return()?;
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+                    if !handler_body_has_instructions
+                        && !self.active_exception_region_exclusions.is_empty()
+                    {
+                        self.assembler
+                            .exclude_last_instruction_from_exception_if_extended();
+                    }
                     let return_is_overridden = self.active_overriding_finally_returns > 0
                         && matches!(handler.body.last(), Some(Stmt::Return(_)));
                     if self.prevent_try_exit_inlining && !return_is_overridden {
@@ -4662,9 +4674,16 @@ impl Compiler {
         let reraise = self.assembler.label();
 
         if emit_statement_nop {
+            let statement_nop_start = self.assembler.label();
+            self.assembler.mark(statement_nop_start);
             self.assembler
                 .set_location(self.source_location_including_trailing_semicolon(statement.range));
             self.emit(NOP, 0, 0)?;
+            let statement_nop_end = self.assembler.label();
+            self.assembler.mark(statement_nop_end);
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((statement_nop_start, statement_nop_end));
+            }
         }
         self.assembler.mark(try_start);
         self.active_exception_region_exclusions.push(Vec::new());
@@ -4680,6 +4699,17 @@ impl Compiler {
             .flatten();
         let body_fallthrough_location =
             body_noop_location.or_else(|| self.assembler.last_instruction_location());
+        let exit_exclusion_start = if body_noop_location.is_some()
+            && statement.orelse.is_empty()
+            && !self.prevent_try_exit_inlining
+            && !self.active_exception_region_exclusions.is_empty()
+        {
+            let start = self.assembler.label();
+            self.assembler.mark(start);
+            Some(start)
+        } else {
+            None
+        };
         if !terminal && let Some(location) = body_noop_location {
             self.assembler.set_location(location);
             self.emit(NOP, 0, 0)?;
@@ -4695,6 +4725,13 @@ impl Compiler {
             SourceLocation::NONE
         });
         self.emit_jump_forward(JUMP_FORWARD, orelse, 0)?;
+        if let Some(exit_exclusion_start) = exit_exclusion_start {
+            let exit_exclusion_end = self.assembler.label();
+            self.assembler.mark(exit_exclusion_end);
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((exit_exclusion_start, exit_exclusion_end));
+            }
+        }
         self.add_exception_regions_with_exclusions(
             try_start,
             try_end,
@@ -4735,11 +4772,12 @@ impl Compiler {
             self.emit(CHECK_EG_MATCH, 0, 0)?;
             self.emit(COPY, 1, 1)?;
             self.emit_jump_forward(POP_JUMP_IF_NONE, no_match, -1)?;
-            let not_taken_exclusion_start = (handler_index > 0).then(|| {
-                let start = self.assembler.label();
-                self.assembler.mark(start);
-                start
-            });
+            let not_taken_exclusion_start =
+                (handler_index > 0 || matches!(exception_type.as_ref(), Expr::If(_))).then(|| {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    start
+                });
             self.emit(NOT_TAKEN, 0, 0)?;
             if let Some(start) = not_taken_exclusion_start {
                 let end = self.assembler.label();

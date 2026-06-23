@@ -46,6 +46,9 @@ struct Instruction {
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
     preserve_no_location: bool,
+    // CPython's cold-block optimizer retains stale exception ownership for the short form of
+    // certain synthetic handler-exit jumps, but not when the jump needs an `EXTENDED_ARG`.
+    exclude_exception_if_extended: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -255,6 +258,17 @@ impl Assembler {
         });
     }
 
+    pub(crate) fn exclude_last_instruction_from_exception_if_extended(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.exclude_exception_if_extended = true;
+        }
+    }
+
     pub(crate) fn emit(&mut self, opcode: Opcode, argument: u32) {
         self.emit_operand(opcode, Operand::Value(argument));
     }
@@ -401,6 +415,7 @@ impl Assembler {
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
             preserve_no_location: false,
+            exclude_exception_if_extended: false,
         }));
     }
 
@@ -964,6 +979,14 @@ impl Assembler {
                     || next_line == Some(instruction.location.line))
             {
                 self.items.remove(index);
+                if instruction.exclude_exception_if_extended
+                    && let Some(Item::Instruction(previous)) = self.items[..index]
+                        .iter_mut()
+                        .rev()
+                        .find(|item| matches!(item, Item::Instruction(_)))
+                {
+                    previous.exclude_exception_if_extended = true;
+                }
                 if instruction.location.line >= 0
                     && let Some(Item::Instruction(next)) = self.items[index..]
                         .iter_mut()
@@ -1114,17 +1137,20 @@ impl Assembler {
                 blocks[index + 1].insert(0, Item::Label(label));
                 label
             };
-            let location = blocks[index]
+            let (location, exclude_exception_if_extended) = blocks[index]
                 .iter()
                 .rev()
                 .find_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(instruction.location)
+                        Some((
+                            instruction.location,
+                            instruction.exclude_exception_if_extended,
+                        ))
                     } else {
                         None
                     }
                 })
-                .unwrap_or(SourceLocation::NONE);
+                .unwrap_or((SourceLocation::NONE, false));
             let label = self.label();
             blocks.insert(
                 index + 1,
@@ -1140,6 +1166,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        exclude_exception_if_extended,
                     }),
                 ],
             );
@@ -1490,6 +1517,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        exclude_exception_if_extended: false,
                     }),
                 );
             }
@@ -2737,6 +2765,8 @@ impl Assembler {
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
+                exclude_exception_if_extended: first.exclude_exception_if_extended
+                    || second.exclude_exception_if_extended,
             }));
             index += 2;
         }
@@ -2744,7 +2774,7 @@ impl Assembler {
     }
 
     fn exception_table(&self, extended_args: &[u8]) -> Result<Vec<u8>, CompileError> {
-        let (_, labels) = self.positions(extended_args);
+        let (positions, labels) = self.positions(extended_args);
         let regions = self
             .exception_regions
             .iter()
@@ -2769,9 +2799,32 @@ impl Assembler {
                 ))
             })
             .collect::<Result<Vec<_>, CompileError>>()?;
+        let extended_jump_exclusions = self
+            .items
+            .iter()
+            .filter_map(|item| {
+                let Item::Instruction(instruction) = item else {
+                    return None;
+                };
+                Some(instruction)
+            })
+            .zip(&positions)
+            .zip(extended_args)
+            .filter_map(|((instruction, position), extended)| {
+                (instruction.exclude_exception_if_extended && *extended > 0).then_some((
+                    *position,
+                    *position + u32::from(*extended) + 1 + u32::from(instruction.opcode.caches),
+                ))
+            })
+            .collect::<Vec<_>>();
         let mut boundaries = regions
             .iter()
             .flat_map(|(start, end, _, _, _, _)| [*start, *end])
+            .chain(
+                extended_jump_exclusions
+                    .iter()
+                    .flat_map(|(start, end)| [*start, *end]),
+            )
             .collect::<Vec<_>>();
         boundaries.sort_unstable();
         boundaries.dedup();
@@ -2781,6 +2834,14 @@ impl Assembler {
             let start = boundary[0];
             let end = boundary[1];
             if end <= start {
+                continue;
+            }
+            if extended_jump_exclusions
+                .iter()
+                .any(|(excluded_start, excluded_end)| {
+                    *excluded_start <= start && *excluded_end >= end
+                })
+            {
                 continue;
             }
             let Some((_, _, target, depth, preserve_lasti, _)) = regions
