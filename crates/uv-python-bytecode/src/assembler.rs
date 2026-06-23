@@ -408,6 +408,7 @@ impl Assembler {
         self.fuse_superinstructions();
         self.push_cold_blocks_to_end();
         self.duplicate_exit_blocks();
+        self.remove_redundant_checked_loads();
         self.propagate_locations_within_blocks();
         self.remove_redundant_swaps_before_pops();
         self.remove_redundant_nops();
@@ -2024,6 +2025,63 @@ impl Assembler {
                 index += 1;
             }
             block_start = block_end;
+        }
+    }
+
+    /// Removes repeated checked loads within a basic block.
+    ///
+    /// Once a checked load succeeds, CPython's definite-assignment scan treats
+    /// that local as initialized for subsequent instructions on the same path.
+    fn remove_redundant_checked_loads(&mut self) {
+        const DELETE_DEREF: u8 = 62;
+        const DELETE_FAST: u8 = 63;
+        const LOAD_FAST: u8 = 84;
+        const LOAD_FAST_AND_CLEAR: u8 = 85;
+        const LOAD_FAST_CHECK: u8 = 88;
+        const LOAD_FAST_LOAD_FAST: u8 = 89;
+        const STORE_DEREF: u8 = 111;
+        const STORE_FAST: u8 = 112;
+        const STORE_FAST_LOAD_FAST: u8 = 113;
+        const STORE_FAST_STORE_FAST: u8 = 114;
+
+        let mut initialized = HashSet::new();
+        let mut block_has_instruction = false;
+        for item in &mut self.items {
+            let Item::Instruction(instruction) = item else {
+                if block_has_instruction {
+                    initialized.clear();
+                    block_has_instruction = false;
+                }
+                continue;
+            };
+            block_has_instruction = true;
+            let Operand::Value(argument) = instruction.operand else {
+                initialized.clear();
+                block_has_instruction = false;
+                continue;
+            };
+            match instruction.opcode.code {
+                DELETE_DEREF | DELETE_FAST | LOAD_FAST_AND_CLEAR => {
+                    initialized.remove(&argument);
+                }
+                LOAD_FAST_CHECK => {
+                    if initialized.contains(&argument) {
+                        instruction.opcode = Opcode::new(LOAD_FAST, 0);
+                    }
+                    initialized.insert(argument);
+                }
+                LOAD_FAST | STORE_DEREF | STORE_FAST => {
+                    initialized.insert(argument);
+                }
+                LOAD_FAST_LOAD_FAST | STORE_FAST_LOAD_FAST | STORE_FAST_STORE_FAST => {
+                    initialized.extend([argument >> 4, argument & 15]);
+                }
+                _ => {}
+            }
+            if matches!(instruction.opcode.code, 35 | 104 | 105) {
+                initialized.clear();
+                block_has_instruction = false;
+            }
         }
     }
 
