@@ -170,18 +170,9 @@ pub fn uninstall_wheel(
         }
     }
 
-    // Preserve URL identity through general cleanup, then remove it immediately before RECORD.
-    match fs_err::remove_file(&direct_url_path) {
-        Ok(()) => {
-            trace!("Removed file: {}", direct_url_path.display());
-            file_count += 1;
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
-
     // RECORD is the uninstall journal, so remove it after cleaning up every other file and
-    // directory.
+    // directory. Keep direct URL identity until this succeeds so a failed finalization can still
+    // be retried by URL.
     match fs_err::remove_file(&record_path) {
         Ok(()) => {
             trace!("Removed file: {}", record_path.display());
@@ -191,7 +182,16 @@ pub fn uninstall_wheel(
         Err(err) => return Err(err.into()),
     }
 
-    // Removing RECORD may leave an empty dist-info directory behind.
+    match fs_err::remove_file(&direct_url_path) {
+        Ok(()) => {
+            trace!("Removed file: {}", direct_url_path.display());
+            file_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    // Removing the final metadata may leave an empty dist-info directory behind.
     match fs_err::read_dir(dist_info) {
         Ok(mut entries) => {
             if entries.next().is_none() {

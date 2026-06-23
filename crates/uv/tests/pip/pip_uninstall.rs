@@ -1,13 +1,15 @@
 #[cfg(unix)]
 use std::fmt::Write;
+#[cfg(unix)]
+use std::path::PathBuf;
 #[cfg(windows)]
 use std::path::{Component, Prefix};
 #[cfg(unix)]
-use std::process::Command;
+use std::process::{Child, Command};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
@@ -25,7 +27,7 @@ use url::Url;
 use uv_test::uv_snapshot;
 
 #[cfg(unix)]
-fn interrupt_when(command: &mut Command, condition: impl Fn() -> bool) -> Result<bool> {
+fn stop_when(command: &mut Command, condition: impl Fn() -> bool) -> Result<Option<(Child, Pid)>> {
     let mut child = command.spawn()?;
     let pid = Pid::from_raw(i32::try_from(child.id())?);
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -42,9 +44,7 @@ fn interrupt_when(command: &mut Command, condition: impl Fn() -> bool) -> Result
         };
 
         if condition() {
-            child.kill()?;
-            child.wait()?;
-            return Ok(true);
+            return Ok(Some((child, pid)));
         }
 
         if child.try_wait()?.is_some() {
@@ -57,7 +57,81 @@ fn interrupt_when(command: &mut Command, condition: impl Fn() -> bool) -> Result
     let _ = kill(pid, Signal::SIGCONT);
     let _ = child.kill();
     let _ = child.wait();
-    Ok(false)
+    Ok(None)
+}
+
+#[cfg(unix)]
+fn interrupt_when(command: &mut Command, condition: impl Fn() -> bool) -> Result<bool> {
+    let Some((mut child, _)) = stop_when(command, condition)? else {
+        return Ok(false);
+    };
+    child.kill()?;
+    child.wait()?;
+    Ok(true)
+}
+
+#[cfg(unix)]
+struct DirectUrlDistribution {
+    source: PathBuf,
+    package: PathBuf,
+    dist_info: PathBuf,
+    record: PathBuf,
+    direct_url: PathBuf,
+    first_payload_file: PathBuf,
+    last_payload_file: PathBuf,
+}
+
+#[cfg(unix)]
+fn create_direct_url_distribution(
+    context: &uv_test::TestContext,
+    name: &str,
+) -> Result<DirectUrlDistribution> {
+    let module = name.replace('-', "_");
+    let source = context.temp_dir.join(name);
+    fs_err::create_dir_all(&source)?;
+    fs_err::write(
+        source.join("pyproject.toml"),
+        format!("[project]\nname = '{name}'\nversion = '1.0.0'\n"),
+    )?;
+    let source_url = Url::from_file_path(&source).expect("source path is a valid file URL");
+
+    let site_packages = context.site_packages();
+    let package = site_packages.join(&module);
+    let dist_info = site_packages.join(format!("{module}-1.0.0.dist-info"));
+    fs_err::create_dir_all(&package)?;
+    fs_err::create_dir_all(&dist_info)?;
+    fs_err::write(
+        dist_info.join("METADATA"),
+        format!("Metadata-Version: 2.1\nName: {name}\nVersion: 1.0.0\n"),
+    )?;
+    let direct_url = dist_info.join("direct_url.json");
+    fs_err::write(
+        &direct_url,
+        format!(r#"{{"url":"{source_url}","dir_info":{{}}}}"#),
+    )?;
+
+    let record = dist_info.join("RECORD");
+    let mut record_contents = format!(
+        "{module}-1.0.0.dist-info/METADATA,,\n\
+         {module}-1.0.0.dist-info/RECORD,,\n\
+         {module}-1.0.0.dist-info/direct_url.json,,\n"
+    );
+    for index in 0..1_000 {
+        let relative_path = format!("{module}/module_{index:04}.py");
+        fs_err::write(site_packages.join(&relative_path), "")?;
+        writeln!(record_contents, "{relative_path},,")?;
+    }
+    fs_err::write(&record, record_contents)?;
+
+    Ok(DirectUrlDistribution {
+        source,
+        first_payload_file: package.join("module_0000.py"),
+        last_payload_file: package.join("module_0999.py"),
+        package,
+        dist_info,
+        record,
+        direct_url,
+    })
 }
 
 #[test]
@@ -309,53 +383,63 @@ fn interrupted_uninstall_during_directory_cleanup_can_be_retried() -> Result<()>
 #[cfg(unix)]
 fn interrupted_uninstall_by_path_can_be_retried() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let source = context.temp_dir.join("interrupted-url");
-    fs_err::create_dir_all(&source)?;
-    fs_err::write(
-        source.join("pyproject.toml"),
-        "[project]\nname = 'interrupted-url'\nversion = '1.0.0'\n",
-    )?;
-    let source_url = Url::from_file_path(&source).expect("source path is a valid file URL");
+    let distribution = create_direct_url_distribution(&context, "interrupted-url")?;
 
-    let site_packages = context.site_packages();
-    let package = site_packages.join("interrupted_url");
-    let dist_info = site_packages.join("interrupted_url-1.0.0.dist-info");
-    fs_err::create_dir_all(&package)?;
-    fs_err::create_dir_all(&dist_info)?;
-    fs_err::write(
-        dist_info.join("METADATA"),
-        "Metadata-Version: 2.1\nName: interrupted-url\nVersion: 1.0.0\n",
-    )?;
-    fs_err::write(
-        dist_info.join("direct_url.json"),
-        format!(r#"{{"url":"{source_url}","dir_info":{{}}}}"#),
-    )?;
-
-    let record_path = dist_info.join("RECORD");
-    let mut record = String::from(
-        "interrupted_url-1.0.0.dist-info/METADATA,,\n\
-         interrupted_url-1.0.0.dist-info/RECORD,,\n\
-         interrupted_url-1.0.0.dist-info/direct_url.json,,\n",
-    );
-    for index in 0..1_000 {
-        let relative_path = format!("interrupted_url/module_{index:04}.py");
-        fs_err::write(site_packages.join(&relative_path), "")?;
-        writeln!(record, "{relative_path},,")?;
-    }
-    fs_err::write(&record_path, record)?;
-
-    let first_payload_file = package.join("module_0000.py");
-    let last_payload_file = package.join("module_0999.py");
     let mut command = context.pip_uninstall();
-    command.arg(&source);
+    command.arg(&distribution.source);
     let interrupted = interrupt_when(&mut command, || {
-        first_payload_file.exists() != last_payload_file.exists()
+        distribution.first_payload_file.exists() != distribution.last_payload_file.exists()
     })?;
     assert!(interrupted, "failed to interrupt uv during path uninstall");
 
-    context.pip_uninstall().arg(&source).assert().success();
-    assert!(!package.exists());
-    assert!(!dist_info.exists());
+    context
+        .pip_uninstall()
+        .arg(&distribution.source)
+        .assert()
+        .success();
+    assert!(!distribution.package.exists());
+    assert!(!distribution.dist_info.exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn failed_record_removal_preserves_direct_url_identity() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let distribution = create_direct_url_distribution(&context, "record-failure-url")?;
+
+    let mut command = context.pip_uninstall();
+    command.arg(&distribution.source);
+    let Some((mut child, pid)) = stop_when(&mut command, || {
+        distribution.first_payload_file.exists() != distribution.last_payload_file.exists()
+    })?
+    else {
+        bail!("failed to stop uv during path uninstall");
+    };
+
+    let record_backup = distribution.dist_info.join("RECORD.backup");
+    fs_err::rename(&distribution.record, &record_backup)?;
+    fs_err::create_dir(&distribution.record)?;
+    fs_err::write(distribution.record.join("blocker"), "")?;
+
+    kill(pid, Signal::SIGCONT)?;
+    assert!(!child.wait()?.success());
+
+    fs_err::remove_dir_all(&distribution.record)?;
+    fs_err::rename(record_backup, &distribution.record)?;
+    assert!(
+        distribution.direct_url.exists(),
+        "failed RECORD removal discarded the distribution's URL identity"
+    );
+
+    context
+        .pip_uninstall()
+        .arg(&distribution.source)
+        .assert()
+        .success();
+    assert!(!distribution.package.exists());
+    assert!(!distribution.dist_info.exists());
 
     Ok(())
 }
