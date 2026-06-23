@@ -7038,13 +7038,34 @@ impl Compiler {
                     .iter()
                     .any(|keyword| keyword.arg.is_none())
         });
+        let has_starred_arguments =
+            arguments.is_some_and(|arguments| arguments.args.iter().any(Expr::is_starred_expr));
         let argument_count = arguments.map_or(0, |arguments| {
             arguments.args.len() + arguments.keywords.len()
         }) + usize::from(!self.type_parameter_names.is_empty());
         if has_unpacking {
-            self.emit(BUILD_LIST, 2, -1)?;
-            if let Some(arguments) = arguments {
-                for argument in &arguments.args {
+            // Extended class calls include the body function and class name in their positional
+            // tuple. CPython packs those together with every base before the first starred base.
+            if has_starred_arguments {
+                let leading_count = arguments.map_or(0, |arguments| {
+                    arguments
+                        .args
+                        .iter()
+                        .take_while(|argument| !argument.is_starred_expr())
+                        .count()
+                });
+                if let Some(arguments) = arguments {
+                    for argument in arguments.args.iter().take(leading_count) {
+                        self.compile_expression(argument)?;
+                    }
+                }
+                self.emit_build(BUILD_LIST, leading_count + 2)?;
+                for argument in arguments
+                    .expect("starred class arguments require an argument list")
+                    .args
+                    .iter()
+                    .skip(leading_count)
+                {
                     if let Expr::Starred(starred) = argument {
                         self.compile_expression(&starred.value)?;
                         self.emit(LIST_EXTEND, 1, -1)?;
@@ -7053,24 +7074,52 @@ impl Compiler {
                         self.emit(LIST_APPEND, 1, -1)?;
                     }
                 }
+                if !self.type_parameter_names.is_empty() {
+                    self.load_name(".generic_base")?;
+                    self.emit(LIST_APPEND, 1, -1)?;
+                }
+                self.emit(CALL_INTRINSIC_1, 6, 0)?;
+            } else {
+                if let Some(arguments) = arguments {
+                    for argument in &arguments.args {
+                        self.compile_expression(argument)?;
+                    }
+                }
+                if !self.type_parameter_names.is_empty() {
+                    self.load_name(".generic_base")?;
+                }
+                let positional_count = arguments.map_or(0, |arguments| arguments.args.len())
+                    + usize::from(!self.type_parameter_names.is_empty());
+                self.emit_build(BUILD_TUPLE, positional_count + 2)?;
             }
-            if !self.type_parameter_names.is_empty() {
-                self.load_name(".generic_base")?;
-                self.emit(LIST_APPEND, 1, -1)?;
-            }
-            self.emit(CALL_INTRINSIC_1, 6, 0)?;
             if let Some(arguments) = arguments.filter(|arguments| !arguments.keywords.is_empty()) {
-                self.emit(BUILD_MAP, 0, 1)?;
-                for keyword in &arguments.keywords {
-                    if let Some(name) = &keyword.arg {
+                if arguments
+                    .keywords
+                    .iter()
+                    .all(|keyword| keyword.arg.is_some())
+                {
+                    for keyword in &arguments.keywords {
+                        let name = keyword.arg.as_ref().unwrap();
                         let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
                         self.emit(LOAD_CONST, key, 1)?;
                         self.compile_expression(&keyword.value)?;
-                        self.emit(BUILD_MAP, 1, -1)?;
-                    } else {
-                        self.compile_expression(&keyword.value)?;
                     }
-                    self.emit(DICT_MERGE, 1, -1)?;
+                    self.assembler.set_location(definition_location);
+                    self.emit_build_map(arguments.keywords.len())?;
+                } else {
+                    self.emit(BUILD_MAP, 0, 1)?;
+                    for keyword in &arguments.keywords {
+                        if let Some(name) = &keyword.arg {
+                            let key =
+                                self.add_constant(Constant::String(name.as_str().to_string()))?;
+                            self.emit(LOAD_CONST, key, 1)?;
+                            self.compile_expression(&keyword.value)?;
+                            self.emit(BUILD_MAP, 1, -1)?;
+                        } else {
+                            self.compile_expression(&keyword.value)?;
+                        }
+                        self.emit(DICT_MERGE, 1, -1)?;
+                    }
                 }
             } else {
                 self.emit(PUSH_NULL, 0, 1)?;
