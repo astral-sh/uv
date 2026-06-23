@@ -685,6 +685,163 @@ impl Assembler {
         const JUMP_BACKWARD: u8 = 75;
         const JUMP_BACKWARD_NO_INTERRUPT: u8 = 76;
         const JUMP_FORWARD: u8 = 77;
+        const COPY: u8 = 59;
+        const NOP: u8 = 27;
+        const NOT_TAKEN: u8 = 28;
+        const POP_JUMP_IF_FALSE: u8 = 100;
+        const POP_JUMP_IF_TRUE: u8 = 103;
+        const POP_TOP: u8 = 31;
+        const TO_BOOL: u8 = 39;
+
+        #[derive(Clone, Copy)]
+        struct ConditionalTarget {
+            opcode: u8,
+            operand: Operand,
+            fallthrough_index: usize,
+        }
+
+        fn is_value_preserving_jump(items: &[Item], index: usize) -> bool {
+            let previous = items[..index]
+                .iter()
+                .rev()
+                .filter_map(|item| {
+                    let Item::Instruction(instruction) = item else {
+                        return None;
+                    };
+                    (instruction.opcode.code != NOP).then_some(*instruction)
+                })
+                .take(2)
+                .collect::<Vec<_>>();
+            matches!(
+                previous.as_slice(),
+                [to_bool, copy]
+                    if to_bool.opcode.code == TO_BOOL
+                        && copy.opcode.code == COPY
+                        && matches!(copy.operand, Operand::Value(1))
+            )
+        }
+
+        // CPython threads the value-preserving jumps used by boolean
+        // expressions through a nested boolean test. If both tests jump on
+        // the same truth value, they share the final target. Otherwise the
+        // inner jump skips the redundant outer test and enters its POP_TOP
+        // fallthrough path directly.
+        let mut conditional_targets = HashMap::new();
+        for (index, item) in self.items.iter().enumerate() {
+            let Item::Label(label) = item else {
+                continue;
+            };
+            let following = self.items[index + 1..]
+                .iter()
+                .enumerate()
+                .filter_map(|(offset, item)| {
+                    let Item::Instruction(instruction) = item else {
+                        return None;
+                    };
+                    (instruction.opcode.code != NOP).then_some((index + 1 + offset, *instruction))
+                })
+                .take(5)
+                .collect::<Vec<_>>();
+            let [
+                (_, copy),
+                (_, to_bool),
+                (_, jump),
+                (_, not_taken),
+                (fallthrough_index, pop),
+            ] = following.as_slice()
+            else {
+                continue;
+            };
+            if copy.opcode.code != COPY
+                || !matches!(copy.operand, Operand::Value(1))
+                || to_bool.opcode.code != TO_BOOL
+                || !matches!(jump.opcode.code, POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE)
+                || !matches!(jump.operand, Operand::Forward(_))
+                || not_taken.opcode.code != NOT_TAKEN
+                || pop.opcode.code != POP_TOP
+            {
+                continue;
+            }
+            conditional_targets.insert(
+                *label,
+                ConditionalTarget {
+                    opcode: jump.opcode.code,
+                    operand: jump.operand,
+                    fallthrough_index: *fallthrough_index,
+                },
+            );
+        }
+
+        let mut fallthrough_indices = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| {
+                let Item::Instruction(instruction) = item else {
+                    return None;
+                };
+                if !is_value_preserving_jump(&self.items, index) {
+                    return None;
+                }
+                let Operand::Forward(target) = instruction.operand else {
+                    return None;
+                };
+                let target = conditional_targets.get(&target)?;
+                (instruction.opcode.code != target.opcode).then_some(target.fallthrough_index)
+            })
+            .collect::<Vec<_>>();
+        fallthrough_indices.sort_unstable();
+        fallthrough_indices.dedup();
+        let fallthrough_labels = fallthrough_indices
+            .iter()
+            .map(|index| (*index, self.label()))
+            .collect::<HashMap<_, _>>();
+        for index in fallthrough_indices.into_iter().rev() {
+            self.items
+                .insert(index, Item::Label(fallthrough_labels[&index]));
+        }
+
+        let value_preserving_jumps = (0..self.items.len())
+            .filter(|index| is_value_preserving_jump(&self.items, *index))
+            .collect::<HashSet<_>>();
+        for (index, item) in self.items.iter_mut().enumerate() {
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            if !value_preserving_jumps.contains(&index) {
+                continue;
+            }
+            if !matches!(
+                instruction.opcode.code,
+                POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE
+            ) {
+                continue;
+            }
+            let Operand::Forward(mut target) = instruction.operand else {
+                continue;
+            };
+            for _ in 0..conditional_targets.len() {
+                let Some(next) = conditional_targets.get(&target) else {
+                    break;
+                };
+                if instruction.opcode.code == next.opcode {
+                    instruction.operand = next.operand;
+                    let Operand::Forward(next_target) = next.operand else {
+                        break;
+                    };
+                    if next_target == target {
+                        break;
+                    }
+                    target = next_target;
+                } else {
+                    let Some(fallthrough) = fallthrough_labels.get(&next.fallthrough_index) else {
+                        break;
+                    };
+                    instruction.operand = Operand::Forward(*fallthrough);
+                    break;
+                }
+            }
+        }
 
         let mut jump_targets = HashMap::new();
         for (index, item) in self.items.iter().enumerate() {
