@@ -2290,11 +2290,18 @@ impl Compiler {
                 } else if let Some(value) = &statement.value {
                     self.compile_expression(value)?;
                 }
-                let exception_unwind_start = if overriding_unwind_start.is_some() {
+                let delay_exception_unwind_start = overriding_unwind_start.is_none()
+                    && !self.active_exception_region_exclusions.is_empty()
+                    && self.active_with_exit_locations.is_empty()
+                    && !unwinds_pass_finally
+                    && preserve_tos
+                    && !self.active_exception_handlers.is_empty();
+                let mut exception_unwind_start = if overriding_unwind_start.is_some() {
                     overriding_unwind_start
                 } else if !self.active_exception_region_exclusions.is_empty()
                     && self.active_with_exit_locations.is_empty()
                     && !unwinds_pass_finally
+                    && !delay_exception_unwind_start
                 {
                     let start = self.assembler.label();
                     self.assembler.mark(start);
@@ -2326,6 +2333,11 @@ impl Compiler {
                     }
                     if preserve_tos {
                         self.emit(SWAP, 2, 0)?;
+                    }
+                    if delay_exception_unwind_start && exception_unwind_start.is_none() {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        exception_unwind_start = Some(start);
                     }
                     self.emit(POP_EXCEPT, 0, -1)?;
                     if let Some(name) = &handler.name {
