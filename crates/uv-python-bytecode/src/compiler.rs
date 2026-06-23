@@ -549,6 +549,8 @@ pub(crate) struct Compiler {
     active_with_exit_locations: Vec<SourceLocation>,
     active_with_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_terminal_withs: usize,
+    // CPython retains the empty end block when an async for ends a protected suite.
+    emit_protected_async_for_end_nop: bool,
     active_exception_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_exception_handlers: Vec<ExceptionHandlerContext>,
     // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
@@ -616,6 +618,7 @@ impl Compiler {
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
+            emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
@@ -736,6 +739,7 @@ impl Compiler {
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
+            emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
@@ -841,6 +845,7 @@ impl Compiler {
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
+            emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
@@ -1544,7 +1549,17 @@ impl Compiler {
                     }
                 }
             } else {
-                self.compile_statement(statement)?;
+                let emit_protected_async_for_end_nop = is_final
+                    && matches!(statement, Stmt::For(statement) if statement.is_async)
+                    && (!self.active_with_region_exclusions.is_empty()
+                        || !self.active_exception_region_exclusions.is_empty());
+                let previous = std::mem::replace(
+                    &mut self.emit_protected_async_for_end_nop,
+                    emit_protected_async_for_end_nop,
+                );
+                let result = self.compile_statement(statement);
+                self.emit_protected_async_for_end_nop = previous;
+                result?;
             }
             if statement_terminates(statement) {
                 let unreachable = &body[index + 1..];
@@ -4129,6 +4144,12 @@ impl Compiler {
         self.assembler.mark(async_cleanup);
         self.generator_region_exclusions
             .push((cleanup_throw, async_cleanup));
+        for exclusions in &mut self.active_with_region_exclusions {
+            exclusions.push((cleanup_throw_end, async_cleanup));
+        }
+        for exclusions in &mut self.active_exception_region_exclusions {
+            exclusions.push((cleanup_throw_end, async_cleanup));
+        }
         self.set_depth(base_depth + 2);
         self.assembler.set_location(iterator_location);
         self.apply_stack_effect(-2)?;
@@ -4153,6 +4174,26 @@ impl Compiler {
         self.compile_suite(&statement.orelse)?;
         if has_break {
             self.assembler.mark(end);
+        }
+        if self.emit_protected_async_for_end_nop && statement.orelse.is_empty() && !has_break {
+            let noop_start = self.assembler.label();
+            self.assembler.mark(noop_start);
+            self.assembler
+                .set_location(self.source_location(statement.iter.range()));
+            self.emit(NOP, 0, 0)?;
+            let noop_end = self.assembler.label();
+            self.assembler.mark(noop_end);
+            // CPython's coroutine stop handler excludes both the synthetic end block and the
+            // preceding END_ASYNC_FOR, while the surrounding protected region still owns the
+            // END_ASYNC_FOR itself.
+            self.generator_region_exclusions
+                .push((async_cleanup, noop_end));
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.push((noop_start, noop_end));
+            }
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((noop_start, noop_end));
+            }
         }
         self.set_depth(base_depth);
         Ok(())
@@ -5748,14 +5789,13 @@ impl Compiler {
             } else {
                 self.compile_suite(body)?;
             }
-            let trailing_nop_is_covered =
-                body_previous_location.is_some_and(|previous| {
-                    previous.line >= 0
-                        && self
-                            .assembler
-                            .last_instruction_location()
-                            .is_some_and(|last| last.line == previous.line)
-                }) && self.assembler.take_trailing_nop_location().is_some();
+            let trailing_nop_is_covered = body_previous_location.is_some_and(|previous| {
+                previous.line >= 0
+                    && self
+                        .assembler
+                        .last_instruction_location()
+                        .is_some_and(|last| last.line == previous.line)
+            }) && self.take_trailing_nop_location().is_some();
             if !trailing_nop_is_covered
                 && self.assembler.instruction_count() == body_start
                 && let Some(statement) = body.last()
@@ -9610,6 +9650,12 @@ impl Compiler {
         for exclusions in &mut self.active_comprehension_region_exclusions {
             exclusions.push((cleanup_throw_end, async_cleanup));
         }
+        for exclusions in &mut self.active_with_region_exclusions {
+            exclusions.push((cleanup_throw_end, async_cleanup));
+        }
+        for exclusions in &mut self.active_exception_region_exclusions {
+            exclusions.push((cleanup_throw_end, async_cleanup));
+        }
         self.set_depth(loop_depth + 1);
         self.apply_stack_effect(-2)?;
         self.assembler.emit_backward(END_ASYNC_FOR, send_end);
@@ -11430,7 +11476,7 @@ impl Compiler {
         effect: i32,
     ) -> Result<(), CompileError> {
         if matches!(opcode.code(), 75..=77)
-            && let Some(location) = self.assembler.take_trailing_nop_location()
+            && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }
@@ -11447,7 +11493,7 @@ impl Compiler {
         effect: i32,
     ) -> Result<(), CompileError> {
         if matches!(opcode.code(), 75..=77)
-            && let Some(location) = self.assembler.take_trailing_nop_location()
+            && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }
@@ -11455,6 +11501,24 @@ impl Compiler {
         self.assembler
             .emit_backward_with_depth(opcode, label, self.depth.cast_unsigned());
         Ok(())
+    }
+
+    fn take_trailing_nop_location(&mut self) -> Option<SourceLocation> {
+        let (location, exclusion) = self.assembler.take_trailing_nop_location()?;
+        if let Some(exclusion) = exclusion {
+            self.generator_region_exclusions
+                .retain(|candidate| *candidate != exclusion);
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.retain(|candidate| *candidate != exclusion);
+            }
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.retain(|candidate| *candidate != exclusion);
+            }
+            for exclusions in &mut self.active_comprehension_region_exclusions {
+                exclusions.retain(|candidate| *candidate != exclusion);
+            }
+        }
+        Some(location)
     }
 
     fn apply_stack_effect(&mut self, effect: i32) -> Result<(), CompileError> {

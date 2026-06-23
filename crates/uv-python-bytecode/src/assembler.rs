@@ -296,7 +296,10 @@ impl Assembler {
         }
     }
 
-    pub(crate) fn take_trailing_nop_location(&mut self) -> Option<SourceLocation> {
+    /// Removes a trailing NOP and returns its location and immediate exclusion labels, if any.
+    pub(crate) fn take_trailing_nop_location(
+        &mut self,
+    ) -> Option<(SourceLocation, Option<(Label, Label)>)> {
         let index = self
             .items
             .iter()
@@ -313,8 +316,16 @@ impl Assembler {
         {
             return None;
         }
+        let exclusion = if index > 0 {
+            match (self.items[index - 1], self.items.get(index + 1).copied()) {
+                (Item::Label(start), Some(Item::Label(end))) => Some((start, end)),
+                _ => None,
+            }
+        } else {
+            None
+        };
         self.items.remove(index);
-        Some(instruction.location)
+        Some((instruction.location, exclusion))
     }
 
     pub(crate) fn add_exception_region(

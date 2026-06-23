@@ -374,11 +374,11 @@ mod tests {
     }
 
     #[test]
-    fn matches_cpython_marshal_for_loop_tail_conditionals() {
+    fn matches_cpython_marshal_for_loop_and_async_iteration_edges() {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def f():\n    for value in range(10):\n        if 2 <= value <= 8:\n            print(value)\n\nasync def async_tail(items, result):\n    async for value in items:\n        if value:\n            result.append(value)\n";
+        let source = "def f():\n    for value in range(10):\n        if 2 <= value <= 8:\n            print(value)\n\nasync def async_tail(items, result):\n    async for value in items:\n        if value:\n            result.append(value)\n\nasync def protected_async_for(manager, items):\n    with manager:\n        async for item in items:\n            ...\n\nasync def protected_async_comprehension(manager, items):\n    async with manager:\n        consume({item async for item in items})\n";
         let expected = Command::new(python)
             .args([
                 "-c",
