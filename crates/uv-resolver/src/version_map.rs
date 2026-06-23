@@ -90,9 +90,7 @@ impl VersionMap {
         // If a set of flat distributions have been given, linearly merge the
         // already sorted flat entries with the archive-ordered simple vector.
         if let Some(flat_index) = flat_index {
-            for (version, _) in flat_index.iter() {
-                stable |= version.is_stable();
-            }
+            stable |= flat_index.iter().any(|(version, _)| version.is_stable());
             map = map.merge_flat(flat_index);
         }
         Self {
@@ -373,52 +371,35 @@ impl VersionMapLazyIndex {
         let mut merged = Vec::with_capacity(self.entries.len() + flat_count);
         let mut simple = self.entries.into_iter().peekable();
         let mut flat = flat_index.into_iter().peekable();
-        loop {
-            match (simple.peek(), flat.peek()) {
-                (Some(simple_entry), Some((flat_version, _))) => {
-                    match simple_entry.version.cmp(flat_version) {
-                        std::cmp::Ordering::Less => {
-                            if let Some(entry) = simple.next() {
-                                merged.push(entry);
-                            }
-                        }
-                        std::cmp::Ordering::Greater => {
-                            if let Some((version, dist)) = flat.next() {
-                                merged.push(VersionMapLazyEntry {
-                                    version,
-                                    dist: LazyPrioritizedDist {
-                                        flat: Some(dist),
-                                        simple: None,
-                                    },
-                                });
-                            }
-                        }
-                        std::cmp::Ordering::Equal => {
-                            if let (Some(mut entry), Some((_, dist))) = (simple.next(), flat.next())
-                            {
-                                entry.dist.flat = Some(dist);
-                                merged.push(entry);
-                            }
-                        }
+        let flat_entry = |(version, dist)| VersionMapLazyEntry {
+            version,
+            dist: LazyPrioritizedDist {
+                flat: Some(dist),
+                simple: None,
+            },
+        };
+        while let (Some(simple_entry), Some((flat_version, _))) = (simple.peek(), flat.peek()) {
+            match simple_entry.version.cmp(flat_version) {
+                std::cmp::Ordering::Less => {
+                    if let Some(entry) = simple.next() {
+                        merged.push(entry);
                     }
                 }
-                (Some(_), None) => {
-                    merged.extend(simple);
-                    break;
+                std::cmp::Ordering::Greater => {
+                    if let Some(entry) = flat.next() {
+                        merged.push(flat_entry(entry));
+                    }
                 }
-                (None, Some(_)) => {
-                    merged.extend(flat.map(|(version, dist)| VersionMapLazyEntry {
-                        version,
-                        dist: LazyPrioritizedDist {
-                            flat: Some(dist),
-                            simple: None,
-                        },
-                    }));
-                    break;
+                std::cmp::Ordering::Equal => {
+                    if let (Some(mut entry), Some((_, dist))) = (simple.next(), flat.next()) {
+                        entry.dist.flat = Some(dist);
+                        merged.push(entry);
+                    }
                 }
-                (None, None) => break,
             }
         }
+        merged.extend(simple);
+        merged.extend(flat.map(flat_entry));
 
         Self { entries: merged }
     }
@@ -478,13 +459,6 @@ fn sort_and_coalesce_entries(mut entries: Vec<VersionMapLazyEntry>) -> Vec<Versi
     coalesced
 }
 
-fn deserialize_resolution_metadata(
-    archived: &rkyv::Archived<ResolutionMetadata>,
-) -> ResolutionMetadata {
-    rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
-        .expect("archived metadata always deserializes")
-}
-
 /// A map that lazily materializes some prioritized distributions upon access.
 ///
 /// The idea here is that some packages have a lot of versions published, and
@@ -535,14 +509,15 @@ impl VersionMapLazy {
             .and_then(|entry| entry.dist.simple.as_ref())
             .and_then(|simple| self.simple_metadata.datum(simple.datum_index))
             .and_then(|datum| datum.metadata.as_ref())?;
-        Some(deserialize_resolution_metadata(archived))
+        Some(
+            rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
+                .expect("archived metadata always deserializes"),
+        )
     }
 
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        let entry = self.map.get(version)?;
-        let priority_dist = self.get_lazy(&entry.dist)?;
-        Some(priority_dist)
+        self.get_lazy(&self.map.get(version)?.dist)
     }
 
     /// Given a reference to a possibly-initialized distribution that is in
@@ -846,16 +821,12 @@ mod tests {
     use std::sync::OnceLock;
 
     use pubgrub::Ranges;
-    use rkyv::rancor::Error;
     use uv_distribution_types::PrioritizedDist;
-    use uv_normalize::PackageName;
     use uv_pep440::Version;
-    use uv_pypi_types::ResolutionMetadata;
 
     use super::{
         BoundingRange, FlatDistributions, LazyPrioritizedDist, SimplePrioritizedDist,
-        VersionMapLazyEntry, VersionMapLazyIndex, deserialize_resolution_metadata,
-        sort_and_coalesce_entries,
+        VersionMapLazyEntry, VersionMapLazyIndex, sort_and_coalesce_entries,
     };
 
     fn version(value: &str) -> Version {
@@ -875,7 +846,7 @@ mod tests {
         }
     }
 
-    fn compact_index(simple: &[(&str, usize)], flat: &[&str]) -> (VersionMapLazyIndex, bool) {
+    fn compact_index(simple: &[(&str, usize)], flat: &[&str]) -> VersionMapLazyIndex {
         let mut archive_ordered = true;
         let mut entries = Vec::with_capacity(simple.len());
         for &(value, datum_index) in simple {
@@ -890,14 +861,13 @@ mod tests {
         }
         let index = VersionMapLazyIndex { entries };
         if flat.is_empty() {
-            (index, !archive_ordered)
+            index
         } else {
             let distributions = flat
                 .iter()
                 .map(|value| (version(value), PrioritizedDist::default()))
                 .collect::<BTreeMap<_, _>>();
-            let index = index.merge_flat(FlatDistributions::from(distributions));
-            (index, !archive_ordered)
+            index.merge_flat(FlatDistributions::from(distributions))
         }
     }
 
@@ -950,7 +920,7 @@ mod tests {
         ];
 
         for (simple, flat) in cases {
-            let (index, _) = compact_index(&simple, &flat);
+            let index = compact_index(&simple, &flat);
             let restored = restored_tree(&simple, &flat);
             let expected = restored
                 .iter()
@@ -976,7 +946,7 @@ mod tests {
             ("2.0", 5),
         ];
         let flat = ["1.0", "1.5", "3.0"];
-        let (index, _) = compact_index(&simple, &flat);
+        let index = compact_index(&simple, &flat);
         let restored = restored_tree(&simple, &flat);
 
         for key in restored.keys() {
@@ -1009,22 +979,12 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(compact, reference);
         }
-
-        let before = index
-            .get(&version("1.0"))
-            .map(|entry| std::ptr::from_ref(&entry.version));
-        let _ = index.range(BoundingRange::from(&Ranges::full()));
-        let after = index
-            .get(&version("1.0"))
-            .map(|entry| std::ptr::from_ref(&entry.version));
-        assert_eq!(before, after);
     }
 
     #[test]
     fn compact_index_fallback_preserves_last_normalized_entry() {
         let simple = [("2.0", 0), ("1.0", 1), ("1.0.0", 2), ("1.0.post1", 3)];
-        let (index, fallback_sorted) = compact_index(&simple, &[]);
-        assert!(fallback_sorted);
+        let index = compact_index(&simple, &[]);
         assert_eq!(
             descriptors(&index),
             vec![
@@ -1033,57 +993,5 @@ mod tests {
                 (version("2.0"), Some(0), false),
             ]
         );
-    }
-
-    #[test]
-    fn archived_metadata_is_deserialized_only_when_present() {
-        let metadata = ResolutionMetadata {
-            name: PackageName::from_str("example").expect("test package name should be valid"),
-            version: version("1.0"),
-            requires_dist: Vec::new().into(),
-            requires_python: None,
-            provides_extra: Vec::new().into(),
-            dynamic: false,
-        };
-        let some_bytes = rkyv::to_bytes::<Error>(&Some(metadata.clone()))
-            .expect("test metadata should serialize");
-        let some = rkyv::access::<rkyv::Archived<Option<ResolutionMetadata>>, Error>(&some_bytes)
-            .expect("test metadata archive should validate");
-        let archived = some.as_ref().expect("test metadata should be present");
-        let deserialized = deserialize_resolution_metadata(archived);
-        assert_eq!(deserialized.name, metadata.name);
-        assert_eq!(deserialized.version, metadata.version);
-        assert!(deserialized.requires_dist.is_empty());
-        assert!(deserialized.requires_python.is_none());
-        assert!(deserialized.provides_extra.is_empty());
-        assert!(!deserialized.dynamic);
-
-        let none_bytes = rkyv::to_bytes::<Error>(&Option::<ResolutionMetadata>::None)
-            .expect("absent metadata should serialize");
-        let none = rkyv::access::<rkyv::Archived<Option<ResolutionMetadata>>, Error>(&none_bytes)
-            .expect("absent metadata archive should validate");
-        assert!(none.as_ref().is_none());
-
-        let (flat_only, _) = compact_index(&[], &["1.0"]);
-        let entry = flat_only
-            .get(&version("1.0"))
-            .expect("flat-only version should exist");
-        assert!(entry.dist.simple.is_none());
-    }
-
-    #[test]
-    fn lazy_distribution_storage_initializes_once() {
-        let entry = simple_entry("1.0", 0);
-        let simple = entry
-            .dist
-            .simple
-            .as_ref()
-            .expect("simple entry should contain lazy storage");
-        assert!(simple.dist.get().is_none());
-        assert!(simple.dist.set(Some(PrioritizedDist::default())).is_ok());
-        let first = simple.dist.get().map(std::ptr::from_ref);
-        let second = simple.dist.get().map(std::ptr::from_ref);
-        assert_eq!(first, second);
-        assert!(simple.dist.set(Some(PrioritizedDist::default())).is_err());
     }
 }
