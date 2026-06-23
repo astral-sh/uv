@@ -47,6 +47,7 @@ struct Instruction {
     preserve_inlined_jump_nop: bool,
     preserve_no_location: bool,
     prevent_fusion_with_next: bool,
+    defer_redundant_jump_removal: bool,
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
     normalized_exception_owner: Option<bool>,
@@ -207,6 +208,18 @@ impl Assembler {
             .find(|item| matches!(item, Item::Instruction(_)))
         {
             instruction.prevent_fusion_with_next = true;
+        }
+    }
+
+    /// Defers a redundant jump until the pass after exit-block duplication.
+    pub(crate) fn defer_last_jump_removal(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.defer_redundant_jump_removal = true;
         }
     }
 
@@ -450,6 +463,7 @@ impl Assembler {
             preserve_inlined_jump_nop: false,
             preserve_no_location: false,
             prevent_fusion_with_next: false,
+            defer_redundant_jump_removal: false,
             normalized_exception_owner: None,
             exclude_exception_if_extended: false,
         }));
@@ -987,6 +1001,14 @@ impl Assembler {
                 index += 1;
                 continue;
             }
+            if instruction.defer_redundant_jump_removal {
+                let Item::Instruction(instruction) = &mut self.items[index] else {
+                    unreachable!();
+                };
+                instruction.defer_redundant_jump_removal = false;
+                index += 1;
+                continue;
+            }
             let target_is_next = self.items[index + 1..]
                 .iter()
                 .take_while(|item| matches!(item, Item::Label(_)))
@@ -1203,6 +1225,7 @@ impl Assembler {
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
+                        defer_redundant_jump_removal: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended,
                     }),
@@ -1556,6 +1579,7 @@ impl Assembler {
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
+                        defer_redundant_jump_removal: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
                     }),
@@ -2820,6 +2844,8 @@ impl Assembler {
                 preserve_inlined_jump_nop: false,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
                 prevent_fusion_with_next: second.prevent_fusion_with_next,
+                defer_redundant_jump_removal: first.defer_redundant_jump_removal
+                    || second.defer_redundant_jump_removal,
                 normalized_exception_owner: first
                     .normalized_exception_owner
                     .or(second.normalized_exception_owner),

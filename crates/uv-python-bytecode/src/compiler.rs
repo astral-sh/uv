@@ -2955,6 +2955,11 @@ impl Compiler {
                         self.emit_deferred_implicit_return()?;
                     } else {
                         self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+                        if index + 1 == matched_cases && !context.fail_pop.is_empty() {
+                            // CPython duplicates small exits before removing this jump across
+                            // the empty final pattern-failure block.
+                            self.assembler.defer_last_jump_removal();
+                        }
                         let subject_pop_is_optimized_away = !copied_subject
                             && context.stores.is_empty()
                             && fold_constant(&statement.subject).is_some();
