@@ -3,6 +3,8 @@ use std::fmt::Write;
 #[cfg(windows)]
 use std::path::{Component, Prefix};
 #[cfg(unix)]
+use std::process::Command;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -19,6 +21,42 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::Pid;
 
 use uv_test::uv_snapshot;
+
+#[cfg(unix)]
+fn interrupt_when(command: &mut Command, condition: impl Fn() -> bool) -> Result<bool> {
+    let mut child = command.spawn()?;
+    let pid = Pid::from_raw(i32::try_from(child.id())?);
+    let deadline = Instant::now() + Duration::from_secs(30);
+
+    while Instant::now() < deadline && child.try_wait()?.is_none() {
+        match kill(pid, Signal::SIGSTOP) {
+            Ok(()) => {}
+            Err(Errno::ESRCH) => break,
+            Err(error) => return Err(error.into()),
+        }
+        let WaitStatus::Stopped(_, Signal::SIGSTOP) = waitpid(pid, Some(WaitPidFlag::WUNTRACED))?
+        else {
+            break;
+        };
+
+        if condition() {
+            child.kill()?;
+            child.wait()?;
+            return Ok(true);
+        }
+
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        kill(pid, Signal::SIGCONT)?;
+        std::thread::sleep(Duration::from_micros(100));
+    }
+
+    let _ = kill(pid, Signal::SIGCONT);
+    let _ = child.kill();
+    let _ = child.wait();
+    Ok(false)
+}
 
 #[test]
 fn no_arguments() {
@@ -194,41 +232,11 @@ fn interrupted_uninstall_can_be_retried() -> Result<()> {
 
     let first_payload_file = package.join("module_0000.py");
     let last_payload_file = package.join("module_0999.py");
-    let mut child = context.pip_uninstall().arg("interrupted").spawn()?;
-    let pid = Pid::from_raw(i32::try_from(child.id())?);
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let mut interrupted = false;
-
-    while Instant::now() < deadline && child.try_wait()?.is_none() {
-        match kill(pid, Signal::SIGSTOP) {
-            Ok(()) => {}
-            Err(Errno::ESRCH) => break,
-            Err(error) => return Err(error.into()),
-        }
-        let WaitStatus::Stopped(_, Signal::SIGSTOP) = waitpid(pid, Some(WaitPidFlag::WUNTRACED))?
-        else {
-            break;
-        };
-
-        if record_path.exists() && !first_payload_file.exists() && last_payload_file.exists() {
-            child.kill()?;
-            child.wait()?;
-            interrupted = true;
-            break;
-        }
-
-        if child.try_wait()?.is_some() {
-            break;
-        }
-        kill(pid, Signal::SIGCONT)?;
-        std::thread::sleep(Duration::from_micros(100));
-    }
-
-    if !interrupted {
-        let _ = kill(pid, Signal::SIGCONT);
-        let _ = child.kill();
-        let _ = child.wait();
-    }
+    let mut command = context.pip_uninstall();
+    command.arg("interrupted");
+    let interrupted = interrupt_when(&mut command, || {
+        record_path.exists() && !first_payload_file.exists() && last_payload_file.exists()
+    })?;
     assert!(
         interrupted,
         "failed to interrupt uv while RECORD could support recovery"
@@ -237,6 +245,56 @@ fn interrupted_uninstall_can_be_retried() -> Result<()> {
     context
         .pip_uninstall()
         .arg("interrupted")
+        .assert()
+        .success();
+    assert!(!package.exists());
+    assert!(!dist_info.exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn interrupted_uninstall_during_directory_cleanup_can_be_retried() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = context.site_packages();
+    let package = site_packages.join("interrupted_cleanup");
+    let bytecode = package.join("__pycache__");
+    let dist_info = site_packages.join("interrupted_cleanup-1.0.0.dist-info");
+    fs_err::create_dir_all(&bytecode)?;
+    fs_err::create_dir_all(&dist_info)?;
+    fs_err::write(package.join("__init__.py"), "")?;
+    fs_err::write(
+        dist_info.join("METADATA"),
+        "Metadata-Version: 2.1\nName: interrupted-cleanup\nVersion: 1.0.0\n",
+    )?;
+
+    let record_path = dist_info.join("RECORD");
+    fs_err::write(
+        &record_path,
+        "interrupted_cleanup-1.0.0.dist-info/METADATA,,\n\
+         interrupted_cleanup-1.0.0.dist-info/RECORD,,\n\
+         interrupted_cleanup/__init__.py,,\n",
+    )?;
+    for index in 0..10_000 {
+        fs_err::write(bytecode.join(format!("module_{index:05}.pyc")), "")?;
+    }
+
+    let first_bytecode_file = bytecode.join("module_00000.pyc");
+    let last_bytecode_file = bytecode.join("module_09999.pyc");
+    let mut command = context.pip_uninstall();
+    command.arg("interrupted-cleanup");
+    let interrupted = interrupt_when(&mut command, || {
+        record_path.exists() && first_bytecode_file.exists() != last_bytecode_file.exists()
+    })?;
+    assert!(
+        interrupted,
+        "failed to interrupt uv during directory cleanup while RECORD remained available"
+    );
+
+    context
+        .pip_uninstall()
+        .arg("interrupted-cleanup")
         .assert()
         .success();
     assert!(!package.exists());
