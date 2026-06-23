@@ -2808,15 +2808,20 @@ impl Compiler {
                 self.store_name(name)?;
             }
             let mut guard_always_false = false;
+            let mut irrefutable_true_guard = false;
             if let Some(guard) = &case.guard {
                 if let Some(truthiness) = early_condition_truthiness(guard) {
-                    let range = if is_wildcard_pattern(&case.pattern) {
-                        case.pattern.range()
-                    } else {
-                        guard.range()
-                    };
-                    self.assembler.set_location(self.source_location(range));
-                    self.emit(NOP, 0, 0)?;
+                    self.record_folded_value(guard)?;
+                    irrefutable_true_guard = truthiness && context.fail_pop.is_empty();
+                    if !truthiness || !context.fail_pop.is_empty() {
+                        let range = if is_wildcard_pattern(&case.pattern) {
+                            case.pattern.range()
+                        } else {
+                            guard.range()
+                        };
+                        self.assembler.set_location(self.source_location(range));
+                        self.emit(NOP, 0, 0)?;
+                    }
                     if !truthiness {
                         self.ensure_match_fail_pop(&mut context, 0);
                         guard_always_false = true;
@@ -2852,8 +2857,9 @@ impl Compiler {
                             && body_previous_location.is_some_and(|location| {
                                 location.line == self.assembler.location().line
                             });
-                        if self.assembler.instruction_count() == body_start + 1
-                            && !previous_instruction_covers_branch
+                        if irrefutable_true_guard
+                            || (self.assembler.instruction_count() == body_start + 1
+                                && !previous_instruction_covers_branch)
                         {
                             self.assembler.preserve_last_inlined_jump_nop();
                         }
