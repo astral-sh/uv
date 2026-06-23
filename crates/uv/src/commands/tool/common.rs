@@ -494,9 +494,21 @@ pub(crate) fn finalize_tool_install(
             if itself.as_ref().is_some_and(|itself| {
                 std::path::absolute(&target).is_ok_and(|target| *itself == target)
             }) {
-                self_replace::self_replace(src).context("Failed to install entrypoint")?;
+                if let Some((launcher, is_gui)) = rewritten_tool_launcher(src, environment)? {
+                    let mut file = uv_fs::tempfile_in(
+                        target
+                            .parent()
+                            .context("Expected entrypoint parent directory")?,
+                    )?;
+                    launcher.write_to_file(file.as_file_mut(), is_gui)?;
+                    self_replace::self_replace(file.path())
+                        .context("Failed to install entrypoint")?;
+                } else {
+                    self_replace::self_replace(src).context("Failed to install entrypoint")?;
+                }
             } else {
-                fs_err::copy(src, &target).context("Failed to install entrypoint")?;
+                copy_tool_entrypoint(src, &target, environment)
+                    .context("Failed to install entrypoint")?;
             }
 
             let tool_entry = ToolEntrypoint::new(&name, target, package.to_string());
@@ -534,6 +546,57 @@ pub(crate) fn finalize_tool_install(
     warn_out_of_path(&executable_directory);
 
     Ok(())
+}
+
+/// Copy a tool entrypoint out of its environment.
+///
+/// Relocatable Windows launchers contain a Python path relative to the environment's scripts
+/// directory. Rewrite that path when exporting the launcher to the tool executable directory.
+#[cfg(windows)]
+fn copy_tool_entrypoint(
+    source: &Path,
+    target: &Path,
+    environment: &PythonEnvironment,
+) -> anyhow::Result<()> {
+    if let Some((launcher, is_gui)) = rewritten_tool_launcher(source, environment)? {
+        let mut file = fs_err::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(target)?;
+        launcher.write_to_file(&mut file, is_gui)?;
+    } else {
+        fs_err::copy(source, target)?;
+    }
+
+    Ok(())
+}
+
+/// Rewrite a relocatable Windows launcher for use outside of its environment.
+#[cfg(windows)]
+fn rewritten_tool_launcher(
+    source: &Path,
+    environment: &PythonEnvironment,
+) -> anyhow::Result<Option<(uv_trampoline_builder::Launcher, bool)>> {
+    use uv_trampoline_builder::Launcher;
+
+    let Some(launcher) = Launcher::try_from_path(source)? else {
+        return Ok(None);
+    };
+
+    if launcher.python_path.is_absolute() {
+        return Ok(None);
+    }
+
+    let is_gui = launcher.python_path.ends_with("pythonw.exe");
+    let python_executable = environment.interpreter().sys_executable();
+    let python_path = if is_gui {
+        python_executable.with_file_name("pythonw.exe")
+    } else {
+        python_executable.to_path_buf()
+    };
+
+    Ok(Some((launcher.with_python_path(python_path), is_gui)))
 }
 
 fn warn_out_of_path(executable_directory: &Path) {

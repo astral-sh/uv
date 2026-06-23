@@ -15,6 +15,7 @@ use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
+use uv_preview::PreviewFeature;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
@@ -346,7 +347,7 @@ impl InstalledTools {
             uv_virtualenv::Prompt::None,
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
-            false,
+            uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
             false,
             false,
         )?;
