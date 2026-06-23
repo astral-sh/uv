@@ -8774,6 +8774,8 @@ impl Compiler {
                         self.assembler.fusion_barrier();
                     }
                     self.emit(STORE_FAST, *index, -1)?;
+                    self.assembler
+                        .prevent_last_instruction_fusion_with_previous();
                 }
             } else {
                 for (position, index) in temporary_indices.iter().rev().enumerate() {
@@ -8781,6 +8783,8 @@ impl Compiler {
                         self.assembler.fusion_barrier();
                     }
                     self.emit(STORE_FAST, *index, -1)?;
+                    self.assembler
+                        .prevent_last_instruction_fusion_with_previous();
                 }
             }
             // CPython converts STORE_FAST_MAYBE_NULL only after inserting superinstructions.
@@ -10650,6 +10654,8 @@ impl Compiler {
                     self.assembler.set_location(location);
                 }
                 self.emit(STORE_FAST, *index, -1)?;
+                self.assembler
+                    .prevent_last_instruction_fusion_with_previous();
             }
             // CPython converts STORE_FAST_MAYBE_NULL only after inserting superinstructions.
             self.assembler.prevent_last_instruction_fusion();
@@ -11408,6 +11414,17 @@ impl LocalCollector {
         for statement in body {
             match statement {
                 Stmt::Assign(assignment) => {
+                    let mut references = ReferenceCollector::default();
+                    references.visit_expr(&assignment.value);
+                    for target in &assignment.targets {
+                        let mut names = Vec::new();
+                        collect_target_names(target, &mut names);
+                        for name in names {
+                            if references.references.contains(name.as_str()) {
+                                self.insert(&name);
+                            }
+                        }
+                    }
                     self.collect_expression(&assignment.value);
                     for target in &assignment.targets {
                         self.collect_target(target);
@@ -13859,7 +13876,7 @@ fn terminal_exception_handler_if_supported(statement: &ruff_python_ast::StmtIf) 
 
 fn statement_uses_implicit_return_location(statement: &Stmt) -> bool {
     matches!(statement, Stmt::Assign(assignment) if assignment.targets.len() > 1 || matches!(assignment.targets.last(), Some(Expr::List(_) | Expr::Tuple(_))))
-        || matches!(statement, Stmt::Assign(assignment) if expression_defers_async_comprehension_restore(&assignment.value))
+        || matches!(statement, Stmt::Assign(assignment) if matches!(assignment.value.as_ref(), Expr::ListComp(_) | Expr::SetComp(_) | Expr::DictComp(_)))
         || matches!(statement, Stmt::Expr(expression) if fold_constant(&expression.value).is_some())
         || matches!(
             statement,
