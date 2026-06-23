@@ -46,6 +46,7 @@ struct Instruction {
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
     preserve_no_location: bool,
+    prevent_fusion_with_next: bool,
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
     normalized_exception_owner: Option<bool>,
@@ -195,6 +196,18 @@ impl Assembler {
     pub(crate) fn fusion_barrier(&mut self) {
         let label = self.label();
         self.mark(label);
+    }
+
+    /// Prevents fusion with the next instruction without introducing a CFG boundary.
+    pub(crate) fn prevent_last_instruction_fusion(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.prevent_fusion_with_next = true;
+        }
     }
 
     pub(crate) fn prevent_last_jump_inlining(&mut self) {
@@ -436,6 +449,7 @@ impl Assembler {
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
             preserve_no_location: false,
+            prevent_fusion_with_next: false,
             normalized_exception_owner: None,
             exclude_exception_if_extended: false,
         }));
@@ -1188,6 +1202,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        prevent_fusion_with_next: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended,
                     }),
@@ -1540,6 +1555,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        prevent_fusion_with_next: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
                     }),
@@ -2760,6 +2776,11 @@ impl Assembler {
                 index += 1;
                 continue;
             };
+            if first.prevent_fusion_with_next {
+                fused.push(self.items[index]);
+                index += 1;
+                continue;
+            }
             let (Operand::Value(first_argument), Operand::Value(second_argument)) =
                 (first.operand, second.operand)
             else {
@@ -2798,6 +2819,7 @@ impl Assembler {
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
+                prevent_fusion_with_next: second.prevent_fusion_with_next,
                 normalized_exception_owner: first
                     .normalized_exception_owner
                     .or(second.normalized_exception_owner),

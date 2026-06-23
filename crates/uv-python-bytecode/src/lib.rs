@@ -534,7 +534,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "value: int\n[x for x in values if True]\n";
+        let source = "value: int\n[x for x in values if True]\n\ndef restored_then_subscript(values):\n    result = {}\n    result['key'] = [value for value in values]\n";
         let expected = Command::new(python)
             .args([
                 "-c",

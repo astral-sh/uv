@@ -8735,6 +8735,8 @@ impl Compiler {
                     self.emit(STORE_FAST, *index, -1)?;
                 }
             }
+            // CPython converts STORE_FAST_MAYBE_NULL only after inserting superinstructions.
+            self.assembler.prevent_last_instruction_fusion();
         }
         for name in &active_temporary_names {
             self.active_temporaries.remove(name);
@@ -10598,6 +10600,8 @@ impl Compiler {
                 }
                 self.emit(STORE_FAST, *index, -1)?;
             }
+            // CPython converts STORE_FAST_MAYBE_NULL only after inserting superinstructions.
+            self.assembler.prevent_last_instruction_fusion();
         }
         Ok(())
     }
