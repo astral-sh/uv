@@ -329,27 +329,14 @@ impl Lock {
         // Determine the set of packages included at multiple versions.
         let mut seen = FxHashSet::default();
         let mut duplicates = FxHashSet::default();
-        for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
-                continue;
-            };
-            if !dist.is_base() {
-                continue;
-            }
+        for (_, dist) in resolution.base_dists() {
             if !seen.insert(dist.name()) {
                 duplicates.insert(dist.name());
             }
         }
 
         // Lock all base packages.
-        for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &resolution.graph[node_index] else {
-                continue;
-            };
-            if !dist.is_base() {
-                continue;
-            }
-
+        for (node_index, dist) in resolution.base_dists() {
             // If there are multiple distributions for the same package, include the markers of all
             // forks that included the current distribution.
             //

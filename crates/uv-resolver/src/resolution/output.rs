@@ -598,14 +598,24 @@ impl ResolverOutput {
             })
     }
 
+    /// Returns an iterator over the base distributions in the graph.
+    pub(crate) fn base_dists(&self) -> impl Iterator<Item = (NodeIndex, &AnnotatedDist)> {
+        self.graph
+            .node_indices()
+            .filter_map(move |node_index| match &self.graph[node_index] {
+                ResolutionGraphNode::Root => None,
+                ResolutionGraphNode::Dist(dist) => dist.is_base().then_some((node_index, dist)),
+            })
+    }
+
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
-        self.dists().filter(|dist| dist.is_base()).count()
+        self.base_dists().count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        !self.dists().any(AnnotatedDist::is_base)
+        self.base_dists().next().is_none()
     }
 
     /// Returns `true` if the graph contains the given package.

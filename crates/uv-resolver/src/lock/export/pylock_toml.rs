@@ -40,7 +40,6 @@ use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable};
-use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
@@ -390,13 +389,7 @@ impl<'lock> PylockToml {
 
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
-        for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(node) = &resolution.graph[node_index] else {
-                continue;
-            };
-            if !node.is_base() {
-                continue;
-            }
+        for (node_index, node) in resolution.base_dists() {
             let ResolvedDist::Installable { dist, version } = &node.dist else {
                 continue;
             };
