@@ -10110,6 +10110,9 @@ impl Compiler {
             )?;
             self.emit(NOT_TAKEN, 0, 0)?;
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            if !jump_on {
+                self.assembler.prevent_last_jump_inlining();
+            }
 
             self.assembler.mark(cleanup);
             self.set_depth(base_depth + 1);
