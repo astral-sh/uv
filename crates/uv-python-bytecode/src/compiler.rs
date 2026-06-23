@@ -5029,6 +5029,10 @@ impl Compiler {
         for exclusions in &mut self.active_exception_region_exclusions {
             exclusions.push((statement_nop_start, statement_nop_end));
         }
+        if self.generator_region_start.is_some() {
+            self.generator_region_exclusions
+                .push((statement_nop_start, statement_nop_end));
+        }
         self.assembler.mark(protected_start);
         self.active_exception_region_exclusions.push(Vec::new());
         let pass_finally_location = match statement.finalbody.as_slice() {
@@ -7197,9 +7201,12 @@ impl Compiler {
                     self.emit(CALL_INTRINSIC_1, 4, 0)?;
                 }
                 self.emit(YIELD_VALUE, 0, 0)?;
+                let wrapper_is_only_exception_region = self.generator_region_start.is_some()
+                    && self.active_exception_region_exclusions.is_empty()
+                    && self.active_with_region_exclusions.is_empty();
                 self.emit(
                     RESUME,
-                    if self.generator_region_start.is_some() {
+                    if wrapper_is_only_exception_region {
                         5
                     } else {
                         1
