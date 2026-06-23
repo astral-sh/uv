@@ -1870,6 +1870,10 @@ impl Compiler {
         self.assembler.mark(otherwise);
         self.set_depth(base_depth);
         self.compile_expression(&expression.orelse)?;
+        // CPython's conditional-expression join is a jump target. Its redundant-pair
+        // optimizer therefore does not remove a constant else value with this POP_TOP.
+        let end = self.assembler.label();
+        self.assembler.mark(end);
         self.assembler
             .set_location(self.source_location(expression.orelse.range()));
         self.emit(POP_TOP, 0, -1)?;
