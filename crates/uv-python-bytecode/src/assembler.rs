@@ -1930,8 +1930,10 @@ impl Assembler {
                 block_labels.insert(*label);
             }
         }
+        // CPython's borrow analysis operates on CFG blocks. Protected-range
+        // boundaries do not create blocks, but exception handlers do.
         for region in &self.exception_regions {
-            block_labels.extend([region.start, region.end, region.target]);
+            block_labels.insert(region.target);
         }
 
         let mut blocks = Vec::<Vec<usize>>::new();

@@ -296,6 +296,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_local_borrowing_across_exception_regions() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def try_return():\n    try:\n        value = process()\n        return value\n    except ValueError:\n        pass\n\ndef with_return(manager):\n    with manager:\n        return 1\n\ndef match_subject(provided):\n    match provided:\n        case True:\n            return captured\n\ndef comprehension(collection):\n    return [element for element in collection if element is not None]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'borrowing.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "borrowing.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_a_constant_true_comprehension_filter() {
         let Some(python) = python_314() else {
             return;

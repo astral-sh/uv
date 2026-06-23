@@ -2710,11 +2710,6 @@ impl Compiler {
         terminal: bool,
     ) -> Result<(), CompileError> {
         let base_depth = self.depth;
-        let owned_subject = if let Expr::Name(name) = statement.subject.as_ref() {
-            self.owned_load_locals.insert(name.id.as_str().to_string())
-        } else {
-            false
-        };
         if matches!(statement.subject.as_ref(), Expr::Tuple(_))
             && let Some(constant) = fold_constant(&statement.subject)
         {
@@ -2728,9 +2723,6 @@ impl Compiler {
             self.emit_deferred_constant(constant)?;
         } else {
             self.compile_expression(&statement.subject)?;
-        }
-        if owned_subject && let Expr::Name(name) = statement.subject.as_ref() {
-            self.owned_load_locals.remove(name.id.as_str());
         }
         let end = self.assembler.label();
         let has_default = statement.cases.len() > 1
