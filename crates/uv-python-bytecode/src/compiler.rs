@@ -2328,6 +2328,9 @@ impl Compiler {
                         CompileError::Internal("continue outside loop".to_string())
                     })?;
                 self.emit_jump_backward(JUMP_BACKWARD, context.continue_label, 0)?;
+                // CPython emits a temporary NOP before loop control, so an incoming jump sees
+                // the NOP instead of threading through this backward jump.
+                self.assembler.prevent_last_jump_threading_target();
                 if let Some(exclusion_start) = exclusion_start {
                     let exclusion_end = self.assembler.label();
                     self.assembler.mark(exclusion_end);

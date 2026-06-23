@@ -47,6 +47,8 @@ struct Instruction {
     preserve_inlined_jump_nop: bool,
     // Retain the jump's line event only if its original target is copied directly.
     preserve_direct_inlined_jump_nop: Option<Label>,
+    // Whether an incoming jump may be threaded through this instruction.
+    allow_jump_threading_target: bool,
     preserve_no_location: bool,
     prevent_fusion_with_next: bool,
     prevent_fusion_with_previous: bool,
@@ -272,6 +274,17 @@ impl Assembler {
         }
     }
 
+    pub(crate) fn prevent_last_jump_threading_target(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.allow_jump_threading_target = false;
+        }
+    }
+
     pub(crate) fn preserve_last_no_location(&mut self) {
         if let Some(Item::Instruction(instruction)) = self
             .items
@@ -489,6 +502,7 @@ impl Assembler {
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
             preserve_direct_inlined_jump_nop: None,
+            allow_jump_threading_target: true,
             preserve_no_location: false,
             prevent_fusion_with_next: false,
             prevent_fusion_with_previous: false,
@@ -971,7 +985,8 @@ impl Assembler {
                 continue;
             };
             // A jump retained as a source-position NOP remains a CFG boundary.
-            if !instruction.preserve_inlined_jump_nop
+            if instruction.allow_jump_threading_target
+                && !instruction.preserve_inlined_jump_nop
                 && matches!(instruction.opcode.code, 75..=77)
                 && let operand @ (Operand::Forward(_) | Operand::Backward(_)) = instruction.operand
             {
@@ -1253,6 +1268,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_direct_inlined_jump_nop: None,
+                        allow_jump_threading_target: true,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -1618,6 +1634,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_direct_inlined_jump_nop: None,
+                        allow_jump_threading_target: true,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -2890,6 +2907,8 @@ impl Assembler {
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
                 preserve_direct_inlined_jump_nop: None,
+                allow_jump_threading_target: first.allow_jump_threading_target
+                    && second.allow_jump_threading_target,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
                 prevent_fusion_with_next: second.prevent_fusion_with_next,
                 prevent_fusion_with_previous: first.prevent_fusion_with_previous,
