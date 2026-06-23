@@ -92,7 +92,11 @@ pub fn uninstall_wheel(
                     visited.insert(normalize_path(parent));
                 }
             }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                if let Some(parent) = path.parent() {
+                    visited.insert(normalize_path(parent));
+                }
+            }
             Err(err) => match fs_err::remove_dir_all(&path) {
                 Ok(()) => {
                     trace!("Removed directory: {}", path.display());
@@ -102,17 +106,6 @@ pub fn uninstall_wheel(
                 Err(_) => return Err(err.into()),
             },
         }
-    }
-
-    // RECORD is the uninstall journal, so remove it last.
-    match fs_err::remove_file(&record_path) {
-        Ok(()) => {
-            trace!("Removed file: {}", record_path.display());
-            file_count += 1;
-            visited.insert(normalize_path(dist_info));
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
     }
 
     // If any directories were left empty, remove them. Iterate in reverse order such that we visit
@@ -170,6 +163,30 @@ pub fn uninstall_wheel(
                 break;
             }
         }
+    }
+
+    // RECORD is the uninstall journal, so remove it after cleaning up every other file and
+    // directory.
+    match fs_err::remove_file(&record_path) {
+        Ok(()) => {
+            trace!("Removed file: {}", record_path.display());
+            file_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    // Removing RECORD may leave an empty dist-info directory behind.
+    match fs_err::read_dir(dist_info) {
+        Ok(mut entries) => {
+            if entries.next().is_none() {
+                fs_err::remove_dir(dist_info)?;
+                trace!("Removed directory: {}", dist_info.display());
+                dir_count += 1;
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
 
     Ok(Uninstall {
