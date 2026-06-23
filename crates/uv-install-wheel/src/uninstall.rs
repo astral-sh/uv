@@ -25,7 +25,6 @@ pub fn uninstall_wheel(
     };
 
     let record_path = dist_info.join("RECORD");
-    let direct_url_path = dist_info.join("direct_url.json");
 
     // Read the RECORD file.
     let record = {
@@ -47,19 +46,17 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let mut dist_info_file_count = 0usize;
 
-    // Normalize the metadata paths for comparison with RECORD entries.
-    let normalized_record_path = normalize_path(&record_path);
-    let normalized_direct_url_path = normalize_path(&direct_url_path);
+    // Normalize the metadata path for comparison with RECORD entries.
+    let normalized_dist_info = normalize_path(dist_info);
     for entry in &record {
         let path = site_packages.join(&entry.path);
 
-        // Keep the uninstall journal and direct URL identity available until every other entry has
-        // been removed so an interrupted uninstall can be retried by name or URL.
-        if (path.ends_with("RECORD") && normalize_path(&path) == normalized_record_path)
-            || (path.ends_with("direct_url.json")
-                && normalize_path(&path) == normalized_direct_url_path)
-        {
+        // Keep the entire metadata directory intact until every other entry has been removed. It
+        // contains the journal and identity metadata needed to retry an interrupted uninstall.
+        if normalize_path(&path).starts_with(&normalized_dist_info) {
+            dist_info_file_count += usize::from(path.try_exists()?);
             continue;
         }
 
@@ -179,12 +176,9 @@ pub fn uninstall_wheel(
         }
     }
 
-    file_count += usize::from(record_path.try_exists()?);
-    file_count += usize::from(direct_url_path.try_exists()?);
-
     // Atomically make the distribution metadata undiscoverable. The temporary directory is a
-    // sibling of `dist_info`, so the rename stays on the same filesystem. If it fails, RECORD and
-    // direct URL identity remain available for a retry; once it succeeds, deletion is best-effort.
+    // sibling of `dist_info`, so the rename stays on the same filesystem. If it fails, the intact
+    // metadata remains available for a retry; once it succeeds, deletion is best-effort.
     let temporary_directory = tempfile::tempdir_in(site_packages)?;
     let temporary_dist_info = temporary_directory.path().join("dist-info");
     fs_err::rename(dist_info, &temporary_dist_info)?;
@@ -192,6 +186,7 @@ pub fn uninstall_wheel(
         "Moved directory for removal: {}",
         temporary_dist_info.display()
     );
+    file_count += dist_info_file_count;
     dir_count += 1;
 
     let temporary_path = temporary_directory.path().to_path_buf();
