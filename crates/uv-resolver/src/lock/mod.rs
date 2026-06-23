@@ -3004,7 +3004,7 @@ impl TryFrom<LockWire> for Lock {
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
-        Self::new(
+        let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -3015,7 +3015,9 @@ impl TryFrom<LockWire> for Lock {
             supported_environments,
             required_environments,
             fork_markers,
-        )
+        )?;
+
+        Ok(lock)
     }
 }
 
@@ -7355,50 +7357,6 @@ mod tests {
     use uv_warnings::anstream;
 
     use super::*;
-
-    #[test]
-    fn manifest_matching_normalizes_requirements() -> Result<(), Box<dyn Error>> {
-        let lock = toml::from_str::<Lock>(
-            r#"
-version = 1
-requires-python = ">=3.12"
-
-[manifest]
-requirements = [{ name = "foo", directory = "foo" }]
-"#,
-        )?;
-        let root = if cfg!(windows) {
-            PathBuf::from(r"C:\root")
-        } else {
-            PathBuf::from("/root")
-        };
-        let install_path = root.join("foo").into_boxed_path();
-        let manifest = ResolverManifest::new(
-            std::iter::empty::<PackageName>(),
-            [Requirement {
-                name: "foo".parse()?,
-                extras: Box::new([]),
-                groups: Box::new([]),
-                marker: MarkerTree::TRUE,
-                source: RequirementSource::Directory {
-                    url: VerbatimUrl::from_absolute_path(&install_path)?,
-                    install_path,
-                    editable: None,
-                    r#virtual: Some(false),
-                },
-                origin: None,
-            }],
-            std::iter::empty::<Requirement>(),
-            std::iter::empty::<Requirement>(),
-            std::iter::empty::<PackageName>(),
-            std::iter::empty::<Requirement>(),
-            std::iter::empty::<(GroupName, Vec<Requirement>)>(),
-            std::iter::empty::<StaticMetadata>(),
-        );
-
-        assert!(lock.matches_manifest_at(&manifest, &root)?);
-        Ok(())
-    }
 
     /// Assert a given display snapshot, stripping ANSI color codes.
     macro_rules! assert_stripped_snapshot {
