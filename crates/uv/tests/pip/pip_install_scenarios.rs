@@ -3409,6 +3409,43 @@ fn python_version_does_not_exist() {
     context.assert_not_installed("a");
 }
 
+/// A single package with two stable versions.
+///
+/// ```text
+/// single-package
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       ├── satisfied by a-1.0.0
+/// │       └── satisfied by a-2.0.0
+/// └── a
+///     ├── a-1.0.0
+///     └── a-2.0.0
+/// ```
+#[test]
+fn single_package() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
+    ");
+
+    // The latest version of 'a' should be selected.
+    context.assert_installed("a", "2.0.0");
+}
+
 /// Both wheels and source distributions are available, and the user has disabled binaries.
 ///
 /// ```text
