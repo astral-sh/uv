@@ -2533,9 +2533,12 @@ impl Assembler {
                     12 | 15 | 18 | 19 | 24..=26 | 43 | 72 => {
                         let popped = opcode_num_popped(instruction.opcode.code, argument);
                         let pushed = opcode_num_pushed(instruction.opcode.code, argument);
-                        for _ in 0..pushed.saturating_sub(popped) {
+                        // CPython's inner loop shadows the instruction index,
+                        // attributing these references to the first
+                        // instructions in the block.
+                        for producer in block.iter().copied().take(pushed.saturating_sub(popped)) {
                             stack.push(Reference {
-                                producer: None,
+                                producer: Some(producer),
                                 local: None,
                             });
                         }
