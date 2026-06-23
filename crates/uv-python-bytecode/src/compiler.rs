@@ -2530,9 +2530,7 @@ impl Compiler {
                 .first()
                 .is_none_or(|clause| clause.test.is_none())
         {
-            if let Some(constant) = fold_constant(&statement.test)
-                && (self.constants.is_empty() || matches!(constant, Constant::None))
-            {
+            if let Some(constant) = fold_constant(&statement.test) {
                 self.add_constant(constant)?;
             }
             self.assembler
@@ -4340,6 +4338,9 @@ impl Compiler {
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
                 if handler_index > 0 {
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((exclusion_start, exclusion_end));
+                    }
                     not_taken_exclusion = Some((exclusion_start, exclusion_end));
                 }
             } else if handler_index + 1 != statement.handlers.len() {

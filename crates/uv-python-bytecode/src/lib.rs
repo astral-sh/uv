@@ -300,7 +300,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def try_except():\n    try:\n        'try'\n        body()\n    except:\n        'except'\n        recover()\n\ndef except_only():\n    try:\n        body()\n    except:\n        'except'\n\ndef with_body(manager):\n    with manager:\n        'with'\n        body()\n\ndef with_only(manager):\n    with manager:\n        'with'\n\nasync def protected_condition():\n    await source\n    if test:\n        await other\n";
+        let source = "def try_except():\n    try:\n        'try'\n        body()\n    except:\n        'except'\n        recover()\n\ndef except_only():\n    try:\n        body()\n    except:\n        'except'\n\ndef nested_handlers():\n    try:\n        try:\n            body()\n        except ValueError:\n            recover()\n        except TypeError:\n            recover()\n    finally:\n        cleanup()\n\ndef with_body(manager):\n    with manager:\n        'with'\n        body()\n\ndef with_only(manager):\n    with manager:\n        'with'\n\nasync def protected_condition():\n    await source\n    if test:\n        await other\n";
         let expected = Command::new(python)
             .args([
                 "-c",
@@ -378,7 +378,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "if a:\n    if b:\n        body()\nelif c:\n    other()\nafter1(); after2(); after3(); after4(); after5(); after6()\n\nif x:\n    if True:\n        body()\nelif y:\n    other()\n\nif False if True else False:\n    body()\nelif True:\n    other()\nelse:\n    unreachable()\n\ndef conditional_in_loop(src, dst):\n    for k, v in src:\n        if True if True else False:\n            dst[k] = v\n\ndef terminating_nested_if(x, y):\n    if x:\n        if y:\n            raise Exception()\n        else:\n            body()\n    else:\n        other()\n    after()\n";
+        let source = "seed = 0\nif True:\n    body()\ndef between():\n    pass\nreused = True\n\nif a:\n    if b:\n        body()\nelif c:\n    other()\nafter1(); after2(); after3(); after4(); after5(); after6()\n\nif x:\n    if True:\n        body()\nelif y:\n    other()\n\nif False if True else False:\n    body()\nelif True:\n    other()\nelse:\n    unreachable()\n\ndef conditional_in_loop(src, dst):\n    for k, v in src:\n        if True if True else False:\n            dst[k] = v\n\ndef terminating_nested_if(x, y):\n    if x:\n        if y:\n            raise Exception()\n        else:\n            body()\n    else:\n        other()\n    after()\n";
         let expected = Command::new(python)
             .args([
                 "-c",
