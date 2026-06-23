@@ -2605,6 +2605,9 @@ impl Compiler {
         );
 
         let branch_count = branches.len();
+        let has_terminating_else = branches
+            .last()
+            .is_some_and(|(test, body)| test.is_none() && suite_terminates(body));
         for (branch_index, (test, body)) in branches.into_iter().enumerate() {
             if let Some(test) = test {
                 let next = self.assembler.label();
@@ -2636,13 +2639,26 @@ impl Compiler {
                             if early_condition_truthiness(&statement.test).is_none()
                                 && !suite_terminates(&statement.body)
                     );
-                    if nested_if_body_falls_through {
+                    let nested_if_ends_in_break = matches!(
+                        body.last(),
+                        Some(Stmt::If(statement))
+                            if matches!(statement.body.last(), Some(Stmt::Break(_)))
+                    );
+                    if nested_if_ends_in_break && has_terminating_else {
+                        let Some(Stmt::If(statement)) = body.last() else {
+                            unreachable!();
+                        };
+                        self.assembler
+                            .set_location(self.source_location(statement.test.range()));
+                    } else if nested_if_body_falls_through {
                         self.assembler.set_location(SourceLocation::NONE);
                     } else {
                         self.set_branch_end_location(body, body_start);
                     }
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                    if nested_if_body_falls_through {
+                    if nested_if_ends_in_break && has_terminating_else {
+                        self.assembler.preserve_last_inlined_jump_nop();
+                    } else if nested_if_body_falls_through {
                         self.assembler.preserve_last_no_location();
                     }
                 }
