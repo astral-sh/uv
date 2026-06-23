@@ -55,6 +55,14 @@ filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_f
 test-group = 'io-bound'
 priority = 1 # Start earlier so these can complete before the end
 
+# Per-test overrides are not inherited from parent profiles, so keep this in sync with the
+# `ci-windows` override above.
+[[profile.ci-windows-free.overrides]]
+platform = 'cfg(target_os = "windows")'
+filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
+test-group = 'io-bound'
+priority = 1 # Start earlier so these can complete before the end
+
 [scripts.setup.setup-hook-unix]
 command = "scripts/nextest-setup-hook-unix.sh"
 
