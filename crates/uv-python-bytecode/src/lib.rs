@@ -326,7 +326,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "if a and f() and False and g():\n    pass\na or \"\" or True\na or () or True\na and \"value\" and False\n0 if a or [1] or True or [2] else 1\nif (\n    f()\n    is None\n):\n    pass\nif g() is not None:\n    pass\nx\n";
+        let source = "if a and f() and False and g():\n    pass\na or \"\" or True\na or () or True\na and \"value\" and False\na or (b or c) or d\n0 if a or [1] or True or [2] else 1\nif (\n    f()\n    is None\n):\n    pass\nif g() is not None:\n    pass\nx\n";
         let expected = Command::new(python)
             .args([
                 "-c",

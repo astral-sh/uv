@@ -9558,6 +9558,14 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprBoolOp,
     ) -> Result<(), CompileError> {
+        self.compile_bool_expression_at(expression, self.source_location(expression.range))
+    }
+
+    fn compile_bool_expression_at(
+        &mut self,
+        expression: &ruff_python_ast::ExprBoolOp,
+        location: SourceLocation,
+    ) -> Result<(), CompileError> {
         let mut effective = Vec::with_capacity(expression.values.len());
         let mut short_circuited = false;
         for (index, value) in expression.values.iter().enumerate() {
@@ -9588,8 +9596,7 @@ impl Compiler {
                 "boolean expression contains no values".to_string(),
             ));
         };
-        self.assembler
-            .set_location(self.source_location(expression.range));
+        self.assembler.set_location(location);
         let base_depth = self.depth;
         let end = self.assembler.label();
         let jump = match expression.op {
@@ -9598,7 +9605,14 @@ impl Compiler {
         };
 
         for value in leading {
-            self.compile_expression(value)?;
+            if let Expr::BoolOp(inner) = value
+                && inner.op == expression.op
+            {
+                self.compile_bool_expression_at(inner, location)?;
+            } else {
+                self.compile_expression(value)?;
+            }
+            self.assembler.set_location(location);
             let exclusion_start = self.assembler.label();
             self.assembler.mark(exclusion_start);
             self.emit(COPY, 1, 1)?;
@@ -9611,9 +9625,17 @@ impl Compiler {
             }
             self.emit_jump_forward(jump, end, -1)?;
             self.emit(NOT_TAKEN, 0, 0)?;
+            self.assembler
+                .set_location(self.source_location(expression.range));
             self.emit(POP_TOP, 0, -1)?;
         }
-        self.compile_expression(last)?;
+        if let Expr::BoolOp(inner) = last
+            && inner.op == expression.op
+        {
+            self.compile_bool_expression_at(inner, location)?;
+        } else {
+            self.compile_expression(last)?;
+        }
         self.assembler.preserve_block_boundary(end);
         self.assembler.mark(end);
         self.set_depth(base_depth + 1);
