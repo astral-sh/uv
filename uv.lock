@@ -1544,7 +1544,7 @@ wheels = [
 
 [[package]]
 name = "uv"
-version = "0.11.23"
+version = "0.11.24"
 source = { editable = "." }
 
 [package.dev-dependencies]

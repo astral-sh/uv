@@ -3,6 +3,31 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.24
+
+Released on 2026-06-23.
+
+### Python
+
+- Add CPython 3.15.0b3 ([#19964](https://github.com/astral-sh/uv/pull/19964))
+
+### Preview features
+
+- Make project environments relocatable under preview ([#19965](https://github.com/astral-sh/uv/pull/19965))
+
+### Performance
+
+- Use a compact index for lazy version maps ([#19959](https://github.com/astral-sh/uv/pull/19959))
+
+### Bug fixes
+
+- Allow disabling `exclude-newer` ([#19934](https://github.com/astral-sh/uv/pull/19934))
+- Avoid archive id collisions ([#19949](https://github.com/astral-sh/uv/pull/19949))
+- Reapply "Fix transparent Python upgrades in project environments" ([#19928](https://github.com/astral-sh/uv/pull/19928))
+- Clean up partial tool entrypoint installs ([#19966](https://github.com/astral-sh/uv/pull/19966))
+- Fix relocatable `activate.fish` and broaden Fish version support ([#19856](https://github.com/astral-sh/uv/pull/19856))
+
+
 ## 0.11.23
 
 Released on 2026-06-19.
