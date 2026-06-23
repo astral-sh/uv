@@ -272,6 +272,35 @@ impl RegistryClient {
         self.client.uncached().credentials_cache()
     }
 
+    /// Fetch package metadata from an exact Simple API index.
+    pub async fn simple_detail_for_index(
+        &self,
+        package_name: &PackageName,
+        index: &IndexUrl,
+        capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
+    ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
+        if self.indexes.no_index() {
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+        }
+
+        let _permit = download_concurrency.acquire().await;
+        let status_code_strategy = self.indexes.status_code_strategy_for(index);
+        match self
+            .simple_detail_single_index(package_name, index, capabilities, &status_code_strategy)
+            .await?
+        {
+            SimpleMetadataSearchOutcome::Found(metadata) => Ok(metadata),
+            SimpleMetadataSearchOutcome::NotFound => match self.connectivity {
+                Connectivity::Online => {
+                    Err(ErrorKind::RemotePackageNotFound(package_name.clone()).into())
+                }
+                Connectivity::Offline => Err(ErrorKind::Offline(package_name.to_string()).into()),
+            },
+            SimpleMetadataSearchOutcome::StatusCodeFailure { error, .. } => Err(error),
+        }
+    }
+
     /// Return the appropriate index URLs for the given [`PackageName`].
     fn index_urls_for(
         &self,
@@ -358,7 +387,10 @@ impl RegistryClient {
                                 SimpleMetadataSearchOutcome::NotFound => {}
                                 // The search failed because of an HTTP status code that we don't ignore for
                                 // this index. We end our search here.
-                                SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                SimpleMetadataSearchOutcome::StatusCodeFailure {
+                                    status_code,
+                                    ..
+                                } => {
                                     debug!(
                                         "Indexes search failed because of status code failure: {status_code}"
                                     );
@@ -573,7 +605,15 @@ impl RegistryClient {
                             return Err(err);
                         }
                     }
-                    Ok(SimpleMetadataSearchOutcome::from(decision))
+                    Ok(match decision {
+                        IndexStatusCodeDecision::Ignore => SimpleMetadataSearchOutcome::NotFound,
+                        IndexStatusCodeDecision::Fail(status_code) => {
+                            SimpleMetadataSearchOutcome::StatusCodeFailure {
+                                status_code,
+                                error: err,
+                            }
+                        }
+                    })
                 }
 
                 // The package is unavailable due to a lack of connectivity.
@@ -1323,16 +1363,10 @@ enum SimpleMetadataSearchOutcome {
     NotFound,
     /// A status code failure was encountered when searching for
     /// simple metadata and our strategy did not ignore it
-    StatusCodeFailure(StatusCode),
-}
-
-impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
-    fn from(item: IndexStatusCodeDecision) -> Self {
-        match item {
-            IndexStatusCodeDecision::Ignore => Self::NotFound,
-            IndexStatusCodeDecision::Fail(status_code) => Self::StatusCodeFailure(status_code),
-        }
-    }
+    StatusCodeFailure {
+        status_code: StatusCode,
+        error: Error,
+    },
 }
 
 /// A map from [`IndexUrl`] to [`FlatIndexEntry`] entries found at the given URL, indexed by
@@ -1710,6 +1744,7 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use serde_json::from_str as deserialize_json;
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
@@ -1806,6 +1841,173 @@ mod tests {
         )
         .await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exact_simple_index_returns_metadata() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/simple/validation/$"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files": []}"#, "application/vnd.pypi.simple.v1+json"),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?).build()?;
+
+        let metadata = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?;
+
+        assert_eq!(metadata.iter().count(), 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exact_simple_index_preserves_not_found_error() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/simple/validation/$"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        let index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?).build()?;
+
+        let error = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("a missing package should return a not-found error");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::RemotePackageNotFound(package) if package.as_ref() == "validation"
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn no_index_disables_exact_simple_index() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        let index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let registry_client = no_index_client(vec![])?;
+
+        let error = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("index lookup should be disabled");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::NoIndex(package) if package == "validation"
+        ));
+        assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exact_simple_index_preserves_offline_error() -> Result<(), Error> {
+        let index = IndexUrl::from_str("https://index.example.com/simple")?;
+        let registry_client = RegistryClientBuilder::new(
+            BaseClientBuilder::default().connectivity(Connectivity::Offline),
+            Cache::temp()?,
+        )
+        .build()?;
+
+        let error = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("an uncached offline lookup should fail");
+
+        assert!(matches!(error.kind(), crate::ErrorKind::Offline(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exact_simple_index_preserves_authentication_error() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?).build()?;
+        let capabilities = IndexCapabilities::default();
+
+        let error = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &capabilities,
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("an unauthorized lookup should fail");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::WrappedReqwestError(_, _)
+        ));
+        assert!(capabilities.unauthorized(&index));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn exact_simple_index_uses_per_index_status_code_policy() -> Result<(), Error> {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&server)
+            .await;
+        let index = IndexUrl::from_str(&format!("{}/simple", server.uri()))?;
+        let mut configured_index = Index::from(index.clone());
+        configured_index.ignore_error_codes = Some(vec![deserialize_json("500")?]);
+        let registry_client =
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(IndexLocations::new(vec![configured_index], vec![], false))
+                .build()?;
+
+        let error = registry_client
+            .simple_detail_for_index(
+                &PackageName::from_str("validation")?,
+                &index,
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await
+            .expect_err("an ignored status code should behave like a missing package");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::RemotePackageNotFound(package) if package.as_ref() == "validation"
+        ));
         Ok(())
     }
 
