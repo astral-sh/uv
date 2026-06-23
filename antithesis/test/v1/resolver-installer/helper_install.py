@@ -24,6 +24,9 @@ INDEX_URL = os.environ.get(
 )
 STATE_DIRECTORY = Path(os.environ.get("UV_ANTITHESIS_STATE_DIR", "/state"))
 SHARED_ENVIRONMENT = STATE_DIRECTORY / "shared-environment"
+INTERRUPTED_UNINSTALL_ENVIRONMENT = (
+    STATE_DIRECTORY / "interrupted-uninstall-environment"
+)
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,9 @@ The `resolver-installer` test template repeatedly installs a dependency graph wh
 version is unsatisfiable. A successful run must backtrack to the older root version, install the
 expected packages, and pass `uv pip check`. The `interrupted-reinstall` template kills a reinstall
 after distribution metadata becomes visible but before the full wheel payload does, then verifies
-that an ordinary install repairs the environment.
+that an ordinary install repairs the environment. The `interrupted-uninstall` template kills an
+uninstall after uv removes the wheel's `RECORD` but before it removes the package payload, then
+verifies that retrying the same uninstall completes the removal.
 
 Parallel drivers run from two client containers and share uv's cache between otherwise isolated
 virtual environments. The cache is stored under `/state/cache` so it survives container restarts.
@@ -61,6 +63,23 @@ docker compose \
   -f antithesis/docker-compose.local.yaml \
   exec client \
   /opt/antithesis/test/v1/interrupted-reinstall/singleton_driver_recover.py
+```
+
+Run the interrupted-uninstall reproducer. The singleton command fails on affected uv builds because
+the first uninstall removes its own `RECORD`, leaving the retry unable to remove the remaining wheel
+payload:
+
+```console
+docker compose \
+  -f antithesis/docker-compose.yaml \
+  -f antithesis/docker-compose.local.yaml \
+  exec client \
+  /opt/antithesis/test/v1/interrupted-uninstall/first_initialize.py
+docker compose \
+  -f antithesis/docker-compose.yaml \
+  -f antithesis/docker-compose.local.yaml \
+  exec client \
+  /opt/antithesis/test/v1/interrupted-uninstall/singleton_driver_recover.py
 ```
 
 When using the local Compose override, SDK lifecycle events and assertion evaluations are written to
