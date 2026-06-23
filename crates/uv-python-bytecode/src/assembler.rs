@@ -59,6 +59,7 @@ pub(crate) struct Assembler {
     next_label: u32,
     location: SourceLocation,
     exception_regions: Vec<ExceptionRegion>,
+    preserved_block_boundaries: HashSet<Label>,
     load_fast_borrowing_enabled: bool,
 }
 
@@ -104,6 +105,7 @@ impl Default for Assembler {
             next_label: 0,
             location: SourceLocation::NONE,
             exception_regions: Vec::new(),
+            preserved_block_boundaries: HashSet::new(),
             load_fast_borrowing_enabled: true,
         }
     }
@@ -144,6 +146,11 @@ impl Assembler {
 
     pub(crate) fn mark(&mut self, label: Label) {
         self.items.push(Item::Label(label));
+    }
+
+    /// Keep a source CFG boundary after jump threading removes its last incoming edge.
+    pub(crate) fn preserve_block_boundary(&mut self, label: Label) {
+        self.preserved_block_boundaries.insert(label);
     }
 
     pub(crate) fn mark_before_trailing_instructions(&mut self, label: Label, count: usize) {
@@ -1930,7 +1937,7 @@ impl Assembler {
         let mut blocks = Vec::<Vec<usize>>::new();
         let mut block = Vec::new();
         for (index, item) in self.items.iter().enumerate() {
-            if matches!(item, Item::Label(label) if block_labels.contains(label))
+            if matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
                 && !block.is_empty()
             {
                 blocks.push(std::mem::take(&mut block));

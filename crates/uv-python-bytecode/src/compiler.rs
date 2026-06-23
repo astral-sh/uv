@@ -2285,16 +2285,7 @@ impl Compiler {
                     self.assembler.set_location(self.source_location(range));
                     self.emit(NOP, 0, 0)?;
                 } else if let Some(value) = &statement.value {
-                    let mut result_names = Vec::new();
-                    collect_branch_result_names(value, &mut result_names, false);
-                    let newly_owned = result_names
-                        .into_iter()
-                        .filter(|name| self.owned_load_locals.insert(name.clone()))
-                        .collect::<Vec<_>>();
                     self.compile_expression(value)?;
-                    for name in newly_owned {
-                        self.owned_load_locals.remove(&name);
-                    }
                 }
                 let exception_unwind_start = if overriding_unwind_start.is_some() {
                     overriding_unwind_start
@@ -8317,37 +8308,11 @@ impl Compiler {
             // handler used by `def` generators and generator expressions.
             child.generator_region_start = None;
         }
-        if let Expr::If(expression) = lambda.body.as_ref() {
-            let otherwise = child.assembler.label();
-            child.compile_jump_if(&expression.test, false, otherwise)?;
-            child.compile_expression(&expression.body)?;
-            child
-                .assembler
-                .set_location(child.source_location(lambda.body.range()));
-            child.emit(RETURN_VALUE, 0, -1)?;
-            child.assembler.mark(otherwise);
-            child.set_depth(0);
-            child.compile_expression(&expression.orelse)?;
-            child
-                .assembler
-                .set_location(child.source_location(lambda.body.range()));
-            child.emit(RETURN_VALUE, 0, -1)?;
-        } else {
-            let mut result_names = Vec::new();
-            collect_branch_result_names(&lambda.body, &mut result_names, false);
-            let newly_owned = result_names
-                .into_iter()
-                .filter(|name| child.owned_load_locals.insert(name.clone()))
-                .collect::<Vec<_>>();
-            child.compile_expression(&lambda.body)?;
-            for name in newly_owned {
-                child.owned_load_locals.remove(&name);
-            }
-            child
-                .assembler
-                .set_location(child.source_location(lambda.body.range()));
-            child.emit(RETURN_VALUE, 0, -1)?;
-        }
+        child.compile_expression(&lambda.body)?;
+        child
+            .assembler
+            .set_location(child.source_location(lambda.body.range()));
+        child.emit(RETURN_VALUE, 0, -1)?;
         let child = child.finish_inner(false)?;
 
         if !closure_names.is_empty() {
@@ -9562,6 +9527,7 @@ impl Compiler {
         self.assembler.mark(else_label);
         self.set_depth(base_depth);
         self.compile_expression(&expression.orelse)?;
+        self.assembler.preserve_block_boundary(end);
         self.assembler.mark(end);
         self.set_depth(base_depth + 1);
         Ok(())
@@ -9627,6 +9593,7 @@ impl Compiler {
             self.emit(POP_TOP, 0, -1)?;
         }
         self.compile_expression(last)?;
+        self.assembler.preserve_block_boundary(end);
         self.assembler.mark(end);
         self.set_depth(base_depth + 1);
         Ok(())
@@ -9759,6 +9726,7 @@ impl Compiler {
                 self.compile_jump_if(value, !jump_on, end)?;
             }
             self.compile_jump_if(last, jump_on, label)?;
+            self.assembler.preserve_block_boundary(end);
             self.assembler.mark(end);
             return Ok(());
         }
@@ -9771,6 +9739,7 @@ impl Compiler {
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
             self.assembler.mark(otherwise);
             self.compile_jump_if(&conditional.orelse, jump_on, label)?;
+            self.assembler.preserve_block_boundary(end);
             self.assembler.mark(end);
             return Ok(());
         }
@@ -12347,25 +12316,6 @@ fn expression_contains_inlined_comprehension(expression: &Expr) -> bool {
     let mut collector = Collector::default();
     collector.visit_expr(expression);
     collector.found
-}
-
-fn collect_branch_result_names(expression: &Expr, names: &mut Vec<String>, branched: bool) {
-    match expression {
-        Expr::Name(name) if branched => names.push(name.id.to_string()),
-        Expr::BoolOp(boolean) => {
-            for value in &boolean.values {
-                collect_branch_result_names(value, names, true);
-            }
-        }
-        Expr::If(expression) => {
-            collect_branch_result_names(&expression.body, names, true);
-            collect_branch_result_names(&expression.orelse, names, true);
-        }
-        Expr::Named(expression) => {
-            collect_branch_result_names(&expression.value, names, branched);
-        }
-        _ => {}
-    }
 }
 
 fn expression_contains_await(expression: &Expr) -> bool {
