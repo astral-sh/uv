@@ -59,7 +59,6 @@ impl VersionMap {
         let mut stable = false;
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
-        let mut archive_ordered = true;
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
@@ -69,9 +68,12 @@ impl VersionMap {
 
             stable |= version.is_stable();
             local |= version.is_local();
-            archive_ordered &= entries
-                .last()
-                .is_none_or(|entry: &VersionMapLazyEntry| entry.version < version);
+            debug_assert!(
+                entries
+                    .last()
+                    .is_none_or(|entry: &VersionMapLazyEntry| entry.version < version),
+                "simple metadata versions must be sorted and unique"
+            );
             entries.push(VersionMapLazyEntry {
                 version,
                 dist: LazyPrioritizedDist {
@@ -82,9 +84,6 @@ impl VersionMap {
                     }),
                 },
             });
-        }
-        if !archive_ordered {
-            entries = sort_and_coalesce_entries(entries);
         }
         let mut map = VersionMapLazyIndex { entries };
         // If a set of flat distributions have been given, linearly merge the
@@ -441,22 +440,6 @@ impl VersionMapLazyIndex {
     fn len(&self) -> usize {
         self.entries.len()
     }
-}
-
-/// Restore native ordering and [`BTreeMap`]'s last-entry behavior for malformed archives.
-fn sort_and_coalesce_entries(mut entries: Vec<VersionMapLazyEntry>) -> Vec<VersionMapLazyEntry> {
-    entries.sort_by(|left, right| left.version.cmp(&right.version));
-    let mut coalesced: Vec<VersionMapLazyEntry> = Vec::with_capacity(entries.len());
-    for entry in entries {
-        if let Some(previous) = coalesced.last_mut()
-            && previous.version == entry.version
-        {
-            *previous = entry;
-        } else {
-            coalesced.push(entry);
-        }
-    }
-    coalesced
 }
 
 /// A map that lazily materializes some prioritized distributions upon access.
@@ -826,7 +809,7 @@ mod tests {
 
     use super::{
         BoundingRange, FlatDistributions, LazyPrioritizedDist, SimplePrioritizedDist,
-        VersionMapLazyEntry, VersionMapLazyIndex, sort_and_coalesce_entries,
+        VersionMapLazyEntry, VersionMapLazyIndex,
     };
 
     fn version(value: &str) -> Version {
@@ -847,18 +830,10 @@ mod tests {
     }
 
     fn compact_index(simple: &[(&str, usize)], flat: &[&str]) -> VersionMapLazyIndex {
-        let mut archive_ordered = true;
-        let mut entries = Vec::with_capacity(simple.len());
-        for &(value, datum_index) in simple {
-            let entry = simple_entry(value, datum_index);
-            archive_ordered &= entries
-                .last()
-                .is_none_or(|previous: &VersionMapLazyEntry| previous.version < entry.version);
-            entries.push(entry);
-        }
-        if !archive_ordered {
-            entries = sort_and_coalesce_entries(entries);
-        }
+        let entries = simple
+            .iter()
+            .map(|&(value, datum_index)| simple_entry(value, datum_index))
+            .collect();
         let index = VersionMapLazyIndex { entries };
         if flat.is_empty() {
             index
@@ -913,10 +888,6 @@ mod tests {
             ),
             (Vec::new(), vec!["1.0", "2.0"]),
             (vec![("1.0", 0), ("2.0", 1)], vec!["1.5", "2.0", "3.0"]),
-            (
-                vec![("2.0", 0), ("1.0", 1), ("1.0.0", 2), ("1.0.post1", 3)],
-                vec!["1.0", "3.0"],
-            ),
         ];
 
         for (simple, flat) in cases {
@@ -979,19 +950,5 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(compact, reference);
         }
-    }
-
-    #[test]
-    fn compact_index_fallback_preserves_last_normalized_entry() {
-        let simple = [("2.0", 0), ("1.0", 1), ("1.0.0", 2), ("1.0.post1", 3)];
-        let index = compact_index(&simple, &[]);
-        assert_eq!(
-            descriptors(&index),
-            vec![
-                (version("1.0"), Some(2), false),
-                (version("1.0.post1"), Some(3), false),
-                (version("2.0"), Some(0), false),
-            ]
-        );
     }
 }
