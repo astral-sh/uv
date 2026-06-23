@@ -244,6 +244,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_multiple_exception_group_handlers() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "try:\n    body()\nexcept* ValueError:\n    first()\nexcept* TypeError:\n    second()\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'try_star.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "try_star.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_optimized_boolean_operands() {
         let Some(python) = python_314() else {
             return;

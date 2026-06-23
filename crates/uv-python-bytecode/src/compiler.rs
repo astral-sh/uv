@@ -4651,7 +4651,17 @@ impl Compiler {
             self.emit(CHECK_EG_MATCH, 0, 0)?;
             self.emit(COPY, 1, 1)?;
             self.emit_jump_forward(POP_JUMP_IF_NONE, no_match, -1)?;
+            let not_taken_exclusion_start = (handler_index > 0).then(|| {
+                let start = self.assembler.label();
+                self.assembler.mark(start);
+                start
+            });
             self.emit(NOT_TAKEN, 0, 0)?;
+            if let Some(start) = not_taken_exclusion_start {
+                let end = self.assembler.label();
+                self.assembler.mark(end);
+                handler_region_exclusions.push((start, end));
+            }
 
             if let Some(name) = &handler.name {
                 self.store_name(name.as_str())?;
