@@ -14,6 +14,8 @@ use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{Signal, kill};
 #[cfg(unix)]
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
+#[cfg(unix)]
 use nix::unistd::Pid;
 
 use uv_test::uv_snapshot;
@@ -203,7 +205,10 @@ fn interrupted_uninstall_can_be_retried() -> Result<()> {
             Err(Errno::ESRCH) => break,
             Err(error) => return Err(error.into()),
         }
-        std::thread::sleep(Duration::from_millis(1));
+        let WaitStatus::Stopped(_, Signal::SIGSTOP) = waitpid(pid, Some(WaitPidFlag::WUNTRACED))?
+        else {
+            break;
+        };
 
         if record_path.exists() && !first_payload_file.exists() && last_payload_file.exists() {
             child.kill()?;
