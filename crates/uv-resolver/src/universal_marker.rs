@@ -279,6 +279,15 @@ impl UniversalMarker {
         self.marker.is_false()
     }
 
+    /// Returns true if this universal marker contains a conflict marker.
+    ///
+    /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is the same
+    /// canonical marker with all `extra` expressions removed. Since [`MarkerTree`] equality is
+    /// semantic, the trees differ exactly when the marker depends on a conflict item.
+    pub(crate) fn has_conflict_marker(self) -> bool {
+        self.marker != self.pep508
+    }
+
     /// Returns true if this universal marker is disjoint with the one given.
     ///
     /// Two universal markers are disjoint when it is impossible for them both
@@ -1051,6 +1060,14 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+    }
+
+    #[test]
+    fn has_conflict_marker() {
+        let pep508 =
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
+        assert!(!UniversalMarker::from_combined(pep508).has_conflict_marker());
+        assert!(UniversalMarker::new(pep508, create_extra_marker("foo")).has_conflict_marker());
     }
 
     #[test]

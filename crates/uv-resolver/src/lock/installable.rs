@@ -254,7 +254,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
-                if validate_conflicts {
+                if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((dist, dep));
                 }
                 let additional_activated_extras = newly_activated_extras(dep, &activated_extras);
@@ -580,7 +580,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
-                if validate_conflicts {
+                if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }
                 if !dep.complexified_marker.evaluate(
@@ -636,13 +636,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         // Evaluate conflict markers from concrete roots, not from workspace members that depend on
         // them. Reject markers that still depend on conflict items outside the resulting subgraph.
-        if validate_conflicts {
+        if !dependencies_for_conflict_validation.is_empty() {
             let subgraph_packages = inverse
                 .keys()
                 .map(|package_id| &package_id.name)
                 .collect::<FxHashSet<_>>();
 
+            // The environment and conflict state are shared by every dependency, so repeated
+            // markers have the same result.
+            let mut validated_markers = FxHashSet::default();
             for (package, dependency) in dependencies_for_conflict_validation {
+                if !validated_markers.insert(dependency.complexified_marker) {
+                    continue;
+                }
                 let mut marker = dependency.complexified_marker;
                 for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
                     if !subgraph_packages.contains(item.package()) {
