@@ -253,20 +253,40 @@ pub(crate) fn link_wheel_files(
     link_mode: LinkMode,
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
+    dist_info_prefix: &str,
     state: &InstallState,
     filename: &WheelFilename,
-) -> Result<(), Error> {
+) -> Result<tempfile::TempDir, Error> {
     let wheel = wheel.as_ref();
     let site_packages = site_packages.as_ref();
     register_installed_paths(wheel, state, filename)?;
 
-    // The `RECORD` file is modified during installation, so it needs a real
-    // copy rather than a link back to the cache.
-    let options = LinkOptions::new(link_mode)
-        .with_mutable_copy_filter(|p: &Path| p.ends_with("RECORD"))
-        .with_copy_locks(state.copy_locks())
-        .with_on_existing_directory(OnExistingDirectory::Merge);
-    let used_link_mode = link_dir(wheel, site_packages, &options)?;
+    let dist_info_directory = format!("{dist_info_prefix}.dist-info");
+    // The presence of `.dist-info` is what causes a subsequent install to treat the distribution as
+    // already installed. Build it in a hidden, same-filesystem staging directory so it only becomes
+    // visible after the package payload, data files, scripts, and metadata are complete.
+    let staged_dist_info = tempfile::tempdir_in(site_packages)?;
+
+    let mut used_link_mode = link_mode;
+    for entry in fs::read_dir(wheel)? {
+        let entry = entry?;
+        let destination = if entry.file_name() == dist_info_directory.as_str() {
+            staged_dist_info.path()
+        } else {
+            site_packages
+        };
+        // The `RECORD` file is modified during installation, so it needs a real copy rather than a
+        // link back to the cache.
+        let options = LinkOptions::new(used_link_mode)
+            .with_mutable_copy_filter(|path: &Path| path.ends_with("RECORD"))
+            .with_copy_locks(state.copy_locks())
+            .with_on_existing_directory(OnExistingDirectory::Merge);
+        used_link_mode = link_dir(
+            &entry.path(),
+            &destination.join(entry.file_name()),
+            &options,
+        )?;
+    }
 
     if used_link_mode == LinkMode::Clone {
         // The directory mtime is not updated when cloning and the mtime is
@@ -278,7 +298,7 @@ pub(crate) fn link_wheel_files(
         update_site_packages_mtime(site_packages);
     }
 
-    Ok(())
+    Ok(staged_dist_info)
 }
 
 /// Update the mtime of the site-packages directory to the current time.
@@ -313,4 +333,49 @@ fn register_installed_paths(
         state.register_installed_path(&relative, &path, filename);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use anyhow::Result;
+
+    use super::*;
+
+    #[test]
+    fn stages_dist_info_until_installation_completes() -> Result<()> {
+        let temporary_directory = tempfile::tempdir()?;
+        let wheel = temporary_directory.path().join("wheel");
+        let site_packages = temporary_directory.path().join("site-packages");
+        let package = wheel.join("example");
+        let dist_info = wheel.join("example-1.0.0.dist-info");
+        fs::create_dir_all(&package)?;
+        fs::create_dir_all(&dist_info)?;
+        fs::create_dir_all(&site_packages)?;
+        fs::write(package.join("__init__.py"), "")?;
+        fs::write(dist_info.join("RECORD"), "")?;
+
+        let state = InstallState::new(Preview::default());
+        let filename = WheelFilename::from_str("example-1.0.0-py3-none-any.whl")?;
+        let staged_dist_info = link_wheel_files(
+            LinkMode::Copy,
+            &site_packages,
+            &wheel,
+            "example-1.0.0",
+            &state,
+            &filename,
+        )?;
+
+        assert!(site_packages.join("example/__init__.py").is_file());
+        assert!(!site_packages.join("example-1.0.0.dist-info").exists());
+        assert!(
+            staged_dist_info
+                .path()
+                .join("example-1.0.0.dist-info/RECORD")
+                .is_file()
+        );
+
+        Ok(())
+    }
 }

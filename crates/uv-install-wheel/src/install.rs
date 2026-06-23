@@ -74,7 +74,14 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
+    let staged_dist_info = link_wheel_files(
+        link_mode,
+        site_packages,
+        &wheel,
+        &dist_info_prefix,
+        state,
+        filename,
+    )?;
     trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.
@@ -137,7 +144,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     if installer_metadata {
         trace!(?name, "Writing installer metadata");
         write_installer_metadata(
-            site_packages,
+            staged_dist_info.path(),
             &dist_info_prefix,
             true,
             direct_url,
@@ -149,7 +156,15 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     }
 
     trace!(?name, "Writing record");
-    write_record(site_packages, &dist_info_prefix, record)?;
+    write_record(staged_dist_info.path(), &dist_info_prefix, record)?;
+
+    // Make the completed distribution metadata visible atomically. A subsequent install uses the
+    // presence of this directory to determine whether the distribution is already installed.
+    let dist_info_directory = format!("{dist_info_prefix}.dist-info");
+    fs_err::rename(
+        staged_dist_info.path().join(&dist_info_directory),
+        site_packages.join(dist_info_directory),
+    )?;
 
     Ok(())
 }
