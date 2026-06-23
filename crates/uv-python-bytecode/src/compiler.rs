@@ -4065,6 +4065,10 @@ impl Compiler {
             if let Some(constant) = fold_constant(&statement.test) {
                 self.add_constant(constant)?;
             }
+            if let Some(message) = &statement.msg {
+                self.pre_register_expression_names(message)?;
+                self.pre_register_expression_constants(message)?;
+            }
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
             return self.emit(NOP, 0, 0);
@@ -10857,6 +10861,30 @@ impl Compiler {
             if force_name || !is_fast_local {
                 self.name_index(&name)?;
             }
+        }
+        Ok(())
+    }
+
+    fn pre_register_expression_constants(&mut self, expression: &Expr) -> Result<(), CompileError> {
+        #[derive(Default)]
+        struct Collector {
+            constants: Vec<Constant>,
+        }
+
+        impl<'ast> Visitor<'ast> for Collector {
+            fn visit_expr(&mut self, expression: &'ast Expr) {
+                if let Some(constant) = literal_constant(expression) {
+                    self.constants.push(constant);
+                } else {
+                    walk_expr(self, expression);
+                }
+            }
+        }
+
+        let mut collector = Collector::default();
+        collector.visit_expr(expression);
+        for constant in collector.constants {
+            self.add_constant(constant)?;
         }
         Ok(())
     }
