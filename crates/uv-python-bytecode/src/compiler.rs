@@ -1160,7 +1160,8 @@ impl Compiler {
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(RETURN_VALUE, 0, -1)?;
         }
-        if self.constants.is_empty() {
+        if self.constants.is_empty() && !(self.name == "<lambda>" && self.flags & CO_GENERATOR != 0)
+        {
             self.add_constant(Constant::None)?;
         }
         let deferred_cleanups = std::mem::take(&mut self.deferred_comprehension_cleanups);
