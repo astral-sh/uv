@@ -25,8 +25,8 @@ pub fn uninstall_wheel(
     };
 
     // Read the RECORD file.
+    let record_path = dist_info.join("RECORD");
     let record = {
-        let record_path = dist_info.join("RECORD");
         let mut record_file = match fs_err::File::open(&record_path) {
             Ok(record_file) => record_file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -45,8 +45,15 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+    let normalized_record_path = normalize_path(&record_path);
     for entry in &record {
         let path = site_packages.join(&entry.path);
+
+        // Keep RECORD available until every other entry has been removed so an interrupted
+        // uninstall can be retried.
+        if path.ends_with("RECORD") && normalize_path(&path) == normalized_record_path {
+            continue;
+        }
 
         if !is_path_in_scheme(&entry.path, site_packages, &distribution, layout) {
             continue;
@@ -95,6 +102,17 @@ pub fn uninstall_wheel(
                 Err(_) => return Err(err.into()),
             },
         }
+    }
+
+    // RECORD is the uninstall journal, so remove it last.
+    match fs_err::remove_file(&record_path) {
+        Ok(()) => {
+            trace!("Removed file: {}", record_path.display());
+            file_count += 1;
+            visited.insert(normalize_path(dist_info));
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
 
     // If any directories were left empty, remove them. Iterate in reverse order such that we visit

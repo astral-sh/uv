@@ -1,10 +1,20 @@
+#[cfg(unix)]
+use std::fmt::Write;
 #[cfg(windows)]
 use std::path::{Component, Prefix};
+#[cfg(unix)]
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+#[cfg(unix)]
+use nix::errno::Errno;
+#[cfg(unix)]
+use nix::sys::signal::{Signal, kill};
+#[cfg(unix)]
+use nix::unistd::Pid;
 
 use uv_test::uv_snapshot;
 
@@ -150,6 +160,82 @@ fn missing_record() -> Result<()> {
     error: Cannot uninstall package; `RECORD` file not found at: [SITE_PACKAGES]/MarkupSafe-2.1.3.dist-info/RECORD
     "
     );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn interrupted_uninstall_can_be_retried() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = context.site_packages();
+    let package = site_packages.join("interrupted");
+    let dist_info = site_packages.join("interrupted-1.0.0.dist-info");
+    fs_err::create_dir_all(&package)?;
+    fs_err::create_dir_all(&dist_info)?;
+    fs_err::write(
+        dist_info.join("METADATA"),
+        "Metadata-Version: 2.1\nName: interrupted\nVersion: 1.0.0\n",
+    )?;
+
+    let record_path = dist_info.join("RECORD");
+    let mut record = String::from(
+        "interrupted-1.0.0.dist-info/METADATA,,\n\
+         interrupted-1.0.0.dist-info/RECORD,,\n",
+    );
+    for index in 0..1_000 {
+        let relative_path = format!("interrupted/module_{index:04}.py");
+        fs_err::write(site_packages.join(&relative_path), "")?;
+        writeln!(record, "{relative_path},,")?;
+    }
+    fs_err::write(&record_path, record)?;
+
+    let first_payload_file = package.join("module_0000.py");
+    let last_payload_file = package.join("module_0999.py");
+    let mut child = context.pip_uninstall().arg("interrupted").spawn()?;
+    let pid = Pid::from_raw(i32::try_from(child.id())?);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut interrupted = false;
+
+    while Instant::now() < deadline && child.try_wait()?.is_none() {
+        match kill(pid, Signal::SIGSTOP) {
+            Ok(()) => {}
+            Err(Errno::ESRCH) => break,
+            Err(error) => return Err(error.into()),
+        }
+        std::thread::sleep(Duration::from_millis(1));
+
+        if record_path.exists() && !first_payload_file.exists() && last_payload_file.exists() {
+            child.kill()?;
+            child.wait()?;
+            interrupted = true;
+            break;
+        }
+
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        kill(pid, Signal::SIGCONT)?;
+        std::thread::sleep(Duration::from_micros(100));
+    }
+
+    if !interrupted {
+        let _ = kill(pid, Signal::SIGCONT);
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    assert!(
+        interrupted,
+        "failed to interrupt uv while RECORD could support recovery"
+    );
+
+    context
+        .pip_uninstall()
+        .arg("interrupted")
+        .assert()
+        .success();
+    assert!(!package.exists());
+    assert!(!dist_info.exists());
 
     Ok(())
 }
