@@ -44,9 +44,8 @@ use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    ToolPython, finalize_tool_install, normalize_tool_local_requirements, read_tool_lock,
-    refine_interpreter, remove_entrypoints, tool_environment_spec, tool_lock, tool_lock_is_fresh,
-    tool_lock_manifest, tool_lock_to_resolution,
+    ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    tool_environment_spec,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -388,7 +387,7 @@ pub(crate) async fn install(
             )
             .await?,
         );
-        normalize_tool_local_requirements(requirements)
+        requirements
     };
 
     // Explicit local directory requirements should always be rebuilt and reinstalled, matching
@@ -422,46 +421,42 @@ pub(crate) async fn install(
     };
 
     // Resolve the constraints.
-    let receipt_constraints = normalize_tool_local_requirements(
-        spec.constraints
-            .into_iter()
-            .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>(),
-    );
+    let receipt_constraints = spec
+        .constraints
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
 
     // Resolve the overrides.
-    let receipt_overrides = normalize_tool_local_requirements(
-        resolve_names(
-            spec.overrides,
-            &interpreter,
-            &settings,
-            &client_builder,
-            &state,
-            &concurrency,
-            &cache,
-            workspace_cache,
-            printer,
-            preview,
-            lfs,
-        )
-        .await?,
-    );
+    let receipt_overrides = resolve_names(
+        spec.overrides,
+        &interpreter,
+        &settings,
+        &client_builder,
+        &state,
+        &concurrency,
+        &cache,
+        workspace_cache,
+        printer,
+        preview,
+        lfs,
+    )
+    .await?;
 
     // Resolve the excludes.
     let receipt_excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
-    let receipt_build_constraints = normalize_tool_local_requirements(
+    let receipt_build_constraints =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .collect::<Vec<_>>(),
-    );
+            .collect::<Vec<_>>();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
-    let lock_manifest = tool_lock_manifest(
+    let lock_manifest = ToolLock::manifest(
         &requirements,
         &receipt_constraints,
         &receipt_overrides,
@@ -526,8 +521,7 @@ pub(crate) async fn install(
     };
 
     let existing_tool_lock = if tool_locks {
-        read_tool_lock(&tool_dir)
-            .filter(|lock| tool_lock_is_fresh(&tool_dir, lock, &lock_manifest, &settings.resolver))
+        ToolLock::read(&tool_dir).filter(|lock| lock.is_fresh(&lock_manifest, &settings.resolver))
     } else {
         None
     };
@@ -538,12 +532,16 @@ pub(crate) async fn install(
         !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none()
     }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            if requirements == tool_receipt.requirements()
-                && receipt_constraints == tool_receipt.constraints()
-                && receipt_overrides == tool_receipt.overrides()
-                && receipt_excludes == tool_receipt.excludes()
-                && receipt_build_constraints == tool_receipt.build_constraints()
-            {
+            let inputs_match = if tool_locks {
+                existing_tool_lock.is_some()
+            } else {
+                requirements == tool_receipt.requirements()
+                    && receipt_constraints == tool_receipt.constraints()
+                    && receipt_overrides == tool_receipt.overrides()
+                    && receipt_excludes == tool_receipt.excludes()
+                    && receipt_build_constraints == tool_receipt.build_constraints()
+            };
+            if inputs_match {
                 let ResolverInstallerSettings {
                     resolver:
                         ResolverSettings {
@@ -573,9 +571,7 @@ pub(crate) async fn install(
                     environment.environment().interpreter(),
                 )?;
                 let already_installed = if let Some(lock) = existing_tool_lock.as_ref() {
-                    match tool_lock_to_resolution(
-                        environment.environment().root(),
-                        lock,
+                    match lock.to_resolution(
                         tool_receipt
                             .requirements()
                             .first()
@@ -689,7 +685,6 @@ pub(crate) async fn install(
                 tool_environment_spec(
                     spec.clone(),
                     existing_tool_lock.as_ref(),
-                    &tool_dir,
                     Some(&site_packages),
                 ),
                 resolution_scope,
@@ -720,10 +715,8 @@ pub(crate) async fn install(
                 Err(err) => return Err(err.into()),
             };
 
-            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest)?;
-            let resolution = tool_lock_to_resolution(
-                &tool_dir,
-                &tool_lock,
+            let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+            let resolution = tool_lock.to_resolution(
                 Some(package_name),
                 environment.interpreter(),
                 python_platform.as_ref(),
@@ -921,10 +914,8 @@ pub(crate) async fn install(
         };
 
         let (resolution, tool_lock) = if tool_locks {
-            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest)?;
-            let resolution = tool_lock_to_resolution(
-                &tool_dir,
-                &tool_lock,
+            let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+            let resolution = tool_lock.to_resolution(
                 Some(package_name),
                 &interpreter,
                 python_platform.as_ref(),

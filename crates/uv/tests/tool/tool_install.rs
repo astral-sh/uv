@@ -6431,7 +6431,7 @@ fn tool_install_removed_python() {
 }
 
 #[test]
-fn tool_install_locks_are_preview() -> Result<()> {
+fn tool_install_locks_are_preview() {
     let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -6465,21 +6465,31 @@ fn tool_install_locks_are_preview() -> Result<()> {
         .assert()
         .success();
 
-    let lock = fs_err::read_to_string(lock_path)?;
-    assert_snapshot!(lock.lines().take(3).collect::<Vec<_>>().join("\n"), @r#"
-    version = 1
-    revision = 3
-    requires-python = ">=3.12"
-    "#);
-    let lock: toml::Value = toml::from_str(&lock)?;
-    assert!(lock.get("supported-markers").is_none());
-    assert!(lock.get("required-markers").is_none());
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
 
-    Ok(())
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" },
+        ]
+        "#);
+    });
 }
 
 #[test]
-fn tool_install_lock_supports_local_wheel() -> Result<()> {
+fn tool_install_lock_supports_local_wheel() {
     let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -6499,12 +6509,87 @@ fn tool_install_lock_supports_local_wheel() -> Result<()> {
             .success();
     }
 
-    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
-    let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
-    assert_eq!(
-        lock["manifest"]["requirements"][0]["name"].as_str(),
-        Some("simple-launcher")
-    );
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }
+        wheels = [
+            { filename = "simple_launcher-0.1.0-py3-none-any.whl", hash = "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4" },
+        ]
+        "#);
+    });
+}
+
+#[test]
+fn tool_install_lock_normalizes_local_directory_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("simple-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        simple-launcher = "simple_launcher:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let local_package_src = local_package.child("src").child("simple_launcher");
+    local_package_src.create_dir_all()?;
+    local_package_src
+        .child("__init__.py")
+        .write_str("def main(): pass\n")?;
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&format!(
+        "simple-launcher @ {}\n",
+        local_package.path().display()
+    ))?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
 
     Ok(())
 }

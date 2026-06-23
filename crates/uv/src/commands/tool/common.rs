@@ -3,7 +3,7 @@ use std::{
     ffi::OsString,
     fmt::Write,
     io,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, bail};
@@ -19,8 +19,8 @@ use uv_configuration::{
 };
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
-    DependencyMetadata, InstalledDist, Name, Requirement, RequirementSource, RequiresPython,
-    Resolution, UnresolvedRequirement,
+    DependencyMetadata, InstalledDist, Name, Requirement, RequiresPython, Resolution,
+    UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -133,16 +133,11 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
 
 /// Remove any entrypoints attached to the [`Tool`].
 pub(crate) fn remove_entrypoints(tool: &Tool) {
-    remove_entrypoint_paths(
-        tool.entrypoints()
-            .iter()
-            .map(|entrypoint| entrypoint.install_path.as_path()),
-    );
-}
-
-/// Remove the entrypoints at the given paths.
-fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
-    for executable in entrypoints {
+    for executable in tool
+        .entrypoints()
+        .iter()
+        .map(|entrypoint| &entrypoint.install_path)
+    {
         debug!("Removing executable: `{}`", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
@@ -269,187 +264,173 @@ async fn infer_requires_python_from_requirement(
     }
 }
 
-/// Normalize tool-local directory requirements so non-editable inputs are represented explicitly.
-///
-/// The CLI parser distinguishes editable local directories with `editable = Some(true)`, but
-/// leaves non-editable directories as `editable = None`. Tools need to preserve each local
-/// requirement's chosen mode while lowering implicit workspace members, so convert the implicit
-/// non-editable case into `Some(false)` before resolution.
-pub(crate) fn normalize_tool_local_requirements(
-    requirements: impl IntoIterator<Item = Requirement>,
-) -> Vec<Requirement> {
-    requirements
-        .into_iter()
-        .map(|requirement| Requirement {
-            source: match requirement.source {
-                RequirementSource::Directory {
-                    install_path,
-                    editable: None,
-                    r#virtual,
-                    url,
-                } => RequirementSource::Directory {
-                    install_path,
-                    editable: Some(false),
-                    r#virtual,
-                    url,
-                },
-                source => source,
-            },
-            ..requirement
+/// A universal lock for a tool environment.
+pub(crate) struct ToolLock {
+    root: PathBuf,
+    lock: Lock,
+}
+
+impl ToolLock {
+    /// Build the lock manifest for a tool environment.
+    pub(crate) fn manifest(
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        excludes: &[PackageName],
+        build_constraints: &[Requirement],
+        dependency_metadata: &DependencyMetadata,
+    ) -> ResolverManifest {
+        ResolverManifest::new(
+            std::iter::empty::<PackageName>(),
+            requirements.iter().cloned(),
+            constraints.iter().cloned(),
+            overrides.iter().cloned(),
+            excludes.iter().cloned(),
+            build_constraints.iter().cloned(),
+            std::iter::empty::<(GroupName, Vec<Requirement>)>(),
+            dependency_metadata.values().cloned(),
+        )
+    }
+
+    /// Build the lock for a tool environment.
+    pub(crate) fn from_resolution(
+        root: &Path,
+        resolution: &ResolverOutput,
+        manifest: &ResolverManifest,
+    ) -> anyhow::Result<Self> {
+        let lock = Lock::from_resolution(resolution, root, Vec::new())?;
+        let manifest = manifest.clone().relative_to(root)?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            lock: lock.with_manifest(manifest),
         })
-        .collect()
-}
+    }
 
-/// Build the lock manifest for a tool environment.
-pub(crate) fn tool_lock_manifest(
-    requirements: &[Requirement],
-    constraints: &[Requirement],
-    overrides: &[Requirement],
-    excludes: &[PackageName],
-    build_constraints: &[Requirement],
-    dependency_metadata: &DependencyMetadata,
-) -> ResolverManifest {
-    ResolverManifest::new(
-        std::iter::empty::<PackageName>(),
-        requirements.iter().cloned(),
-        constraints.iter().cloned(),
-        overrides.iter().cloned(),
-        excludes.iter().cloned(),
-        build_constraints.iter().cloned(),
-        std::iter::empty::<(GroupName, Vec<Requirement>)>(),
-        dependency_metadata.values().cloned(),
-    )
-}
-
-/// Build the lock for a tool environment.
-pub(crate) fn tool_lock(
-    root: &Path,
-    resolution: &ResolverOutput,
-    manifest: &ResolverManifest,
-) -> anyhow::Result<Lock> {
-    let lock = Lock::from_resolution(resolution, root, Vec::new())?;
-    let manifest = manifest.clone().relative_to(root)?;
-    Ok(lock.with_manifest(manifest))
-}
-
-/// Read the lock for a tool, if one has been generated.
-pub(crate) fn read_tool_lock(directory: &Path) -> Option<Lock> {
-    let path = directory.join("uv.lock");
-    match fs_err::read_to_string(&path) {
-        Ok(contents) => match toml::from_str(&contents) {
-            Ok(lock) => Some(lock),
+    /// Read the lock for a tool, if one has been generated.
+    pub(crate) fn read(directory: &Path) -> Option<Self> {
+        let path = directory.join("uv.lock");
+        match fs_err::read_to_string(&path) {
+            Ok(contents) => match toml::from_str(&contents) {
+                Ok(lock) => Some(Self {
+                    root: directory.to_path_buf(),
+                    lock,
+                }),
+                Err(err) => {
+                    debug!(
+                        "Ignoring invalid tool lock at `{}`: {err}",
+                        path.user_display()
+                    );
+                    None
+                }
+            },
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
             Err(err) => {
                 debug!(
-                    "Ignoring invalid tool lock at `{}`: {err}",
+                    "Ignoring unreadable tool lock at `{}`: {err}",
                     path.user_display()
                 );
                 None
             }
-        },
-        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
-        Err(err) => {
-            debug!(
-                "Ignoring unreadable tool lock at `{}`: {err}",
-                path.user_display()
-            );
-            None
-        }
-    }
-}
-
-/// Write or remove the lock for a tool.
-pub(crate) fn write_tool_lock(directory: &Path, lock: Option<&Lock>) -> anyhow::Result<()> {
-    let path = directory.join("uv.lock");
-    if let Some(lock) = lock {
-        uv_fs::write_atomic_sync(&path, lock.to_toml()?)?;
-    } else {
-        match fs_err::remove_file(path) {
-            Ok(()) => (),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
-        }
-    }
-    Ok(())
-}
-
-/// Return whether a tool lock matches all inputs that determine a universal resolution.
-pub(crate) fn tool_lock_is_fresh(
-    root: &Path,
-    lock: &Lock,
-    manifest: &ResolverManifest,
-    resolver_settings: &ResolverSettings,
-) -> bool {
-    if !lock.matches_manifest_at(manifest, root) {
-        return false;
-    }
-
-    lock.resolution_mode() == resolver_settings.resolution
-        && lock.prerelease_mode() == resolver_settings.prerelease
-        && lock.fork_strategy() == resolver_settings.fork_strategy
-        && lock.exclude_newer() == resolver_settings.exclude_newer
-}
-
-/// Project a universal tool lock into a specific environment.
-pub(crate) fn tool_lock_to_resolution(
-    root: &Path,
-    lock: &Lock,
-    project_name: Option<&PackageName>,
-    interpreter: &Interpreter,
-    python_platform: Option<&TargetTriple>,
-    build_options: &BuildOptions,
-) -> anyhow::Result<Resolution> {
-    struct ToolLockInstallTarget<'lock> {
-        root: &'lock Path,
-        lock: &'lock Lock,
-        project_name: Option<&'lock PackageName>,
-    }
-
-    impl<'lock> Installable<'lock> for ToolLockInstallTarget<'lock> {
-        fn install_path(&self) -> &'lock Path {
-            self.root
-        }
-
-        fn lock(&self) -> &'lock Lock {
-            self.lock
-        }
-
-        fn roots(&self) -> impl Iterator<Item = &PackageName> {
-            std::iter::empty()
-        }
-
-        fn project_name(&self) -> Option<&PackageName> {
-            self.project_name
         }
     }
 
-    let markers = pip::resolution_markers(None, python_platform, interpreter);
-    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
-    Ok(ToolLockInstallTarget {
-        root,
-        lock,
-        project_name,
+    /// Write or remove the lock for a tool.
+    pub(crate) fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
+        let path = directory.join("uv.lock");
+        if let Some(lock) = lock {
+            uv_fs::write_atomic_sync(&path, lock.lock.to_toml()?)?;
+        } else {
+            match fs_err::remove_file(path) {
+                Ok(()) => (),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(())
     }
-    .to_resolution(
-        &markers,
-        &tags,
-        &ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
-        &DependencyGroupsWithDefaults::none(),
-        build_options,
-        &InstallOptions::default(),
-    )?)
+
+    /// Return whether the lock matches all inputs that determine a universal resolution.
+    pub(crate) fn is_fresh(
+        &self,
+        manifest: &ResolverManifest,
+        resolver_settings: &ResolverSettings,
+    ) -> bool {
+        match self.lock.matches_manifest_at(manifest, &self.root) {
+            Ok(true) => {}
+            Ok(false) => return false,
+            Err(err) => {
+                debug!("Failed to compare tool lock manifest: {err}");
+                return false;
+            }
+        }
+
+        self.lock.resolution_mode() == resolver_settings.resolution
+            && self.lock.prerelease_mode() == resolver_settings.prerelease
+            && self.lock.fork_strategy() == resolver_settings.fork_strategy
+            && self.lock.exclude_newer() == resolver_settings.exclude_newer
+    }
+
+    /// Project the universal lock into a specific environment.
+    pub(crate) fn to_resolution(
+        &self,
+        project_name: Option<&PackageName>,
+        interpreter: &Interpreter,
+        python_platform: Option<&TargetTriple>,
+        build_options: &BuildOptions,
+    ) -> anyhow::Result<Resolution> {
+        struct ToolLockInstallTarget<'lock> {
+            tool_lock: &'lock ToolLock,
+            project_name: Option<&'lock PackageName>,
+        }
+
+        impl<'lock> Installable<'lock> for ToolLockInstallTarget<'lock> {
+            fn install_path(&self) -> &'lock Path {
+                &self.tool_lock.root
+            }
+
+            fn lock(&self) -> &'lock Lock {
+                &self.tool_lock.lock
+            }
+
+            fn roots(&self) -> impl Iterator<Item = &PackageName> {
+                std::iter::empty()
+            }
+
+            fn project_name(&self) -> Option<&PackageName> {
+                self.project_name
+            }
+        }
+
+        let markers = pip::resolution_markers(None, python_platform, interpreter);
+        let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+        Ok(ToolLockInstallTarget {
+            tool_lock: self,
+            project_name,
+        }
+        .to_resolution(
+            &markers,
+            &tags,
+            &ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
+            &DependencyGroupsWithDefaults::none(),
+            build_options,
+            &InstallOptions::default(),
+        )?)
+    }
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
 /// available, then falling back to the installed environment.
 pub(crate) fn tool_environment_spec<'lock>(
     requirements: RequirementsSpecification,
-    lock: Option<&'lock Lock>,
-    install_path: &'lock Path,
+    lock: Option<&'lock ToolLock>,
     site_packages: Option<&SitePackages>,
 ) -> EnvironmentSpecification<'lock> {
     let specification = EnvironmentSpecification::from(requirements);
     if let Some(lock) = lock {
-        return specification.with_preferences(PreferenceLocation::Lock { lock, install_path });
+        return specification.with_preferences(PreferenceLocation::Lock {
+            lock: &lock.lock,
+            install_path: &lock.root,
+        });
     }
 
     let preferences = site_packages
@@ -570,7 +551,7 @@ pub(crate) fn finalize_tool_install(
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<Requirement>,
-    lock: Option<&Lock>,
+    lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let executable_directory = uv_tool::tool_executable_dir()?;
@@ -581,7 +562,7 @@ pub(crate) fn finalize_tool_install(
         executable_directory.user_display()
     );
 
-    let mut installed_entrypoints: Vec<ToolEntrypoint> = Vec::new();
+    let mut installed_entrypoints = Vec::new();
     let site_packages = SitePackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
@@ -600,29 +581,9 @@ pub(crate) fn finalize_tool_install(
         }
 
         let installed = site_packages.get_packages(package);
-        let Some(dist) = installed.first() else {
-            if package != name {
-                bail!("Expected package `{package}` to be installed");
-            }
-
-            writeln!(
-                printer.stdout(),
-                "No executables are provided by package `{}`; removing tool",
-                package.cyan()
-            )?;
-            remove_entrypoint_paths(
-                installed_entrypoints
-                    .iter()
-                    .map(|entrypoint| entrypoint.install_path.as_path()),
-            );
-            installed_tools.remove_environment(name)?;
-
-            return Err(NoExecutablesError::Root {
-                package: package.clone(),
-                matching_dependency_packages: Vec::new(),
-            }
-            .into());
-        };
+        let dist = installed
+            .first()
+            .context("Expected at least one requirement")?;
         let dist_entrypoints = entrypoint_paths(&site_packages, dist.name(), dist.version())?;
 
         // Determine the entry points targets. Use a sorted collection for deterministic output.
@@ -675,11 +636,6 @@ pub(crate) fn finalize_tool_install(
             )?;
 
             // Clean up the environment we just created.
-            remove_entrypoint_paths(
-                installed_entrypoints
-                    .iter()
-                    .map(|entrypoint| entrypoint.install_path.as_path()),
-            );
             installed_tools.remove_environment(name)?;
 
             return Err(err.into());
@@ -693,11 +649,6 @@ pub(crate) fn finalize_tool_install(
                 .peekable();
             if existing_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
-                remove_entrypoint_paths(
-                    installed_entrypoints
-                        .iter()
-                        .map(|entrypoint| entrypoint.install_path.as_path()),
-                );
                 installed_tools.remove_environment(name)?;
 
                 let existing_entrypoints = existing_entrypoints
@@ -768,7 +719,7 @@ pub(crate) fn finalize_tool_install(
         installed_entrypoints,
         options.clone(),
     );
-    write_tool_lock(&installed_tools.tool_dir(name), lock)?;
+    ToolLock::write(&installed_tools.tool_dir(name), lock)?;
     installed_tools.add_tool_receipt(name, tool)?;
 
     warn_out_of_path(&executable_directory);

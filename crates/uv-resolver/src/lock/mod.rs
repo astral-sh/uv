@@ -697,10 +697,22 @@ impl Lock {
         self
     }
 
-    /// Return whether this lock was generated with the given [`ResolverManifest`], resolving local
-    /// paths relative to the given root before comparison.
-    pub fn matches_manifest_at(&self, manifest: &ResolverManifest, root: &Path) -> bool {
-        self.manifest.clone().into_absolute(root) == manifest.clone().into_absolute(root)
+    /// Return whether this lock was generated with the given [`ResolverManifest`], normalizing
+    /// requirements relative to the given root before comparison.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a manifest requirement cannot be normalized.
+    pub fn matches_manifest_at(
+        &self,
+        manifest: &ResolverManifest,
+        root: &Path,
+    ) -> Result<bool, LockError> {
+        Ok(self
+            .manifest
+            .clone()
+            .normalize(root, &self.requires_python)?
+            == manifest.clone().normalize(root, &self.requires_python)?)
     }
 
     /// Record the conflicting groups that were used to generate this lock.
@@ -2891,28 +2903,29 @@ impl ResolverManifest {
         })
     }
 
-    /// Convert the manifest to an absolute form using the given root.
-    fn into_absolute(self, root: &Path) -> Self {
-        let absolute = |requirements: BTreeSet<Requirement>| {
+    /// Normalize all requirements in the manifest relative to the given root.
+    fn normalize(self, root: &Path, requires_python: &RequiresPython) -> Result<Self, LockError> {
+        let normalize = |requirements: BTreeSet<Requirement>| {
             requirements
                 .into_iter()
-                .map(|requirement| requirement.to_absolute(root))
-                .collect()
+                .map(|requirement| normalize_requirement(requirement, root, requires_python))
+                .collect::<Result<BTreeSet<_>, _>>()
         };
-        Self {
+
+        Ok(Self {
             members: self.members,
-            requirements: absolute(self.requirements),
-            constraints: absolute(self.constraints),
-            overrides: absolute(self.overrides),
+            requirements: normalize(self.requirements)?,
+            constraints: normalize(self.constraints)?,
+            overrides: normalize(self.overrides)?,
             excludes: self.excludes,
-            build_constraints: absolute(self.build_constraints),
+            build_constraints: normalize(self.build_constraints)?,
             dependency_groups: self
                 .dependency_groups
                 .into_iter()
-                .map(|(group, requirements)| (group, absolute(requirements)))
-                .collect(),
+                .map(|(group, requirements)| Ok((group, normalize(requirements)?)))
+                .collect::<Result<BTreeMap<_, _>, LockError>>()?,
             dependency_metadata: self.dependency_metadata,
-        }
+        })
     }
 }
 
@@ -7342,6 +7355,50 @@ mod tests {
     use uv_warnings::anstream;
 
     use super::*;
+
+    #[test]
+    fn manifest_matching_normalizes_requirements() -> Result<(), Box<dyn Error>> {
+        let lock = toml::from_str::<Lock>(
+            r#"
+version = 1
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "foo", directory = "foo" }]
+"#,
+        )?;
+        let root = if cfg!(windows) {
+            PathBuf::from(r"C:\root")
+        } else {
+            PathBuf::from("/root")
+        };
+        let install_path = root.join("foo").into_boxed_path();
+        let manifest = ResolverManifest::new(
+            std::iter::empty::<PackageName>(),
+            [Requirement {
+                name: "foo".parse()?,
+                extras: Box::new([]),
+                groups: Box::new([]),
+                marker: MarkerTree::TRUE,
+                source: RequirementSource::Directory {
+                    url: VerbatimUrl::from_absolute_path(&install_path)?,
+                    install_path,
+                    editable: None,
+                    r#virtual: Some(false),
+                },
+                origin: None,
+            }],
+            std::iter::empty::<Requirement>(),
+            std::iter::empty::<Requirement>(),
+            std::iter::empty::<PackageName>(),
+            std::iter::empty::<Requirement>(),
+            std::iter::empty::<(GroupName, Vec<Requirement>)>(),
+            std::iter::empty::<StaticMetadata>(),
+        );
+
+        assert!(lock.matches_manifest_at(&manifest, &root)?);
+        Ok(())
+    }
 
     /// Assert a given display snapshot, stripping ANSI color codes.
     macro_rules! assert_stripped_snapshot {

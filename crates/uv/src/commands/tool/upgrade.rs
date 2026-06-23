@@ -36,10 +36,7 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{
-    normalize_tool_local_requirements, read_tool_lock, remove_entrypoints, tool_environment_spec,
-    tool_lock, tool_lock_is_fresh, tool_lock_manifest, tool_lock_to_resolution, write_tool_lock,
-};
+use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -327,22 +324,18 @@ async fn upgrade_tool(
     );
     let settings = ResolverInstallerSettings::from(options.clone());
 
-    let build_constraint_requirements = normalize_tool_local_requirements(
-        existing_tool_receipt.build_constraints().iter().cloned(),
-    );
+    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
     let build_constraints =
         Constraints::from_requirements(build_constraint_requirements.iter().cloned());
-    let manifest_constraints = normalize_tool_local_requirements(
-        existing_tool_receipt
-            .constraints()
-            .iter()
-            .chain(constraints)
-            .cloned(),
-    );
-    let manifest_overrides =
-        normalize_tool_local_requirements(existing_tool_receipt.overrides().iter().cloned());
+    let manifest_constraints = existing_tool_receipt
+        .constraints()
+        .iter()
+        .chain(constraints)
+        .cloned()
+        .collect::<Vec<_>>();
+    let manifest_overrides = existing_tool_receipt.overrides().to_vec();
     let manifest_excludes = existing_tool_receipt.excludes().to_vec();
-    let lock_manifest = tool_lock_manifest(
+    let lock_manifest = ToolLock::manifest(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
         &manifest_overrides,
@@ -353,7 +346,7 @@ async fn upgrade_tool(
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(
-        normalize_tool_local_requirements(existing_tool_receipt.requirements().to_vec()),
+        existing_tool_receipt.requirements().to_vec(),
         manifest_constraints,
         manifest_overrides,
         manifest_excludes,
@@ -365,19 +358,16 @@ async fn upgrade_tool(
     let requested_interpreter =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter));
     let tool_dir = installed_tools.tool_dir(name);
+    // TODO(zanieb): When updating an existing environment, build it in the cache directory then
+    // copy it into the tool directory.
     let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
-        let existing_lock = read_tool_lock(&tool_dir)
-            .filter(|lock| tool_lock_is_fresh(&tool_dir, lock, &lock_manifest, &settings.resolver));
+        let existing_lock = ToolLock::read(&tool_dir)
+            .filter(|lock| lock.is_fresh(&lock_manifest, &settings.resolver));
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let universal_resolution = resolve_environment(
-            tool_environment_spec(
-                spec,
-                existing_lock.as_ref(),
-                &tool_dir,
-                Some(&site_packages),
-            ),
+            tool_environment_spec(spec, existing_lock.as_ref(), Some(&site_packages)),
             EnvironmentResolution::Universal,
             target_interpreter,
             python_platform,
@@ -394,10 +384,9 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let tool_lock = tool_lock(&tool_dir, &universal_resolution, &lock_manifest)?;
-        let resolution = tool_lock_to_resolution(
-            &tool_dir,
-            &tool_lock,
+        let tool_lock =
+            ToolLock::from_resolution(&tool_dir, &universal_resolution, &lock_manifest)?;
+        let resolution = tool_lock.to_resolution(
             Some(name),
             target_interpreter,
             python_platform,
@@ -429,6 +418,7 @@ async fn upgrade_tool(
                 Some(tool_lock),
             )
         } else {
+            // Otherwise, upgrade the existing environment.
             let ResolverInstallerSettings {
                 resolver:
                     crate::settings::ResolverSettings {
@@ -536,6 +526,7 @@ async fn upgrade_tool(
         .await?;
         (environment, UpgradeOutcome::UpgradeEnvironment, None)
     } else {
+        // Otherwise, upgrade the existing environment.
         let EnvironmentUpdate {
             environment,
             changelog,
@@ -605,7 +596,7 @@ async fn upgrade_tool(
             printer,
         )?;
     } else if tool_locks {
-        write_tool_lock(&tool_dir, tool_lock.as_ref())?;
+        ToolLock::write(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
             name,
             existing_tool_receipt

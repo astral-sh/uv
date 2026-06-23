@@ -1684,7 +1684,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
 }
 
 #[test]
-fn tool_upgrade_writes_preview_lock() -> Result<()> {
+fn tool_upgrade_writes_preview_lock() {
     let context = uv_test::test_context!("3.12");
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -1713,8 +1713,26 @@ fn tool_upgrade_writes_preview_lock() -> Result<()> {
         .assert()
         .success();
 
-    let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
-    assert_eq!(lock["version"].as_integer(), Some(1));
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
 
-    Ok(())
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher" }]
+        constraints = [{ name = "simple-launcher" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" },
+        ]
+        "#);
+    });
 }
