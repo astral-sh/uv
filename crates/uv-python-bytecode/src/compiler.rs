@@ -557,6 +557,7 @@ pub(crate) struct Compiler {
     // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
     // coroutine stop-iteration handler.
     active_normal_finally_bodies: usize,
+    active_finally_try_bodies: usize,
     active_pass_finally_locations: Vec<SourceLocation>,
     active_overriding_finally_returns: usize,
     preserve_finally_break_exit_loop_range: Option<ruff_text_size::TextRange>,
@@ -624,6 +625,7 @@ impl Compiler {
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             preserve_finally_break_exit_loop_range: None,
@@ -746,6 +748,7 @@ impl Compiler {
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             preserve_finally_break_exit_loop_range: None,
@@ -853,6 +856,7 @@ impl Compiler {
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             preserve_finally_break_exit_loop_range: None,
@@ -5453,6 +5457,7 @@ impl Compiler {
             } else {
                 previous_break_exit_loop_range
             };
+        self.active_finally_try_bodies += 1;
         let protected_result = (|| -> Result<bool, CompileError> {
             if statement.handlers.is_empty() {
                 let instruction_count = self.assembler.instruction_count();
@@ -5476,6 +5481,7 @@ impl Compiler {
                 Ok(true)
             }
         })();
+        self.active_finally_try_bodies -= 1;
         self.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
         self.active_overriding_finally_returns = previous_overriding_finally_returns;
         let protected_has_instructions = protected_result?;
@@ -5905,7 +5911,11 @@ impl Compiler {
                 self.emit_implicit_return()?;
             } else {
                 self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                self.assembler.prevent_last_jump_inlining();
+                if self.active_exception_region_exclusions.is_empty()
+                    || self.active_finally_try_bodies > 0
+                {
+                    self.assembler.prevent_last_jump_inlining();
+                }
             }
         }
         let mut region_start = protected_start;
@@ -5956,7 +5966,11 @@ impl Compiler {
             self.emit_implicit_return()?;
         } else {
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-            self.assembler.prevent_last_jump_inlining();
+            if self.active_exception_region_exclusions.is_empty()
+                || self.active_finally_try_bodies > 0
+            {
+                self.assembler.prevent_last_jump_inlining();
+            }
         }
 
         self.assembler.mark(cleanup);
