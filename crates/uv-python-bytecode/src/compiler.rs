@@ -331,6 +331,13 @@ impl FunctionPlan {
                 plan.mark_global(&name);
             }
         }
+        // Method annotation thunks are created by the class body, so they can close over the
+        // class body's free variables even when the method body does not reference them.
+        for name in &plan.annotation_references {
+            if class_freevars.contains(name.as_str()) {
+                plan.annotation_freevars.insert(name.clone());
+            }
+        }
         plan
     }
 

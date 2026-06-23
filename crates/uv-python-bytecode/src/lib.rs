@@ -740,11 +740,11 @@ mod tests {
     }
 
     #[test]
-    fn matches_cpython_marshal_for_a_redundant_nop_after_annotation_setup() {
+    fn matches_cpython_marshal_for_annotation_thunk_edges() {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "()\nvalue: int\n";
+        let source = "()\nvalue: int\n\ndef outer():\n    from pathlib import Path\n\n    class Visitor:\n        def visit(self, value: Path) -> None:\n            pass\n";
         let expected = Command::new(python)
             .args([
                 "-c",
