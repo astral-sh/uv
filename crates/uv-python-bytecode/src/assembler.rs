@@ -45,6 +45,8 @@ struct Instruction {
     strict_owned_load: bool,
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
+    // Retain the jump's line event only if its original target is copied directly.
+    preserve_direct_inlined_jump_nop: Option<Label>,
     preserve_no_location: bool,
     prevent_fusion_with_next: bool,
     prevent_fusion_with_previous: bool,
@@ -255,6 +257,18 @@ impl Assembler {
             .find(|item| matches!(item, Item::Instruction(_)))
         {
             instruction.preserve_inlined_jump_nop = true;
+        }
+    }
+
+    pub(crate) fn preserve_last_direct_inlined_jump_nop(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+            && let Operand::Forward(target) = instruction.operand
+        {
+            instruction.preserve_direct_inlined_jump_nop = Some(target);
         }
     }
 
@@ -474,6 +488,7 @@ impl Assembler {
             strict_owned_load,
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
+            preserve_direct_inlined_jump_nop: None,
             preserve_no_location: false,
             prevent_fusion_with_next: false,
             prevent_fusion_with_previous: false,
@@ -1237,6 +1252,7 @@ impl Assembler {
                         strict_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
+                        preserve_direct_inlined_jump_nop: None,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -1552,7 +1568,16 @@ impl Assembler {
                     .rev()
                     .find_map(|item| {
                         if let Item::Instruction(instruction) = item {
-                            Some(instruction.preserve_inlined_jump_nop)
+                            Some(
+                                instruction.preserve_inlined_jump_nop
+                                    || matches!(
+                                        (
+                                            instruction.preserve_direct_inlined_jump_nop,
+                                            instruction.operand,
+                                        ),
+                                        (Some(expected), Operand::Forward(actual)) if expected == actual
+                                    ),
+                            )
                         } else {
                             None
                         }
@@ -1592,6 +1617,7 @@ impl Assembler {
                         strict_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
+                        preserve_direct_inlined_jump_nop: None,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -2863,6 +2889,7 @@ impl Assembler {
                 strict_owned_load: first.strict_owned_load || second.strict_owned_load,
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
+                preserve_direct_inlined_jump_nop: None,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
                 prevent_fusion_with_next: second.prevent_fusion_with_next,
                 prevent_fusion_with_previous: first.prevent_fusion_with_previous,

@@ -2670,6 +2670,11 @@ impl Compiler {
                         self.assembler.preserve_last_inlined_jump_nop();
                     } else if nested_if_body_falls_through {
                         self.assembler.preserve_last_no_location();
+                    } else if matches!(body.last(), Some(Stmt::If(_))) {
+                        // CPython emits this jump in the nested if's empty join block. When
+                        // small-exit inlining replaces it with a NOP, no preceding instruction
+                        // in that block can make the NOP redundant.
+                        self.assembler.preserve_last_direct_inlined_jump_nop();
                     }
                 }
                 self.assembler.mark(next);
