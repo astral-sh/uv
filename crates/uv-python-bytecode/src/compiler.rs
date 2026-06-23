@@ -9669,10 +9669,7 @@ impl Compiler {
             {
                 self.compile_expression(singleton)?;
                 self.compile_store_target(&nested.target)?;
-                if let Some(key) = key {
-                    self.compile_expression(key)?;
-                }
-                self.compile_expression(value)?;
+                self.compile_comprehension_element(key, value)?;
                 let add_range = key.map_or_else(
                     || value.range(),
                     |key| ruff_text_size::TextRange::new(key.range().start(), value.range().end()),
@@ -9705,10 +9702,7 @@ impl Compiler {
                 loop_back_location = Some(self.source_location(key.unwrap_or(value).range()));
             }
         } else {
-            if let Some(key) = key {
-                self.compile_expression(key)?;
-            }
-            self.compile_expression(value)?;
+            self.compile_comprehension_element(key, value)?;
             let add_range = key.map_or_else(
                 || value.range(),
                 |key| ruff_text_size::TextRange::new(key.range().start(), value.range().end()),
@@ -9734,6 +9728,28 @@ impl Compiler {
         self.emit(END_FOR, 0, -1)?;
         self.emit(POP_ITER, 0, -1)?;
         Ok(())
+    }
+
+    fn compile_comprehension_element(
+        &mut self,
+        key: Option<&Expr>,
+        value: &Expr,
+    ) -> Result<(), CompileError> {
+        let folded_conditional_key = matches!(key, Some(Expr::If(expression)) if early_condition_truthiness(&expression.test).is_some());
+        self.compile_with_strict_owned_loads(folded_conditional_key, |compiler| {
+            if let Some(key) = key {
+                if folded_conditional_key {
+                    // CPython retains the folded conditional's entry and join boundaries. They
+                    // prevent fusion around the key and force both MAP_ADD operands to be owned.
+                    compiler.assembler.fusion_barrier();
+                }
+                compiler.compile_expression(key)?;
+                if folded_conditional_key {
+                    compiler.assembler.fusion_barrier();
+                }
+            }
+            compiler.compile_expression(value)
+        })
     }
 
     fn compile_async_comprehension_generator(
@@ -9810,10 +9826,7 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(key.unwrap_or(value).range()));
         } else {
-            if let Some(key) = key {
-                self.compile_expression(key)?;
-            }
-            self.compile_expression(value)?;
+            self.compile_comprehension_element(key, value)?;
             let add_range = key.map_or_else(
                 || value.range(),
                 |key| ruff_text_size::TextRange::new(key.range().start(), value.range().end()),
