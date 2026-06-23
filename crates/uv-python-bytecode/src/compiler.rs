@@ -1680,16 +1680,26 @@ impl Compiler {
                 self.emit_deferred_implicit_return()?;
                 return Ok(());
             };
-            self.compile_suite(body)?;
+            let emitted_fallthrough = if matches!(body.last(), Some(Stmt::If(_))) {
+                let previous_fallthrough =
+                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                self.compile_suite_inner(body, true)?;
+                std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+            } else {
+                self.compile_suite(body)?;
+                false
+            };
             if truthiness {
                 for clause in &statement.elif_else_clauses {
                     self.pre_register_suite_names(&clause.body)?;
                 }
             }
-            if let Some(location) = self.assembler.last_instruction_location() {
-                self.assembler.set_location(location);
+            if !emitted_fallthrough {
+                if let Some(location) = self.assembler.last_instruction_location() {
+                    self.assembler.set_location(location);
+                }
+                self.emit_deferred_implicit_return()?;
             }
-            self.emit_deferred_implicit_return()?;
             return Ok(());
         }
 
