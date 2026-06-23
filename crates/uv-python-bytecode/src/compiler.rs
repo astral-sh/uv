@@ -3924,6 +3924,12 @@ impl Compiler {
             }
             if !truthiness {
                 self.pre_register_suite_names(&statement.body)?;
+                // The eliminated loop body leaves a CFG boundary that CPython's borrowed-load
+                // optimizer does not traverse into the following block.
+                self.assembler.set_strict_owned_loads(true);
+                self.assembler
+                    .set_location(self.source_location(statement.test.range()));
+                self.emit(NOP, 0, 0)?;
                 self.compile_suite(&statement.orelse)?;
                 return Ok(());
             }
@@ -3951,6 +3957,12 @@ impl Compiler {
             }
             self.pre_register_suite_names(&statement.orelse)?;
             self.assembler.mark(end);
+            if suite_contains_loop_break(&statement.body) {
+                // A constant-true loop can reach its exit only through `break`. CPython removes
+                // a redundant break jump before borrowed-load analysis but does not reconnect
+                // the large exit block; a copied small exit remains independently reachable.
+                self.assembler.prevent_borrow_reachability(end);
+            }
             self.set_depth(base_depth);
             if statement.orelse.is_empty() {
                 self.assembler
