@@ -452,6 +452,35 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_unreachable_deferred_annotations() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source =
+            "seed = 0\nraise terminal\nvalue: Annotation = build()\ndeclaration: Annotation\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'unreachable_annotation.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "unreachable_annotation.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_an_inline_constant_with_body() {
         let Some(python) = python_314() else {
             return;

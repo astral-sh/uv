@@ -10661,6 +10661,13 @@ impl Compiler {
         impl<'ast> Visitor<'ast> for Collector {
             fn visit_stmt(&mut self, statement: &'ast Stmt) {
                 match statement {
+                    Stmt::AnnAssign(assignment) => {
+                        if let Some(value) = &assignment.value {
+                            self.visit_expr(value);
+                            self.visit_expr(&assignment.target);
+                        }
+                        return;
+                    }
                     Stmt::FunctionDef(definition) => {
                         for decorator in &definition.decorator_list {
                             self.visit_expr(&decorator.expression);
