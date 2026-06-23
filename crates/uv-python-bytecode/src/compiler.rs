@@ -9049,13 +9049,18 @@ impl Compiler {
         }
         collect_nested_comprehension_target_names(value, &mut temporary_names);
         let active_temporary_names = temporary_names.clone();
-        if let Some(key) = key {
-            collect_named_expression_target_names(key, &mut temporary_names);
-        }
-        collect_named_expression_target_names(value, &mut temporary_names);
-        for generator in generators {
-            for condition in &generator.ifs {
-                collect_named_expression_target_names(condition, &mut temporary_names);
+        if matches!(self.scope, Scope::Module) {
+            // CPython assigns a hidden fast-local slot to module-scope walrus targets while
+            // inlining a comprehension. Function-scope targets remain bindings in the
+            // containing function and are not part of the comprehension's save set.
+            if let Some(key) = key {
+                collect_named_expression_target_names(key, &mut temporary_names);
+            }
+            collect_named_expression_target_names(value, &mut temporary_names);
+            for generator in generators {
+                for condition in &generator.ifs {
+                    collect_named_expression_target_names(condition, &mut temporary_names);
+                }
             }
         }
         let mut seen_temporaries = HashSet::new();
