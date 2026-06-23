@@ -1,11 +1,10 @@
+use std::collections::BTreeMap;
 use std::collections::Bound;
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
 use jiff::Timestamp;
 use pubgrub::Ranges;
-use rustc_hash::FxHashMap;
 use tracing::{instrument, trace};
 
 use uv_client::{FlatIndexEntry, OwnedArchive, SimpleDetailMetadata, VersionFiles};
@@ -59,68 +58,48 @@ impl VersionMap {
     ) -> Self {
         let mut stable = false;
         let mut local = false;
-        let mut map = BTreeMap::new();
-        let mut core_metadata = FxHashMap::default();
+        let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
+        let mut archive_ordered = true;
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
         for (datum_index, datum) in simple_metadata.iter().enumerate() {
-            // Deserialize the version.
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 
-            // Deserialize the metadata.
-            let core_metadatum =
-                rkyv::deserialize::<Option<ResolutionMetadata>, rkyv::rancor::Error>(
-                    &datum.metadata,
-                )
-                .expect("archived metadata always deserializes");
-            if let Some(core_metadatum) = core_metadatum {
-                core_metadata.insert(version.clone(), core_metadatum);
-            }
-
             stable |= version.is_stable();
             local |= version.is_local();
-            map.insert(
+            archive_ordered &= entries
+                .last()
+                .is_none_or(|entry: &VersionMapLazyEntry| entry.version < version);
+            entries.push(VersionMapLazyEntry {
                 version,
-                LazyPrioritizedDist::OnlySimple(SimplePrioritizedDist {
-                    datum_index,
-                    dist: OnceLock::new(),
-                }),
-            );
-        }
-        // If a set of flat distributions have been given, we need to add those
-        // to our map of entries as well.
-        for (version, prioritized_dist) in flat_index.into_iter().flatten() {
-            stable |= version.is_stable();
-            match map.entry(version) {
-                Entry::Vacant(e) => {
-                    e.insert(LazyPrioritizedDist::OnlyFlat(prioritized_dist));
-                }
-                // When there is both a `VersionFiles` (from the "simple"
-                // metadata) and a flat distribution for the same version of
-                // a package, we store both and "merge" them into a single
-                // `PrioritizedDist` upon access later.
-                Entry::Occupied(e) => match e.remove_entry() {
-                    (version, LazyPrioritizedDist::OnlySimple(simple_dist)) => {
-                        map.insert(
-                            version,
-                            LazyPrioritizedDist::Both {
-                                flat: prioritized_dist,
-                                simple: simple_dist,
-                            },
-                        );
-                    }
-                    _ => unreachable!(),
+                dist: LazyPrioritizedDist {
+                    flat: None,
+                    simple: Some(SimplePrioritizedDist {
+                        datum_index,
+                        dist: OnceLock::new(),
+                    }),
                 },
+            });
+        }
+        if !archive_ordered {
+            entries = sort_and_coalesce_entries(entries);
+        }
+        let mut map = VersionMapLazyIndex { entries };
+        // If a set of flat distributions have been given, linearly merge the
+        // already sorted flat entries with the archive-ordered simple vector.
+        if let Some(flat_index) = flat_index {
+            for (version, _) in flat_index.iter() {
+                stable |= version.is_stable();
             }
+            map = map.merge_flat(flat_index);
         }
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 stable,
                 local,
-                core_metadata,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
@@ -160,10 +139,10 @@ impl VersionMap {
     }
 
     /// Return the [`ResolutionMetadata`] for the given version, if any.
-    pub(crate) fn get_metadata(&self, version: &Version) -> Option<&ResolutionMetadata> {
+    pub(crate) fn get_metadata(&self, version: &Version) -> Option<ResolutionMetadata> {
         match self.inner {
             VersionMapInner::Eager(_) => None,
-            VersionMapInner::Lazy(ref lazy) => lazy.core_metadata.get(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get_metadata(version),
         }
     }
 
@@ -223,14 +202,15 @@ impl VersionMap {
                     ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.get_key_value(version).into_iter().map(
-                        move |(version, dist)| {
-                            let version_map_dist = VersionMapDistHandle {
-                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                            };
-                            (version, version_map_dist)
-                        },
-                    ))
+                    either::Either::Right(lazy.map.get(version).into_iter().map(move |entry| {
+                        let version_map_dist = VersionMapDistHandle {
+                            inner: VersionMapDistHandleInner::Lazy {
+                                lazy,
+                                dist: &entry.dist,
+                            },
+                        };
+                        (&entry.version, version_map_dist)
+                    }))
                 }
             })
         } else {
@@ -246,12 +226,15 @@ impl VersionMap {
                     ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).map(
-                        |(version, dist)| {
+                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).iter().map(
+                        |entry| {
                             let version_map_dist = VersionMapDistHandle {
-                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                                inner: VersionMapDistHandleInner::Lazy {
+                                    lazy,
+                                    dist: &entry.dist,
+                                },
                             };
-                            (version, version_map_dist)
+                            (&entry.version, version_map_dist)
                         },
                     ))
                 }
@@ -370,6 +353,138 @@ struct VersionMapEager {
     local: bool,
 }
 
+/// An entry in the immutable lazy version index.
+#[derive(Debug)]
+struct VersionMapLazyEntry {
+    version: Version,
+    dist: LazyPrioritizedDist,
+}
+
+/// A compact immutable version index, ordered by native PEP 440 versions.
+#[derive(Debug)]
+struct VersionMapLazyIndex {
+    entries: Vec<VersionMapLazyEntry>,
+}
+
+impl VersionMapLazyIndex {
+    /// Merge the sorted flat index into the sorted simple entries in one pass.
+    fn merge_flat(self, flat_index: FlatDistributions) -> Self {
+        let flat_count = flat_index.iter().size_hint().0;
+        let mut merged = Vec::with_capacity(self.entries.len() + flat_count);
+        let mut simple = self.entries.into_iter().peekable();
+        let mut flat = flat_index.into_iter().peekable();
+        loop {
+            match (simple.peek(), flat.peek()) {
+                (Some(simple_entry), Some((flat_version, _))) => {
+                    match simple_entry.version.cmp(flat_version) {
+                        std::cmp::Ordering::Less => {
+                            if let Some(entry) = simple.next() {
+                                merged.push(entry);
+                            }
+                        }
+                        std::cmp::Ordering::Greater => {
+                            if let Some((version, dist)) = flat.next() {
+                                merged.push(VersionMapLazyEntry {
+                                    version,
+                                    dist: LazyPrioritizedDist {
+                                        flat: Some(dist),
+                                        simple: None,
+                                    },
+                                });
+                            }
+                        }
+                        std::cmp::Ordering::Equal => {
+                            if let (Some(mut entry), Some((_, dist))) = (simple.next(), flat.next())
+                            {
+                                entry.dist.flat = Some(dist);
+                                merged.push(entry);
+                            }
+                        }
+                    }
+                }
+                (Some(_), None) => {
+                    merged.extend(simple);
+                    break;
+                }
+                (None, Some(_)) => {
+                    merged.extend(flat.map(|(version, dist)| VersionMapLazyEntry {
+                        version,
+                        dist: LazyPrioritizedDist {
+                            flat: Some(dist),
+                            simple: None,
+                        },
+                    }));
+                    break;
+                }
+                (None, None) => break,
+            }
+        }
+
+        Self { entries: merged }
+    }
+
+    fn get(&self, version: &Version) -> Option<&VersionMapLazyEntry> {
+        let index = self
+            .entries
+            .binary_search_by(|entry| entry.version.cmp(version))
+            .ok()?;
+        self.entries.get(index)
+    }
+
+    fn keys(&self) -> impl DoubleEndedIterator<Item = &Version> {
+        self.entries.iter().map(|entry| &entry.version)
+    }
+
+    fn range(&self, range: BoundingRange<'_>) -> &[VersionMapLazyEntry] {
+        let start = match range.min {
+            Bound::Included(version) => self
+                .entries
+                .partition_point(|entry| entry.version < *version),
+            Bound::Excluded(version) => self
+                .entries
+                .partition_point(|entry| entry.version <= *version),
+            Bound::Unbounded => 0,
+        };
+        let end = match range.max {
+            Bound::Included(version) => self
+                .entries
+                .partition_point(|entry| entry.version <= *version),
+            Bound::Excluded(version) => self
+                .entries
+                .partition_point(|entry| entry.version < *version),
+            Bound::Unbounded => self.entries.len(),
+        };
+        self.entries.get(start..end).unwrap_or_default()
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
+/// Restore native ordering and [`BTreeMap`]'s last-entry behavior for malformed archives.
+fn sort_and_coalesce_entries(mut entries: Vec<VersionMapLazyEntry>) -> Vec<VersionMapLazyEntry> {
+    entries.sort_by(|left, right| left.version.cmp(&right.version));
+    let mut coalesced: Vec<VersionMapLazyEntry> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if let Some(previous) = coalesced.last_mut()
+            && previous.version == entry.version
+        {
+            *previous = entry;
+        } else {
+            coalesced.push(entry);
+        }
+    }
+    coalesced
+}
+
+fn deserialize_resolution_metadata(
+    archived: &rkyv::Archived<ResolutionMetadata>,
+) -> ResolutionMetadata {
+    rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)
+        .expect("archived metadata always deserializes")
+}
+
 /// A map that lazily materializes some prioritized distributions upon access.
 ///
 /// The idea here is that some packages have a lot of versions published, and
@@ -380,14 +495,12 @@ struct VersionMapEager {
 /// provide substantial savings in some cases.
 #[derive(Debug)]
 struct VersionMapLazy {
-    /// A map from version to possibly-initialized distribution.
-    map: BTreeMap<Version, LazyPrioritizedDist>,
+    /// An immutable archive-order index from version to possibly-initialized distribution.
+    map: VersionMapLazyIndex,
     /// Whether the version map contains at least one stable (non-pre-release) version.
     stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
-    /// The pre-populated metadata for each version.
-    core_metadata: FxHashMap<Version, ResolutionMetadata>,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleDetailMetadata>,
@@ -414,10 +527,21 @@ struct VersionMapLazy {
 }
 
 impl VersionMapLazy {
+    /// Returns the registry-provided metadata for the given version, if it exists.
+    fn get_metadata(&self, version: &Version) -> Option<ResolutionMetadata> {
+        let archived = self
+            .map
+            .get(version)
+            .and_then(|entry| entry.dist.simple.as_ref())
+            .and_then(|simple| self.simple_metadata.datum(simple.datum_index))
+            .and_then(|datum| datum.metadata.as_ref())?;
+        Some(deserialize_resolution_metadata(archived))
+    }
+
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        let lazy_dist = self.map.get(version)?;
-        let priority_dist = self.get_lazy(lazy_dist)?;
+        let entry = self.map.get(version)?;
+        let priority_dist = self.get_lazy(&entry.dist)?;
         Some(priority_dist)
     }
 
@@ -427,13 +551,11 @@ impl VersionMapLazy {
     /// When both a flat and simple distribution are present internally, they
     /// are merged automatically.
     fn get_lazy<'p>(&'p self, lazy_dist: &'p LazyPrioritizedDist) -> Option<&'p PrioritizedDist> {
-        match *lazy_dist {
-            LazyPrioritizedDist::OnlyFlat(ref dist) => Some(dist),
-            LazyPrioritizedDist::OnlySimple(ref dist) => self.get_simple(None, dist),
-            LazyPrioritizedDist::Both {
-                ref flat,
-                ref simple,
-            } => self.get_simple(Some(flat), simple),
+        match (&lazy_dist.flat, &lazy_dist.simple) {
+            (Some(flat), Some(simple)) => self.get_simple(Some(flat), simple),
+            (Some(flat), None) => Some(flat),
+            (None, Some(simple)) => self.get_simple(None, simple),
+            (None, None) => None,
         }
     }
 
@@ -665,22 +787,13 @@ impl VersionMapLazy {
     }
 }
 
-/// Represents a possibly initialized [`PrioritizedDist`] for
-/// a single version of a package.
+/// Represents a possibly initialized [`PrioritizedDist`] for a package version.
 #[derive(Debug)]
-enum LazyPrioritizedDist {
-    /// Represents an eagerly constructed distribution from a
-    /// `FlatDistributions`.
-    OnlyFlat(PrioritizedDist),
-    /// Represents a lazily constructed distribution from an index into a
-    /// `VersionFiles` from `SimpleDetailMetadata`.
-    OnlySimple(SimplePrioritizedDist),
-    /// Combines the above. This occurs when we have data from both a flat
-    /// distribution and a simple distribution.
-    Both {
-        flat: PrioritizedDist,
-        simple: SimplePrioritizedDist,
-    },
+struct LazyPrioritizedDist {
+    /// An eagerly constructed distribution from [`FlatDistributions`], if present.
+    flat: Option<PrioritizedDist>,
+    /// A lazy index into [`SimpleDetailMetadata`], if present.
+    simple: Option<SimplePrioritizedDist>,
 }
 
 /// Represents a lazily initialized `PrioritizedDist`.
@@ -723,5 +836,254 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 
     fn end_bound(&self) -> Bound<&'a Version> {
         self.max
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+    use std::sync::OnceLock;
+
+    use pubgrub::Ranges;
+    use rkyv::rancor::Error;
+    use uv_distribution_types::PrioritizedDist;
+    use uv_normalize::PackageName;
+    use uv_pep440::Version;
+    use uv_pypi_types::ResolutionMetadata;
+
+    use super::{
+        BoundingRange, FlatDistributions, LazyPrioritizedDist, SimplePrioritizedDist,
+        VersionMapLazyEntry, VersionMapLazyIndex, deserialize_resolution_metadata,
+        sort_and_coalesce_entries,
+    };
+
+    fn version(value: &str) -> Version {
+        Version::from_str(value).expect("test version should be valid")
+    }
+
+    fn simple_entry(value: &str, datum_index: usize) -> VersionMapLazyEntry {
+        VersionMapLazyEntry {
+            version: version(value),
+            dist: LazyPrioritizedDist {
+                flat: None,
+                simple: Some(SimplePrioritizedDist {
+                    datum_index,
+                    dist: OnceLock::new(),
+                }),
+            },
+        }
+    }
+
+    fn compact_index(simple: &[(&str, usize)], flat: &[&str]) -> (VersionMapLazyIndex, bool) {
+        let mut archive_ordered = true;
+        let mut entries = Vec::with_capacity(simple.len());
+        for &(value, datum_index) in simple {
+            let entry = simple_entry(value, datum_index);
+            archive_ordered &= entries
+                .last()
+                .is_none_or(|previous: &VersionMapLazyEntry| previous.version < entry.version);
+            entries.push(entry);
+        }
+        if !archive_ordered {
+            entries = sort_and_coalesce_entries(entries);
+        }
+        let index = VersionMapLazyIndex { entries };
+        if flat.is_empty() {
+            (index, !archive_ordered)
+        } else {
+            let distributions = flat
+                .iter()
+                .map(|value| (version(value), PrioritizedDist::default()))
+                .collect::<BTreeMap<_, _>>();
+            let index = index.merge_flat(FlatDistributions::from(distributions));
+            (index, !archive_ordered)
+        }
+    }
+
+    fn descriptors(index: &VersionMapLazyIndex) -> Vec<(Version, Option<usize>, bool)> {
+        index
+            .entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry.version.clone(),
+                    entry.dist.simple.as_ref().map(|simple| simple.datum_index),
+                    entry.dist.flat.is_some(),
+                )
+            })
+            .collect()
+    }
+
+    fn restored_tree(
+        simple: &[(&str, usize)],
+        flat: &[&str],
+    ) -> BTreeMap<Version, (Option<usize>, bool)> {
+        let mut restored = BTreeMap::new();
+        for &(value, datum_index) in simple {
+            restored.insert(version(value), (Some(datum_index), false));
+        }
+        for value in flat {
+            restored
+                .entry(version(value))
+                .and_modify(|entry| entry.1 = true)
+                .or_insert((None, true));
+        }
+        restored
+    }
+
+    #[test]
+    fn compact_index_matches_restored_tree_shapes_and_order() {
+        let cases = [
+            (Vec::new(), Vec::new()),
+            (vec![("1.0", 0)], Vec::new()),
+            (
+                vec![("1.0.dev1", 0), ("1.0a1", 1), ("1.0", 2), ("1.0+local", 3)],
+                Vec::new(),
+            ),
+            (Vec::new(), vec!["1.0", "2.0"]),
+            (vec![("1.0", 0), ("2.0", 1)], vec!["1.5", "2.0", "3.0"]),
+            (
+                vec![("2.0", 0), ("1.0", 1), ("1.0.0", 2), ("1.0.post1", 3)],
+                vec!["1.0", "3.0"],
+            ),
+        ];
+
+        for (simple, flat) in cases {
+            let (index, _) = compact_index(&simple, &flat);
+            let restored = restored_tree(&simple, &flat);
+            let expected = restored
+                .iter()
+                .map(|(version, &(datum_index, has_flat))| (version.clone(), datum_index, has_flat))
+                .collect::<Vec<_>>();
+            assert_eq!(descriptors(&index), expected);
+
+            let forward = index.keys().cloned().collect::<Vec<_>>();
+            let reverse = index.keys().rev().cloned().collect::<Vec<_>>();
+            assert_eq!(forward, restored.keys().cloned().collect::<Vec<_>>());
+            assert_eq!(reverse, restored.keys().rev().cloned().collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn compact_index_lookup_and_ranges_match_restored_tree() {
+        let simple = [
+            ("1.0.dev1", 0),
+            ("1.0a1", 1),
+            ("1.0", 2),
+            ("1.0+local", 3),
+            ("1.0.post1", 4),
+            ("2.0", 5),
+        ];
+        let flat = ["1.0", "1.5", "3.0"];
+        let (index, _) = compact_index(&simple, &flat);
+        let restored = restored_tree(&simple, &flat);
+
+        for key in restored.keys() {
+            assert_eq!(index.get(key).map(|entry| &entry.version), Some(key));
+        }
+        assert!(index.get(&version("9.0")).is_none());
+
+        let disjoint = Ranges::between(version("1.0a1"), version("1.0.post1"))
+            .union(&Ranges::between(version("2.0"), version("4.0")));
+        let ranges = [
+            Ranges::empty(),
+            Ranges::full(),
+            Ranges::singleton(version("1.0")),
+            Ranges::higher_than(version("1.0")),
+            Ranges::strictly_higher_than(version("1.0")),
+            Ranges::lower_than(version("2.0")),
+            Ranges::strictly_lower_than(version("2.0")),
+            Ranges::between(version("1.0"), version("2.0")),
+            disjoint,
+        ];
+        for range in ranges {
+            let compact = index
+                .range(BoundingRange::from(&range))
+                .iter()
+                .map(|entry| entry.version.clone())
+                .collect::<Vec<_>>();
+            let reference = restored
+                .range(BoundingRange::from(&range))
+                .map(|(version, _)| version.clone())
+                .collect::<Vec<_>>();
+            assert_eq!(compact, reference);
+        }
+
+        let before = index
+            .get(&version("1.0"))
+            .map(|entry| std::ptr::from_ref(&entry.version));
+        let _ = index.range(BoundingRange::from(&Ranges::full()));
+        let after = index
+            .get(&version("1.0"))
+            .map(|entry| std::ptr::from_ref(&entry.version));
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn compact_index_fallback_preserves_last_normalized_entry() {
+        let simple = [("2.0", 0), ("1.0", 1), ("1.0.0", 2), ("1.0.post1", 3)];
+        let (index, fallback_sorted) = compact_index(&simple, &[]);
+        assert!(fallback_sorted);
+        assert_eq!(
+            descriptors(&index),
+            vec![
+                (version("1.0"), Some(2), false),
+                (version("1.0.post1"), Some(3), false),
+                (version("2.0"), Some(0), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn archived_metadata_is_deserialized_only_when_present() {
+        let metadata = ResolutionMetadata {
+            name: PackageName::from_str("example").expect("test package name should be valid"),
+            version: version("1.0"),
+            requires_dist: Vec::new().into(),
+            requires_python: None,
+            provides_extra: Vec::new().into(),
+            dynamic: false,
+        };
+        let some_bytes = rkyv::to_bytes::<Error>(&Some(metadata.clone()))
+            .expect("test metadata should serialize");
+        let some = rkyv::access::<rkyv::Archived<Option<ResolutionMetadata>>, Error>(&some_bytes)
+            .expect("test metadata archive should validate");
+        let archived = some.as_ref().expect("test metadata should be present");
+        let deserialized = deserialize_resolution_metadata(archived);
+        assert_eq!(deserialized.name, metadata.name);
+        assert_eq!(deserialized.version, metadata.version);
+        assert!(deserialized.requires_dist.is_empty());
+        assert!(deserialized.requires_python.is_none());
+        assert!(deserialized.provides_extra.is_empty());
+        assert!(!deserialized.dynamic);
+
+        let none_bytes = rkyv::to_bytes::<Error>(&Option::<ResolutionMetadata>::None)
+            .expect("absent metadata should serialize");
+        let none = rkyv::access::<rkyv::Archived<Option<ResolutionMetadata>>, Error>(&none_bytes)
+            .expect("absent metadata archive should validate");
+        assert!(none.as_ref().is_none());
+
+        let (flat_only, _) = compact_index(&[], &["1.0"]);
+        let entry = flat_only
+            .get(&version("1.0"))
+            .expect("flat-only version should exist");
+        assert!(entry.dist.simple.is_none());
+    }
+
+    #[test]
+    fn lazy_distribution_storage_initializes_once() {
+        let entry = simple_entry("1.0", 0);
+        let simple = entry
+            .dist
+            .simple
+            .as_ref()
+            .expect("simple entry should contain lazy storage");
+        assert!(simple.dist.get().is_none());
+        assert!(simple.dist.set(Some(PrioritizedDist::default())).is_ok());
+        let first = simple.dist.get().map(std::ptr::from_ref);
+        let second = simple.dist.get().map(std::ptr::from_ref);
+        assert_eq!(first, second);
+        assert!(simple.dist.set(Some(PrioritizedDist::default())).is_err());
     }
 }

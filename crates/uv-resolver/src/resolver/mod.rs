@@ -2445,7 +2445,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     return Ok(Some(Response::Dist {
                                         dist,
                                         metadata: MetadataResponse::Found(
-                                            ArchiveMetadata::from_metadata23(metadata.clone()),
+                                            ArchiveMetadata::from_metadata23(metadata),
                                         ),
                                     }));
                                 }
@@ -2468,7 +2468,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 return Ok(Some(Response::Dist {
                                     dist,
                                     metadata: MetadataResponse::Found(
-                                        ArchiveMetadata::from_metadata23(metadata.clone()),
+                                        ArchiveMetadata::from_metadata23(metadata),
                                     ),
                                 }));
                             }
@@ -2578,9 +2578,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if version_map.index() == dist.index() {
                             debug!("Found registry-provided metadata for: {dist}");
 
-                            let metadata = MetadataResponse::Found(
-                                ArchiveMetadata::from_metadata23(metadata.clone()),
-                            );
+                            let metadata =
+                                MetadataResponse::Found(ArchiveMetadata::from_metadata23(metadata));
 
                             let dist = dist.to_owned();
                             if &package_name != dist.name() {
