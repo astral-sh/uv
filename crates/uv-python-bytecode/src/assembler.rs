@@ -41,8 +41,10 @@ struct Instruction {
     operand: Operand,
     location: SourceLocation,
     depth_after: Option<u32>,
+    force_owned_load: bool,
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
+    preserve_no_location: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -57,6 +59,7 @@ pub(crate) struct Assembler {
     next_label: u32,
     location: SourceLocation,
     exception_regions: Vec<ExceptionRegion>,
+    load_fast_borrowing_enabled: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -101,11 +104,16 @@ impl Default for Assembler {
             next_label: 0,
             location: SourceLocation::NONE,
             exception_regions: Vec::new(),
+            load_fast_borrowing_enabled: true,
         }
     }
 }
 
 impl Assembler {
+    pub(crate) fn disable_load_fast_borrowing(&mut self) {
+        self.load_fast_borrowing_enabled = false;
+    }
+
     pub(crate) fn location(&self) -> SourceLocation {
         self.location
     }
@@ -138,6 +146,18 @@ impl Assembler {
         self.items.push(Item::Label(label));
     }
 
+    pub(crate) fn mark_before_trailing_instructions(&mut self, label: Label, count: usize) {
+        let index = self
+            .items
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, item)| matches!(item, Item::Instruction(_)))
+            .nth(count.saturating_sub(1))
+            .map_or(self.items.len(), |(index, _)| index);
+        self.items.insert(index, Item::Label(label));
+    }
+
     pub(crate) fn fusion_barrier(&mut self) {
         let label = self.label();
         self.mark(label);
@@ -162,6 +182,17 @@ impl Assembler {
             .find(|item| matches!(item, Item::Instruction(_)))
         {
             instruction.preserve_inlined_jump_nop = true;
+        }
+    }
+
+    pub(crate) fn preserve_last_no_location(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.preserve_no_location = true;
         }
     }
 
@@ -236,19 +267,16 @@ impl Assembler {
 
     pub(crate) fn used_constant_indices(&self, load_const: Opcode) -> HashSet<u32> {
         let mut used = HashSet::new();
-        let mut unreachable = false;
-        for item in &self.items {
-            match item {
-                Item::Label(_) => unreachable = false,
-                Item::Instruction(_) if unreachable => {}
-                Item::Instruction(instruction) => {
-                    if instruction.opcode.code == load_const.code
-                        && let Operand::Value(index) = instruction.operand
-                    {
-                        used.insert(index);
-                    }
-                    unreachable = matches!(instruction.opcode.code, 35 | 75 | 76 | 77 | 104 | 105);
-                }
+        let reachable = self.reachable_items();
+        for (index, item) in self.items.iter().enumerate() {
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            if reachable[index]
+                && instruction.opcode.code == load_const.code
+                && let Operand::Value(index) = instruction.operand
+            {
+                used.insert(index);
             }
         }
         used
@@ -268,6 +296,34 @@ impl Assembler {
             if let Some(new_index) = index_map[usize::try_from(*index).unwrap()] {
                 *index = new_index;
             }
+        }
+    }
+
+    /// Removes a side-effect-free constant whose value is immediately discarded.
+    pub(crate) fn optimize_constant_pops(&mut self) {
+        const NOP: u8 = 27;
+        const POP_TOP: u8 = 31;
+        const LOAD_CONST: u8 = 82;
+        const LOAD_COMMON_CONSTANT: u8 = 81;
+        const LOAD_SMALL_INT: u8 = 94;
+
+        for index in 0..self.items.len().saturating_sub(1) {
+            let [Item::Instruction(load), Item::Instruction(pop)] =
+                &mut self.items[index..index + 2]
+            else {
+                continue;
+            };
+            if !matches!(
+                load.opcode.code,
+                LOAD_CONST | LOAD_COMMON_CONSTANT | LOAD_SMALL_INT
+            ) || pop.opcode.code != POP_TOP
+            {
+                continue;
+            }
+            load.opcode = Opcode::new(NOP, 0);
+            load.operand = Operand::Value(0);
+            pop.opcode = Opcode::new(NOP, 0);
+            pop.operand = Operand::Value(0);
         }
     }
 
@@ -303,17 +359,24 @@ impl Assembler {
 
     fn emit_operand_with_depth(
         &mut self,
-        opcode: Opcode,
+        mut opcode: Opcode,
         operand: Operand,
         depth_after: Option<u32>,
     ) {
+        let force_owned_load =
+            opcode.code == 121 || (opcode.code == 84 && !self.load_fast_borrowing_enabled);
+        if force_owned_load {
+            opcode = Opcode::new(84, 0);
+        }
         self.items.push(Item::Instruction(Instruction {
             opcode,
             operand,
             location: self.location,
             depth_after,
+            force_owned_load,
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
+            preserve_no_location: false,
         }));
     }
 
@@ -326,10 +389,15 @@ impl Assembler {
         mut self,
         first_line_number: u32,
     ) -> Result<EncodedCode, CompileError> {
-        let removed_max_depth = self.remove_unreachable_instructions();
+        let mut removed_max_depth = self.remove_unreachable_instructions();
         self.optimize_boolean_conversions();
         self.thread_forward_jumps();
+        if let Some(depth) = self.remove_unreachable_instructions() {
+            removed_max_depth = Some(removed_max_depth.map_or(depth, |current| current.max(depth)));
+        }
         self.remove_redundant_forward_jumps();
+        self.optimize_swap_runs();
+        self.apply_static_swaps();
         self.fuse_superinstructions();
         self.push_cold_blocks_to_end();
         self.duplicate_exit_blocks();
@@ -337,6 +405,7 @@ impl Assembler {
         self.remove_redundant_swaps_before_pops();
         self.remove_redundant_nops();
         self.remove_redundant_forward_jumps();
+        self.optimize_load_fast();
         let instruction_count = self
             .items
             .iter()
@@ -414,31 +483,132 @@ impl Assembler {
     }
 
     fn remove_unreachable_instructions(&mut self) -> Option<u32> {
-        let mut unreachable = false;
+        let reachable = self.reachable_items();
         let mut removed_max_depth = None;
-        self.items.retain(|item| match item {
-            Item::Label(_) => {
-                unreachable = false;
-                true
-            }
-            Item::Instruction(instruction) if unreachable => {
-                if let Some(depth) = instruction.depth_after {
-                    removed_max_depth =
-                        Some(removed_max_depth.map_or(depth, |max: u32| max.max(depth)));
+        let mut index = 0_usize;
+        self.items.retain(|item| {
+            let retain = match item {
+                Item::Label(_) => true,
+                Item::Instruction(_) if reachable[index] => true,
+                Item::Instruction(instruction) => {
+                    if let Some(depth) = instruction.depth_after {
+                        removed_max_depth =
+                            Some(removed_max_depth.map_or(depth, |max: u32| max.max(depth)));
+                    }
+                    false
                 }
-                false
-            }
-            Item::Instruction(instruction) => {
-                unreachable = matches!(instruction.opcode.code, 35 | 75 | 76 | 77 | 104 | 105);
-                true
-            }
+            };
+            index += 1;
+            retain
         });
         removed_max_depth
+    }
+
+    fn reachable_items(&self) -> Vec<bool> {
+        if self.items.is_empty() {
+            return Vec::new();
+        }
+
+        let mut block_starts = vec![0_usize];
+        let mut block_has_instruction = false;
+        for (index, item) in self.items.iter().enumerate() {
+            match item {
+                Item::Label(_) if block_has_instruction => {
+                    if block_starts.last().copied() != Some(index) {
+                        block_starts.push(index);
+                    }
+                    block_has_instruction = false;
+                }
+                Item::Label(_) => {}
+                Item::Instruction(instruction) => {
+                    block_has_instruction = true;
+                    let ends_block = !matches!(instruction.operand, Operand::Value(_))
+                        || matches!(instruction.opcode.code, 35 | 104 | 105);
+                    if ends_block && index + 1 < self.items.len() {
+                        block_starts.push(index + 1);
+                        block_has_instruction = false;
+                    }
+                }
+            }
+        }
+        block_starts.sort_unstable();
+        block_starts.dedup();
+
+        let block_ranges = block_starts
+            .iter()
+            .enumerate()
+            .map(|(index, start)| {
+                let end = block_starts
+                    .get(index + 1)
+                    .copied()
+                    .unwrap_or(self.items.len());
+                (*start, end)
+            })
+            .collect::<Vec<_>>();
+        let mut item_blocks = vec![0_usize; self.items.len()];
+        let mut label_blocks = HashMap::new();
+        for (block, (start, end)) in block_ranges.iter().copied().enumerate() {
+            for index in start..end {
+                item_blocks[index] = block;
+                if let Item::Label(label) = self.items[index] {
+                    label_blocks.insert(label, block);
+                }
+            }
+        }
+
+        let region_blocks = self
+            .exception_regions
+            .iter()
+            .filter_map(|region| {
+                Some((
+                    *label_blocks.get(&region.start)?,
+                    *label_blocks.get(&region.end)?,
+                    *label_blocks.get(&region.target)?,
+                ))
+            })
+            .collect::<Vec<_>>();
+        let mut reachable_blocks = vec![false; block_ranges.len()];
+        let mut pending = vec![0_usize];
+        pending.extend(
+            region_blocks
+                .iter()
+                .filter_map(|(start, end, handler)| (start == end).then_some(*handler)),
+        );
+        while let Some(block) = pending.pop() {
+            if reachable_blocks[block] {
+                continue;
+            }
+            reachable_blocks[block] = true;
+            let (start, end) = block_ranges[block];
+            let items = &self.items[start..end];
+            if block_has_fallthrough(items) && block + 1 < block_ranges.len() {
+                pending.push(block + 1);
+            }
+            if let Some(target) = block_jump_target(items)
+                && let Some(target) = label_blocks.get(&target)
+            {
+                pending.push(*target);
+            }
+            for (region_start, region_end, handler) in &region_blocks {
+                if *region_start <= block && block < *region_end {
+                    pending.push(*handler);
+                }
+            }
+        }
+
+        self.items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                matches!(item, Item::Label(_)) || reachable_blocks[item_blocks[index]]
+            })
+            .collect()
     }
 
     fn optimize_boolean_conversions(&mut self) {
         const NOP: u8 = 27;
         const TO_BOOL: u8 = 39;
+        const UNARY_NOT: u8 = 42;
         const COMPARE_OP: u8 = 56;
         const CONTAINS_OP: u8 = 57;
         const IS_OP: u8 = 74;
@@ -449,6 +619,39 @@ impl Assembler {
             else {
                 continue;
             };
+            match (current.opcode.code, next.opcode.code) {
+                (TO_BOOL, TO_BOOL) => {
+                    current.opcode = Opcode::new(NOP, 0);
+                    current.operand = Operand::Value(0);
+                    continue;
+                }
+                (UNARY_NOT, TO_BOOL) => {
+                    current.opcode = Opcode::new(NOP, 0);
+                    current.operand = Operand::Value(0);
+                    next.opcode = Opcode::new(UNARY_NOT, 0);
+                    next.operand = Operand::Value(0);
+                    continue;
+                }
+                (UNARY_NOT, UNARY_NOT) => {
+                    current.opcode = Opcode::new(NOP, 0);
+                    current.operand = Operand::Value(0);
+                    next.opcode = Opcode::new(NOP, 0);
+                    next.operand = Operand::Value(0);
+                    continue;
+                }
+                (CONTAINS_OP | IS_OP, UNARY_NOT) => {
+                    let Operand::Value(argument) = current.operand else {
+                        continue;
+                    };
+                    let opcode = current.opcode;
+                    current.opcode = Opcode::new(NOP, 0);
+                    current.operand = Operand::Value(0);
+                    next.opcode = opcode;
+                    next.operand = Operand::Value(argument ^ 1);
+                    continue;
+                }
+                _ => {}
+            }
             if next.opcode.code != TO_BOOL {
                 continue;
             }
@@ -498,7 +701,7 @@ impl Assembler {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
-            if instruction.opcode.code != JUMP_FORWARD {
+            if instruction.opcode.code != JUMP_FORWARD || instruction.preserve_inlined_jump_nop {
                 continue;
             }
             let Operand::Forward(mut target) = instruction.operand else {
@@ -567,9 +770,10 @@ impl Assembler {
                     None
                 }
             });
-            if instruction.location.line < 0
-                || previous_line == Some(instruction.location.line)
-                || next_line == Some(instruction.location.line)
+            if !instruction.preserve_inlined_jump_nop
+                && (instruction.location.line < 0
+                    || previous_line == Some(instruction.location.line)
+                    || next_line == Some(instruction.location.line))
             {
                 self.items.remove(index);
                 if instruction.location.line >= 0
@@ -577,6 +781,7 @@ impl Assembler {
                         .iter_mut()
                         .find(|item| matches!(item, Item::Instruction(_)))
                     && next.location.line < 0
+                    && !next.preserve_no_location
                 {
                     next.location = instruction.location;
                 }
@@ -742,8 +947,10 @@ impl Assembler {
                         operand: Operand::Backward(target),
                         location,
                         depth_after: None,
+                        force_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
+                        preserve_no_location: false,
                     }),
                 ],
             );
@@ -988,11 +1195,18 @@ impl Assembler {
                 continue;
             };
             let source_has_fallthrough = block_has_fallthrough(&blocks[source]);
-            let target_is_small_exit = blocks[target]
+            let target_pre_fusion_size = blocks[target]
                 .iter()
-                .filter(|item| matches!(item, Item::Instruction(_)))
-                .count()
-                <= 4
+                .filter_map(|item| {
+                    let Item::Instruction(instruction) = item else {
+                        return None;
+                    };
+                    let fused_push_null = instruction.opcode.code == 92
+                        && matches!(instruction.operand, Operand::Value(argument) if argument & 1 != 0);
+                    Some(1 + usize::from(fused_push_null))
+                })
+                .sum::<usize>();
+            let target_is_small_exit = target_pre_fusion_size <= 4
                 && blocks[target].iter().rev().find_map(|item| {
                     if let Item::Instruction(instruction) = item {
                         Some(matches!(instruction.opcode.code, 35 | 104 | 105))
@@ -1082,8 +1296,10 @@ impl Assembler {
                         operand: Operand::Value(0),
                         location: source_location,
                         depth_after: None,
+                        force_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
+                        preserve_no_location: false,
                     }),
                 );
             }
@@ -1091,6 +1307,7 @@ impl Assembler {
                 if let Some(Item::Instruction(instruction)) = copied
                     .iter_mut()
                     .find(|item| matches!(item, Item::Instruction(_)))
+                    && !instruction.preserve_no_location
                 {
                     instruction.location = source_location;
                 }
@@ -1216,6 +1433,7 @@ impl Assembler {
             if let Some(Item::Instruction(instruction)) = blocks[target]
                 .iter_mut()
                 .find(|item| matches!(item, Item::Instruction(_)))
+                && !instruction.preserve_no_location
             {
                 instruction.location = location;
             }
@@ -1254,7 +1472,7 @@ impl Assembler {
                 Item::Label(_) => {}
                 Item::Instruction(instruction) => {
                     block_has_instruction = true;
-                    if instruction.location.line < 0 {
+                    if instruction.location.line < 0 && !instruction.preserve_no_location {
                         if let Some(location) = previous {
                             instruction.location = location;
                         }
@@ -1294,7 +1512,7 @@ impl Assembler {
                     None
                 }
             });
-            if next_location.is_some_and(|location| location == instruction.location) {
+            if next_location.is_some_and(|location| location.line == instruction.location.line) {
                 self.items.remove(index);
             } else {
                 index += 1;
@@ -1347,6 +1565,667 @@ impl Assembler {
         }
     }
 
+    /// Replaces each run of stack swaps with the shortest equivalent sequence.
+    ///
+    /// This is the first half of CPython's `swaptimize` pass. Reconstructing the
+    /// permutation from the end of the run guarantees that the replacement fits
+    /// in the original instruction slots.
+    fn optimize_swap_runs(&mut self) {
+        const NOP: u8 = 27;
+        const SWAP: u8 = 117;
+        const VISITED: usize = usize::MAX;
+
+        let mut block_labels = HashSet::new();
+        for item in &self.items {
+            if let Item::Instruction(Instruction {
+                operand: Operand::Forward(label) | Operand::Backward(label),
+                ..
+            }) = item
+            {
+                block_labels.insert(*label);
+            }
+        }
+        for region in &self.exception_regions {
+            block_labels.extend([region.start, region.end, region.target]);
+        }
+        let mut block_ends = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| match item {
+                Item::Label(label) if block_labels.contains(label) => Some(index),
+                Item::Instruction(instruction)
+                    if !matches!(instruction.operand, Operand::Value(_))
+                        || matches!(instruction.opcode.code, 35 | 104 | 105) =>
+                {
+                    Some(index + 1)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        block_ends.push(self.items.len());
+        block_ends.sort_unstable();
+        block_ends.dedup();
+
+        let mut block_start = 0;
+        for block_end in block_ends {
+            let instruction_indices = self.items[block_start..block_end]
+                .iter()
+                .enumerate()
+                .filter_map(|(offset, item)| {
+                    matches!(item, Item::Instruction(_)).then_some(block_start + offset)
+                })
+                .collect::<Vec<_>>();
+            let mut position = 0;
+            while position < instruction_indices.len() {
+                let Item::Instruction(first) = self.items[instruction_indices[position]] else {
+                    unreachable!();
+                };
+                if first.opcode.code != SWAP {
+                    position += 1;
+                    continue;
+                }
+                let Operand::Value(first_depth) = first.operand else {
+                    unreachable!();
+                };
+                let mut depth = usize::try_from(first_depth).unwrap();
+                let mut run_end = position + 1;
+                let mut multiple_swaps = false;
+                while run_end < instruction_indices.len() {
+                    let Item::Instruction(instruction) = self.items[instruction_indices[run_end]]
+                    else {
+                        unreachable!();
+                    };
+                    if instruction.opcode.code == SWAP {
+                        let Operand::Value(argument) = instruction.operand else {
+                            unreachable!();
+                        };
+                        depth = depth.max(usize::try_from(argument).unwrap());
+                        multiple_swaps = true;
+                    } else if instruction.opcode.code != NOP {
+                        break;
+                    }
+                    run_end += 1;
+                }
+                if !multiple_swaps {
+                    position += 1;
+                    continue;
+                }
+
+                let mut stack = (0..depth).collect::<Vec<_>>();
+                for instruction_index in &instruction_indices[position..run_end] {
+                    let Item::Instruction(instruction) = self.items[*instruction_index] else {
+                        unreachable!();
+                    };
+                    if instruction.opcode.code == SWAP {
+                        let Operand::Value(argument) = instruction.operand else {
+                            unreachable!();
+                        };
+                        stack.swap(0, usize::try_from(argument).unwrap() - 1);
+                    }
+                }
+
+                let mut current = run_end;
+                for index in 0..depth {
+                    if stack[index] == VISITED || stack[index] == index {
+                        continue;
+                    }
+                    let mut stack_index = index;
+                    loop {
+                        if stack_index != 0 {
+                            current -= 1;
+                            let Item::Instruction(instruction) =
+                                &mut self.items[instruction_indices[current]]
+                            else {
+                                unreachable!();
+                            };
+                            instruction.opcode = Opcode::new(SWAP, 0);
+                            instruction.operand =
+                                Operand::Value(u32::try_from(stack_index + 1).unwrap_or(u32::MAX));
+                        }
+                        if stack[stack_index] == VISITED {
+                            debug_assert_eq!(stack_index, index);
+                            break;
+                        }
+                        let next = stack[stack_index];
+                        stack[stack_index] = VISITED;
+                        stack_index = next;
+                    }
+                }
+                while current > position {
+                    current -= 1;
+                    let Item::Instruction(instruction) =
+                        &mut self.items[instruction_indices[current]]
+                    else {
+                        unreachable!();
+                    };
+                    instruction.opcode = Opcode::new(NOP, 0);
+                    instruction.operand = Operand::Value(0);
+                }
+                position = run_end;
+            }
+            block_start = block_end;
+        }
+    }
+
+    /// Applies stack swaps statically by reordering local stores and pops.
+    ///
+    /// This is the `apply_static_swaps` half of CPython's `swaptimize` pass and
+    /// must run before adjacent local stores are fused.
+    fn apply_static_swaps(&mut self) {
+        const NOP: u8 = 27;
+        const POP_TOP: u8 = 31;
+        const STORE_FAST: u8 = 112;
+        const SWAP: u8 = 117;
+
+        fn swappable(instruction: &Instruction) -> bool {
+            matches!(instruction.opcode.code, POP_TOP | STORE_FAST)
+        }
+
+        fn stored_local(instruction: &Instruction) -> Option<u32> {
+            (instruction.opcode.code == STORE_FAST).then(|| match instruction.operand {
+                Operand::Value(argument) => argument,
+                Operand::Forward(_) | Operand::Backward(_) => unreachable!(),
+            })
+        }
+
+        fn next_swappable(
+            items: &[Item],
+            mut index: usize,
+            end: usize,
+            line: Option<i32>,
+        ) -> Option<usize> {
+            while index < end {
+                let Item::Instruction(instruction) = items[index] else {
+                    index += 1;
+                    continue;
+                };
+                if line.is_some_and(|line| instruction.location.line != line) {
+                    return None;
+                }
+                if instruction.opcode.code == NOP {
+                    index += 1;
+                    continue;
+                }
+                return swappable(&instruction).then_some(index);
+            }
+            None
+        }
+
+        let mut block_labels = HashSet::new();
+        for item in &self.items {
+            if let Item::Instruction(Instruction {
+                operand: Operand::Forward(label) | Operand::Backward(label),
+                ..
+            }) = item
+            {
+                block_labels.insert(*label);
+            }
+        }
+        for region in &self.exception_regions {
+            block_labels.extend([region.start, region.end, region.target]);
+        }
+        let mut block_ends = self
+            .items
+            .iter()
+            .enumerate()
+            .filter_map(|(index, item)| match item {
+                Item::Label(label) if block_labels.contains(label) => Some(index),
+                Item::Instruction(instruction)
+                    if !matches!(instruction.operand, Operand::Value(_))
+                        || matches!(instruction.opcode.code, 35 | 104 | 105) =>
+                {
+                    Some(index + 1)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        block_ends.push(self.items.len());
+        block_ends.sort_unstable();
+        block_ends.dedup();
+
+        let mut block_start = 0;
+        for block_end in block_ends {
+            let mut index = block_start;
+            while index < block_end {
+                let Item::Instruction(swap) = self.items[index] else {
+                    index += 1;
+                    continue;
+                };
+                if swap.opcode.code != SWAP {
+                    index += 1;
+                    continue;
+                }
+                let Operand::Value(depth) = swap.operand else {
+                    unreachable!();
+                };
+                let Some(first) = next_swappable(&self.items, index + 1, block_end, None) else {
+                    index += 1;
+                    continue;
+                };
+                let Item::Instruction(first_instruction) = self.items[first] else {
+                    unreachable!();
+                };
+                let line = (first_instruction.location.line >= 0)
+                    .then_some(first_instruction.location.line);
+                let mut last = first;
+                let mut valid = true;
+                for _ in 1..depth {
+                    let Some(next) = next_swappable(&self.items, last + 1, block_end, line) else {
+                        valid = false;
+                        break;
+                    };
+                    last = next;
+                }
+                if !valid {
+                    index += 1;
+                    continue;
+                }
+                let Item::Instruction(first_instruction) = self.items[first] else {
+                    unreachable!();
+                };
+                let Item::Instruction(last_instruction) = self.items[last] else {
+                    unreachable!();
+                };
+                let first_store = stored_local(&first_instruction);
+                let last_store = stored_local(&last_instruction);
+                // CPython sees locationless cleanup pops at this stage and
+                // therefore does not move a traced pop across them.
+                if first_store.is_none() && last_store.is_none() {
+                    index += 1;
+                    continue;
+                }
+                if first_store.is_some() || last_store.is_some() {
+                    if first_store == last_store
+                        || self.items[first + 1..last].iter().any(|item| {
+                            let Item::Instruction(instruction) = item else {
+                                return false;
+                            };
+                            stored_local(instruction).is_some_and(|local| {
+                                Some(local) == first_store || Some(local) == last_store
+                            })
+                        })
+                    {
+                        index += 1;
+                        continue;
+                    }
+                }
+
+                let Item::Instruction(swap) = &mut self.items[index] else {
+                    unreachable!();
+                };
+                swap.opcode = Opcode::new(NOP, 0);
+                swap.operand = Operand::Value(0);
+                self.items.swap(first, last);
+                index += 1;
+            }
+            block_start = block_end;
+        }
+    }
+
+    /// Mirrors CPython's final `optimize_load_fast` CFG pass.
+    ///
+    /// An owned local load can become a borrowed load only when its value is
+    /// consumed in the same basic block, is not stored into another local, and
+    /// remains supported by the original local until it is consumed.
+    fn optimize_load_fast(&mut self) {
+        const LOAD_FAST: u8 = 84;
+        const LOAD_FAST_AND_CLEAR: u8 = 85;
+        const LOAD_FAST_BORROW: u8 = 86;
+        const LOAD_FAST_BORROW_LOAD_FAST_BORROW: u8 = 87;
+        const LOAD_FAST_LOAD_FAST: u8 = 89;
+        const STORE_FAST: u8 = 112;
+        const STORE_FAST_LOAD_FAST: u8 = 113;
+        const STORE_FAST_STORE_FAST: u8 = 114;
+
+        #[derive(Clone, Copy)]
+        struct Reference {
+            producer: Option<usize>,
+            local: Option<u32>,
+        }
+
+        fn pop_reference(stack: &mut Vec<Reference>) -> Reference {
+            stack.pop().unwrap_or(Reference {
+                producer: None,
+                local: None,
+            })
+        }
+
+        fn kill_local(unsafe_loads: &mut HashSet<usize>, stack: &[Reference], local: u32) {
+            for reference in stack {
+                if reference.local == Some(local)
+                    && let Some(producer) = reference.producer
+                {
+                    unsafe_loads.insert(producer);
+                }
+            }
+        }
+
+        fn store_local(
+            unsafe_loads: &mut HashSet<usize>,
+            stack: &[Reference],
+            local: u32,
+            reference: Reference,
+        ) {
+            kill_local(unsafe_loads, stack, local);
+            if let Some(producer) = reference.producer {
+                unsafe_loads.insert(producer);
+            }
+        }
+
+        let mut block_labels = HashSet::new();
+        for item in &self.items {
+            if let Item::Instruction(Instruction {
+                operand: Operand::Forward(label) | Operand::Backward(label),
+                ..
+            }) = item
+            {
+                block_labels.insert(*label);
+            }
+        }
+        for region in &self.exception_regions {
+            block_labels.extend([region.start, region.end, region.target]);
+        }
+
+        let mut blocks = Vec::<Vec<usize>>::new();
+        let mut block = Vec::new();
+        for (index, item) in self.items.iter().enumerate() {
+            if matches!(item, Item::Label(label) if block_labels.contains(label))
+                && !block.is_empty()
+            {
+                blocks.push(std::mem::take(&mut block));
+            }
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            block.push(index);
+            if !matches!(instruction.operand, Operand::Value(_))
+                || matches!(instruction.opcode.code, 35 | 104 | 105)
+            {
+                blocks.push(std::mem::take(&mut block));
+            }
+        }
+        if !block.is_empty() {
+            blocks.push(block);
+        }
+
+        let mut item_blocks = vec![None; self.items.len()];
+        for (block_index, block) in blocks.iter().enumerate() {
+            for index in block {
+                item_blocks[*index] = Some(block_index);
+            }
+        }
+        let mut label_blocks = HashMap::new();
+        let mut next_block = None;
+        for (index, item) in self.items.iter().enumerate().rev() {
+            match item {
+                Item::Instruction(_) => next_block = item_blocks[index],
+                Item::Label(label) if block_labels.contains(label) => {
+                    if let Some(block) = next_block {
+                        label_blocks.insert(*label, block);
+                    }
+                }
+                Item::Label(_) => {}
+            }
+        }
+        let mut reachable = vec![false; blocks.len()];
+        let mut pending = (!blocks.is_empty())
+            .then_some(0)
+            .into_iter()
+            .collect::<Vec<_>>();
+        while let Some(block_index) = pending.pop() {
+            if std::mem::replace(&mut reachable[block_index], true) {
+                continue;
+            }
+            let block = &blocks[block_index];
+            let Some(last_index) = block.last().copied() else {
+                continue;
+            };
+            let Item::Instruction(last) = self.items[last_index] else {
+                unreachable!();
+            };
+            if block_has_fallthrough(&[Item::Instruction(last)]) && block_index + 1 < blocks.len() {
+                pending.push(block_index + 1);
+            }
+            if let Operand::Forward(label) | Operand::Backward(label) = last.operand
+                && let Some(target) = label_blocks.get(&label)
+            {
+                pending.push(*target);
+            }
+        }
+
+        for (block_index, block) in blocks.into_iter().enumerate() {
+            if !reachable[block_index] {
+                continue;
+            }
+            let mut cumulative_effect = 0_i64;
+            let mut start_depth = None;
+            for index in &block {
+                let Item::Instruction(instruction) = self.items[*index] else {
+                    unreachable!();
+                };
+                let Operand::Value(argument) = instruction.operand else {
+                    cumulative_effect += opcode_stack_effect(instruction.opcode.code, 0);
+                    if let Some(depth_after) = instruction.depth_after {
+                        start_depth = Some(i64::from(depth_after) - cumulative_effect);
+                        break;
+                    }
+                    continue;
+                };
+                cumulative_effect += opcode_stack_effect(instruction.opcode.code, argument);
+                if let Some(depth_after) = instruction.depth_after {
+                    start_depth = Some(i64::from(depth_after) - cumulative_effect);
+                    break;
+                }
+            }
+            let mut stack = vec![
+                Reference {
+                    producer: None,
+                    local: None,
+                };
+                usize::try_from(start_depth.unwrap_or(0).max(0)).unwrap()
+            ];
+            let mut unsafe_loads = HashSet::new();
+
+            for index in &block {
+                let Item::Instruction(instruction) = self.items[*index] else {
+                    unreachable!();
+                };
+                let argument = match instruction.operand {
+                    Operand::Value(argument) => argument,
+                    Operand::Forward(_) | Operand::Backward(_) => 0,
+                };
+                match instruction.opcode.code {
+                    63 => kill_local(&mut unsafe_loads, &stack, argument),
+                    LOAD_FAST => stack.push(Reference {
+                        producer: Some(*index),
+                        local: Some(argument),
+                    }),
+                    LOAD_FAST_AND_CLEAR => {
+                        kill_local(&mut unsafe_loads, &stack, argument);
+                        stack.push(Reference {
+                            producer: Some(*index),
+                            local: Some(argument),
+                        });
+                    }
+                    LOAD_FAST_LOAD_FAST => {
+                        stack.push(Reference {
+                            producer: Some(*index),
+                            local: Some(argument >> 4),
+                        });
+                        stack.push(Reference {
+                            producer: Some(*index),
+                            local: Some(argument & 15),
+                        });
+                    }
+                    STORE_FAST => {
+                        let reference = pop_reference(&mut stack);
+                        store_local(&mut unsafe_loads, &stack, argument, reference);
+                    }
+                    STORE_FAST_LOAD_FAST => {
+                        let reference = pop_reference(&mut stack);
+                        store_local(&mut unsafe_loads, &stack, argument >> 4, reference);
+                        stack.push(Reference {
+                            producer: Some(*index),
+                            local: Some(argument & 15),
+                        });
+                    }
+                    STORE_FAST_STORE_FAST => {
+                        let reference = pop_reference(&mut stack);
+                        store_local(&mut unsafe_loads, &stack, argument >> 4, reference);
+                        let reference = pop_reference(&mut stack);
+                        store_local(&mut unsafe_loads, &stack, argument & 15, reference);
+                    }
+                    59 => {
+                        let reference = stack
+                            .len()
+                            .checked_sub(usize::try_from(argument).unwrap())
+                            .and_then(|index| stack.get(index))
+                            .copied()
+                            .unwrap_or(Reference {
+                                producer: None,
+                                local: None,
+                            });
+                        stack.push(reference);
+                    }
+                    117 => {
+                        if let Some(index) =
+                            stack.len().checked_sub(usize::try_from(argument).unwrap())
+                        {
+                            let top = stack.len().saturating_sub(1);
+                            if index < stack.len() {
+                                stack.swap(index, top);
+                            }
+                        }
+                    }
+                    // These instructions retain all their existing inputs.
+                    12 | 15 | 18 | 19 | 24..=26 | 43 | 72 => {
+                        let popped = opcode_num_popped(instruction.opcode.code, argument);
+                        let pushed = opcode_num_pushed(instruction.opcode.code, argument);
+                        for _ in 0..pushed.saturating_sub(popped) {
+                            stack.push(Reference {
+                                producer: None,
+                                local: None,
+                            });
+                        }
+                    }
+                    // These consume only their top inputs and retain the
+                    // container deeper on the stack.
+                    66 | 67 | 78 | 79 | 98 | 105 | 107 | 109 => {
+                        let popped = opcode_num_popped(instruction.opcode.code, argument);
+                        let pushed = opcode_num_pushed(instruction.opcode.code, argument);
+                        for _ in 0..popped.saturating_sub(pushed) {
+                            pop_reference(&mut stack);
+                        }
+                    }
+                    10 | 108 => {
+                        let top = pop_reference(&mut stack);
+                        pop_reference(&mut stack);
+                        stack.push(top);
+                    }
+                    6 => {
+                        pop_reference(&mut stack);
+                        stack.push(Reference {
+                            producer: None,
+                            local: None,
+                        });
+                    }
+                    70 => stack.push(Reference {
+                        producer: None,
+                        local: None,
+                    }),
+                    80 | 96 => {
+                        let receiver = pop_reference(&mut stack);
+                        if instruction.opcode.code == 96 {
+                            pop_reference(&mut stack);
+                            pop_reference(&mut stack);
+                        }
+                        stack.push(Reference {
+                            producer: None,
+                            local: None,
+                        });
+                        if argument & 1 != 0 {
+                            stack.push(receiver);
+                        }
+                    }
+                    32 | 95 => {
+                        let top = pop_reference(&mut stack);
+                        stack.push(Reference {
+                            producer: None,
+                            local: None,
+                        });
+                        stack.push(top);
+                    }
+                    106 => {
+                        pop_reference(&mut stack);
+                        stack.push(Reference {
+                            producer: None,
+                            local: None,
+                        });
+                    }
+                    _ => {
+                        for _ in 0..opcode_num_popped(instruction.opcode.code, argument) {
+                            pop_reference(&mut stack);
+                        }
+                        for _ in 0..opcode_num_pushed(instruction.opcode.code, argument) {
+                            stack.push(Reference {
+                                producer: None,
+                                local: None,
+                            });
+                        }
+                    }
+                }
+            }
+
+            for reference in &stack {
+                if let Some(producer) = reference.producer {
+                    unsafe_loads.insert(producer);
+                }
+            }
+            for (position, index) in block.iter().copied().enumerate() {
+                if unsafe_loads.contains(&index) {
+                    continue;
+                }
+                let force_owned_load = match self.items[index] {
+                    Item::Instruction(instruction) => instruction.force_owned_load,
+                    Item::Label(_) => unreachable!(),
+                };
+                if force_owned_load {
+                    let following = block[position + 1..]
+                        .iter()
+                        .filter_map(|index| match self.items[*index] {
+                            Item::Instruction(instruction) if instruction.opcode.code != 27 => {
+                                Some(instruction.opcode.code)
+                            }
+                            _ => None,
+                        })
+                        .take(2)
+                        .collect::<Vec<_>>();
+                    let directly_consumed = following
+                        .first()
+                        .is_some_and(|opcode| matches!(opcode, 35 | 111 | 115))
+                        || matches!(following.as_slice(), [31, next] if *next != 29)
+                        || matches!(following.as_slice(), [81 | 82 | 94, 56]);
+                    if !directly_consumed {
+                        continue;
+                    }
+                }
+                let Item::Instruction(instruction) = &mut self.items[index] else {
+                    unreachable!();
+                };
+                match instruction.opcode.code {
+                    LOAD_FAST => {
+                        instruction.opcode = Opcode::new(LOAD_FAST_BORROW, 0);
+                    }
+                    LOAD_FAST_LOAD_FAST => {
+                        instruction.opcode = Opcode::new(LOAD_FAST_BORROW_LOAD_FAST_BORROW, 0);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn fuse_superinstructions(&mut self) {
         const LOAD_FAST: u8 = 84;
         const LOAD_FAST_BORROW: u8 = 86;
@@ -1389,7 +2268,7 @@ impl Assembler {
             let opcode = match (first.opcode.code, second.opcode.code) {
                 (LOAD_FAST_BORROW, LOAD_FAST_BORROW) => LOAD_FAST_BORROW_LOAD_FAST_BORROW,
                 (LOAD_FAST, LOAD_FAST) => LOAD_FAST_LOAD_FAST,
-                (STORE_FAST, LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
+                (STORE_FAST, LOAD_FAST) | (STORE_FAST, LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
                 (STORE_FAST, STORE_FAST) => STORE_FAST_STORE_FAST,
                 _ => {
                     fused.push(self.items[index]);
@@ -1402,8 +2281,10 @@ impl Assembler {
                 operand: Operand::Value((first_argument << 4) | second_argument),
                 location: first.location,
                 depth_after: second.depth_after,
+                force_owned_load: first.force_owned_load || second.force_owned_load,
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
+                preserve_no_location: first.preserve_no_location || second.preserve_no_location,
             }));
             index += 2;
         }
@@ -1570,6 +2451,135 @@ impl Assembler {
     }
 }
 
+// Generated from CPython 3.14's `pycore_opcode_metadata.h`. Keeping the pop
+// and push counts separate is required by the borrowed-local dataflow pass.
+fn opcode_num_popped(opcode: u8, argument: u32) -> usize {
+    let argument = usize::try_from(argument).unwrap();
+    match opcode {
+        0
+        | 17
+        | 21
+        | 22
+        | 27
+        | 28
+        | 33
+        | 34
+        | 36
+        | 60
+        | 62..=65
+        | 69
+        | 75..=77
+        | 81..=89
+        | 92..=94
+        | 97
+        | 128 => 0,
+        1 | 7 | 37 | 38 | 43 | 96 | 99 => 3,
+        2 | 3 | 5 | 6 | 8 | 10 | 44 | 54 | 56 | 57 | 73 | 74 | 106 | 108 | 110 | 114 => 2,
+        4 => 4,
+        9
+        | 11..=16
+        | 18..=20
+        | 23
+        | 25
+        | 26
+        | 29..=32
+        | 35
+        | 39..=42
+        | 53
+        | 58
+        | 61
+        | 68
+        | 70..=72
+        | 80
+        | 90
+        | 91
+        | 95
+        | 100..=103
+        | 111..=113
+        | 115
+        | 116
+        | 118..=120 => 1,
+        24 => 2,
+        45 => 2 + (argument & 1),
+        46 | 48..=51 => argument,
+        47 => argument * 2,
+        52 => 2 + argument,
+        55 => 3 + argument,
+        59 | 117 => argument,
+        66 => 4 + argument,
+        67 | 78 | 79 | 107 | 109 => 1 + argument,
+        98 => 2 + argument,
+        104 => argument,
+        105 => 1 + argument,
+        _ => unreachable!("missing stack-pop metadata for opcode {opcode}"),
+    }
+}
+
+fn opcode_num_pushed(opcode: u8, argument: u32) -> usize {
+    let argument = usize::try_from(argument).unwrap();
+    match opcode {
+        0
+        | 3
+        | 8
+        | 9
+        | 11
+        | 17
+        | 20
+        | 27..=31
+        | 36..=38
+        | 60..=65
+        | 68
+        | 69
+        | 75..=77
+        | 97
+        | 100..=104
+        | 110..=112
+        | 114..=116
+        | 128 => 0,
+        1
+        | 2
+        | 4
+        | 12..=14
+        | 16
+        | 19
+        | 21..=23
+        | 35
+        | 39..=42
+        | 44..=58
+        | 71
+        | 73
+        | 74
+        | 81..=86
+        | 88
+        | 90
+        | 91
+        | 93
+        | 94
+        | 99
+        | 108
+        | 120 => 1,
+        5..=7 | 10 | 15 | 18 | 25 | 26 | 32 | 70 | 72 | 87 | 89 | 95 | 106 => 2,
+        24 => 3,
+        33 | 34 => 1,
+        43 => 6,
+        59 => argument + 1,
+        66 => argument + 3,
+        67 | 78 | 79 | 98 | 107 | 109 => argument,
+        80 | 92 | 96 => 1 + (argument & 1),
+        105 => argument,
+        113 => 1,
+        117 => argument,
+        118 => 1 + (argument & 0xff) + (argument >> 8),
+        119 => argument,
+        _ => unreachable!("missing stack-push metadata for opcode {opcode}"),
+    }
+}
+
+fn opcode_stack_effect(opcode: u8, argument: u32) -> i64 {
+    i64::try_from(opcode_num_pushed(opcode, argument)).unwrap()
+        - i64::try_from(opcode_num_popped(opcode, argument)).unwrap()
+}
+
 fn block_has_fallthrough(block: &[Item]) -> bool {
     let Some(instruction) = block.iter().rev().find_map(|item| {
         if let Item::Instruction(instruction) = item {
@@ -1712,7 +2722,7 @@ mod tests {
     use super::{Assembler, Opcode};
 
     #[test]
-    fn resolves_forward_and_backward_jumps() {
+    fn removes_unreachable_jumps() {
         let jump = Opcode::new(77, 0);
         let resume = Opcode::new(128, 0);
         let mut assembler = Assembler::default();
@@ -1725,7 +2735,7 @@ mod tests {
         assembler.emit_backward(jump, start);
         assembler.mark(end);
 
-        assert_eq!(assembler.finish().unwrap(), [128, 0, 77, 1, 77, 3]);
+        assert_eq!(assembler.finish().unwrap(), [128, 0]);
     }
 
     #[test]

@@ -75,6 +75,14 @@ impl Error for CompileError {}
 
 /// Compile a Python module for CPython 3.14.
 pub fn compile(source: &str, filename: &str) -> Result<CompiledModule, CompileError> {
+    let normalized;
+    let source = if source.contains('\r') {
+        normalized = source.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        source
+    };
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
     let parsed = ruff_python_parser::parse_module(source)
         .map_err(|error| CompileError::Parse(error.to_string()))?;
     let code = Compiler::module(filename, source).compile_module(parsed.suite())?;
@@ -96,7 +104,8 @@ pub fn compile_to_pyc(
 #[cfg(test)]
 mod tests {
     use std::fmt::Write as _;
-    use std::process::Command;
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
 
     use tempfile::tempdir;
 
@@ -153,6 +162,216 @@ mod tests {
             .unwrap();
         assert!(expected.status.success());
         assert_eq!(compile("", "empty.py").unwrap().marshal(), expected.stdout);
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_a_module_containing_only_global_statements() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "global x\nglobal x, y, z\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'global.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "global.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_when_a_match_case_ends_in_a_constant_expression() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "match foo:\n    case foo_bar: ...\nmatch foo:\n    case _: ...\nmatch 1:\n    case _ if (True): ...\nmatch (1, 2):\n    case _: ...\nmatch subject:\n    case [a, b]: ...\n    case (a, b): ...\nmatch value:\n    case 1:\n        h(x)\n    case _:\n        ...\ndef terminal_try_star():\n    try:\n        assigned = 1\n    except* ValueError:\n        assigned = 2\ntry: ...\nexcept* ValueError: ...\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'match.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "match.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_pass_only_try_else_finally() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source =
+            "try:\n    foo()\nexcept Exception:\n    pass\nelse:\n    pass\nfinally:\n    pass\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'try.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "try.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_optimized_boolean_operands() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "if a and f() and False and g():\n    pass\na or \"\" or True\na or () or True\na and \"value\" and False\n0 if a or [1] or True or [2] else 1\nif (\n    f()\n    is None\n):\n    pass\nif g() is not None:\n    pass\nx\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'bool.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "bool.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_a_constant_true_comprehension_filter() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "value: int\n[x for x in values if True]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'comprehension.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "comprehension.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_an_inline_constant_with_body() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "import io\nwith (\n    io  # comment\n    .open('file.txt') as file\n): ...\nwith manager:\n    while condition:\n        body()\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'with.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "with.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_a_tuple_containing_a_constant_slice() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "constant = lambda value: value[:, 1]\ndynamic = lambda value: value[::-1]\nwith_defaults = lambda value=1, other=2: value\nstring_slice = 'héllo'[1:4]\nstepped_string_slice = 'abcdef'[1:5:2]\nboolean_slice = 'abc'[False:True:True]\nbytes_slice = b'prefix'[2:]\ntuple_slice = (1, 2, 3)[1:]\nnegative_slice = 'abc'[:-1]\nstring_index = 'héllo'[1]\nfstring_index = f'abc'[0]\nbytes_index = b'prefix'[-1]\ntuple_index = (1, 2, 3)[-2]\ndynamic_list_index = [1, 2, 3][0]\nmember = item in [1, 2]\ndouble_negation = not not item\n5.0 ** 5.0\nTrue ** True\nFalse ** False\n() << 0 ** 99999999999999999999999999\n1 - 2\ninverted = ~1\nnegative_zero = -0000\nmixed = 1 + 2.5\nassert (False, 'x')\nassert (False,)\nassert ()\nassert True\npacked = fn('User', **{'name': str})\nunicode_keyword = fn(café=1)\nhuge = -999999999999999999999999999999999999999999\nadjacent = ('' f'prefix {item}')\nleft if condition else right\n'%s' % ('value',)\nif (1, 2):\n    pass\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'example.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "example.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_lambda_edge_cases() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "from __future__ import barry_as_FLUFL, generator_stop, print_function\nsimple = lambda: (yield None)\ndelegating = lambda: (yield from source())\ndef eliminated():\n    while False:\n        value = lambda: missing\ndef   trailing_semicolon():\n    value = 1 \\\n        ;\ndef trailing_semicolon_try():\n    try:\n        value = 1;\n    except ValueError:\n        pass;\ndef overridden_return():\n    try:\n        return 1\n    finally:\n        return 2\ndef overridden_handler_return():\n    try:\n        pass\n    except:\n        return 1\n    finally:\n        return 2\ndef empty_try_else():\n    try:\n        pass\n    except:\n        return 1\n    else:\n        return 2\ndef dead_loop_return(value):\n    while value > 0:\n        break\n        return 1\ndef return_inside_with():\n    with manager:\n        return 1\nasync  def terminal_async_comprehension():\n    if test:\n        values = [value async for value in source]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'example.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "example.py").unwrap().marshal(),
+            expected.stdout
+        );
     }
 
     #[test]
@@ -549,12 +768,24 @@ except ValueError:
 finally:
     events.append("cleanup-2")
 
+def overriding_return():
+    try:
+        events.append("value")
+        return len(events)
+    finally:
+        events.append("override")
+        return 2
+
 print(events)
+print(overriding_return(), events)
 "#;
         let Some(output) = execute(source) else {
             return;
         };
-        assert_eq!(output, "['normal', 'cleanup-1', 'handled', 'cleanup-2']\n");
+        assert_eq!(
+            output,
+            "['normal', 'cleanup-1', 'handled', 'cleanup-2']\n2 ['normal', 'cleanup-1', 'handled', 'cleanup-2', 'value', 'override']\n"
+        );
     }
 
     #[test]

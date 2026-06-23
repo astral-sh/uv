@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 use ruff_python_ast::{
-    BoolOp, CmpOp, ConversionFlag, Expr, ExprContext, FStringPart, InterpolatedStringElement,
-    Number, Operator, Pattern, Singleton, Stmt, StmtClassDef, StmtFunctionDef, Suite, TypeParam,
-    UnaryOp,
+    BoolOp, CmpOp, ConversionFlag, Expr, ExprBinOp, ExprContext, FStringPart,
+    InterpolatedStringElement, Keyword, Number, Operator, Pattern, Singleton, Stmt, StmtClassDef,
+    StmtFunctionDef, Suite, TypeParam, UnaryOp,
 };
 use ruff_python_codegen::{Generator, Indentation, Mode as CodegenMode};
 use ruff_source_file::LineEnding;
@@ -41,9 +41,15 @@ const LOAD_SPECIAL: Opcode = Opcode::new(95, 0);
 const LOAD_SUPER_ATTR: Opcode = Opcode::new(96, 1);
 const STORE_NAME: Opcode = Opcode::new(116, 0);
 const DELETE_NAME: Opcode = Opcode::new(65, 0);
-const LOAD_FAST: Opcode = Opcode::new(86, 0);
+const STORE_SLICE: Opcode = Opcode::new(37, 0);
+// CPython initially emits owned local loads, then strength-reduces safe loads
+// to borrowed references after the control-flow graph has reached its final
+// shape. The assembler mirrors that dataflow pass.
+const LOAD_FAST: Opcode = Opcode::new(84, 0);
 const LOAD_FAST_CHECK: Opcode = Opcode::new(88, 0);
-const LOAD_FAST_OWNED: Opcode = Opcode::new(84, 0);
+// Internal marker: the assembler lowers this to `LOAD_FAST`, while retaining
+// the code generator's conservative ownership hint for the final CFG pass.
+const LOAD_FAST_OWNED: Opcode = Opcode::new(121, 0);
 const LOAD_FAST_AND_CLEAR: Opcode = Opcode::new(85, 0);
 const LOAD_FROM_DICT_OR_DEREF: Opcode = Opcode::new(90, 0);
 const LOAD_FROM_DICT_OR_GLOBALS: Opcode = Opcode::new(91, 0);
@@ -136,7 +142,9 @@ const CO_COROUTINE: u32 = 0x0080;
 const CO_ASYNC_GENERATOR: u32 = 0x0200;
 const CO_HAS_DOCSTRING: u32 = 0x0400_0000;
 const CO_METHOD: u32 = 0x0800_0000;
+const CO_FUTURE_BARRY_AS_BDFL: u32 = 0x0040_0000;
 const CO_FUTURE_ANNOTATIONS: u32 = 0x0100_0000;
+const CO_FUTURE_MASK: u32 = CO_FUTURE_BARRY_AS_BDFL | CO_FUTURE_ANNOTATIONS;
 const CO_FAST_LOCAL: u8 = 0x20;
 const CO_FAST_HIDDEN: u8 = 0x10;
 const CO_FAST_CELL: u8 = 0x40;
@@ -144,6 +152,7 @@ const CO_FAST_FREE: u8 = 0x80;
 const CO_FAST_ARG_POS: u8 = 0x02;
 const CO_FAST_ARG_KW: u8 = 0x04;
 const CO_FAST_ARG_VAR: u8 = 0x08;
+const SHADOWED_SUPER_SENTINEL: &str = "\0shadowed super";
 
 #[derive(Clone, Debug)]
 pub(crate) enum Constant {
@@ -152,7 +161,10 @@ pub(crate) enum Constant {
     Ellipsis,
     Int(u64),
     SignedInt(i64),
-    BigInt(Vec<u16>),
+    BigInt {
+        negative: bool,
+        digits: Vec<u16>,
+    },
     Float(f64),
     Complex {
         real: f64,
@@ -189,6 +201,7 @@ pub(crate) struct CodeObject {
     pub(crate) line_table: Vec<u8>,
     pub(crate) exception_table: Vec<u8>,
     pub(crate) annotation_thunk: bool,
+    pub(crate) interned_constant_strings: HashSet<String>,
 }
 
 #[derive(Debug)]
@@ -213,6 +226,12 @@ struct LoopContext {
     break_label: Label,
     iterator_cleanup: IteratorCleanup,
     break_returns: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ExceptionHandlerContext {
+    name: Option<String>,
+    loop_depth: usize,
 }
 
 #[derive(Debug)]
@@ -380,6 +399,7 @@ impl FunctionPlan {
         let local_names: HashSet<_> = locals.names.iter().cloned().collect();
         let class_requirements = nested_class_required_names(&definition.body, future_annotations);
         let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
+        let generator_requirements = nested_generator_required_names_in_suite(&definition.body);
         let nested_function_requirements = children
             .iter()
             .cloned()
@@ -388,8 +408,10 @@ impl FunctionPlan {
         locals.names.retain(|name| {
             !locals.annotation_only.contains(name)
                 || reference_collector.references.contains(name)
+                    && (name != "__class__" || reference_collector.explicit_dunder_class_reference)
                 || class_requirements.contains(name)
                 || lambda_requirements.contains(name)
+                || generator_requirements.contains(name)
                 || nested_function_requirements.contains(name)
         });
         reference_collector
@@ -398,6 +420,9 @@ impl FunctionPlan {
         reference_collector
             .references
             .extend(lambda_requirements.iter().cloned());
+        reference_collector
+            .references
+            .extend(generator_requirements.iter().cloned());
         let mut cellvars = generator_named_targets_in_suite(&definition.body)
             .into_iter()
             .filter(|name| local_names.contains(name))
@@ -409,6 +434,11 @@ impl FunctionPlan {
         );
         cellvars.extend(
             lambda_requirements
+                .into_iter()
+                .filter(|name| local_names.contains(name)),
+        );
+        cellvars.extend(
+            generator_requirements
                 .into_iter()
                 .filter(|name| local_names.contains(name)),
         );
@@ -501,16 +531,21 @@ pub(crate) struct Compiler {
     initialized_locals: HashSet<String>,
     owned_load_locals: HashSet<String>,
     imported_scope_names: HashSet<String>,
+    interned_constant_strings: HashSet<String>,
     type_parameter_names: BTreeSet<String>,
     generic_target_qualified_name: Option<String>,
+    child_qualified_name_parent: Option<String>,
     defer_async_comprehension_restore: bool,
     pending_comprehension_restores: Vec<(Vec<u32>, SourceLocation)>,
     active_comprehension_cleanups: Vec<(Label, u32)>,
     active_comprehension_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_with_exit_locations: Vec<SourceLocation>,
     active_with_region_exclusions: Vec<Vec<(Label, Label)>>,
+    active_terminal_withs: usize,
     active_exception_region_exclusions: Vec<Vec<(Label, Label)>>,
+    active_exception_handlers: Vec<ExceptionHandlerContext>,
     active_pass_finally_locations: Vec<SourceLocation>,
+    active_overriding_finally_returns: usize,
     exclude_terminal_if_not_taken: bool,
     exclude_condition_not_taken_from_exception: bool,
     prevent_try_exit_inlining: bool,
@@ -531,6 +566,7 @@ pub(crate) struct Compiler {
     source: Arc<str>,
     name: String,
     qualified_name: String,
+    private_name: Option<String>,
     arg_count: u32,
     positional_only_arg_count: u32,
     keyword_only_arg_count: u32,
@@ -559,16 +595,21 @@ impl Compiler {
             initialized_locals: HashSet::new(),
             owned_load_locals: HashSet::new(),
             imported_scope_names: HashSet::new(),
+            interned_constant_strings: HashSet::new(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
+            child_qualified_name_parent: None,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
+            active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
+            active_exception_handlers: Vec::new(),
             active_pass_finally_locations: Vec::new(),
+            active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -589,6 +630,7 @@ impl Compiler {
             source: Arc::from(source),
             name: "<module>".to_string(),
             qualified_name: "<module>".to_string(),
+            private_name: None,
             arg_count: 0,
             positional_only_arg_count: 0,
             keyword_only_arg_count: 0,
@@ -672,16 +714,21 @@ impl Compiler {
             initialized_locals,
             owned_load_locals: HashSet::new(),
             imported_scope_names: HashSet::new(),
+            interned_constant_strings: HashSet::new(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
+            child_qualified_name_parent: None,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
+            active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
+            active_exception_handlers: Vec::new(),
             active_pass_finally_locations: Vec::new(),
+            active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -707,6 +754,7 @@ impl Compiler {
             source,
             name: name.to_string(),
             qualified_name,
+            private_name: None,
             arg_count,
             positional_only_arg_count,
             keyword_only_arg_count,
@@ -770,16 +818,21 @@ impl Compiler {
             initialized_locals: HashSet::new(),
             owned_load_locals: HashSet::new(),
             imported_scope_names: HashSet::new(),
+            interned_constant_strings: HashSet::new(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
+            child_qualified_name_parent: None,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
             active_with_exit_locations: Vec::new(),
             active_with_region_exclusions: Vec::new(),
+            active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
+            active_exception_handlers: Vec::new(),
             active_pass_finally_locations: Vec::new(),
+            active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -804,6 +857,7 @@ impl Compiler {
             source,
             name: name.to_string(),
             qualified_name,
+            private_name: Some(name.to_string()),
             arg_count: 0,
             positional_only_arg_count: 0,
             keyword_only_arg_count: 0,
@@ -816,17 +870,34 @@ impl Compiler {
     pub(crate) fn compile_module(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
         self.module_globals = module_global_names(body);
         self.imported_scope_names = module_imported_names(body);
+        let mut module_bindings = LocalCollector::default();
+        module_bindings.collect_suite(body);
+        for name in &module_bindings.comprehension_targets {
+            let index = to_u32(self.locals.len(), "module local count")?;
+            self.locals.push(name.clone());
+            self.temporary_indices.insert(name.clone(), index);
+            self.hidden_names.insert(name.clone());
+        }
+        self.fast_local_count = self.locals.len();
+        if module_bindings.seen.contains("super") {
+            // This set is propagated to every child compiler. An impossible
+            // Python identifier keeps the module-shadowing fact alongside the
+            // imported-name facts used by the same optimization checks.
+            self.imported_scope_names
+                .insert(SHADOWED_SUPER_SENTINEL.to_string());
+        }
         self.flags |= future_feature_flags(body);
         let simple_module_annotations = has_simple_annotations(body);
         let module_annotations = has_annotations(body);
         let future_module_annotations =
             self.flags & CO_FUTURE_ANNOTATIONS != 0 && module_annotations;
         if module_annotations {
+            let annotation_cell = to_u32(self.locals.len(), "module annotation cell index")?;
             self.locals.push("__conditional_annotations__".to_string());
             self.cell_names
                 .insert("__conditional_annotations__".to_string());
             self.assembler.set_location(SourceLocation::NONE);
-            self.emit(MAKE_CELL, 0, 0)?;
+            self.emit(MAKE_CELL, annotation_cell, 0)?;
         }
         self.assembler.set_location(SourceLocation::new(0, 1, 0, 0));
         self.emit(RESUME, 0, 0)?;
@@ -878,11 +949,15 @@ impl Compiler {
                 .last()
                 .is_some_and(statement_uses_implicit_return_location)
         {
-            self.assembler
-                .set_location(self.source_location(implicit_return_range(body.last().unwrap())));
+            self.assembler.set_location(
+                self.source_location(implicit_return_range(&self, body.last().unwrap())),
+            );
         } else if self.assembler.instruction_count() > body_start {
             self.assembler.set_location(SourceLocation::NONE);
-        } else if let Some(statement) = body.last() {
+        } else if let Some(statement) = body
+            .last()
+            .filter(|statement| !matches!(statement, Stmt::Global(_) | Stmt::Nonlocal(_)))
+        {
             self.assembler
                 .set_location(self.source_location(statement.range()));
         }
@@ -913,8 +988,9 @@ impl Compiler {
                 .last()
                 .is_some_and(statement_uses_implicit_return_location)
         {
-            self.assembler
-                .set_location(self.source_location(implicit_return_range(body.last().unwrap())));
+            self.assembler.set_location(
+                self.source_location(implicit_return_range(&self, body.last().unwrap())),
+            );
         } else if self.assembler.instruction_count() > body_start {
             self.assembler.set_location(SourceLocation::NONE);
         } else if let Some(statement @ Stmt::Pass(_)) = body.last() {
@@ -955,7 +1031,13 @@ impl Compiler {
         let qualified_name = self.add_constant(Constant::String(self.qualified_name.clone()))?;
         self.emit(LOAD_CONST, qualified_name, 1)?;
         self.store_name("__qualname__")?;
-        self.emit(LOAD_SMALL_INT, self.first_line_number, 1)?;
+        if self.first_line_number <= u32::from(u8::MAX) {
+            self.emit(LOAD_SMALL_INT, self.first_line_number, 1)?;
+        } else {
+            let first_line_number =
+                self.add_constant(Constant::Int(u64::from(self.first_line_number)))?;
+            self.emit(LOAD_CONST, first_line_number, 1)?;
+        }
         self.store_name("__firstlineno__")?;
         if self.free_names.iter().any(|name| name == ".type_params") {
             self.load_name(".type_params")?;
@@ -991,7 +1073,17 @@ impl Compiler {
         };
         let body_start = self.assembler.instruction_count();
         self.compile_suite(body)?;
-        if self.assembler.instruction_count() > body_start
+        if let Some(Stmt::Expr(expression)) = body.last()
+            && fold_constant(&expression.value).is_some()
+        {
+            let range = if let Expr::FString(fstring) = expression.value.as_ref() {
+                self.fstring_result_range(fstring)
+            } else {
+                expression.range
+            };
+            self.assembler.set_location(self.source_location(range));
+            self.emit(NOP, 0, 0)?;
+        } else if self.assembler.instruction_count() > body_start
             && let Some(location) = self.assembler.last_instruction_location()
         {
             self.assembler.set_location(location);
@@ -1148,6 +1240,7 @@ impl Compiler {
             let index = self.name_index(&name)?;
             self.assembler.patch_argument(instruction, index);
         }
+        self.assembler.optimize_constant_pops();
         self.remove_unused_constants()?;
 
         let local_kinds = self
@@ -1194,6 +1287,11 @@ impl Compiler {
                     }
             })
             .collect();
+        let output_locals = self
+            .locals
+            .iter()
+            .map(|name| self.mangled_name(name))
+            .collect();
         let (bytecode, line_table, exception_table, assembled_max_depth, removed_max_depth) =
             self.assembler.finish_code(self.first_line_number)?;
         let max_depth =
@@ -1202,7 +1300,9 @@ impl Compiler {
             } else {
                 self.max_depth
             };
-        let stack_size = if self.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR) != 0 {
+        let stack_size = if self.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR) != 0
+            && self.generator_region_start.is_some()
+        {
             max_depth.max(2)
         } else {
             max_depth.max(1)
@@ -1216,7 +1316,7 @@ impl Compiler {
             bytecode,
             constants: self.constants,
             names: self.names,
-            locals: self.locals,
+            locals: output_locals,
             local_kinds,
             filename: self.filename,
             name: self.name,
@@ -1225,6 +1325,7 @@ impl Compiler {
             line_table,
             exception_table,
             annotation_thunk: self.annotation_thunk,
+            interned_constant_strings: self.interned_constant_strings,
         })
     }
 
@@ -1373,7 +1474,14 @@ impl Compiler {
                     _ => {}
                 }
             }
-            if let Stmt::Expr(expression) = statement
+            if let Stmt::Pass(statement) = statement
+                && self.active_exception_region_exclusions.is_empty()
+                && self.active_with_region_exclusions.is_empty()
+            {
+                self.assembler
+                    .set_location(self.source_location(statement.range));
+                self.emit(NOP, 0, 0)?;
+            } else if let Stmt::Expr(expression) = statement
                 && fold_constant(&expression.value).is_some()
             {
                 if literal_constant(&expression.value).is_none() {
@@ -1389,10 +1497,37 @@ impl Compiler {
                     || (!final_expression_becomes_return
                         && !matches!(self.scope, Scope::Class { .. }))
                 {
+                    let noop_start = self.assembler.label();
+                    self.assembler.mark(noop_start);
                     self.emit(NOP, 0, 0)?;
+                    let noop_end = self.assembler.label();
+                    self.assembler.mark(noop_end);
+                    if self.generator_region_start.is_some() {
+                        self.generator_region_exclusions
+                            .push((noop_start, noop_end));
+                    }
+                    for exclusions in &mut self.active_with_region_exclusions {
+                        exclusions.push((noop_start, noop_end));
+                    }
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((noop_start, noop_end));
+                    }
                 }
             } else {
                 self.compile_statement(statement)?;
+            }
+            if statement_terminates(statement) {
+                let unreachable = &body[index + 1..];
+                // CPython visits unreachable statements before the flow graph removes them.
+                // Its constant compaction always retains slot zero, so the first literal in
+                // an unreachable tail survives when no reachable constant preceded it.
+                if self.constants.is_empty()
+                    && let Some(constant) = first_suite_literal_constant(unreachable)
+                {
+                    self.add_constant(constant)?;
+                }
+                self.pre_register_suite_names(unreachable)?;
+                break;
             }
         }
         Ok(())
@@ -1414,15 +1549,10 @@ impl Compiler {
         statement: &ruff_python_ast::StmtWhile,
     ) -> Result<(), CompileError> {
         let base_depth = self.depth;
-        if self.constants.is_empty()
-            && let Some(constant) = first_suite_literal_constant(&statement.body)
-        {
-            self.add_constant(constant)?;
-        }
         let start = self.assembler.label();
         let condition_false = self.assembler.label();
         self.assembler.mark(start);
-        if literal_truthiness(&statement.test) == Some(true) {
+        if early_condition_truthiness(&statement.test) == Some(true) {
             if self.constants.is_empty()
                 && let Some(constant) = fold_constant(&statement.test)
             {
@@ -1433,6 +1563,11 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
         } else {
             self.compile_jump_if(&statement.test, false, condition_false)?;
+        }
+        if self.constants.is_empty()
+            && let Some(constant) = first_suite_literal_constant(&statement.body)
+        {
+            self.add_constant(constant)?;
         }
         self.loops.push(LoopContext {
             continue_label: start,
@@ -1496,7 +1631,7 @@ impl Compiler {
         {
             return self.compile_terminal_if_chained_compare(statement, comparison);
         }
-        if let Some(truthiness) = literal_truthiness(&statement.test)
+        if let Some(truthiness) = early_condition_truthiness(&statement.test)
             && statement.elif_else_clauses.len() <= 1
             && statement
                 .elif_else_clauses
@@ -1512,7 +1647,7 @@ impl Compiler {
                 self.pre_register_suite_names(&statement.body)?;
                 self.assembler
                     .set_location(self.source_location(statement.test.range()));
-                self.emit_implicit_return()?;
+                self.emit_deferred_implicit_return()?;
                 return Ok(());
             }
             self.assembler
@@ -1525,7 +1660,7 @@ impl Compiler {
                 &clause.body
             } else {
                 self.pre_register_suite_names(&statement.body)?;
-                self.emit_implicit_return()?;
+                self.emit_deferred_implicit_return()?;
                 return Ok(());
             };
             self.compile_suite(body)?;
@@ -1537,7 +1672,7 @@ impl Compiler {
             if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
             }
-            self.emit_implicit_return()?;
+            self.emit_deferred_implicit_return()?;
             return Ok(());
         }
 
@@ -1564,6 +1699,7 @@ impl Compiler {
                 let condition_result = self.compile_jump_if(test, false, next);
                 self.exclude_terminal_if_not_taken = previous_exclusion;
                 condition_result?;
+                self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
                 let previous_fallthrough =
                     std::mem::replace(&mut self.emitted_fallthrough_return, false);
@@ -1571,7 +1707,14 @@ impl Compiler {
                 let emitted_fallthrough =
                     std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
                 if !suite_terminates(body) && !emitted_fallthrough {
-                    if self.assembler.instruction_count() > body_start
+                    if let Some(statement) = body
+                        .last()
+                        .filter(|statement| statement_uses_implicit_return_location(statement))
+                    {
+                        self.assembler.set_location(
+                            self.source_location(implicit_return_range(self, statement)),
+                        );
+                    } else if self.assembler.instruction_count() > body_start
                         && let Some(location) = self.assembler.last_instruction_location()
                     {
                         self.assembler.set_location(location);
@@ -1582,7 +1725,7 @@ impl Compiler {
                         self.assembler
                             .set_location(self.source_location(test.range()));
                     }
-                    self.emit_implicit_return()?;
+                    self.emit_deferred_implicit_return()?;
                 }
                 self.assembler.mark(next);
                 self.set_depth(base_depth);
@@ -1596,7 +1739,14 @@ impl Compiler {
                 let emitted_fallthrough =
                     std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
                 if !suite_terminates(body) && !emitted_fallthrough {
-                    if self.assembler.instruction_count() > body_start
+                    if let Some(statement) = body
+                        .last()
+                        .filter(|statement| statement_uses_implicit_return_location(statement))
+                    {
+                        self.assembler.set_location(
+                            self.source_location(implicit_return_range(self, statement)),
+                        );
+                    } else if self.assembler.instruction_count() > body_start
                         && let Some(location) = self.assembler.last_instruction_location()
                     {
                         self.assembler.set_location(location);
@@ -1604,13 +1754,13 @@ impl Compiler {
                         self.assembler
                             .set_location(self.source_location(statement.range()));
                     }
-                    self.emit_implicit_return()?;
+                    self.emit_deferred_implicit_return()?;
                 }
             }
         }
         if !has_else {
             self.assembler.set_location(SourceLocation::NONE);
-            self.emit_implicit_return()?;
+            self.emit_deferred_implicit_return()?;
         }
         self.set_depth(base_depth);
         Ok(())
@@ -1657,7 +1807,7 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(comparison.range));
         self.emit(POP_TOP, 0, -1)?;
-        self.emit_implicit_return()?;
+        self.emit_deferred_implicit_return()?;
 
         self.assembler.mark(body);
         self.set_depth(base_depth);
@@ -1666,13 +1816,13 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(last.range()));
         }
-        self.emit_implicit_return()?;
+        self.emit_deferred_implicit_return()?;
 
         self.assembler.mark(condition_false);
         self.set_depth(base_depth);
         self.assembler
             .set_location(self.source_location(comparison.range));
-        self.emit_implicit_return()?;
+        self.emit_deferred_implicit_return()?;
         self.set_depth(base_depth);
         Ok(())
     }
@@ -1749,7 +1899,7 @@ impl Compiler {
         self.compile_assignment_targets(&assignment.targets)?;
         self.assembler
             .set_location(self.source_location(assignment.targets[0].range()));
-        self.emit_implicit_return()?;
+        self.emit_deferred_implicit_return()?;
 
         self.assembler.mark(otherwise);
         self.set_depth(base_depth);
@@ -1757,7 +1907,7 @@ impl Compiler {
         self.compile_assignment_targets(&assignment.targets)?;
         self.assembler
             .set_location(self.source_location(assignment.targets[0].range()));
-        self.emit_implicit_return()?;
+        self.emit_deferred_implicit_return()?;
         self.set_depth(base_depth);
         Ok(())
     }
@@ -1808,8 +1958,16 @@ impl Compiler {
             }
             self.assembler
                 .set_location(self.source_location(expression.range));
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
             self.emit(COPY, 1, 1)?;
             self.emit(TO_BOOL, 0, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            if self.generator_region_start.is_some() {
+                self.generator_region_exclusions
+                    .push((exclusion_start, exclusion_end));
+            }
             self.emit_jump_forward(jump, short_circuit, -1)?;
             self.emit(NOT_TAKEN, 0, 0)?;
             self.assembler.mark(continue_outer);
@@ -1955,21 +2113,8 @@ impl Compiler {
                         self.compile_store_target(target)?;
                     }
                 } else {
-                    let defer_restore = match assignment.value.as_ref() {
-                        Expr::ListComp(comprehension) => comprehension
-                            .generators
-                            .iter()
-                            .any(|generator| generator.is_async),
-                        Expr::SetComp(comprehension) => comprehension
-                            .generators
-                            .iter()
-                            .any(|generator| generator.is_async),
-                        Expr::DictComp(comprehension) => comprehension
-                            .generators
-                            .iter()
-                            .any(|generator| generator.is_async),
-                        _ => false,
-                    };
+                    let defer_restore =
+                        expression_defers_async_comprehension_restore(&assignment.value);
                     let previous_defer = std::mem::replace(
                         &mut self.defer_async_comprehension_restore,
                         defer_restore,
@@ -2052,9 +2197,12 @@ impl Compiler {
                 if discarded_comprehension {
                     return Ok(());
                 }
-                if matches!(expression.value.as_ref(), Expr::BoolOp(_))
-                    || matches!(expression.value.as_ref(), Expr::Compare(compare) if compare.ops.len() > 1)
-                {
+                self.mark_definitely_evaluated_locals(&expression.value);
+                let preserve_no_location = matches!(
+                    expression.value.as_ref(),
+                    Expr::BoolOp(_) | Expr::If(_)
+                ) || matches!(expression.value.as_ref(), Expr::Compare(compare) if compare.ops.len() > 1);
+                if preserve_no_location {
                     self.assembler.set_location(SourceLocation::NONE);
                 } else {
                     let discard_range = match expression.value.as_ref() {
@@ -2064,10 +2212,19 @@ impl Compiler {
                         Expr::FString(fstring) => self.fstring_result_range(fstring),
                         expression => expression.range(),
                     };
-                    self.assembler
-                        .set_location(self.source_location(discard_range));
+                    if matches!(expression.value.as_ref(), Expr::BinOp(binary) if optimized_percent_format(binary).is_some())
+                        && let Some(location) = self.assembler.last_instruction_location()
+                    {
+                        self.assembler.set_location(location);
+                    } else {
+                        self.assembler
+                            .set_location(self.source_location(discard_range));
+                    }
                 }
                 self.emit(POP_TOP, 0, -1)?;
+                if preserve_no_location {
+                    self.assembler.preserve_last_no_location();
+                }
             }
             Stmt::Pass(_) => {}
             Stmt::If(statement) => self.compile_if(statement)?,
@@ -2104,13 +2261,23 @@ impl Compiler {
                 if !matches!(self.scope, Scope::Function { .. }) {
                     return Err(unsupported("return outside a function"));
                 }
-                let returns_none = statement
+                let return_is_overridden = self.active_overriding_finally_returns > 0;
+                let preserve_tos = statement
                     .value
                     .as_deref()
-                    .is_none_or(|value| matches!(value, Expr::NoneLiteral(_)));
-                let unwinds_with = !self.active_with_exit_locations.is_empty();
+                    .is_some_and(|value| !is_literal_constant(value));
                 let unwinds_pass_finally = !self.active_pass_finally_locations.is_empty();
-                if returns_none && unwinds_with {
+                let overriding_unwind_start = if return_is_overridden
+                    && !preserve_tos
+                    && !self.active_exception_region_exclusions.is_empty()
+                {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
+                } else {
+                    None
+                };
+                if !preserve_tos {
                     let range = statement
                         .value
                         .as_deref()
@@ -2128,13 +2295,63 @@ impl Compiler {
                     for name in newly_owned {
                         self.owned_load_locals.remove(&name);
                     }
-                    if is_literal_constant(value) {
-                        self.assembler
-                            .set_location(self.source_location(value.range()));
-                    }
+                }
+                let exception_unwind_start = if overriding_unwind_start.is_some() {
+                    overriding_unwind_start
+                } else if !self.active_exception_region_exclusions.is_empty()
+                    && self.active_with_exit_locations.is_empty()
+                    && !unwinds_pass_finally
+                {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
                 } else {
-                    let none = self.add_constant(Constant::None)?;
-                    self.emit(LOAD_CONST, none, 1)?;
+                    None
+                };
+                let loops = self.loops.clone();
+                let handlers = if !return_is_overridden
+                    && self.active_with_exit_locations.is_empty()
+                    && !unwinds_pass_finally
+                {
+                    self.active_exception_handlers.clone()
+                } else {
+                    Vec::new()
+                };
+                let mut next_loop = loops.len();
+                for handler in handlers.iter().rev() {
+                    for context in loops[handler.loop_depth..next_loop].iter().rev() {
+                        match context.iterator_cleanup {
+                            IteratorCleanup::None => {}
+                            IteratorCleanup::Sync | IteratorCleanup::Async => {
+                                if preserve_tos {
+                                    self.emit(SWAP, 2, 0)?;
+                                }
+                                self.emit(POP_TOP, 0, -1)?;
+                            }
+                        }
+                    }
+                    if preserve_tos {
+                        self.emit(SWAP, 2, 0)?;
+                    }
+                    self.emit(POP_EXCEPT, 0, -1)?;
+                    if let Some(name) = &handler.name {
+                        let none = self.add_constant(Constant::None)?;
+                        self.emit(LOAD_CONST, none, 1)?;
+                        self.store_name(name)?;
+                        self.delete_name(name)?;
+                    }
+                    next_loop = handler.loop_depth;
+                }
+                for context in loops[..next_loop].iter().rev() {
+                    match context.iterator_cleanup {
+                        IteratorCleanup::None => {}
+                        IteratorCleanup::Sync | IteratorCleanup::Async => {
+                            if preserve_tos {
+                                self.emit(SWAP, 2, 0)?;
+                            }
+                            self.emit(POP_TOP, 0, -1)?;
+                        }
+                    }
                 }
                 let with_unwind_start = if self.active_with_exit_locations.is_empty() {
                     None
@@ -2145,7 +2362,7 @@ impl Compiler {
                 };
                 for location in self.active_with_exit_locations.clone().into_iter().rev() {
                     self.assembler.set_location(location);
-                    if !returns_none {
+                    if preserve_tos {
                         self.emit(SWAP, 3, 0)?;
                         self.emit(SWAP, 2, 0)?;
                     }
@@ -2168,11 +2385,66 @@ impl Compiler {
                 } else {
                     None
                 };
-                if returns_none && (unwinds_with || unwinds_pass_finally) {
-                    let none = self.add_constant(Constant::None)?;
-                    self.emit(LOAD_CONST, none, 1)?;
+                if !preserve_tos && !return_is_overridden {
+                    if let Some(value) = &statement.value {
+                        if with_unwind_start.is_some() || finally_unwind_start.is_some() {
+                            let constant = fold_constant(value).ok_or_else(|| {
+                                CompileError::Internal(
+                                    "literal return value did not fold to a constant".to_string(),
+                                )
+                            })?;
+                            self.emit_preprocessed_constant(value, constant)?;
+                        } else if {
+                            let location = self.source_location(statement.range);
+                            location.line != location.end_line
+                        } {
+                            self.assembler
+                                .set_location(self.source_location(statement.range));
+                            let constant = fold_constant(value).ok_or_else(|| {
+                                CompileError::Internal(
+                                    "literal return value did not fold to a constant".to_string(),
+                                )
+                            })?;
+                            self.emit_preprocessed_constant(value, constant)?;
+                        } else {
+                            self.assembler
+                                .set_location(self.source_location(value.range()));
+                            self.compile_expression(value)?;
+                        }
+                    } else {
+                        let none = self.add_constant(Constant::None)?;
+                        self.emit(LOAD_CONST, none, 1)?;
+                    }
                 }
-                self.emit(RETURN_VALUE, 0, -1)?;
+                let return_exclusion_start = if exception_unwind_start.is_none()
+                    && finally_unwind_start.is_none()
+                    && !self.active_exception_region_exclusions.is_empty()
+                {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
+                } else {
+                    None
+                };
+                if return_is_overridden {
+                    if preserve_tos {
+                        self.assembler
+                            .set_location(self.source_location(statement.range));
+                        self.emit(POP_TOP, 0, -1)?;
+                    }
+                } else {
+                    self.emit(RETURN_VALUE, 0, -1)?;
+                }
+                if exception_unwind_start.is_some() || return_exclusion_start.is_some() {
+                    let return_exclusion_end = self.assembler.label();
+                    self.assembler.mark(return_exclusion_end);
+                    let exclusion_start = exception_unwind_start
+                        .or(return_exclusion_start)
+                        .expect("return exclusion has a start");
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((exclusion_start, return_exclusion_end));
+                    }
+                }
                 if with_unwind_start.is_some() || finally_unwind_start.is_some() {
                     let unwind_end = self.assembler.label();
                     self.assembler.mark(unwind_end);
@@ -2221,7 +2493,7 @@ impl Compiler {
     }
 
     fn compile_if(&mut self, statement: &ruff_python_ast::StmtIf) -> Result<(), CompileError> {
-        if let Some(truthiness) = literal_truthiness(&statement.test)
+        if let Some(truthiness) = early_condition_truthiness(&statement.test)
             && statement.elif_else_clauses.len() <= 1
             && statement
                 .elif_else_clauses
@@ -2243,6 +2515,7 @@ impl Compiler {
                 }
             } else {
                 self.pre_register_suite_names(&statement.body)?;
+                self.assembler.disable_load_fast_borrowing();
                 if let Some(clause) = statement.elif_else_clauses.first() {
                     self.compile_suite(&clause.body)?;
                 }
@@ -2274,6 +2547,7 @@ impl Compiler {
                 let condition_result = self.compile_jump_if(test, false, next);
                 self.exclude_terminal_if_not_taken = previous_exclusion;
                 condition_result?;
+                self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
                 self.compile_suite(body)?;
                 if self.assembler.instruction_count() == body_start
@@ -2309,7 +2583,12 @@ impl Compiler {
     }
 
     fn set_branch_end_location(&mut self, body: &[Stmt], body_start: usize) {
-        if self.assembler.instruction_count() > body_start
+        if let Some(Stmt::If(statement)) = body.last()
+            && let Some(test) = terminating_if_fallthrough_test(statement)
+        {
+            self.assembler
+                .set_location(self.source_location(test.range()));
+        } else if self.assembler.instruction_count() > body_start
             && let Some(location) = self.assembler.last_instruction_location()
         {
             self.assembler.set_location(location);
@@ -2339,6 +2618,30 @@ impl Compiler {
         restart: Label,
     ) -> Result<(), CompileError> {
         let base_depth = self.depth;
+        if statement.elif_else_clauses.is_empty() {
+            let body = statement.body.as_slice();
+            let body_label = self.assembler.label();
+            let generator_exclusion = self.generator_region_start.map(|_| self.assembler.label());
+            self.compile_jump_if(&statement.test, true, body_label)?;
+            if let Some(exclusion_start) = generator_exclusion {
+                self.assembler
+                    .mark_before_trailing_instructions(exclusion_start, 2);
+            }
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            self.assembler.mark(body_label);
+            if let Some(exclusion_start) = generator_exclusion {
+                self.generator_region_exclusions
+                    .push((exclusion_start, body_label));
+            }
+            self.set_depth(base_depth);
+            let body_start = self.assembler.instruction_count();
+            let nested_tail = self.compile_loop_tail_suite(body, restart)?;
+            if !nested_tail && !suite_terminates(body) {
+                self.set_branch_end_location(body, body_start);
+                self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            }
+            return Ok(());
+        }
         let mut branches: Vec<(Option<&Expr>, &[Stmt])> =
             vec![(Some(&statement.test), statement.body.as_slice())];
         branches.extend(
@@ -2347,9 +2650,35 @@ impl Compiler {
                 .iter()
                 .map(|clause| (clause.test.as_ref(), clause.body.as_slice())),
         );
+        let branch_count = branches.len();
         let has_else = branches.last().is_some_and(|(test, _)| test.is_none());
 
-        for (test, body) in branches {
+        for (branch_index, (test, body)) in branches.into_iter().enumerate() {
+            if !has_else && branch_index + 1 == branch_count {
+                let test = test.expect("last branch without else has a test");
+                let body_label = self.assembler.label();
+                let generator_exclusion =
+                    self.generator_region_start.map(|_| self.assembler.label());
+                self.compile_jump_if(test, true, body_label)?;
+                if let Some(exclusion_start) = generator_exclusion {
+                    self.assembler
+                        .mark_before_trailing_instructions(exclusion_start, 2);
+                }
+                self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+                self.assembler.mark(body_label);
+                if let Some(exclusion_start) = generator_exclusion {
+                    self.generator_region_exclusions
+                        .push((exclusion_start, body_label));
+                }
+                self.set_depth(base_depth);
+                let body_start = self.assembler.instruction_count();
+                let nested_tail = self.compile_loop_tail_suite(body, restart)?;
+                if !nested_tail && !suite_terminates(body) {
+                    self.set_branch_end_location(body, body_start);
+                    self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+                }
+                return Ok(());
+            }
             let next = test.map(|_| self.assembler.label());
             if let (Some(test), Some(next)) = (test, next) {
                 self.compile_jump_if(test, false, next)?;
@@ -2442,9 +2771,13 @@ impl Compiler {
             }
             let mut guard_always_false = false;
             if let Some(guard) = &case.guard {
-                if let Some(truthiness) = literal_truthiness(guard) {
-                    self.assembler
-                        .set_location(self.source_location(guard.range()));
+                if let Some(truthiness) = early_condition_truthiness(guard) {
+                    let range = if is_wildcard_pattern(&case.pattern) {
+                        case.pattern.range()
+                    } else {
+                        guard.range()
+                    };
+                    self.assembler.set_location(self.source_location(range));
                     self.emit(NOP, 0, 0)?;
                     if !truthiness {
                         self.ensure_match_fail_pop(&mut context, 0);
@@ -2464,6 +2797,7 @@ impl Compiler {
                     );
                     self.emit(POP_TOP, 0, -1)?;
                 }
+                let body_previous_location = self.assembler.last_instruction_location();
                 let body_start = self.assembler.instruction_count();
                 self.compile_suite(&case.body)?;
                 if !suite_terminates(&case.body) {
@@ -2472,7 +2806,17 @@ impl Compiler {
                         self.emit_deferred_implicit_return()?;
                     } else {
                         self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                        if self.assembler.instruction_count() == body_start + 1 {
+                        let subject_pop_is_optimized_away = !copied_subject
+                            && context.stores.is_empty()
+                            && fold_constant(&statement.subject).is_some();
+                        let previous_instruction_covers_branch = context.fail_pop.is_empty()
+                            && !subject_pop_is_optimized_away
+                            && body_previous_location.is_some_and(|location| {
+                                location.line == self.assembler.location().line
+                            });
+                        if self.assembler.instruction_count() == body_start + 1
+                            && !previous_instruction_covers_branch
+                        {
                             self.assembler.preserve_last_inlined_jump_nop();
                         }
                     }
@@ -2888,7 +3232,7 @@ impl Compiler {
             .iter()
             .map(|keyword| Constant::String(keyword.attr.as_str().to_string()))
             .collect();
-        let keyword_names = self.add_constant(Constant::Tuple(keyword_names))?;
+        let keyword_names = self.add_interned_string_tuple(keyword_names)?;
         self.emit(LOAD_CONST, keyword_names, 1)?;
         self.emit(
             MATCH_CLASS,
@@ -3192,7 +3536,7 @@ impl Compiler {
             .iter()
             .map(|keyword| Constant::String(keyword.attr.as_str().to_string()))
             .collect();
-        let keywords = self.add_constant(Constant::Tuple(keywords))?;
+        let keywords = self.add_interned_string_tuple(keywords)?;
         self.emit(LOAD_CONST, keywords, 1)?;
         self.emit(
             MATCH_CLASS,
@@ -3247,7 +3591,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtWhile,
     ) -> Result<(), CompileError> {
         let base_depth = self.depth;
-        if let Some(truthiness) = literal_truthiness(&statement.test) {
+        if let Some(truthiness) = early_condition_truthiness(&statement.test) {
             if self.constants.is_empty()
                 && let Some(constant) = fold_constant(&statement.test)
             {
@@ -3278,6 +3622,7 @@ impl Compiler {
                 self.set_branch_end_location(&statement.body, body_start);
                 self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
             }
+            self.pre_register_suite_names(&statement.orelse)?;
             self.assembler.mark(end);
             self.set_depth(base_depth);
             if statement.orelse.is_empty() {
@@ -3293,7 +3638,9 @@ impl Compiler {
         self.assembler.mark(start);
         let previous_exception_exclusion = std::mem::replace(
             &mut self.exclude_condition_not_taken_from_exception,
-            !self.active_exception_region_exclusions.is_empty(),
+            !self.active_exception_region_exclusions.is_empty()
+                || self.active_terminal_withs > 0
+                || self.generator_region_start.is_some(),
         );
         let condition_result = self.compile_jump_if(&statement.test, false, else_label);
         self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
@@ -3314,6 +3661,25 @@ impl Compiler {
 
         self.assembler.mark(else_label);
         self.set_depth(base_depth);
+        if statement.orelse.is_empty() && !self.active_with_region_exclusions.is_empty() {
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
+            self.assembler
+                .set_location(self.source_location(statement.test.range()));
+            self.emit(NOP, 0, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            if self.generator_region_start.is_some() {
+                self.generator_region_exclusions
+                    .push((exclusion_start, exclusion_end));
+            }
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.push((exclusion_start, exclusion_end));
+            }
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((exclusion_start, exclusion_end));
+            }
+        }
         self.compile_suite(&statement.orelse)?;
         self.assembler.mark(end);
         self.set_depth(base_depth);
@@ -3326,9 +3692,13 @@ impl Compiler {
 
     fn compile_for(&mut self, statement: &ruff_python_ast::StmtFor) -> Result<(), CompileError> {
         let base_depth = self.depth;
+        let has_break = suite_contains_loop_break(&statement.body);
         let start = self.assembler.label();
         let cleanup = self.assembler.label();
         let end = self.assembler.label();
+        let mut newly_initialized_targets = Vec::new();
+        collect_target_names(&statement.target, &mut newly_initialized_targets);
+        newly_initialized_targets.retain(|name| !self.initialized_locals.contains(name));
 
         self.compile_iterable_expression(&statement.iter)?;
         self.assembler
@@ -3365,8 +3735,13 @@ impl Compiler {
             .set_location(self.source_location(statement.iter.range()));
         self.emit(END_FOR, 0, -1)?;
         self.emit(POP_ITER, 0, -1)?;
+        for name in &newly_initialized_targets {
+            self.initialized_locals.remove(name);
+        }
         self.compile_suite(&statement.orelse)?;
-        self.assembler.mark(end);
+        if has_break {
+            self.assembler.mark(end);
+        }
         self.set_depth(base_depth);
         Ok(())
     }
@@ -3380,6 +3755,7 @@ impl Compiler {
         }
 
         let base_depth = self.depth;
+        let has_break = suite_contains_loop_break(&statement.body);
         let start = self.assembler.label();
         let protected_start = self.assembler.label();
         let yielded = self.assembler.label();
@@ -3390,6 +3766,9 @@ impl Compiler {
         let cleanup_throw = self.assembler.label();
         let async_cleanup = self.assembler.label();
         let end = self.assembler.label();
+        let mut newly_initialized_targets = Vec::new();
+        collect_target_names(&statement.target, &mut newly_initialized_targets);
+        newly_initialized_targets.retain(|name| !self.initialized_locals.contains(name));
 
         self.compile_expression(&statement.iter)?;
         let iterator_location = self.source_location(statement.iter.range());
@@ -3471,8 +3850,13 @@ impl Compiler {
             (base_depth + 1).cast_unsigned(),
             false,
         );
+        for name in &newly_initialized_targets {
+            self.initialized_locals.remove(name);
+        }
         self.compile_suite(&statement.orelse)?;
-        self.assembler.mark(end);
+        if has_break {
+            self.assembler.mark(end);
+        }
         self.set_depth(base_depth);
         Ok(())
     }
@@ -3512,29 +3896,44 @@ impl Compiler {
             }
             Expr::Subscript(target) => {
                 self.compile_expression(&target.value)?;
-                if let Expr::Slice(slice) = target.slice.as_ref()
-                    && let Some(constant) = constant_slice(slice)
+                let optimized_slice = if let Expr::Slice(slice) = target.slice.as_ref()
+                    && two_element_slice_optimization(slice)
                 {
-                    let index = self.add_constant(constant)?;
-                    self.assembler
-                        .set_location(self.source_location(slice.range));
-                    self.emit(LOAD_CONST, index, 1)?;
+                    let slice_location = self.source_location(slice.range);
+                    self.compile_optional_slice_bound(slice.lower.as_deref(), slice_location)?;
+                    self.compile_optional_slice_bound(slice.upper.as_deref(), slice_location)?;
+                    true
                 } else {
                     self.compile_expression(&target.slice)?;
-                }
+                    false
+                };
                 let target_location = self.source_location(target.range);
                 self.assembler.set_location(target_location);
-                self.emit(COPY, 2, 1)?;
-                self.emit(COPY, 2, 1)?;
-                self.emit(BINARY_OP, 26, -1)?;
+                if optimized_slice {
+                    self.emit(COPY, 3, 1)?;
+                    self.emit(COPY, 3, 1)?;
+                    self.emit(COPY, 3, 1)?;
+                    self.emit(BINARY_SLICE, 0, -2)?;
+                } else {
+                    self.emit(COPY, 2, 1)?;
+                    self.emit(COPY, 2, 1)?;
+                    self.emit(BINARY_OP, 26, -1)?;
+                }
                 self.compile_expression(&assignment.value)?;
                 self.assembler
                     .set_location(self.source_location(assignment.range));
                 self.emit(BINARY_OP, binary_operator(assignment.op, true), -1)?;
                 self.assembler.set_location(target_location);
-                self.emit(Opcode::new(117, 0), 3, 0)?;
-                self.emit(Opcode::new(117, 0), 2, 0)?;
-                self.emit(STORE_SUBSCR, 0, -3)?;
+                if optimized_slice {
+                    self.emit(SWAP, 4, 0)?;
+                    self.emit(SWAP, 3, 0)?;
+                    self.emit(SWAP, 2, 0)?;
+                    self.emit(STORE_SLICE, 0, -4)?;
+                } else {
+                    self.emit(SWAP, 3, 0)?;
+                    self.emit(SWAP, 2, 0)?;
+                    self.emit(STORE_SUBSCR, 0, -3)?;
+                }
             }
             _ => return Err(unsupported("augmented assignment target")),
         }
@@ -3565,7 +3964,8 @@ impl Compiler {
                 self.assembler
                     .set_location(self.source_location(assignment.range));
                 self.load_name("__annotations__")?;
-                self.load_string_constant(target.id.as_str())?;
+                let target = self.mangled_name(target.id.as_str());
+                self.load_string_constant(&target)?;
                 self.emit(STORE_SUBSCR, 0, -3)?;
             } else {
                 let index = self.module_annotation_index;
@@ -3649,6 +4049,14 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtAssert,
     ) -> Result<(), CompileError> {
+        if early_condition_truthiness(&statement.test) == Some(true) {
+            if let Some(constant) = fold_constant(&statement.test) {
+                self.add_constant(constant)?;
+            }
+            self.assembler
+                .set_location(self.source_location(statement.test.range()));
+            return self.emit(NOP, 0, 0);
+        }
         let base_depth = self.depth;
         let end = self.assembler.label();
         let previous_exclusion = std::mem::replace(
@@ -3720,6 +4128,8 @@ impl Compiler {
         if emit_statement_nop {
             let statement_nop_start = self.assembler.label();
             self.assembler.mark(statement_nop_start);
+            self.assembler
+                .set_location(self.source_location_including_trailing_semicolon(statement.range));
             self.emit(NOP, 0, 0)?;
             let statement_nop_end = self.assembler.label();
             self.assembler.mark(statement_nop_end);
@@ -3747,16 +4157,33 @@ impl Compiler {
                 })
                 .flatten();
             self.assembler.mark(try_end);
+            if !statement.orelse.is_empty()
+                && let Some(location) = location
+            {
+                self.assembler.set_location(location);
+                self.emit(NOP, 0, 0)?;
+            }
             location
         };
         let try_exclusions = self
             .active_exception_region_exclusions
             .pop()
             .expect("active try region has exclusion collector");
+        let orelse_instruction_count = self.assembler.instruction_count();
         self.compile_suite(&statement.orelse)?;
+        let orelse_noop_location = (self.assembler.instruction_count() == orelse_instruction_count)
+            .then(|| {
+                statement
+                    .orelse
+                    .last()
+                    .map(|statement| self.source_location(statement.range()))
+            })
+            .flatten();
         if direct_continue {
         } else if terminal {
-            if matches!(statement.body.last(), Some(Stmt::Try(_))) {
+            if let Some(location) = orelse_noop_location {
+                self.assembler.set_location(location);
+            } else if matches!(statement.body.last(), Some(Stmt::Try(_))) {
                 self.assembler.set_location(SourceLocation::NONE);
             } else if statement.orelse.is_empty()
                 && let Some(location) = body_noop_location
@@ -3765,16 +4192,35 @@ impl Compiler {
             } else if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
             }
-            self.emit_implicit_return()?;
+            self.emit_deferred_implicit_return()?;
         } else {
-            if statement.orelse.is_empty()
+            if let Some(location) = orelse_noop_location {
+                self.assembler.set_location(location);
+            } else if statement.orelse.is_empty()
                 && let Some(location) = body_noop_location
             {
                 self.assembler.set_location(location);
             } else if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
             }
+            let exit_exclusion_start = if self.active_overriding_finally_returns > 0
+                && body_noop_location.is_some()
+                && !self.active_exception_region_exclusions.is_empty()
+            {
+                let start = self.assembler.label();
+                self.assembler.mark(start);
+                Some(start)
+            } else {
+                None
+            };
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            if let Some(exit_exclusion_start) = exit_exclusion_start {
+                let exit_exclusion_end = self.assembler.label();
+                self.assembler.mark(exit_exclusion_end);
+                for exclusions in &mut self.active_exception_region_exclusions {
+                    exclusions.push((exit_exclusion_start, exit_exclusion_end));
+                }
+            }
             if self.prevent_try_exit_inlining {
                 self.assembler.prevent_last_jump_inlining();
             }
@@ -3800,7 +4246,7 @@ impl Compiler {
                 CompileError::Internal("invalid exception handler node".to_string())
             })?;
             let next_handler = self.assembler.label();
-            let handler_location = self.source_location(handler.range);
+            let handler_location = self.source_location_including_trailing_semicolon(handler.range);
             final_handler_location = handler_location;
             self.set_depth(base_depth + 2);
             let mut not_taken_exclusion = None;
@@ -3824,7 +4270,7 @@ impl Compiler {
                 self.emit(NOT_TAKEN, 0, 0)?;
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
-                if handler_index > 0 && handler_index + 1 == statement.handlers.len() {
+                if handler_index > 0 {
                     not_taken_exclusion = Some((exclusion_start, exclusion_end));
                 }
             } else if handler_index + 1 != statement.handlers.len() {
@@ -3980,20 +4426,45 @@ impl Compiler {
                 .name
                 .as_ref()
                 .is_some_and(|name| !self.owned_load_locals.insert(name.to_string()));
-            let terminal_handler_exclusions = if terminal
+            let terminal_handler_if = if terminal
                 && let Some(name) = &handler.name
                 && let [Stmt::If(statement)] = handler.body.as_slice()
                 && terminal_exception_handler_if_supported(statement)
             {
-                Some(self.compile_terminal_exception_handler_if(
-                    statement,
-                    name.as_str(),
-                    base_depth + 1,
-                )?)
+                Some((statement, name.as_str()))
             } else {
-                self.compile_suite(&handler.body)?;
                 None
             };
+            let (terminal_handler_exclusions, mut handler_region_exclusions) =
+                if let Some((statement, name)) = terminal_handler_if {
+                    (
+                        Some(self.compile_terminal_exception_handler_if(
+                            statement,
+                            name,
+                            base_depth + 1,
+                        )?),
+                        Vec::new(),
+                    )
+                } else {
+                    self.active_exception_region_exclusions.push(Vec::new());
+                    self.active_exception_handlers
+                        .push(ExceptionHandlerContext {
+                            name: handler.name.as_ref().map(ToString::to_string),
+                            loop_depth: self.loops.len(),
+                        });
+                    let result = self.compile_suite(&handler.body);
+                    self.active_exception_handlers.pop();
+                    result?;
+                    (
+                        None,
+                        self.active_exception_region_exclusions
+                            .pop()
+                            .expect("exception handler has an exclusion collector"),
+                    )
+                };
+            if let Some(exclusions) = &terminal_handler_exclusions {
+                handler_region_exclusions.extend_from_slice(exclusions);
+            }
             if let Some(name) = &handler.name
                 && !previously_owned
             {
@@ -4005,11 +4476,11 @@ impl Compiler {
             let handler_body_has_instructions =
                 self.assembler.instruction_count() > handler_body_start;
             self.assembler.mark(body_end);
-            if handler.name.is_some() && handler_body_has_instructions {
+            if handler.name.is_some() {
                 self.add_exception_regions_with_exclusions(
                     body_start,
                     body_end,
-                    terminal_handler_exclusions.as_deref().unwrap_or_default(),
+                    &handler_region_exclusions,
                     name_cleanup,
                     (base_depth + 1).cast_unsigned(),
                     true,
@@ -4019,9 +4490,7 @@ impl Compiler {
             if let Some(exclusion) = not_taken_exclusion {
                 dispatch_exclusions.push(exclusion);
             }
-            if let Some(exclusions) = &terminal_handler_exclusions {
-                dispatch_exclusions.extend(exclusions);
-            }
+            dispatch_exclusions.extend_from_slice(&handler_region_exclusions);
             self.add_exception_regions_with_exclusions(
                 dispatch_start,
                 body_end,
@@ -4045,10 +4514,12 @@ impl Compiler {
                     self.delete_name(name.as_str())?;
                 }
                 if terminal {
-                    self.emit_implicit_return()?;
+                    self.emit_deferred_implicit_return()?;
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                    if self.prevent_try_exit_inlining {
+                    let return_is_overridden = self.active_overriding_finally_returns > 0
+                        && matches!(handler.body.last(), Some(Stmt::Return(_)));
+                    if self.prevent_try_exit_inlining && !return_is_overridden {
                         self.assembler.prevent_last_jump_inlining();
                     }
                 }
@@ -4121,25 +4592,43 @@ impl Compiler {
         let reraise = self.assembler.label();
 
         if emit_statement_nop {
+            self.assembler
+                .set_location(self.source_location_including_trailing_semicolon(statement.range));
             self.emit(NOP, 0, 0)?;
         }
         self.assembler.mark(try_start);
+        self.active_exception_region_exclusions.push(Vec::new());
         let body_instruction_start = self.assembler.instruction_count();
         self.compile_suite(&statement.body)?;
-        if self.assembler.instruction_count() == body_instruction_start
-            && let Some(statement) = statement.body.last()
-        {
-            self.assembler
-                .set_location(self.source_location(statement.range()));
+        let body_noop_location = (self.assembler.instruction_count() == body_instruction_start)
+            .then(|| {
+                statement
+                    .body
+                    .last()
+                    .map(|statement| self.source_location(statement.range()))
+            })
+            .flatten();
+        let body_fallthrough_location =
+            body_noop_location.or_else(|| self.assembler.last_instruction_location());
+        if !terminal && let Some(location) = body_noop_location {
+            self.assembler.set_location(location);
             self.emit(NOP, 0, 0)?;
         }
         self.assembler.mark(try_end);
-        self.assembler.set_location(SourceLocation::NONE);
-        self.assembler
-            .emit_forward_with_depth(JUMP_FORWARD, orelse, self.depth.cast_unsigned());
-        self.assembler.add_exception_region(
+        let try_exclusions = self
+            .active_exception_region_exclusions
+            .pop()
+            .expect("active try-star region has exclusion collector");
+        self.assembler.set_location(if terminal {
+            body_fallthrough_location.unwrap_or(SourceLocation::NONE)
+        } else {
+            SourceLocation::NONE
+        });
+        self.emit_jump_forward(JUMP_FORWARD, orelse, 0)?;
+        self.add_exception_regions_with_exclusions(
             try_start,
             try_end,
+            &try_exclusions,
             handler_start,
             base_depth.cast_unsigned(),
             false,
@@ -4156,7 +4645,7 @@ impl Compiler {
             let handler = handler.as_except_handler().ok_or_else(|| {
                 CompileError::Internal("invalid exception-group handler node".to_string())
             })?;
-            let handler_location = self.source_location(handler.range);
+            let handler_location = self.source_location_including_trailing_semicolon(handler.range);
             let next_handler = self.assembler.label();
             let handler_error = self.assembler.label();
             let no_match = self.assembler.label();
@@ -4217,6 +4706,14 @@ impl Compiler {
                 self.emit(LIST_APPEND, 1, -1)?;
                 self.emit_jump_forward(JUMP_FORWARD, reraise_star, 0)?;
             } else {
+                if body_has_instructions
+                    && let Some(location) = self.assembler.last_instruction_location()
+                {
+                    self.assembler.set_location(location);
+                } else if let Some(statement) = handler.body.last() {
+                    self.assembler
+                        .set_location(self.source_location(statement.range()));
+                }
                 self.emit_jump_forward(JUMP_FORWARD, next_handler, 0)?;
             }
 
@@ -4312,11 +4809,14 @@ impl Compiler {
         self.assembler.mark(orelse);
         self.set_depth(base_depth);
         self.compile_suite(&statement.orelse)?;
-        if terminal {
-            self.emit_implicit_return()?;
-        }
         self.assembler.mark(end);
         self.set_depth(base_depth);
+        if terminal {
+            if let Some(location) = self.assembler.last_instruction_location() {
+                self.assembler.set_location(location);
+            }
+            self.emit_implicit_return()?;
+        }
         Ok(())
     }
 
@@ -4480,27 +4980,35 @@ impl Compiler {
         if let Some(location) = pass_finally_location {
             self.active_pass_finally_locations.push(location);
         }
-        let protected_has_instructions = if statement.handlers.is_empty() {
-            let instruction_count = self.assembler.instruction_count();
-            self.compile_suite(&statement.body)?;
-            let has_instructions = self.assembler.instruction_count() > instruction_count;
-            if !has_instructions {
-                if let Some(last) = statement.body.last() {
-                    self.assembler
-                        .set_location(self.source_location(last.range()));
+        let previous_overriding_finally_returns = self.active_overriding_finally_returns;
+        if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
+            self.active_overriding_finally_returns += 1;
+        }
+        let protected_result = (|| -> Result<bool, CompileError> {
+            if statement.handlers.is_empty() {
+                let instruction_count = self.assembler.instruction_count();
+                self.compile_suite(&statement.body)?;
+                let has_instructions = self.assembler.instruction_count() > instruction_count;
+                if !has_instructions {
+                    if let Some(last) = statement.body.last() {
+                        self.assembler
+                            .set_location(self.source_location(last.range()));
+                    }
+                    self.emit(NOP, 0, 0)?;
                 }
-                self.emit(NOP, 0, 0)?;
+                Ok(has_instructions)
+            } else {
+                let mut inner = statement.clone();
+                inner.finalbody.clear();
+                let previous = std::mem::replace(&mut self.prevent_try_exit_inlining, true);
+                let result = self.compile_try_inner(&inner, false, false);
+                self.prevent_try_exit_inlining = previous;
+                result?;
+                Ok(true)
             }
-            has_instructions
-        } else {
-            let mut inner = statement.clone();
-            inner.finalbody.clear();
-            let previous = std::mem::replace(&mut self.prevent_try_exit_inlining, true);
-            let result = self.compile_try_inner(&inner, false, false);
-            self.prevent_try_exit_inlining = previous;
-            result?;
-            true
-        };
+        })();
+        self.active_overriding_finally_returns = previous_overriding_finally_returns;
+        let protected_has_instructions = protected_result?;
         if pass_finally_location.is_some() {
             self.active_pass_finally_locations.pop();
         }
@@ -4525,7 +5033,7 @@ impl Compiler {
                 .filter(|statement| statement_uses_implicit_return_location(statement))
             {
                 self.assembler
-                    .set_location(self.source_location(implicit_return_range(statement)));
+                    .set_location(self.source_location(implicit_return_range(self, statement)));
             } else if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
             }
@@ -4597,7 +5105,7 @@ impl Compiler {
                     .filter(|statement| statement_uses_implicit_return_location(statement))
                 {
                     self.assembler
-                        .set_location(self.source_location(implicit_return_range(statement)));
+                        .set_location(self.source_location(implicit_return_range(self, statement)));
                 } else if let Some(location) = self.assembler.last_instruction_location() {
                     self.assembler.set_location(location);
                 }
@@ -4808,9 +5316,11 @@ impl Compiler {
         self.active_with_exit_locations
             .push(self.source_location(item.context_expr.range()));
         self.active_with_region_exclusions.push(Vec::new());
+        self.active_terminal_withs += usize::from(terminal);
         let mut body_noop = None;
         if remaining.is_empty() {
             let body_start = self.assembler.instruction_count();
+            let body_previous_location = self.assembler.last_instruction_location();
             let terminal_if = matches!(
                 body.last(),
                 Some(Stmt::If(statement))
@@ -4834,7 +5344,16 @@ impl Compiler {
             } else {
                 self.compile_suite(body)?;
             }
-            if self.assembler.instruction_count() == body_start
+            let trailing_nop_is_covered =
+                body_previous_location.is_some_and(|previous| {
+                    previous.line >= 0
+                        && self
+                            .assembler
+                            .last_instruction_location()
+                            .is_some_and(|last| last.line == previous.line)
+                }) && self.assembler.take_trailing_nop_location().is_some();
+            if !trailing_nop_is_covered
+                && self.assembler.instruction_count() == body_start
                 && let Some(statement) = body.last()
             {
                 body_noop = Some(statement.range());
@@ -4844,6 +5363,7 @@ impl Compiler {
         } else {
             self.compile_with_items(remaining, body, false)?;
         }
+        self.active_terminal_withs -= usize::from(terminal);
         let region_exclusions = self
             .active_with_region_exclusions
             .pop()
@@ -4869,8 +5389,8 @@ impl Compiler {
 
         self.assembler
             .set_location(self.source_location(item.context_expr.range()));
+        let none = self.add_constant(Constant::None)?;
         if !suite_terminates(body) {
-            let none = self.add_constant(Constant::None)?;
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(LOAD_CONST, none, 1)?;
@@ -5002,15 +5522,29 @@ impl Compiler {
         } else {
             self.emit(POP_TOP, 0, -1)?;
         }
+        let body_start = self.assembler.instruction_count();
         if remaining.is_empty() {
             self.compile_suite(body)?;
         } else {
             self.compile_async_with_items(remaining, body, false)?;
         }
-        let region_exclusions = self
+        if remaining.is_empty()
+            && self.assembler.instruction_count() == body_start
+            && let Some(statement) = body.last()
+        {
+            self.assembler
+                .set_location(self.source_location(statement.range()));
+            self.emit(NOP, 0, 0)?;
+        }
+        let mut region_exclusions = self
             .active_with_region_exclusions
             .pop()
             .expect("active async with statement has region exclusions");
+        if remaining.is_empty()
+            && matches!(body, [Stmt::Expr(expression)] if fold_constant(&expression.value).is_some())
+        {
+            region_exclusions.clear();
+        }
         self.assembler.mark(protected_end);
 
         self.assembler
@@ -5265,7 +5799,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_ANNOTATIONS);
+        } | (self.flags & CO_FUTURE_MASK);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -5278,6 +5812,7 @@ impl Compiler {
             0,
             wrapper_flags,
         )?;
+        wrapper.private_name.clone_from(&self.private_name);
         wrapper
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -5367,19 +5902,27 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_ANNOTATIONS);
+        } | (self.flags & CO_FUTURE_MASK);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
-            self.line_number(u32::from(definition.range.start())),
+            self.line_number(u32::from(
+                definition
+                    .decorator_list
+                    .first()
+                    .map_or(definition.range.start(), |decorator| {
+                        decorator.expression.range().start()
+                    }),
+            )),
             wrapper_plan,
             0,
             0,
             0,
             wrapper_flags,
         )?;
+        wrapper.private_name.clone_from(&self.private_name);
         wrapper
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -5403,15 +5946,11 @@ impl Compiler {
         if !wrapper_closure_names.is_empty() {
             self.emit_closure_tuple(&wrapper_closure_names)?;
         }
-        let name_location = self.source_location(definition.name.range());
-        let (end_line, end_column) = self.source_position(u32::from(definition.range.end()));
-        let definition_location = SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location
-                .column
-                .saturating_sub(if definition.is_async { 10 } else { 4 }),
-            end_column,
+        let definition_location = self.definition_location(
+            definition.range,
+            definition.name.range(),
+            b"def",
+            definition.is_async,
         );
         self.assembler.set_location(definition_location);
         let code = self.add_constant(Constant::Code(Box::new(wrapper)))?;
@@ -5439,15 +5978,11 @@ impl Compiler {
         for decorator in &definition.decorator_list {
             self.compile_expression(&decorator.expression)?;
         }
-        let name_location = self.source_location(definition.name.range());
-        let (end_line, end_column) = self.source_position(u32::from(definition.range.end()));
-        let definition_location = SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location
-                .column
-                .saturating_sub(if definition.is_async { 10 } else { 4 }),
-            end_column,
+        let definition_location = self.definition_location(
+            definition.range,
+            definition.name.range(),
+            b"def",
+            definition.is_async,
         );
 
         let positional_defaults: Vec<_> = parameters
@@ -5462,12 +5997,8 @@ impl Compiler {
                 .map(|default| fold_constant(default))
                 .collect::<Option<Vec<_>>>()
             {
-                if self.constants.is_empty()
-                    && let Some(seed) = positional_defaults
-                        .iter()
-                        .find_map(|default| first_literal_constant(default))
-                {
-                    self.add_constant(seed)?;
+                for default in &positional_defaults {
+                    self.record_folded_value(default)?;
                 }
                 self.assembler.set_location(definition_location);
                 self.emit_deferred_constant(Constant::Tuple(defaults))?;
@@ -5493,7 +6024,7 @@ impl Compiler {
         if !keyword_defaults.is_empty() {
             for (name, default) in &keyword_defaults {
                 self.assembler.set_location(definition_location);
-                let name = self.add_constant(Constant::String((*name).to_string()))?;
+                let name = self.add_constant(Constant::String(self.mangled_name(name)))?;
                 self.emit(LOAD_CONST, name, 1)?;
                 self.compile_expression(default)?;
             }
@@ -5553,7 +6084,7 @@ impl Compiler {
                 }
         } else {
             0
-        }) | (self.flags & CO_FUTURE_ANNOTATIONS);
+        }) | (self.flags & CO_FUTURE_MASK);
         if definition.is_async && suite_contains_yield(&definition.body) {
             parameter_flags |= CO_ASYNC_GENERATOR;
         } else if definition.is_async {
@@ -5565,7 +6096,14 @@ impl Compiler {
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
-        let first_line_number = self.line_number(u32::from(definition.range.start()));
+        let first_line_number = self.line_number(u32::from(
+            definition
+                .decorator_list
+                .first()
+                .map_or(definition.range.start(), |decorator| {
+                    decorator.expression.range().start()
+                }),
+        ));
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -5578,6 +6116,7 @@ impl Compiler {
             keyword_only_arg_count,
             parameter_flags,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -5682,19 +6221,27 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_ANNOTATIONS);
+        } | (self.flags & CO_FUTURE_MASK);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
-            self.line_number(u32::from(definition.range.start())),
+            self.line_number(u32::from(
+                definition
+                    .decorator_list
+                    .first()
+                    .map_or(definition.range.start(), |decorator| {
+                        decorator.expression.range().start()
+                    }),
+            )),
             plan,
             0,
             0,
             0,
             wrapper_flags,
         )?;
+        wrapper.private_name.clone_from(&self.private_name);
         wrapper
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -5702,27 +6249,19 @@ impl Compiler {
         wrapper.generic_target_qualified_name = Some(target_qualified_name);
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
-        let name_location = wrapper.source_location(definition.name.range());
-        let (end_line, end_column) = wrapper.source_position(u32::from(definition.range.end()));
-        wrapper.assembler.set_location(SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location.column.saturating_sub(6),
-            end_column,
+        wrapper.assembler.set_location(wrapper.definition_location(
+            definition.range,
+            definition.name.range(),
+            b"class",
+            false,
         ));
         wrapper.store_name(".type_params")?;
         wrapper.compile_plain_class_definition(&inner_definition)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
 
-        let name_location = self.source_location(definition.name.range());
-        let (end_line, end_column) = self.source_position(u32::from(definition.range.end()));
-        let definition_location = SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location.column.saturating_sub(6),
-            end_column,
-        );
+        let definition_location =
+            self.definition_location(definition.range, definition.name.range(), b"class", false);
         self.assembler.set_location(definition_location);
         let code = self.add_constant(Constant::Code(Box::new(wrapper)))?;
         self.emit(LOAD_CONST, code, 1)?;
@@ -5775,7 +6314,14 @@ impl Compiler {
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
-        let first_line_number = self.line_number(u32::from(definition.range.start()));
+        let first_line_number = self.line_number(u32::from(
+            definition
+                .decorator_list
+                .first()
+                .map_or(definition.range.start(), |decorator| {
+                    decorator.expression.range().start()
+                }),
+        ));
         let needs_class_closure =
             class_needs_class_closure(&definition.body, self.flags & CO_FUTURE_ANNOTATIONS != 0);
         let needs_classdict = self.flags & CO_FUTURE_ANNOTATIONS == 0
@@ -5792,7 +6338,7 @@ impl Compiler {
             freevars,
             needs_class_closure,
             needs_classdict,
-            self.flags & CO_FUTURE_ANNOTATIONS,
+            self.flags & CO_FUTURE_MASK,
         );
         child
             .type_parameter_names
@@ -5802,14 +6348,8 @@ impl Compiler {
             .clone_from(&self.imported_scope_names);
         let child = child.compile_class_body(&definition.body)?;
 
-        let name_location = self.source_location(definition.name.range());
-        let (end_line, end_column) = self.source_position(u32::from(definition.range.end()));
-        let definition_location = SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location.column.saturating_sub(6),
-            end_column,
-        );
+        let definition_location =
+            self.definition_location(definition.range, definition.name.range(), b"class", false);
         self.assembler.set_location(definition_location);
         self.emit(LOAD_BUILD_CLASS, 0, 1)?;
         self.emit(PUSH_NULL, 0, 1)?;
@@ -5900,7 +6440,7 @@ impl Compiler {
                         Constant::String(keyword.arg.as_ref().unwrap().as_str().to_string())
                     })
                     .collect();
-                let names = self.add_constant(Constant::Tuple(keyword_names))?;
+                let names = self.add_interned_string_tuple(keyword_names)?;
                 self.emit(LOAD_CONST, names, 1)?;
                 let count = to_u32(argument_count + 2, "class argument count")?;
                 self.emit(CALL_KW, count, -i32::try_from(argument_count).unwrap() - 4)?;
@@ -6002,6 +6542,18 @@ impl Compiler {
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
+        // Definitions inside an annotation scope are qualified against that
+        // scope's parent. Generic-parameter wrappers are themselves annotation
+        // scopes even though this compiler represents them as functions.
+        let child_qualified_name_parent = if self.generic_target_qualified_name.is_some() {
+            self.qualified_name.clone()
+        } else {
+            match self.scope {
+                Scope::Module => String::new(),
+                Scope::Class { .. } => self.qualified_name.clone(),
+                Scope::Function { .. } => format!("{}.<locals>", self.qualified_name),
+            }
+        };
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -6020,11 +6572,13 @@ impl Compiler {
             1,
             1,
             0,
-            (if nested { CO_NESTED } else { 0 }) | (self.flags & CO_FUTURE_ANNOTATIONS),
+            (if nested { CO_NESTED } else { 0 }) | (self.flags & CO_FUTURE_MASK),
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
+        child.child_qualified_name_parent = Some(child_qualified_name_parent);
         child.emit_function_prologue()?;
         child
             .assembler
@@ -6079,7 +6633,7 @@ impl Compiler {
     ) -> Result<Option<CodeObject>, CompileError> {
         let parameters = &definition.parameters;
         let mut annotations = Vec::<(String, &Expr)>::new();
-        for parameter in parameters.posonlyargs.iter().chain(&parameters.args) {
+        for parameter in parameters.args.iter().chain(&parameters.posonlyargs) {
             if let Some(annotation) = parameter.parameter.annotation.as_deref() {
                 annotations.push((parameter.name().as_str().to_string(), annotation));
             }
@@ -6141,7 +6695,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        }) | (self.flags & CO_FUTURE_ANNOTATIONS);
+        }) | (self.flags & CO_FUTURE_MASK);
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -6162,6 +6716,7 @@ impl Compiler {
             0,
             parameter_flags,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -6170,15 +6725,11 @@ impl Compiler {
             child.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
         }
         child.emit_function_prologue()?;
-        let name_location = self.source_location(definition.name.range());
-        let (end_line, end_column) = self.source_position(u32::from(definition.range.end()));
-        let location = SourceLocation::new(
-            name_location.line,
-            end_line,
-            name_location
-                .column
-                .saturating_sub(if definition.is_async { 10 } else { 4 }),
-            end_column,
+        let location = self.definition_location(
+            definition.range,
+            definition.name.range(),
+            b"def",
+            definition.is_async,
         );
         child.assembler.set_location(location);
 
@@ -6187,12 +6738,17 @@ impl Compiler {
         let future_annotations = self.flags & CO_FUTURE_ANNOTATIONS != 0;
         for (name, annotation) in &annotations {
             child.assembler.set_location(location);
-            child.load_string_constant(name)?;
+            let name = child.mangled_name(name);
+            child.load_string_constant(&name)?;
             if future_annotations {
                 child
                     .assembler
                     .set_location(child.source_location(annotation.range()));
                 child.load_string_constant(&unparse_annotation(annotation))?;
+            } else if let Expr::Starred(starred) = annotation {
+                child.compile_expression(&starred.value)?;
+                child.assembler.set_location(location);
+                child.emit(UNPACK_SEQUENCE, 1, 0)?;
             } else {
                 child.compile_expression(annotation)?;
             }
@@ -6263,6 +6819,7 @@ impl Compiler {
             0,
             parameter_flags,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -6287,7 +6844,8 @@ impl Compiler {
                 .assembler
                 .set_location(child.source_location(annotation.range));
             child.emit(COPY, 2, 1)?;
-            child.load_string_constant(target.id.as_str())?;
+            let target = child.mangled_name(target.id.as_str());
+            child.load_string_constant(&target)?;
             child.assembler.set_location(setup_location);
             child.emit(STORE_SUBSCR, 0, -3)?;
         }
@@ -6329,6 +6887,7 @@ impl Compiler {
             0,
             0,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -6389,14 +6948,19 @@ impl Compiler {
         if matches!(expression, Expr::BoolOp(_))
             && let Some((origin, constant)) = folded_bool_operand(expression)
         {
-            self.assembler
-                .set_location(self.source_location(origin.range()));
+            let expression_location = self.source_location(expression.range());
+            let origin_location = self.source_location(origin.range());
+            if expression_location.line != origin_location.line {
+                self.assembler.set_location(expression_location);
+                self.emit(NOP, 0, 0)?;
+            }
+            self.assembler.set_location(origin_location);
             self.emit_folded_constant(origin, constant)?;
             return Ok(());
         }
         if matches!(
             expression,
-            Expr::BinOp(_) | Expr::Name(_) | Expr::UnaryOp(_) | Expr::Tuple(_)
+            Expr::BinOp(_) | Expr::Name(_) | Expr::Subscript(_) | Expr::UnaryOp(_) | Expr::Tuple(_)
         ) && let Some(constant) = fold_constant(expression)
         {
             self.emit_folded_constant(expression, constant)?;
@@ -6421,7 +6985,10 @@ impl Compiler {
             Expr::NumberLiteral(number) => {
                 let constant = match &number.value {
                     Number::Int(value) => value.as_u64().map_or_else(
-                        || Constant::BigInt(big_integer_digits(&value.to_string())),
+                        || Constant::BigInt {
+                            negative: false,
+                            digits: big_integer_digits(&value.to_string()),
+                        },
                         Constant::Int,
                     ),
                     Number::Float(value) => Constant::Float(*value),
@@ -6452,9 +7019,11 @@ impl Compiler {
                 self.emit(LOAD_CONST, index, 1)?;
             }
             Expr::BinOp(binary) => {
-                self.compile_expression(&binary.left)?;
-                self.compile_expression(&binary.right)?;
-                self.emit(BINARY_OP, binary_operator(binary.op, false), -1)?;
+                if !self.compile_optimized_percent_format(binary)? {
+                    self.compile_expression(&binary.left)?;
+                    self.compile_expression(&binary.right)?;
+                    self.emit(BINARY_OP, binary_operator(binary.op, false), -1)?;
+                }
             }
             Expr::UnaryOp(unary) => {
                 self.compile_expression(&unary.operand)?;
@@ -6473,7 +7042,7 @@ impl Compiler {
                 self.compile_call(call)?;
             }
             Expr::Attribute(attribute) if attribute.ctx == ExprContext::Load => {
-                if !self.compile_zero_super_attribute(attribute, false)? {
+                if !self.compile_super_attribute(attribute, false)? {
                     self.compile_expression(&attribute.value)?;
                     let index = self.name_index(attribute.attr.as_str())?;
                     self.assembler
@@ -6569,7 +7138,15 @@ impl Compiler {
                     self.emit(CALL_INTRINSIC_1, 4, 0)?;
                 }
                 self.emit(YIELD_VALUE, 0, 0)?;
-                self.emit(RESUME, 5, 0)?;
+                self.emit(
+                    RESUME,
+                    if self.generator_region_start.is_some() {
+                        5
+                    } else {
+                        1
+                    },
+                    0,
+                )?;
             }
             Expr::YieldFrom(expression) => {
                 if self.flags & CO_GENERATOR == 0 {
@@ -6589,7 +7166,15 @@ impl Compiler {
                 self.assembler.mark(yielded);
                 self.emit(YIELD_VALUE, 1, 0)?;
                 self.assembler.mark(yielded_end);
-                self.emit(RESUME, 2, 0)?;
+                self.emit(
+                    RESUME,
+                    if self.generator_region_start.is_some() {
+                        2
+                    } else {
+                        6
+                    },
+                    0,
+                )?;
                 self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
                 self.assembler.mark(cleanup);
                 self.assembler.add_exception_region(
@@ -6675,6 +7260,26 @@ impl Compiler {
                     self.record_folded_value(element)?;
                 }
             }
+            Expr::Subscript(subscript) => {
+                self.record_folded_value(&subscript.value)?;
+                if let Expr::Slice(slice) = subscript.slice.as_ref() {
+                    if let Some(constant) = constant_slice(slice) {
+                        self.add_constant(constant)?;
+                    } else {
+                        for bound in [slice.lower.as_deref(), slice.upper.as_deref()]
+                            .into_iter()
+                            .flatten()
+                        {
+                            self.record_folded_value(bound)?;
+                        }
+                    }
+                } else if !matches!(
+                    fold_constant(&subscript.slice),
+                    Some(Constant::Int(value)) if u8::try_from(value).is_ok()
+                ) {
+                    self.record_folded_value(&subscript.slice)?;
+                }
+            }
             Expr::UnaryOp(unary) => self.record_folded_value(&unary.operand)?,
             _ => {}
         }
@@ -6683,6 +7288,12 @@ impl Compiler {
 
     fn record_folded_value(&mut self, expression: &Expr) -> Result<(), CompileError> {
         if let Some(constant) = literal_constant(expression) {
+            self.add_constant(constant)?;
+            return Ok(());
+        }
+        if matches!(expression, Expr::Slice(_))
+            && let Some(constant) = fold_constant(expression)
+        {
             self.add_constant(constant)?;
             return Ok(());
         }
@@ -6753,6 +7364,9 @@ impl Compiler {
             let Some((value, range)) = pending.take() else {
                 return Ok(());
             };
+            if value.is_empty() {
+                return Ok(());
+            }
             compiler
                 .assembler
                 .set_location(compiler.source_location(range));
@@ -6767,19 +7381,27 @@ impl Compiler {
 
         let mut component_count = 0_usize;
         let mut has_pending_literal = false;
+        let mut has_interpolation = false;
         for part in &fstring.value {
             match part {
-                FStringPart::Literal(_) => has_pending_literal = true,
+                FStringPart::Literal(literal) => {
+                    has_pending_literal |= !literal.value.is_empty();
+                }
                 FStringPart::FString(fstring) => {
                     for element in &fstring.elements {
                         match element {
-                            InterpolatedStringElement::Literal(_) => has_pending_literal = true,
+                            InterpolatedStringElement::Literal(literal) => {
+                                has_pending_literal |= !literal.value.is_empty();
+                            }
                             InterpolatedStringElement::Interpolation(interpolation) => {
+                                has_interpolation = true;
+                                if interpolation.debug_text.is_some() {
+                                    has_pending_literal = true;
+                                }
                                 if std::mem::take(&mut has_pending_literal) {
                                     component_count += 1;
                                 }
-                                component_count +=
-                                    1 + usize::from(interpolation.debug_text.is_some());
+                                component_count += 1;
                             }
                         }
                     }
@@ -6789,6 +7411,11 @@ impl Compiler {
         component_count += usize::from(has_pending_literal);
         let large = component_count > 30;
         let outer_location = self.source_location(fstring.range);
+        let single_literal_range = if component_count == 1 && !has_interpolation {
+            Some(self.fstring_result_range(fstring))
+        } else {
+            None
+        };
         if large {
             self.assembler.set_location(outer_location);
             self.load_string_constant("")?;
@@ -6802,15 +7429,36 @@ impl Compiler {
         for part in &fstring.value {
             match part {
                 FStringPart::Literal(literal) => {
-                    append_literal(&mut pending_literal, &literal.value, literal.range);
+                    append_literal(
+                        &mut pending_literal,
+                        &literal.value,
+                        single_literal_range.unwrap_or(literal.range),
+                    );
                 }
                 FStringPart::FString(fstring) => {
                     for element in &fstring.elements {
                         match element {
                             InterpolatedStringElement::Literal(literal) => {
-                                append_literal(&mut pending_literal, &literal.value, literal.range);
+                                append_literal(
+                                    &mut pending_literal,
+                                    &literal.value,
+                                    single_literal_range.unwrap_or(literal.range),
+                                );
                             }
                             InterpolatedStringElement::Interpolation(interpolation) => {
+                                if let Some(debug) = &interpolation.debug_text {
+                                    let debug_text = strip_expression_comments(&format!(
+                                        "{}{}{}",
+                                        debug.leading(),
+                                        debug.expression(),
+                                        debug.trailing()
+                                    ));
+                                    append_literal(
+                                        &mut pending_literal,
+                                        &debug_text,
+                                        debug_text_range(interpolation),
+                                    );
+                                }
                                 flush_literal(
                                     self,
                                     &mut pending_literal,
@@ -6818,22 +7466,6 @@ impl Compiler {
                                     large,
                                     outer_location,
                                 )?;
-                                if let Some(debug) = &interpolation.debug_text {
-                                    self.assembler.set_location(
-                                        self.source_location(debug_text_range(interpolation)),
-                                    );
-                                    self.load_string_constant(&format!(
-                                        "{}{}{}",
-                                        debug.leading(),
-                                        debug.expression(),
-                                        debug.trailing()
-                                    ))?;
-                                    value_count += 1;
-                                    if large {
-                                        self.assembler.set_location(outer_location);
-                                        self.emit(LIST_APPEND, 1, -1)?;
-                                    }
-                                }
                                 self.compile_interpolation(interpolation)?;
                                 value_count += 1;
                                 if large {
@@ -6873,6 +7505,17 @@ impl Compiler {
                     strings.last_mut().unwrap().push_str(&literal.value);
                 }
                 InterpolatedStringElement::Interpolation(interpolation) => {
+                    if let Some(debug) = &interpolation.debug_text {
+                        strings
+                            .last_mut()
+                            .unwrap()
+                            .push_str(&strip_expression_comments(&format!(
+                                "{}{}{}",
+                                debug.leading(),
+                                debug.expression(),
+                                debug.trailing()
+                            )));
+                    }
                     interpolations.push(interpolation);
                     strings.push(String::new());
                 }
@@ -6883,26 +7526,26 @@ impl Compiler {
             .into_iter()
             .map(Constant::String)
             .collect::<Vec<_>>();
-        if self.constants.is_empty()
-            && let Some(seed) = strings.first().cloned()
-        {
-            self.add_constant(seed)?;
+        for string in &strings {
+            self.add_constant(string.clone())?;
         }
         self.emit_deferred_constant(Constant::Tuple(strings))?;
         for interpolation in &interpolations {
             self.compile_expression(&interpolation.expression)?;
             self.assembler
                 .set_location(self.source_location(interpolation.range));
-            let expression_text = if let Some(debug) = &interpolation.debug_text {
-                debug.expression().to_string()
-            } else {
-                let start = usize::from(interpolation.range.start()) + 1;
-                let end = usize::from(interpolation.expression.range().end());
-                self.source[start..end].to_string()
-            };
+            let expression_text = self.interpolation_expression_text(interpolation);
             self.load_string_constant(&expression_text)?;
 
-            let mut argument = 2 | match interpolation.conversion {
+            let conversion = if interpolation.debug_text.is_some()
+                && interpolation.format_spec.is_none()
+                && interpolation.conversion == ConversionFlag::None
+            {
+                ConversionFlag::Repr
+            } else {
+                interpolation.conversion
+            };
+            let mut argument = 2 | match conversion {
                 ConversionFlag::None => 0,
                 ConversionFlag::Str => 4,
                 ConversionFlag::Repr => 8,
@@ -6915,6 +7558,8 @@ impl Compiler {
             } else {
                 -1
             };
+            self.assembler
+                .set_location(self.source_location(interpolation.range));
             self.emit(BUILD_INTERPOLATION, argument, effect)?;
         }
         self.assembler
@@ -6927,37 +7572,91 @@ impl Compiler {
         self.emit(BUILD_TEMPLATE, 0, -1)
     }
 
+    fn interpolation_expression_text(
+        &self,
+        interpolation: &ruff_python_ast::InterpolatedElement,
+    ) -> String {
+        let start = usize::from(interpolation.range.start()) + 1;
+        let expression_end = usize::from(interpolation.expression.range().end());
+        let interpolation_end = usize::from(interpolation.range.end()).saturating_sub(1);
+        let trailing = &self.source[expression_end..interpolation_end];
+        let delimiter = if interpolation.debug_text.is_some() {
+            trailing.find('=')
+        } else if interpolation.conversion != ConversionFlag::None {
+            trailing.find('!')
+        } else if interpolation.format_spec.is_some() {
+            trailing.find(':')
+        } else {
+            None
+        };
+        let end = delimiter.map_or(interpolation_end, |offset| expression_end + offset);
+        strip_expression_comments(&self.source[start..end])
+            .trim_end()
+            .to_string()
+    }
+
     fn compile_interpolated_elements(
         &mut self,
         elements: &ruff_python_ast::InterpolatedStringElements,
         range: ruff_text_size::TextRange,
     ) -> Result<(), CompileError> {
+        fn append_literal(
+            pending: &mut Option<(String, ruff_text_size::TextRange)>,
+            value: &str,
+            range: ruff_text_size::TextRange,
+        ) {
+            if let Some((pending_value, pending_range)) = pending {
+                pending_value.push_str(value);
+                *pending_range = ruff_text_size::TextRange::new(pending_range.start(), range.end());
+            } else {
+                *pending = Some((value.to_string(), range));
+            }
+        }
+
+        fn flush_literal(
+            compiler: &mut Compiler,
+            pending: &mut Option<(String, ruff_text_size::TextRange)>,
+            value_count: &mut usize,
+        ) -> Result<(), CompileError> {
+            let Some((value, range)) = pending.take() else {
+                return Ok(());
+            };
+            compiler
+                .assembler
+                .set_location(compiler.source_location(range));
+            compiler.load_string_constant(&value)?;
+            *value_count += 1;
+            Ok(())
+        }
+
         let mut value_count = 0_usize;
+        let mut pending_literal = None;
         for element in elements {
             match element {
                 InterpolatedStringElement::Literal(literal) => {
-                    self.assembler
-                        .set_location(self.source_location(literal.range));
-                    self.load_string_constant(&literal.value)?;
-                    value_count += 1;
+                    append_literal(&mut pending_literal, &literal.value, literal.range);
                 }
                 InterpolatedStringElement::Interpolation(interpolation) => {
                     if let Some(debug) = &interpolation.debug_text {
-                        self.assembler
-                            .set_location(self.source_location(debug_text_range(interpolation)));
-                        self.load_string_constant(&format!(
+                        let debug_text = strip_expression_comments(&format!(
                             "{}{}{}",
                             debug.leading(),
                             debug.expression(),
                             debug.trailing()
-                        ))?;
-                        value_count += 1;
+                        ));
+                        append_literal(
+                            &mut pending_literal,
+                            &debug_text,
+                            debug_text_range(interpolation),
+                        );
                     }
+                    flush_literal(self, &mut pending_literal, &mut value_count)?;
                     self.compile_interpolation(interpolation)?;
                     value_count += 1;
                 }
             }
         }
+        flush_literal(self, &mut pending_literal, &mut value_count)?;
         let range = ruff_text_size::TextRange::new(
             ruff_text_size::TextSize::new(u32::from(range.start()).saturating_sub(1)),
             range.end(),
@@ -6992,6 +7691,58 @@ impl Compiler {
         } else {
             self.emit(FORMAT_SIMPLE, 0, 0)
         }
+    }
+
+    fn compile_optimized_percent_format(
+        &mut self,
+        expression: &ExprBinOp,
+    ) -> Result<bool, CompileError> {
+        let Some(parts) = optimized_percent_format(expression) else {
+            return Ok(false);
+        };
+
+        let expression_location = self.source_location(expression.range);
+        let part_count = parts.len();
+        for part in parts {
+            match part {
+                PercentFormatPart::Literal(value) => {
+                    // The preprocessing pass synthesizes these constants without
+                    // source locations.
+                    self.assembler.set_location(SourceLocation::NONE);
+                    self.load_string_constant(&value)?;
+                }
+                PercentFormatPart::Formatted {
+                    expression,
+                    conversion,
+                    format_spec,
+                } => {
+                    self.compile_expression(expression)?;
+                    let location = self.source_location(expression.range());
+                    self.assembler.set_location(location);
+                    self.emit(CONVERT_VALUE, conversion, 0)?;
+                    if let Some(format_spec) = format_spec {
+                        self.assembler.set_location(SourceLocation::NONE);
+                        self.load_string_constant(&format_spec)?;
+                        self.assembler.set_location(location);
+                        self.emit(FORMAT_WITH_SPEC, 0, -1)?;
+                    } else {
+                        self.emit(FORMAT_SIMPLE, 0, 0)?;
+                    }
+                }
+            }
+        }
+
+        self.assembler.set_location(expression_location);
+        match part_count {
+            0 => self.load_string_constant("")?,
+            1 => {}
+            count => self.emit(
+                BUILD_STRING,
+                to_u32(count, "percent-format component count")?,
+                1 - i32::try_from(count).unwrap(),
+            )?,
+        }
+        Ok(true)
     }
 
     fn load_string_constant(&mut self, value: &str) -> Result<(), CompileError> {
@@ -7079,14 +7830,8 @@ impl Compiler {
             .keywords
             .iter()
             .any(|keyword| keyword.arg.is_none());
-        let direct_method = if !has_starred
-            && !has_keyword_unpack
-            && call.arguments.keywords.len() <= 15
-            && call.arguments.args.len() + call.arguments.keywords.len() < 30
-            && let Expr::Attribute(attribute) = call.func.as_ref()
-            && !self.imported_module_attribute(attribute)
-        {
-            if !self.compile_zero_super_attribute(attribute, true)? {
+        let direct_method = if let Some(attribute) = self.direct_method_attribute(call) {
+            if !self.compile_super_attribute(attribute, true)? {
                 self.compile_expression(&attribute.value)?;
                 let index = self.name_index(attribute.attr.as_str())?;
                 self.assembler
@@ -7175,10 +7920,14 @@ impl Compiler {
                 .iter()
                 .map(|keyword| Constant::String(keyword.arg.as_ref().unwrap().as_str().to_string()))
                 .collect();
-            let names = self.add_constant(Constant::Tuple(keyword_names))?;
+            let names = self.add_interned_string_tuple(keyword_names)?;
             if direct_method {
-                self.assembler
-                    .set_location(self.source_location(call.func.range()));
+                let range = if let Expr::Attribute(attribute) = call.func.as_ref() {
+                    self.attribute_opcode_range(attribute)
+                } else {
+                    call.func.range()
+                };
+                self.assembler.set_location(self.source_location(range));
             }
             self.emit(LOAD_CONST, names, 1)?;
             self.assembler
@@ -7205,31 +7954,75 @@ impl Compiler {
         if call.arguments.keywords.is_empty() {
             self.emit(PUSH_NULL, 0, 1)?;
         } else {
-            let mut keywords = call.arguments.keywords.iter();
-            let first = keywords.next().unwrap();
-            if let Some(name) = &first.arg {
-                let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
-                self.emit(LOAD_CONST, key, 1)?;
-                self.compile_expression(&first.value)?;
-                self.emit(BUILD_MAP, 1, -1)?;
-            } else {
-                self.emit(BUILD_MAP, 0, 1)?;
-                self.compile_expression(&first.value)?;
-                self.emit(DICT_MERGE, 1, -1)?;
-            }
-            for keyword in keywords {
-                if let Some(name) = &keyword.arg {
-                    let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
-                    self.emit(LOAD_CONST, key, 1)?;
-                    self.compile_expression(&keyword.value)?;
-                    self.emit(BUILD_MAP, 1, -1)?;
-                } else {
-                    self.compile_expression(&keyword.value)?;
+            let mut have_dict = false;
+            let mut named_start = 0;
+            for (index, keyword) in call.arguments.keywords.iter().enumerate() {
+                if keyword.arg.is_some() {
+                    continue;
                 }
+                if named_start < index {
+                    self.compile_keyword_map(call, &call.arguments.keywords[named_start..index])?;
+                    if have_dict {
+                        self.emit(DICT_MERGE, 1, -1)?;
+                    }
+                    have_dict = true;
+                }
+                if !have_dict {
+                    self.emit(BUILD_MAP, 0, 1)?;
+                    have_dict = true;
+                }
+                self.compile_expression(&keyword.value)?;
+                self.assembler
+                    .set_location(self.source_location(self.call_opcode_range(call)));
                 self.emit(DICT_MERGE, 1, -1)?;
+                named_start = index + 1;
+            }
+            if named_start < call.arguments.keywords.len() {
+                self.compile_keyword_map(call, &call.arguments.keywords[named_start..])?;
+                if have_dict {
+                    self.emit(DICT_MERGE, 1, -1)?;
+                }
             }
         }
         self.emit(CALL_FUNCTION_EX, 0, -3)
+    }
+
+    fn compile_keyword_map(
+        &mut self,
+        call: &ruff_python_ast::ExprCall,
+        keywords: &[Keyword],
+    ) -> Result<(), CompileError> {
+        debug_assert!(!keywords.is_empty() && keywords.iter().all(|keyword| keyword.arg.is_some()));
+        let call_location = self.source_location(self.call_opcode_range(call));
+        if keywords.len() * 2 > 30 {
+            self.assembler.set_location(SourceLocation::NONE);
+            self.emit(BUILD_MAP, 0, 1)?;
+            for keyword in keywords {
+                let name = keyword.arg.as_ref().unwrap();
+                let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
+                self.assembler.set_location(call_location);
+                self.emit(LOAD_CONST, key, 1)?;
+                self.compile_expression(&keyword.value)?;
+                self.assembler.set_location(SourceLocation::NONE);
+                self.emit(MAP_ADD, 1, -2)?;
+            }
+        } else {
+            for keyword in keywords {
+                let name = keyword.arg.as_ref().unwrap();
+                let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
+                self.assembler.set_location(call_location);
+                self.emit(LOAD_CONST, key, 1)?;
+                self.compile_expression(&keyword.value)?;
+            }
+            self.assembler.set_location(call_location);
+            let count = to_u32(keywords.len(), "keyword count")?;
+            self.emit(
+                BUILD_MAP,
+                count,
+                1 - i32::try_from(keywords.len() * 2).unwrap(),
+            )?;
+        }
+        Ok(())
     }
 
     fn imported_module_attribute(&self, attribute: &ruff_python_ast::ExprAttribute) -> bool {
@@ -7254,7 +8047,7 @@ impl Compiler {
         }
     }
 
-    fn compile_zero_super_attribute(
+    fn compile_super_attribute(
         &mut self,
         attribute: &ruff_python_ast::ExprAttribute,
         method: bool,
@@ -7267,11 +8060,60 @@ impl Compiler {
         };
         if super_name.id.as_str() != "super"
             || attribute.attr.as_str() == "__class__"
-            || !call.arguments.args.is_empty()
             || !call.arguments.keywords.is_empty()
-            || self.arg_count == 0
             || self.imported_scope_names.contains("super")
+            || self.imported_scope_names.contains(SHADOWED_SUPER_SENTINEL)
         {
+            return Ok(false);
+        }
+        let explicit = match call.arguments.args.as_ref() {
+            [] => false,
+            [first, second]
+                if !matches!(first, Expr::Starred(_)) && !matches!(second, Expr::Starred(_)) =>
+            {
+                true
+            }
+            _ => return Ok(false),
+        };
+        let globally_resolved = match &self.scope {
+            Scope::Module => true,
+            Scope::Function {
+                indices,
+                free_indices,
+                globals,
+                ..
+            } => {
+                globals.contains("super")
+                    && !indices.contains_key("super")
+                    && !free_indices.contains_key("super")
+            }
+            Scope::Class { .. } => false,
+        };
+        if !globally_resolved {
+            return Ok(false);
+        }
+
+        if explicit {
+            self.assembler
+                .set_location(self.source_location(super_name.range));
+            self.load_name("super")?;
+            self.compile_expression(&call.arguments.args[0])?;
+            self.compile_expression(&call.arguments.args[1])?;
+            self.assembler
+                .set_location(self.source_location(attribute.range));
+            let attribute_index = self.name_index(attribute.attr.as_str())?;
+            self.emit(
+                LOAD_SUPER_ATTR,
+                (attribute_index << 2) | 2 | u32::from(method),
+                if method { -1 } else { -2 },
+            )?;
+            self.assembler
+                .set_location(self.source_location(self.attribute_opcode_range(attribute)));
+            self.emit(NOP, 0, 0)?;
+            return Ok(true);
+        }
+
+        if self.arg_count == 0 {
             return Ok(false);
         }
         let (class_index, first_parameter) = match &self.scope {
@@ -7304,13 +8146,16 @@ impl Compiler {
         self.emit(LOAD_DEREF, class_index, 1)?;
         self.emit(LOAD_FAST, first_parameter, 1)?;
         self.assembler
-            .set_location(self.source_location(self.attribute_opcode_range(attribute)));
+            .set_location(self.source_location(attribute.range));
         let attribute_index = self.name_index(attribute.attr.as_str())?;
         self.emit(
             LOAD_SUPER_ATTR,
             (attribute_index << 2) | u32::from(method),
             if method { -1 } else { -2 },
         )?;
+        self.assembler
+            .set_location(self.source_location(self.attribute_opcode_range(attribute)));
+        self.emit(NOP, 0, 0)?;
         Ok(true)
     }
 
@@ -7358,10 +8203,23 @@ impl Compiler {
             .filter_map(|parameter| parameter.default.as_deref())
             .collect();
         if !positional_defaults.is_empty() {
-            for default in &positional_defaults {
-                self.compile_expression(default)?;
+            if let Some(defaults) = positional_defaults
+                .iter()
+                .map(|default| fold_constant(default))
+                .collect::<Option<Vec<_>>>()
+            {
+                for default in &positional_defaults {
+                    self.record_folded_value(default)?;
+                }
+                self.assembler
+                    .set_location(self.source_location(lambda.range));
+                self.emit_deferred_constant(Constant::Tuple(defaults))?;
+            } else {
+                for default in &positional_defaults {
+                    self.compile_expression(default)?;
+                }
+                self.emit_build(BUILD_TUPLE, positional_defaults.len())?;
             }
-            self.emit_build(BUILD_TUPLE, positional_defaults.len())?;
         }
         let keyword_defaults: Vec<_> = parameters
             .kwonlyargs
@@ -7375,7 +8233,7 @@ impl Compiler {
             .collect();
         if !keyword_defaults.is_empty() {
             for (name, default) in &keyword_defaults {
-                let name = self.add_constant(Constant::String((*name).to_string()))?;
+                let name = self.add_constant(Constant::String(self.mangled_name(name)))?;
                 self.emit(LOAD_CONST, name, 1)?;
                 self.compile_expression(default)?;
             }
@@ -7431,7 +8289,7 @@ impl Compiler {
             CO_METHOD
         } else {
             0
-        }) | (self.flags & CO_FUTURE_ANNOTATIONS);
+        }) | (self.flags & CO_FUTURE_MASK);
         if expression_contains_yield(&lambda.body) {
             parameter_flags |= CO_GENERATOR;
         }
@@ -7449,10 +8307,16 @@ impl Compiler {
             keyword_only,
             parameter_flags,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
         child.emit_function_prologue()?;
+        if parameter_flags & CO_GENERATOR != 0 {
+            // CPython does not wrap generator lambdas in the stop-iteration
+            // handler used by `def` generators and generator expressions.
+            child.generator_region_start = None;
+        }
         if let Expr::If(expression) = lambda.body.as_ref() {
             let otherwise = child.assembler.label();
             child.compile_jump_if(&expression.test, false, otherwise)?;
@@ -7546,6 +8410,16 @@ impl Compiler {
             collect_nested_comprehension_target_names(key, &mut temporary_names);
         }
         collect_nested_comprehension_target_names(value, &mut temporary_names);
+        let active_temporary_names = temporary_names.clone();
+        if let Some(key) = key {
+            collect_named_expression_target_names(key, &mut temporary_names);
+        }
+        collect_named_expression_target_names(value, &mut temporary_names);
+        for generator in generators {
+            for condition in &generator.ifs {
+                collect_named_expression_target_names(condition, &mut temporary_names);
+            }
+        }
         let mut seen_temporaries = HashSet::new();
         temporary_names.retain(|name| seen_temporaries.insert(name.clone()));
         let mut temporary_indices = Vec::with_capacity(temporary_names.len());
@@ -7560,7 +8434,7 @@ impl Compiler {
             0,
         )?;
         self.active_temporaries
-            .extend(temporary_names.iter().cloned());
+            .extend(active_temporary_names.iter().cloned());
 
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
@@ -7646,7 +8520,7 @@ impl Compiler {
                 }
             }
         }
-        for name in &temporary_names {
+        for name in &active_temporary_names {
             self.active_temporaries.remove(name);
         }
 
@@ -7712,15 +8586,12 @@ impl Compiler {
         }
         let mut seen = HashSet::new();
         locals.retain(|name| seen.insert(name.clone()));
-        let named_targets = generator_named_targets(generator);
+        let required_names = generator_required_names(generator);
+        let generator_cellvars = generator_cellvars(generator);
         let mut globals = HashSet::new();
         let mut freevars = BTreeSet::new();
-        for name in named_targets {
-            let captures_parent = matches!(
-                &self.scope,
-                Scope::Function { indices, .. } if indices.contains_key(&name)
-            );
-            if captures_parent {
+        for name in required_names {
+            if self.can_provide_closure(&name) {
                 freevars.insert(name);
             } else {
                 globals.insert(name);
@@ -7735,7 +8606,7 @@ impl Compiler {
             nonlocals: HashSet::new(),
             references: HashSet::new(),
             annotation_references: HashSet::new(),
-            cellvars: HashSet::new(),
+            cellvars: generator_cellvars,
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -7748,7 +8619,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_ANNOTATIONS);
+        } | (self.flags & CO_FUTURE_MASK);
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -7761,6 +8632,7 @@ impl Compiler {
             0,
             flags,
         )?;
+        child.private_name.clone_from(&self.private_name);
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
@@ -7985,6 +8857,38 @@ impl Compiler {
         accepted: Label,
         restart: Label,
     ) -> Result<(), CompileError> {
+        if early_condition_truthiness(condition) == Some(true) {
+            self.record_folded_value(condition)?;
+            return Ok(());
+        }
+        if let Expr::Compare(comparison) = condition
+            && comparison.ops.len() == 1
+            && matches!(comparison.comparators[0], Expr::NoneLiteral(_))
+            && matches!(comparison.ops[0], CmpOp::Is | CmpOp::IsNot)
+        {
+            self.compile_expression(&comparison.left)?;
+            self.add_constant(Constant::None)?;
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
+            self.assembler
+                .set_location(self.source_location(element.range()));
+            self.emit_jump_forward(
+                if comparison.ops[0] == CmpOp::Is {
+                    POP_JUMP_IF_NONE
+                } else {
+                    POP_JUMP_IF_NOT_NONE
+                },
+                accepted,
+                -1,
+            )?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            self.generator_region_exclusions
+                .push((exclusion_start, exclusion_end));
+            return Ok(());
+        }
         self.compile_expression(condition)?;
         self.assembler
             .set_location(self.source_location(condition.range()));
@@ -8010,6 +8914,40 @@ impl Compiler {
         accepted: Label,
         restart: Label,
     ) -> Result<(), CompileError> {
+        if early_condition_truthiness(condition) == Some(true) {
+            self.record_folded_value(condition)?;
+            return Ok(());
+        }
+        if let Expr::Compare(comparison) = condition
+            && comparison.ops.len() == 1
+            && matches!(comparison.comparators[0], Expr::NoneLiteral(_))
+            && matches!(comparison.ops[0], CmpOp::Is | CmpOp::IsNot)
+        {
+            self.compile_expression(&comparison.left)?;
+            self.add_constant(Constant::None)?;
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
+            self.assembler.set_location(element_location);
+            self.emit_jump_forward(
+                if comparison.ops[0] == CmpOp::Is {
+                    POP_JUMP_IF_NONE
+                } else {
+                    POP_JUMP_IF_NOT_NONE
+                },
+                accepted,
+                -1,
+            )?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            self.generator_region_exclusions
+                .push((exclusion_start, exclusion_end));
+            for exclusions in &mut self.active_comprehension_region_exclusions {
+                exclusions.push((exclusion_start, exclusion_end));
+            }
+            return Ok(());
+        }
         self.compile_expression(condition)?;
         self.assembler
             .set_location(self.source_location(condition.range()));
@@ -8315,6 +9253,17 @@ impl Compiler {
         kind: CollectionKind,
     ) -> Result<(), CompileError> {
         if !elements.iter().any(Expr::is_starred_expr) {
+            if kind == CollectionKind::Tuple
+                && let Some(constants) = elements
+                    .iter()
+                    .map(fold_constant)
+                    .collect::<Option<Vec<_>>>()
+            {
+                for element in elements {
+                    self.record_folded_value(element)?;
+                }
+                return self.emit_deferred_constant(Constant::Tuple(constants));
+            }
             if matches!(kind, CollectionKind::List | CollectionKind::Set)
                 && elements.len() >= 3
                 && let Some(constants) = elements
@@ -8330,7 +9279,7 @@ impl Compiler {
                     for constant in constants {
                         if !unique
                             .iter()
-                            .any(|existing| constants_equal(existing, &constant))
+                            .any(|existing| python_constants_equal(existing, &constant))
                         {
                             unique.push(constant);
                         }
@@ -8373,10 +9322,38 @@ impl Compiler {
             .iter()
             .position(Expr::is_starred_expr)
             .unwrap_or(elements.len());
-        for element in &elements[..unpacking_start] {
-            self.compile_expression(element)?;
+        if unpacking_start >= 3
+            && let Some(constants) = elements[..unpacking_start]
+                .iter()
+                .map(fold_constant)
+                .collect::<Option<Vec<_>>>()
+        {
+            for element in &elements[..unpacking_start] {
+                self.record_folded_value(element)?;
+            }
+            let constant = if kind == CollectionKind::Set {
+                let mut unique = Vec::with_capacity(constants.len());
+                for constant in constants {
+                    if !unique
+                        .iter()
+                        .any(|existing| python_constants_equal(existing, &constant))
+                    {
+                        unique.push(constant);
+                    }
+                }
+                Constant::FrozenSet(unique)
+            } else {
+                Constant::Tuple(constants)
+            };
+            self.emit(kind.build_opcode_for_unpacking(), 0, 1)?;
+            self.emit_deferred_constant(constant)?;
+            self.emit(kind.extend_opcode(), 1, -1)?;
+        } else {
+            for element in &elements[..unpacking_start] {
+                self.compile_expression(element)?;
+            }
+            self.emit_build(kind.build_opcode_for_unpacking(), unpacking_start)?;
         }
-        self.emit_build(kind.build_opcode_for_unpacking(), unpacking_start)?;
         for element in &elements[unpacking_start..] {
             if let Expr::Starred(starred) = element {
                 self.compile_expression(&starred.value)?;
@@ -8397,6 +9374,13 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(expression.range()));
         let result = match expression {
+            Expr::Tuple(tuple)
+                if tuple.elts.iter().any(Expr::is_starred_expr) || tuple.elts.len() > 30 =>
+            {
+                // CPython lowers these tuples through a temporary list, then removes the
+                // list-to-tuple intrinsic when the tuple is immediately iterated.
+                self.compile_collection(&tuple.elts, CollectionKind::List)
+            }
             Expr::List(list) if !list.elts.iter().any(Expr::is_starred_expr) => {
                 if let Some(constants) = list
                     .elts
@@ -8425,7 +9409,7 @@ impl Compiler {
                     let constant = fold_constant(element).unwrap();
                     if !unique
                         .iter()
-                        .any(|existing| constants_equal(existing, &constant))
+                        .any(|existing| python_constants_equal(existing, &constant))
                     {
                         unique.push(constant);
                     }
@@ -8514,6 +9498,11 @@ impl Compiler {
 
     fn compile_slice(&mut self, slice: &ruff_python_ast::ExprSlice) -> Result<(), CompileError> {
         let slice_location = self.source_location(slice.range);
+        if let Some(constant) = constant_slice(slice) {
+            let index = self.add_constant(constant)?;
+            self.assembler.set_location(slice_location);
+            return self.emit(LOAD_CONST, index, 1);
+        }
         for part in [&slice.lower, &slice.upper] {
             self.compile_optional_slice_bound(part.as_deref(), slice_location)?;
         }
@@ -8548,7 +9537,7 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprIf,
     ) -> Result<(), CompileError> {
-        if let Some(truthiness) = literal_truthiness(&expression.test) {
+        if let Some(truthiness) = early_condition_truthiness(&expression.test) {
             if let Some(constant) = fold_constant(&expression.test)
                 && (self.constants.is_empty() || matches!(constant, Constant::None))
             {
@@ -8582,7 +9571,32 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprBoolOp,
     ) -> Result<(), CompileError> {
-        let Some((last, leading)) = expression.values.split_last() else {
+        let mut effective = Vec::with_capacity(expression.values.len());
+        let mut short_circuited = false;
+        for (index, value) in expression.values.iter().enumerate() {
+            let is_last = index + 1 == expression.values.len();
+            if short_circuited {
+                self.pre_register_expression_names(value)?;
+                if fold_constant(value).is_some() {
+                    self.record_folded_value(value)?;
+                }
+                continue;
+            }
+            if !is_last && let Some(truthiness) = early_condition_truthiness(value) {
+                let decisive = matches!(expression.op, BoolOp::And) && !truthiness
+                    || matches!(expression.op, BoolOp::Or) && truthiness;
+                if decisive {
+                    effective.push(value);
+                    short_circuited = true;
+                } else {
+                    self.record_folded_value(value)?;
+                }
+                continue;
+            }
+            effective.push(value);
+        }
+
+        let Some((last, leading)) = effective.split_last() else {
             return Err(CompileError::Internal(
                 "boolean expression contains no values".to_string(),
             ));
@@ -8598,8 +9612,16 @@ impl Compiler {
 
         for value in leading {
             self.compile_expression(value)?;
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
             self.emit(COPY, 1, 1)?;
             self.emit(TO_BOOL, 0, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            if self.generator_region_start.is_some() {
+                self.generator_region_exclusions
+                    .push((exclusion_start, exclusion_end));
+            }
             self.emit_jump_forward(jump, end, -1)?;
             self.emit(NOT_TAKEN, 0, 0)?;
             self.emit(POP_TOP, 0, -1)?;
@@ -8616,7 +9638,7 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         self.compile_expression(&expression.left)?;
         if expression.ops.len() == 1 {
-            self.compile_expression(&expression.comparators[0])?;
+            self.compile_comparison_rhs(expression.ops[0], &expression.comparators[0])?;
             let (opcode, argument) = comparison_operator(expression.ops[0]);
             return self.emit(opcode, argument, -1);
         }
@@ -8655,6 +9677,18 @@ impl Compiler {
         Ok(())
     }
 
+    fn compile_comparison_rhs(
+        &mut self,
+        operator: CmpOp,
+        expression: &Expr,
+    ) -> Result<(), CompileError> {
+        if matches!(operator, CmpOp::In | CmpOp::NotIn) {
+            self.compile_iterable_expression(expression)
+        } else {
+            self.compile_expression(expression)
+        }
+    }
+
     fn compile_jump_if(
         &mut self,
         expression: &Expr,
@@ -8665,6 +9699,47 @@ impl Compiler {
             && unary.op == UnaryOp::Not
         {
             return self.compile_jump_if(&unary.operand, !jump_on, label);
+        }
+        let constant_truthiness = match expression {
+            Expr::EllipsisLiteral(_) => Some(true),
+            Expr::Name(name)
+                if name.ctx == ExprContext::Load && name.id.as_str() == "__debug__" =>
+            {
+                Some(true)
+            }
+            Expr::NoneLiteral(_)
+            | Expr::BooleanLiteral(_)
+            | Expr::NumberLiteral(_)
+            | Expr::StringLiteral(_)
+            | Expr::BytesLiteral(_)
+            | Expr::FString(_) => literal_truthiness(expression),
+            _ => None,
+        };
+        if let Some(truthiness) = constant_truthiness {
+            self.record_folded_value(expression)?;
+            self.assembler
+                .set_location(self.source_location(expression.range()));
+            if truthiness == jump_on {
+                self.emit_jump_forward(JUMP_FORWARD, label, 0)?;
+                self.assembler.preserve_last_inlined_jump_nop();
+            } else {
+                let exclusion_start = self.assembler.label();
+                self.assembler.mark(exclusion_start);
+                self.emit(NOP, 0, 0)?;
+                let exclusion_end = self.assembler.label();
+                self.assembler.mark(exclusion_end);
+                if self.generator_region_start.is_some() {
+                    self.generator_region_exclusions
+                        .push((exclusion_start, exclusion_end));
+                }
+                for exclusions in &mut self.active_with_region_exclusions {
+                    exclusions.push((exclusion_start, exclusion_end));
+                }
+                for exclusions in &mut self.active_exception_region_exclusions {
+                    exclusions.push((exclusion_start, exclusion_end));
+                }
+            }
+            return Ok(());
         }
         if let Expr::BoolOp(boolean) = expression {
             let Some((last, leading)) = boolean.values.split_last() else {
@@ -8687,12 +9762,83 @@ impl Compiler {
             self.assembler.mark(end);
             return Ok(());
         }
+        if let Expr::If(conditional) = expression {
+            let otherwise = self.assembler.label();
+            let end = self.assembler.label();
+            self.compile_jump_if(&conditional.test, false, otherwise)?;
+            self.compile_jump_if(&conditional.body, jump_on, label)?;
+            self.assembler.set_location(SourceLocation::NONE);
+            self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            self.assembler.mark(otherwise);
+            self.compile_jump_if(&conditional.orelse, jump_on, label)?;
+            self.assembler.mark(end);
+            return Ok(());
+        }
+        if let Expr::Compare(comparison) = expression
+            && comparison.ops.len() > 1
+        {
+            let base_depth = self.depth;
+            let cleanup = self.assembler.label();
+            let end = self.assembler.label();
+            self.compile_expression(&comparison.left)?;
+            for (operator, comparator) in comparison
+                .ops
+                .iter()
+                .zip(&comparison.comparators)
+                .take(comparison.ops.len() - 1)
+            {
+                self.compile_expression(comparator)?;
+                self.assembler
+                    .set_location(self.source_location(comparison.range));
+                self.emit(SWAP, 2, 0)?;
+                self.emit(COPY, 2, 1)?;
+                let (opcode, argument) = comparison_operator_boolean(*operator);
+                self.emit(opcode, argument, -1)?;
+                self.emit_jump_forward(POP_JUMP_IF_FALSE, cleanup, -1)?;
+                self.emit(NOT_TAKEN, 0, 0)?;
+            }
+
+            self.compile_expression(comparison.comparators.last().unwrap())?;
+            self.assembler
+                .set_location(self.source_location(comparison.range));
+            let (opcode, argument) = comparison_operator_boolean(*comparison.ops.last().unwrap());
+            self.emit(opcode, argument, -1)?;
+            self.emit_jump_forward(
+                if jump_on {
+                    POP_JUMP_IF_TRUE
+                } else {
+                    POP_JUMP_IF_FALSE
+                },
+                label,
+                -1,
+            )?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+
+            self.assembler.mark(cleanup);
+            self.set_depth(base_depth + 1);
+            self.emit(POP_TOP, 0, -1)?;
+            if !jump_on {
+                self.emit_jump_forward(JUMP_FORWARD, label, 0)?;
+            }
+
+            self.assembler.mark(end);
+            self.set_depth(base_depth);
+            return Ok(());
+        }
         if let Expr::Compare(comparison) = expression
             && comparison.ops.len() == 1
             && matches!(comparison.comparators[0], Expr::NoneLiteral(_))
             && matches!(comparison.ops[0], CmpOp::Is | CmpOp::IsNot)
         {
             self.compile_expression(&comparison.left)?;
+            self.add_constant(Constant::None)?;
+            let left_location = self.source_location(comparison.left.range());
+            let none_location = self.source_location(comparison.comparators[0].range());
+            if left_location.line != none_location.line {
+                self.assembler.set_location(none_location);
+                self.emit(NOP, 0, 0)?;
+            }
             self.assembler
                 .set_location(self.source_location(expression.range()));
             let jump_if_none = jump_on == (comparison.ops[0] == CmpOp::Is);
@@ -8707,6 +9853,8 @@ impl Compiler {
             )?;
             if self.exclude_terminal_if_not_taken || self.exclude_condition_not_taken_from_exception
             {
+                let exclude_from_generator = self.exclude_condition_not_taken_from_exception
+                    && self.generator_region_start.is_some();
                 let exclude_from_exception = self.exclude_condition_not_taken_from_exception
                     || (self.exclude_terminal_if_not_taken
                         && !self.active_with_region_exclusions.is_empty());
@@ -8716,6 +9864,10 @@ impl Compiler {
                 self.emit(NOT_TAKEN, 0, 0)?;
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
+                if exclude_from_generator {
+                    self.generator_region_exclusions
+                        .push((exclusion_start, exclusion_end));
+                }
                 for exclusions in &mut self.active_with_region_exclusions {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
@@ -8732,7 +9884,7 @@ impl Compiler {
             && comparison.ops.len() == 1
         {
             self.compile_expression(&comparison.left)?;
-            self.compile_expression(&comparison.comparators[0])?;
+            self.compile_comparison_rhs(comparison.ops[0], &comparison.comparators[0])?;
             self.assembler
                 .set_location(self.source_location(expression.range()));
             let (opcode, argument) = comparison_operator_boolean(comparison.ops[0]);
@@ -8757,6 +9909,8 @@ impl Compiler {
             -1,
         )?;
         if self.exclude_terminal_if_not_taken || self.exclude_condition_not_taken_from_exception {
+            let exclude_from_generator = self.exclude_condition_not_taken_from_exception
+                && self.generator_region_start.is_some();
             let exclude_from_exception = self.exclude_condition_not_taken_from_exception
                 || (self.exclude_terminal_if_not_taken
                     && !self.active_with_region_exclusions.is_empty());
@@ -8766,6 +9920,10 @@ impl Compiler {
             self.emit(NOT_TAKEN, 0, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
+            if exclude_from_generator {
+                self.generator_region_exclusions
+                    .push((exclusion_start, exclusion_end));
+            }
             for exclusions in &mut self.active_with_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
@@ -8801,8 +9959,21 @@ impl Compiler {
             }
             Expr::Subscript(subscript) => {
                 self.compile_expression(&subscript.value)?;
-                self.compile_expression(&subscript.slice)?;
-                self.emit(STORE_SUBSCR, 0, -3)
+                if let Expr::Slice(slice) = subscript.slice.as_ref()
+                    && two_element_slice_optimization(slice)
+                {
+                    let slice_location = self.source_location(slice.range);
+                    self.compile_optional_slice_bound(slice.lower.as_deref(), slice_location)?;
+                    self.compile_optional_slice_bound(slice.upper.as_deref(), slice_location)?;
+                    self.assembler
+                        .set_location(self.source_location(subscript.range));
+                    self.emit(STORE_SLICE, 0, -4)
+                } else {
+                    self.compile_expression(&subscript.slice)?;
+                    self.assembler
+                        .set_location(self.source_location(subscript.range));
+                    self.emit(STORE_SUBSCR, 0, -3)
+                }
             }
             Expr::List(list) => self.compile_unpack_target(&list.elts),
             Expr::Tuple(tuple) => self.compile_unpack_target(&tuple.elts),
@@ -8908,7 +10079,8 @@ impl Compiler {
                         && name != "__classdict__"
                     {
                         self.emit(LOAD_DEREF, classdict, 1)?;
-                        let index = self.name_index(name)?;
+                        let name = self.annotation_mangled_name(name);
+                        let index = self.name_index(&name)?;
                         return self.emit(LOAD_FROM_DICT_OR_GLOBALS, index, 0);
                     }
                     let index = self.name_index(name)?;
@@ -8950,6 +10122,20 @@ impl Compiler {
                 }
             }
         }
+    }
+
+    fn mark_definitely_evaluated_locals(&mut self, expression: &Expr) {
+        let Some(references) = definitely_evaluated_references(expression) else {
+            return;
+        };
+        let Scope::Function { indices, .. } = &self.scope else {
+            return;
+        };
+        self.initialized_locals.extend(
+            references
+                .into_iter()
+                .filter(|name| indices.contains_key(name)),
+        );
     }
 
     fn store_name(&mut self, name: &str) -> Result<(), CompileError> {
@@ -9148,12 +10334,58 @@ impl Compiler {
     }
 
     fn child_qualified_name(&self, name: &str) -> String {
+        if let Some(parent) = &self.child_qualified_name_parent {
+            return if parent.is_empty() {
+                name.to_string()
+            } else {
+                format!("{parent}.{name}")
+            };
+        }
+        if self.annotation_thunk
+            && let Some(prefix) = self.qualified_name.strip_suffix("__annotate__")
+        {
+            return format!("{prefix}{name}");
+        }
         match &self.scope {
             Scope::Module => name.to_string(),
             Scope::Class { .. } => format!("{}.{}", self.qualified_name, name),
             Scope::Function { globals, .. } if globals.contains(name) => name.to_string(),
             Scope::Function { .. } => format!("{}.<locals>.{name}", self.qualified_name),
         }
+    }
+
+    fn annotation_mangled_name(&self, name: &str) -> String {
+        if self.private_name.is_some() {
+            return self.mangled_name(name);
+        }
+        if !name.starts_with("__") || name.ends_with("__") || name.contains('.') {
+            return name.to_string();
+        }
+        let Some(class_name) = self
+            .qualified_name
+            .strip_suffix(".__annotate__")
+            .and_then(|parent| parent.rsplit('.').next())
+            .map(|name| name.trim_start_matches('_'))
+            .filter(|name| !name.is_empty())
+        else {
+            return name.to_string();
+        };
+        format!("_{class_name}{name}")
+    }
+
+    fn mangled_name(&self, name: &str) -> String {
+        if !name.starts_with("__") || name.ends_with("__") || name.contains('.') {
+            return name.to_string();
+        }
+        let Some(class_name) = self
+            .private_name
+            .as_deref()
+            .map(|name| name.trim_start_matches('_'))
+            .filter(|name| !name.is_empty())
+        else {
+            return name.to_string();
+        };
+        format!("_{class_name}{name}")
     }
 
     fn line_number(&self, offset: u32) -> u32 {
@@ -9173,6 +10405,76 @@ impl Compiler {
         let (line, column) = self.source_position(u32::from(range.start()));
         let (end_line, end_column) = self.source_position(u32::from(range.end()));
         SourceLocation::new(line, end_line, column, end_column)
+    }
+
+    fn source_location_including_trailing_semicolon(
+        &self,
+        range: ruff_text_size::TextRange,
+    ) -> SourceLocation {
+        let (line, column) = self.source_position(u32::from(range.start()));
+        let (end_line, end_column) = self.definition_end_position(range);
+        SourceLocation::new(line, end_line, column, end_column)
+    }
+
+    fn definition_location(
+        &self,
+        range: ruff_text_size::TextRange,
+        name_range: ruff_text_size::TextRange,
+        keyword: &[u8],
+        is_async: bool,
+    ) -> SourceLocation {
+        fn find_keyword(bytes: &[u8], start: usize, end: usize, keyword: &[u8]) -> Option<usize> {
+            let last_start = end.checked_sub(keyword.len())?;
+            (start..=last_start).rev().find(|&offset| {
+                bytes.get(offset..offset + keyword.len()) == Some(keyword)
+                    && bytes
+                        .get(offset.wrapping_sub(1))
+                        .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+                    && bytes
+                        .get(offset + keyword.len())
+                        .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+            })
+        }
+
+        let bytes = self.source.as_bytes();
+        let range_start = usize::from(range.start());
+        let name_start = usize::from(name_range.start());
+        let keyword_start = find_keyword(bytes, range_start, name_start, keyword)
+            .unwrap_or_else(|| name_start.saturating_sub(keyword.len() + 1));
+        let start = if is_async {
+            find_keyword(bytes, range_start, keyword_start, b"async").unwrap_or(keyword_start)
+        } else {
+            keyword_start
+        };
+        let (line, column) = self.source_position(u32::try_from(start).unwrap_or(u32::MAX));
+        let (end_line, end_column) = self.definition_end_position(range);
+        SourceLocation::new(line, end_line, column, end_column)
+    }
+
+    fn definition_end_position(&self, range: ruff_text_size::TextRange) -> (i32, i32) {
+        let bytes = self.source.as_bytes();
+        let original_end = usize::from(range.end());
+        let mut end = original_end;
+        loop {
+            while matches!(bytes.get(end), Some(b' ' | b'\t' | b'\x0c')) {
+                end += 1;
+            }
+            if bytes.get(end) == Some(&b';') {
+                return self.source_position(u32::try_from(end + 1).unwrap_or(u32::MAX));
+            }
+            if bytes.get(end) != Some(&b'\\') {
+                break;
+            }
+            end += 1;
+            if bytes.get(end) == Some(&b'\r') {
+                end += 1;
+            }
+            if bytes.get(end) != Some(&b'\n') {
+                break;
+            }
+            end += 1;
+        }
+        self.source_position(u32::try_from(original_end).unwrap_or(u32::MAX))
     }
 
     fn source_position(&self, offset: u32) -> (i32, i32) {
@@ -9206,10 +10508,7 @@ impl Compiler {
         let bytes = self.source.as_bytes();
         let original_start = usize::from(range.start());
         let original_end = usize::from(range.end());
-        if bytes.get(original_start) == Some(&b'(')
-            && original_end > original_start
-            && bytes.get(original_end - 1) == Some(&b')')
-        {
+        if range_is_wrapped_in_parentheses(&self.source, original_start, original_end) {
             return range;
         }
         let mut start = usize::from(range.start());
@@ -9276,28 +10575,42 @@ impl Compiler {
     ) -> ruff_text_size::TextRange {
         let mut component_count = 0;
         let mut pending_literal = false;
+        let mut only_interpolation = None;
         for part in &fstring.value {
             match part {
-                FStringPart::Literal(_) => pending_literal = true,
+                FStringPart::Literal(literal) => {
+                    pending_literal |= !literal.value.is_empty();
+                }
                 FStringPart::FString(fstring) => {
                     for element in &fstring.elements {
                         match element {
-                            InterpolatedStringElement::Literal(_) => pending_literal = true,
+                            InterpolatedStringElement::Literal(literal) => {
+                                pending_literal |= !literal.value.is_empty();
+                            }
                             InterpolatedStringElement::Interpolation(interpolation) => {
+                                if interpolation.debug_text.is_some() {
+                                    pending_literal = true;
+                                }
                                 if std::mem::take(&mut pending_literal) {
                                     component_count += 1;
                                 }
-                                component_count +=
-                                    1 + usize::from(interpolation.debug_text.is_some());
+                                component_count += 1;
+                                only_interpolation = Some(interpolation.range);
                             }
                         }
                     }
                 }
             }
         }
-        component_count += usize::from(pending_literal);
+        if pending_literal {
+            component_count += 1;
+            only_interpolation = None;
+        }
         if component_count == 1 {
-            self.interpolated_string_content_range(fstring.range)
+            only_interpolation.unwrap_or_else(|| {
+                fstring_literal_span(fstring)
+                    .unwrap_or_else(|| self.interpolated_string_content_range(fstring.range))
+            })
         } else {
             fstring.range
         }
@@ -9316,7 +10629,7 @@ impl Compiler {
     }
 
     fn call_opcode_range(&self, call: &ruff_python_ast::ExprCall) -> ruff_text_size::TextRange {
-        if let Expr::Attribute(attribute) = call.func.as_ref() {
+        if let Some(attribute) = self.direct_method_attribute(call) {
             let attribute_location = self.source_location(attribute.range);
             if attribute_location.line != attribute_location.end_line {
                 return ruff_text_size::TextRange::new(
@@ -9328,6 +10641,27 @@ impl Compiler {
         call.range
     }
 
+    fn direct_method_attribute<'a>(
+        &self,
+        call: &'a ruff_python_ast::ExprCall,
+    ) -> Option<&'a ruff_python_ast::ExprAttribute> {
+        if call.arguments.args.iter().any(Expr::is_starred_expr)
+            || call
+                .arguments
+                .keywords
+                .iter()
+                .any(|keyword| keyword.arg.is_none())
+            || call.arguments.keywords.len() > 15
+            || call.arguments.args.len() + call.arguments.keywords.len() >= 30
+        {
+            return None;
+        }
+        let Expr::Attribute(attribute) = call.func.as_ref() else {
+            return None;
+        };
+        (!self.imported_module_attribute(attribute)).then_some(attribute)
+    }
+
     fn pre_register_suite_names(&mut self, body: &[Stmt]) -> Result<(), CompileError> {
         #[derive(Default)]
         struct Collector {
@@ -9337,6 +10671,43 @@ impl Compiler {
         impl<'ast> Visitor<'ast> for Collector {
             fn visit_stmt(&mut self, statement: &'ast Stmt) {
                 match statement {
+                    Stmt::FunctionDef(definition) => {
+                        for decorator in &definition.decorator_list {
+                            self.visit_expr(&decorator.expression);
+                        }
+                        for parameter in definition
+                            .parameters
+                            .posonlyargs
+                            .iter()
+                            .chain(&definition.parameters.args)
+                            .chain(&definition.parameters.kwonlyargs)
+                        {
+                            if let Some(default) = &parameter.default {
+                                self.visit_expr(default);
+                            }
+                        }
+                        self.names
+                            .push((definition.name.as_str().to_string(), false));
+                        return;
+                    }
+                    Stmt::ClassDef(definition) => {
+                        for decorator in &definition.decorator_list {
+                            self.visit_expr(&decorator.expression);
+                        }
+                        if definition.type_params.is_none()
+                            && let Some(arguments) = definition.arguments.as_deref()
+                        {
+                            for argument in &arguments.args {
+                                self.visit_expr(argument);
+                            }
+                            for keyword in &arguments.keywords {
+                                self.visit_expr(&keyword.value);
+                            }
+                        }
+                        self.names
+                            .push((definition.name.as_str().to_string(), false));
+                        return;
+                    }
                     Stmt::Import(import) => {
                         for alias in &import.names {
                             let imported = alias.name.as_str();
@@ -9371,6 +10742,21 @@ impl Compiler {
                     Expr::Attribute(attribute) => {
                         self.visit_expr(&attribute.value);
                         self.names.push((attribute.attr.as_str().to_string(), true));
+                        return;
+                    }
+                    Expr::Lambda(lambda) => {
+                        if let Some(parameters) = lambda.parameters.as_deref() {
+                            for parameter in parameters
+                                .posonlyargs
+                                .iter()
+                                .chain(&parameters.args)
+                                .chain(&parameters.kwonlyargs)
+                            {
+                                if let Some(default) = &parameter.default {
+                                    self.visit_expr(default);
+                                }
+                            }
+                        }
                         return;
                     }
                     _ => {}
@@ -9433,12 +10819,13 @@ impl Compiler {
     }
 
     fn name_index(&mut self, name: &str) -> Result<u32, CompileError> {
-        if let Some(index) = self.name_indices.get(name) {
+        let name = self.mangled_name(name);
+        if let Some(index) = self.name_indices.get(&name) {
             return Ok(*index);
         }
         let index = to_u32(self.names.len(), "name count")?;
-        self.names.push(name.to_string());
-        self.name_indices.insert(name.to_string(), index);
+        self.names.push(name.clone());
+        self.name_indices.insert(name, index);
         Ok(index)
     }
 
@@ -9453,6 +10840,15 @@ impl Compiler {
         let index = to_u32(self.constants.len(), "constant count")?;
         self.constants.push(constant);
         Ok(index)
+    }
+
+    fn add_interned_string_tuple(&mut self, values: Vec<Constant>) -> Result<u32, CompileError> {
+        self.interned_constant_strings
+            .extend(values.iter().filter_map(|value| match value {
+                Constant::String(value) => Some(value.clone()),
+                _ => None,
+            }));
+        self.add_constant(Constant::Tuple(values))
     }
 
     fn remove_unused_constants(&mut self) -> Result<(), CompileError> {
@@ -9566,6 +10962,8 @@ impl Compiler {
 struct LocalCollector {
     names: Vec<String>,
     seen: HashSet<String>,
+    comprehension_targets: Vec<String>,
+    seen_comprehension_targets: HashSet<String>,
     annotation_only: HashSet<String>,
     globals: HashSet<String>,
     nonlocals: HashSet<String>,
@@ -9866,6 +11264,17 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
         };
         if let Some(generators) = generators {
             for generator in generators {
+                let mut names = Vec::new();
+                collect_target_names(&generator.target, &mut names);
+                for name in names {
+                    if self
+                        .collector
+                        .seen_comprehension_targets
+                        .insert(name.clone())
+                    {
+                        self.collector.comprehension_targets.push(name);
+                    }
+                }
                 self.collector.collect_target(&generator.target);
             }
         }
@@ -9880,6 +11289,7 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
 struct ReferenceCollector {
     references: HashSet<String>,
     skip_annotations: bool,
+    explicit_dunder_class_reference: bool,
 }
 
 impl<'ast> Visitor<'ast> for ReferenceCollector {
@@ -9908,11 +11318,47 @@ impl<'ast> Visitor<'ast> for ReferenceCollector {
                 self.references.insert(name.id.as_str().to_string());
                 if name.id.as_str() == "super" {
                     self.references.insert("__class__".to_string());
+                } else if name.id.as_str() == "__class__" {
+                    self.explicit_dunder_class_reference = true;
                 }
             }
         }
         walk_expr(self, expression);
     }
+}
+
+fn definitely_evaluated_references(expression: &Expr) -> Option<HashSet<String>> {
+    #[derive(Default)]
+    struct ConditionalEvaluationDetector(bool);
+
+    impl<'ast> Visitor<'ast> for ConditionalEvaluationDetector {
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            if matches!(
+                expression,
+                Expr::BoolOp(_)
+                    | Expr::If(_)
+                    | Expr::Lambda(_)
+                    | Expr::Generator(_)
+                    | Expr::ListComp(_)
+                    | Expr::SetComp(_)
+                    | Expr::DictComp(_)
+            ) || matches!(expression, Expr::Compare(comparison) if comparison.ops.len() > 1)
+            {
+                self.0 = true;
+                return;
+            }
+            walk_expr(self, expression);
+        }
+    }
+
+    let mut detector = ConditionalEvaluationDetector::default();
+    detector.visit_expr(expression);
+    if detector.0 {
+        return None;
+    }
+    let mut references = ReferenceCollector::default();
+    references.visit_expr(expression);
+    Some(references.references)
 }
 
 struct LambdaScopeAnalysis {
@@ -10212,6 +11658,7 @@ fn class_needs_class_closure(body: &[Stmt], future_annotations: bool) -> bool {
     }
 
     suite_needs_class_closure(body, future_annotations)
+        || nested_lambda_required_names_in_suite(body).contains("__class__")
 }
 
 fn collect_nested_functions(
@@ -10279,6 +11726,17 @@ fn contains_function_definition(body: &[Stmt]) -> bool {
             contains_function_definition(&statement.body)
                 || contains_function_definition(&statement.orelse)
         }
+        Stmt::Try(statement) => {
+            contains_function_definition(&statement.body)
+                || statement
+                    .handlers
+                    .iter()
+                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
+                    .any(|handler| contains_function_definition(&handler.body))
+                || contains_function_definition(&statement.orelse)
+                || contains_function_definition(&statement.finalbody)
+        }
+        Stmt::With(statement) => contains_function_definition(&statement.body),
         Stmt::Match(statement) => statement
             .cases
             .iter()
@@ -10294,6 +11752,22 @@ fn class_static_attributes(body: &[Stmt]) -> Vec<String> {
     }
 
     impl<'ast> Visitor<'ast> for Collector {
+        fn visit_stmt(&mut self, statement: &'ast Stmt) {
+            // A nested class becomes the nearest enclosing class compiler for
+            // any `self.attr` stores in its body.
+            if matches!(statement, Stmt::ClassDef(_)) {
+                return;
+            }
+            // CPython's augmented-assignment lowering and an annotation without
+            // a value never pass the attribute through the ordinary Store path.
+            if matches!(statement, Stmt::AugAssign(_))
+                || matches!(statement, Stmt::AnnAssign(annotation) if annotation.value.is_none())
+            {
+                return;
+            }
+            walk_stmt(self, statement);
+        }
+
         fn visit_expr(&mut self, expression: &'ast Expr) {
             if let Expr::Attribute(attribute) = expression
                 && attribute.ctx == ExprContext::Store
@@ -10359,6 +11833,28 @@ fn collect_nested_comprehension_target_names(expression: &Expr, names: &mut Vec<
     Collector { names }.visit_expr(expression);
 }
 
+fn collect_named_expression_target_names(expression: &Expr, names: &mut Vec<String>) {
+    struct Collector<'a> {
+        names: &'a mut Vec<String>,
+    }
+
+    impl<'ast> Visitor<'ast> for Collector<'_> {
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            if let Expr::Named(named) = expression
+                && let Expr::Name(name) = named.target.as_ref()
+            {
+                self.names.push(name.id.as_str().to_string());
+            }
+            if matches!(expression, Expr::Generator(_) | Expr::Lambda(_)) {
+                return;
+            }
+            walk_expr(self, expression);
+        }
+    }
+
+    Collector { names }.visit_expr(expression);
+}
+
 fn generator_named_targets(generator: &ruff_python_ast::ExprGenerator) -> HashSet<String> {
     #[derive(Default)]
     struct Collector {
@@ -10385,6 +11881,94 @@ fn generator_named_targets(generator: &ruff_python_ast::ExprGenerator) -> HashSe
         }
     }
     collector.names
+}
+
+fn generator_required_names(generator: &ruff_python_ast::ExprGenerator) -> BTreeSet<String> {
+    let mut local_names = HashSet::new();
+    for comprehension in &generator.generators {
+        let mut names = Vec::new();
+        collect_target_names(&comprehension.target, &mut names);
+        local_names.extend(names);
+    }
+
+    let mut references = ReferenceCollector::default();
+    references.visit_expr(&generator.elt);
+    for (index, comprehension) in generator.generators.iter().enumerate() {
+        // The outermost iterable is evaluated by the enclosing scope and passed
+        // to the generator as its implicit `.0` argument.
+        if index > 0 {
+            references.visit_expr(&comprehension.iter);
+        }
+        for condition in &comprehension.ifs {
+            references.visit_expr(condition);
+        }
+    }
+    references
+        .references
+        .extend(generator_named_targets(generator));
+    references
+        .references
+        .into_iter()
+        .filter(|name| !local_names.contains(name))
+        .collect()
+}
+
+fn generator_cellvars(generator: &ruff_python_ast::ExprGenerator) -> HashSet<String> {
+    let mut local_names = HashSet::new();
+    for comprehension in &generator.generators {
+        let mut names = Vec::new();
+        collect_target_names(&comprehension.target, &mut names);
+        local_names.extend(names);
+    }
+
+    let mut nested_requirements = nested_lambda_required_names_in_expression(&generator.elt);
+    for (index, comprehension) in generator.generators.iter().enumerate() {
+        if index > 0 {
+            nested_requirements.extend(nested_lambda_required_names_in_expression(
+                &comprehension.iter,
+            ));
+        }
+        for condition in &comprehension.ifs {
+            nested_requirements.extend(nested_lambda_required_names_in_expression(condition));
+        }
+    }
+    nested_requirements
+        .into_iter()
+        .filter(|name| local_names.contains(name))
+        .collect()
+}
+
+fn nested_generator_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
+    #[derive(Default)]
+    struct Collector {
+        required: BTreeSet<String>,
+    }
+
+    impl<'ast> Visitor<'ast> for Collector {
+        fn visit_stmt(&mut self, statement: &'ast Stmt) {
+            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+                return;
+            }
+            walk_stmt(self, statement);
+        }
+
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            if let Expr::Generator(generator) = expression {
+                self.required.extend(generator_required_names(generator));
+                return;
+            }
+            if matches!(expression, Expr::Lambda(_)) {
+                return;
+            }
+            walk_expr(self, expression);
+        }
+    }
+
+    let mut collector = Collector::default();
+    for statement in body {
+        collector.visit_stmt(statement);
+    }
+    collector.required
 }
 
 fn generator_named_targets_in_suite(body: &[Stmt]) -> HashSet<String> {
@@ -10433,7 +12017,16 @@ fn constants_equal(left: &Constant, right: &Constant) -> bool {
         (Constant::Bool(left), Constant::Bool(right)) => left == right,
         (Constant::Int(left), Constant::Int(right)) => left == right,
         (Constant::SignedInt(left), Constant::SignedInt(right)) => left == right,
-        (Constant::BigInt(left), Constant::BigInt(right)) => left == right,
+        (
+            Constant::BigInt {
+                negative: left_negative,
+                digits: left_digits,
+            },
+            Constant::BigInt {
+                negative: right_negative,
+                digits: right_digits,
+            },
+        ) => left_negative == right_negative && left_digits == right_digits,
         (Constant::Float(left), Constant::Float(right)) => left.to_bits() == right.to_bits(),
         (
             Constant::Complex {
@@ -10484,6 +12077,150 @@ fn constants_equal(left: &Constant, right: &Constant) -> bool {
     }
 }
 
+#[derive(Debug)]
+enum NumericReal {
+    Integer { negative: bool, digits: Vec<u16> },
+    Float(f64),
+}
+
+fn python_constants_equal(left: &Constant, right: &Constant) -> bool {
+    if let (Some((left_real, left_imag)), Some((right_real, right_imag))) =
+        (numeric_parts(left), numeric_parts(right))
+    {
+        return left_imag == right_imag && numeric_reals_equal(&left_real, &right_real);
+    }
+    match (left, right) {
+        (Constant::Tuple(left), Constant::Tuple(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| python_constants_equal(left, right))
+        }
+        (Constant::FrozenSet(left), Constant::FrozenSet(right)) => {
+            left.len() == right.len()
+                && left.iter().all(|left| {
+                    right
+                        .iter()
+                        .any(|right| python_constants_equal(left, right))
+                })
+        }
+        _ => constants_equal(left, right),
+    }
+}
+
+fn numeric_parts(value: &Constant) -> Option<(NumericReal, f64)> {
+    match value {
+        Constant::Bool(value) => Some((integer_numeric_real(u64::from(*value), false), 0.0)),
+        Constant::Int(value) => Some((integer_numeric_real(*value, false), 0.0)),
+        Constant::SignedInt(value) => Some((
+            integer_numeric_real(value.unsigned_abs(), value.is_negative()),
+            0.0,
+        )),
+        Constant::BigInt { negative, digits } => Some((
+            NumericReal::Integer {
+                negative: *negative,
+                digits: normalized_digits(digits.clone()),
+            },
+            0.0,
+        )),
+        Constant::Float(value) => Some((NumericReal::Float(*value), 0.0)),
+        Constant::Complex { real, imag } => Some((NumericReal::Float(*real), *imag)),
+        _ => None,
+    }
+}
+
+fn integer_numeric_real(mut value: u64, negative: bool) -> NumericReal {
+    let mut digits = Vec::new();
+    while value != 0 {
+        digits.push((value & 0x7fff) as u16);
+        value >>= 15;
+    }
+    NumericReal::Integer {
+        negative: negative && !digits.is_empty(),
+        digits,
+    }
+}
+
+fn normalized_digits(mut digits: Vec<u16>) -> Vec<u16> {
+    while digits.last() == Some(&0) {
+        digits.pop();
+    }
+    digits
+}
+
+fn numeric_reals_equal(left: &NumericReal, right: &NumericReal) -> bool {
+    match (left, right) {
+        (NumericReal::Float(left), NumericReal::Float(right)) => left == right,
+        (
+            NumericReal::Integer {
+                negative: left_negative,
+                digits: left_digits,
+            },
+            NumericReal::Integer {
+                negative: right_negative,
+                digits: right_digits,
+            },
+        ) => left_negative == right_negative && left_digits == right_digits,
+        (integer @ NumericReal::Integer { .. }, NumericReal::Float(float))
+        | (NumericReal::Float(float), integer @ NumericReal::Integer { .. }) => {
+            float_integer_numeric_real(*float)
+                .is_some_and(|float_integer| numeric_reals_equal(integer, &float_integer))
+        }
+    }
+}
+
+fn float_integer_numeric_real(value: f64) -> Option<NumericReal> {
+    if !value.is_finite() {
+        return None;
+    }
+    if value == 0.0 {
+        return Some(integer_numeric_real(0, false));
+    }
+
+    let bits = value.to_bits();
+    let negative = bits >> 63 != 0;
+    let exponent_bits = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    let (mut mantissa, exponent) = if exponent_bits == 0 {
+        (fraction, -1074)
+    } else {
+        ((1_u64 << 52) | fraction, exponent_bits - 1023 - 52)
+    };
+
+    if exponent < 0 {
+        let shift = u32::try_from(-exponent).ok()?;
+        if shift >= 64 || mantissa & ((1_u64 << shift) - 1) != 0 {
+            return None;
+        }
+        mantissa >>= shift;
+        return Some(integer_numeric_real(mantissa, negative));
+    }
+
+    let mut digits = match integer_numeric_real(mantissa, negative) {
+        NumericReal::Integer { digits, .. } => digits,
+        NumericReal::Float(_) => unreachable!(),
+    };
+    let shift = u32::try_from(exponent).ok()?;
+    let digit_shift = usize::try_from(shift / 15).ok()?;
+    let bit_shift = shift % 15;
+    if digit_shift > 0 {
+        digits.splice(0..0, std::iter::repeat_n(0, digit_shift));
+    }
+    if bit_shift > 0 {
+        let mut carry = 0_u32;
+        for digit in &mut digits {
+            let shifted = (u32::from(*digit) << bit_shift) | carry;
+            *digit = (shifted & 0x7fff) as u16;
+            carry = shifted >> 15;
+        }
+        if carry != 0 {
+            digits.push(carry as u16);
+        }
+    }
+    Some(NumericReal::Integer { negative, digits })
+}
+
 fn code_objects_equal(left: &CodeObject, right: &CodeObject) -> bool {
     left.arg_count == right.arg_count
         && left.positional_only_arg_count == right.positional_only_arg_count
@@ -10510,7 +12247,7 @@ fn code_objects_equal(left: &CodeObject, right: &CodeObject) -> bool {
 }
 
 fn suite_terminates(body: &[Stmt]) -> bool {
-    body.last().is_some_and(statement_terminates)
+    body.iter().any(statement_terminates)
 }
 
 fn suite_contains_yield(body: &[Stmt]) -> bool {
@@ -10675,13 +12412,7 @@ fn future_feature_flags(body: &[Stmt]) -> u32 {
         .fold(0, |flags, alias| {
             flags
                 | match alias.name.as_str() {
-                    "division" => 0x0002_0000,
-                    "absolute_import" => 0x0004_0000,
-                    "with_statement" => 0x0008_0000,
-                    "print_function" => 0x0010_0000,
-                    "unicode_literals" => 0x0020_0000,
-                    "barry_as_FLUFL" => 0x0040_0000,
-                    "generator_stop" => 0x0080_0000,
+                    "barry_as_FLUFL" => CO_FUTURE_BARRY_AS_BDFL,
                     "annotations" => CO_FUTURE_ANNOTATIONS,
                     _ => 0,
                 }
@@ -10692,15 +12423,47 @@ fn module_global_names(body: &[Stmt]) -> HashSet<String> {
     #[derive(Default)]
     struct Collector {
         names: HashSet<String>,
+        comprehension_depth: usize,
+        nested_scope_depth: usize,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
         fn visit_stmt(&mut self, statement: &'ast Stmt) {
+            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+                self.nested_scope_depth += 1;
+                walk_stmt(self, statement);
+                self.nested_scope_depth -= 1;
+                return;
+            }
             if let Stmt::Global(global) = statement {
                 self.names
                     .extend(global.names.iter().map(|name| name.as_str().to_string()));
             }
             walk_stmt(self, statement);
+        }
+
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            if matches!(expression, Expr::Lambda(_)) {
+                return;
+            }
+            let is_comprehension = matches!(
+                expression,
+                Expr::ListComp(_) | Expr::SetComp(_) | Expr::DictComp(_) | Expr::Generator(_)
+            );
+            if is_comprehension {
+                self.comprehension_depth += 1;
+            }
+            if self.nested_scope_depth == 0
+                && self.comprehension_depth > 0
+                && let Expr::Named(named) = expression
+                && let Expr::Name(name) = named.target.as_ref()
+            {
+                self.names.insert(name.id.as_str().to_string());
+            }
+            walk_expr(self, expression);
+            if is_comprehension {
+                self.comprehension_depth -= 1;
+            }
         }
     }
 
@@ -10848,7 +12611,10 @@ fn literal_constant(expression: &Expr) -> Option<Constant> {
         Expr::EllipsisLiteral(_) => Some(Constant::Ellipsis),
         Expr::NumberLiteral(number) => Some(match &number.value {
             Number::Int(value) => value.as_u64().map_or_else(
-                || Constant::BigInt(big_integer_digits(&value.to_string())),
+                || Constant::BigInt {
+                    negative: false,
+                    digits: big_integer_digits(&value.to_string()),
+                },
                 Constant::Int,
             ),
             Number::Float(value) => Constant::Float(*value),
@@ -10877,6 +12643,303 @@ fn debug_text_range(
         ruff_text_size::TextSize::new(start),
         ruff_text_size::TextSize::new(end),
     )
+}
+
+fn fstring_literal_span(
+    fstring: &ruff_python_ast::ExprFString,
+) -> Option<ruff_text_size::TextRange> {
+    let mut first = None;
+    let mut last = None;
+    let mut include = |range: ruff_text_size::TextRange| {
+        first.get_or_insert(range.start());
+        last = Some(range.end());
+    };
+    for part in &fstring.value {
+        match part {
+            FStringPart::Literal(literal) => include(literal.range),
+            FStringPart::FString(fstring) => {
+                for element in &fstring.elements {
+                    match element {
+                        InterpolatedStringElement::Literal(literal) => include(literal.range),
+                        InterpolatedStringElement::Interpolation(_) => return None,
+                    }
+                }
+            }
+        }
+    }
+    Some(ruff_text_size::TextRange::new(first?, last?))
+}
+
+fn range_is_wrapped_in_parentheses(source: &str, start: usize, end: usize) -> bool {
+    let bytes = source.as_bytes();
+    if end <= start || bytes.get(start) != Some(&b'(') || bytes.get(end - 1) != Some(&b')') {
+        return false;
+    }
+
+    let mut stack = Vec::new();
+    let mut index = start;
+    let mut quote = None;
+    let mut triple_quoted = false;
+    while index < end {
+        if let Some(delimiter) = quote {
+            if bytes[index] == b'\\' {
+                index = (index + 2).min(end);
+                continue;
+            }
+            if bytes[index] == delimiter {
+                if triple_quoted {
+                    if bytes.get(index..index + 3) == Some(&[delimiter; 3]) {
+                        index += 3;
+                        quote = None;
+                        triple_quoted = false;
+                        continue;
+                    }
+                } else {
+                    index += 1;
+                    quote = None;
+                    continue;
+                }
+            }
+            index += 1;
+            continue;
+        }
+
+        match bytes[index] {
+            b'#' => {
+                while index < end && !matches!(bytes[index], b'\n' | b'\r') {
+                    index += 1;
+                }
+            }
+            delimiter @ (b'\'' | b'"') => {
+                triple_quoted = bytes.get(index..index + 3) == Some(&[delimiter; 3]);
+                index += if triple_quoted { 3 } else { 1 };
+                quote = Some(delimiter);
+            }
+            opening @ (b'(' | b'[' | b'{') => {
+                stack.push(opening);
+                index += 1;
+            }
+            closing @ (b')' | b']' | b'}') => {
+                let Some(opening) = stack.pop() else {
+                    return false;
+                };
+                if !matches!(
+                    (opening, closing),
+                    (b'(', b')') | (b'[', b']') | (b'{', b'}')
+                ) {
+                    return false;
+                }
+                index += 1;
+                if stack.is_empty() {
+                    return index == end;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    false
+}
+
+/// Removes Python comments while preserving the whitespace and newlines around
+/// them, as CPython does for the source text stored by a t-string interpolation.
+fn strip_expression_comments(source: &str) -> String {
+    let bytes = source.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    let mut quote = None;
+    let mut triple_quoted = false;
+
+    while index < bytes.len() {
+        if let Some(delimiter) = quote {
+            if bytes[index] == b'\\' {
+                output.push(bytes[index]);
+                index += 1;
+                if index < bytes.len() {
+                    output.push(bytes[index]);
+                    index += 1;
+                }
+                continue;
+            }
+            if bytes[index] == delimiter {
+                if triple_quoted {
+                    if bytes.get(index..index + 3) == Some(&[delimiter; 3]) {
+                        output.extend_from_slice(&bytes[index..index + 3]);
+                        index += 3;
+                        quote = None;
+                        triple_quoted = false;
+                        continue;
+                    }
+                } else {
+                    output.push(bytes[index]);
+                    index += 1;
+                    quote = None;
+                    continue;
+                }
+            }
+            output.push(bytes[index]);
+            index += 1;
+            continue;
+        }
+
+        match bytes[index] {
+            b'#' => {
+                while index < bytes.len() && !matches!(bytes[index], b'\n' | b'\r') {
+                    index += 1;
+                }
+            }
+            delimiter @ (b'\'' | b'"') => {
+                triple_quoted = bytes.get(index..index + 3) == Some(&[delimiter; 3]);
+                let length = if triple_quoted { 3 } else { 1 };
+                output.extend_from_slice(&bytes[index..index + length]);
+                index += length;
+                quote = Some(delimiter);
+            }
+            byte => {
+                output.push(byte);
+                index += 1;
+            }
+        }
+    }
+
+    String::from_utf8(output).expect("removing ASCII comments preserves UTF-8")
+}
+
+enum PercentFormatPart<'a> {
+    Literal(String),
+    Formatted {
+        expression: &'a Expr,
+        conversion: u32,
+        format_spec: Option<String>,
+    },
+}
+
+fn optimized_percent_format(expression: &ExprBinOp) -> Option<Vec<PercentFormatPart<'_>>> {
+    if expression.op != Operator::Mod {
+        return None;
+    }
+    let Constant::String(format) = fold_constant(&expression.left)? else {
+        return None;
+    };
+    let Expr::Tuple(arguments) = expression.right.as_ref() else {
+        return None;
+    };
+    if arguments
+        .elts
+        .iter()
+        .any(|argument| matches!(argument, Expr::Starred(_)))
+    {
+        return None;
+    }
+
+    let format = format.chars().collect::<Vec<_>>();
+    let mut position = 0;
+    let mut argument_index = 0;
+    let mut parts = Vec::with_capacity(arguments.elts.len() * 2 + 1);
+    while position < format.len() {
+        let mut literal = String::new();
+        while position < format.len() {
+            if format[position] != '%' {
+                literal.push(format[position]);
+                position += 1;
+            } else if format.get(position + 1) == Some(&'%') {
+                literal.push('%');
+                position += 2;
+            } else {
+                break;
+            }
+        }
+        if !literal.is_empty() {
+            parts.push(PercentFormatPart::Literal(literal));
+        }
+        if position == format.len() {
+            break;
+        }
+
+        let argument = arguments.elts.get(argument_index)?;
+        argument_index += 1;
+        position += 1;
+        let (conversion, format_spec) = parse_percent_format(&format, &mut position)?;
+        parts.push(PercentFormatPart::Formatted {
+            expression: argument,
+            conversion,
+            format_spec,
+        });
+    }
+    (argument_index == arguments.elts.len()).then_some(parts)
+}
+
+fn parse_percent_format(format: &[char], position: &mut usize) -> Option<(u32, Option<String>)> {
+    const MAX_DIGITS: usize = 3;
+
+    let mut next = || {
+        let character = format.get(*position).copied()?;
+        *position += 1;
+        Some(character)
+    };
+
+    let mut left_justify = false;
+    let mut character = loop {
+        let character = next()?;
+        match character {
+            '-' => left_justify = true,
+            '+' | ' ' | '#' | '0' => {}
+            _ => break character,
+        }
+    };
+
+    let mut width = None;
+    if character.is_ascii_digit() {
+        let mut value = 0_u32;
+        let mut digits = 0;
+        while character.is_ascii_digit() {
+            value = value * 10 + character.to_digit(10).unwrap();
+            character = next()?;
+            digits += 1;
+            if digits >= MAX_DIGITS {
+                return None;
+            }
+        }
+        width = Some(value);
+    }
+
+    let mut precision = None;
+    if character == '.' {
+        character = next()?;
+        let mut value = 0_u32;
+        if character.is_ascii_digit() {
+            let mut digits = 0;
+            while character.is_ascii_digit() {
+                value = value * 10 + character.to_digit(10).unwrap();
+                character = next()?;
+                digits += 1;
+                if digits >= MAX_DIGITS {
+                    return None;
+                }
+            }
+        }
+        precision = Some(value);
+    }
+
+    let conversion = match character {
+        's' => 1,
+        'r' => 2,
+        'a' => 3,
+        _ => return None,
+    };
+    let mut format_spec = String::new();
+    if !left_justify && width.is_some_and(|width| width > 0) {
+        format_spec.push('>');
+    }
+    if let Some(width) = width {
+        use std::fmt::Write;
+        write!(format_spec, "{width}").unwrap();
+    }
+    if let Some(precision) = precision {
+        use std::fmt::Write;
+        write!(format_spec, ".{precision}").unwrap();
+    }
+
+    Some((conversion, (!format_spec.is_empty()).then_some(format_spec)))
 }
 
 fn fold_constant(expression: &Expr) -> Option<Constant> {
@@ -10910,13 +12973,22 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
             .map(fold_constant)
             .collect::<Option<Vec<_>>>()
             .map(Constant::Tuple),
+        Expr::Subscript(subscript) if subscript.ctx == ExprContext::Load => {
+            fold_literal_subscript(&subscript.value, &subscript.slice)
+        }
+        Expr::Slice(slice) => constant_slice(slice),
         Expr::UnaryOp(unary) => match unary.op {
             UnaryOp::UAdd => fold_constant(&unary.operand),
             UnaryOp::Not => literal_truthiness(&unary.operand).map(|value| Constant::Bool(!value)),
             UnaryOp::USub => match fold_constant(&unary.operand)? {
+                Constant::Int(0) => Some(Constant::Int(0)),
                 Constant::Int(value) => i64::try_from(value)
                     .ok()
                     .map(|value| Constant::SignedInt(-value)),
+                Constant::BigInt { negative, digits } => Some(Constant::BigInt {
+                    negative: !negative,
+                    digits,
+                }),
                 Constant::Float(value) => Some(Constant::Float(-value)),
                 Constant::Complex { real, imag } => Some(Constant::Complex {
                     real: -real,
@@ -10924,7 +12996,23 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                 }),
                 _ => None,
             },
-            UnaryOp::Invert => None,
+            UnaryOp::Invert => match fold_constant(&unary.operand)? {
+                Constant::Int(value) => {
+                    let magnitude = u128::from(value) + 1;
+                    if magnitude < i64::MIN.unsigned_abs().into() {
+                        Some(Constant::SignedInt(-(magnitude as i64)))
+                    } else if magnitude == i64::MIN.unsigned_abs().into() {
+                        Some(Constant::SignedInt(i64::MIN))
+                    } else {
+                        Some(Constant::BigInt {
+                            negative: true,
+                            digits: big_integer_digits(&magnitude.to_string()),
+                        })
+                    }
+                }
+                Constant::SignedInt(value) => Some(Constant::SignedInt(!value)),
+                _ => None,
+            },
         },
         Expr::BinOp(binary) => {
             let left = fold_constant(&binary.left)?;
@@ -10934,10 +13022,27 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                     left.checked_add(right).map(Constant::Int)
                 }
                 (Constant::Int(left), Operator::Sub, Constant::Int(right)) => {
-                    left.checked_sub(right).map(Constant::Int)
+                    if let Some(value) = left.checked_sub(right) {
+                        Some(Constant::Int(value))
+                    } else {
+                        let magnitude = right - left;
+                        if magnitude <= i64::MAX.cast_unsigned() {
+                            Some(Constant::SignedInt(-(magnitude.cast_signed())))
+                        } else if magnitude == i64::MIN.unsigned_abs() {
+                            Some(Constant::SignedInt(i64::MIN))
+                        } else {
+                            Some(Constant::BigInt {
+                                negative: true,
+                                digits: big_integer_digits(&magnitude.to_string()),
+                            })
+                        }
+                    }
                 }
                 (Constant::Int(left), Operator::Mult, Constant::Int(right)) => {
                     left.checked_mul(right).map(Constant::Int)
+                }
+                (Constant::Int(left), Operator::Div, Constant::Int(right)) if right != 0 => {
+                    Some(Constant::Float(left as f64 / right as f64))
                 }
                 (Constant::Int(left), Operator::FloorDiv, Constant::Int(right)) if right != 0 => {
                     Some(Constant::Int(left / right))
@@ -10945,10 +13050,26 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                 (Constant::Int(left), Operator::Mod, Constant::Int(right)) if right != 0 => {
                     Some(Constant::Int(left % right))
                 }
-                (Constant::Int(left), Operator::Pow, Constant::Int(right)) => u32::try_from(right)
-                    .ok()
-                    .and_then(|right| left.checked_pow(right))
-                    .map(Constant::Int),
+                (Constant::Int(left), Operator::Pow, Constant::Int(right)) => {
+                    let right = u32::try_from(right).ok()?;
+                    if let Some(value) = left.checked_pow(right) {
+                        Some(Constant::Int(value))
+                    } else {
+                        u128::from(left)
+                            .checked_pow(right)
+                            .map(|value| Constant::BigInt {
+                                negative: false,
+                                digits: big_integer_digits(&value.to_string()),
+                            })
+                    }
+                }
+                (
+                    Constant::Int(0) | Constant::Bool(false),
+                    Operator::Pow,
+                    Constant::BigInt {
+                        negative: false, ..
+                    },
+                ) => Some(Constant::Int(0)),
                 (Constant::Int(left), Operator::LShift, Constant::Int(right)) => {
                     u32::try_from(right)
                         .ok()
@@ -10982,6 +13103,62 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                 (Constant::Float(left), Operator::Div, Constant::Float(right)) if right != 0.0 => {
                     Some(Constant::Float(left / right))
                 }
+                (left, operator @ (Operator::Add | Operator::Sub | Operator::Div), right)
+                    if matches!(left, Constant::Float(_))
+                        && matches!(
+                            right,
+                            Constant::Bool(_) | Constant::Int(_) | Constant::SignedInt(_)
+                        )
+                        || matches!(right, Constant::Float(_))
+                            && matches!(
+                                left,
+                                Constant::Bool(_) | Constant::Int(_) | Constant::SignedInt(_)
+                            ) =>
+                {
+                    let to_float = |constant: Constant| match constant {
+                        Constant::Bool(value) => Some(f64::from(value)),
+                        Constant::Int(value) => Some(value as f64),
+                        Constant::SignedInt(value) => Some(value as f64),
+                        Constant::Float(value) => Some(value),
+                        _ => None,
+                    };
+                    let left = to_float(left)?;
+                    let right = to_float(right)?;
+                    match operator {
+                        Operator::Add => Some(Constant::Float(left + right)),
+                        Operator::Sub => Some(Constant::Float(left - right)),
+                        Operator::Div if right != 0.0 => Some(Constant::Float(left / right)),
+                        Operator::Div => None,
+                        _ => unreachable!(),
+                    }
+                }
+                (Constant::Float(left), Operator::Pow, Constant::Float(right)) => {
+                    let result = left.powf(right);
+                    result.is_finite().then_some(Constant::Float(result))
+                }
+                (Constant::Float(left), Operator::FloorDiv, Constant::Int(right)) if right != 0 => {
+                    Some(Constant::Float((left / right as f64).floor()))
+                }
+                (Constant::Bool(left), Operator::Pow, Constant::Bool(right)) => {
+                    Some(Constant::Int(u64::from(left).pow(u32::from(right))))
+                }
+                (left, operator @ (Operator::Add | Operator::Sub | Operator::Mult), right)
+                    if matches!(left, Constant::Complex { .. })
+                        || matches!(right, Constant::Complex { .. }) =>
+                {
+                    let (left_real, left_imag) = constant_complex_parts(&left)?;
+                    let (right_real, right_imag) = constant_complex_parts(&right)?;
+                    let (real, imag) = match operator {
+                        Operator::Add => (left_real + right_real, left_imag + right_imag),
+                        Operator::Sub => (left_real - right_real, left_imag - right_imag),
+                        Operator::Mult => (
+                            left_real * right_real - left_imag * right_imag,
+                            left_real * right_imag + left_imag * right_real,
+                        ),
+                        _ => unreachable!(),
+                    };
+                    Some(Constant::Complex { real, imag })
+                }
                 (Constant::String(mut left), Operator::Add, Constant::String(right)) => {
                     left.push_str(&right);
                     Some(Constant::String(left))
@@ -10990,9 +13167,139 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                     left.extend(right);
                     Some(Constant::Bytes(left))
                 }
+                (Constant::String(value), Operator::Mult, Constant::Int(times))
+                | (Constant::Int(times), Operator::Mult, Constant::String(value)) => {
+                    let length = value.chars().count();
+                    if length == 0 {
+                        Some(Constant::String(String::new()))
+                    } else {
+                        let times = usize::try_from(times).ok()?;
+                        (times <= 4096 / length).then(|| Constant::String(value.repeat(times)))
+                    }
+                }
+                (Constant::Bytes(value), Operator::Mult, Constant::Int(times))
+                | (Constant::Int(times), Operator::Mult, Constant::Bytes(value)) => {
+                    if value.is_empty() {
+                        Some(Constant::Bytes(Vec::new()))
+                    } else {
+                        let times = usize::try_from(times).ok()?;
+                        (times <= 4096 / value.len()).then(|| Constant::Bytes(value.repeat(times)))
+                    }
+                }
+                (Constant::Tuple(value), Operator::Mult, Constant::Int(times))
+                | (Constant::Int(times), Operator::Mult, Constant::Tuple(value)) => {
+                    if value.is_empty() {
+                        Some(Constant::Tuple(Vec::new()))
+                    } else {
+                        let times = usize::try_from(times).ok()?;
+                        (times <= 256 / value.len()).then(|| {
+                            Constant::Tuple(
+                                (0..times).flat_map(|_| value.iter().cloned()).collect(),
+                            )
+                        })
+                    }
+                }
                 _ => None,
             }
         }
+        _ => None,
+    }
+}
+
+fn fold_literal_subscript(value: &Expr, index: &Expr) -> Option<Constant> {
+    let value = fold_constant(value)?;
+    if !matches!(index, Expr::Slice(_)) {
+        let index = match fold_constant(index)? {
+            Constant::Bool(value) => i128::from(u8::from(value)),
+            Constant::Int(value) => i128::try_from(value).ok()?,
+            Constant::SignedInt(value) => i128::from(value),
+            _ => return None,
+        };
+        let length = match &value {
+            Constant::String(value) => value.chars().count(),
+            Constant::Bytes(value) => value.len(),
+            Constant::Tuple(value) => value.len(),
+            _ => return None,
+        };
+        let index = if index < 0 {
+            i128::try_from(length).ok()?.checked_add(index)?
+        } else {
+            index
+        };
+        let index = usize::try_from(index)
+            .ok()
+            .filter(|index| *index < length)?;
+        return match value {
+            Constant::String(value) => value
+                .chars()
+                .nth(index)
+                .map(|character| Constant::String(character.to_string())),
+            Constant::Bytes(value) => Some(Constant::Int(u64::from(value[index]))),
+            Constant::Tuple(value) => Some(value[index].clone()),
+            _ => None,
+        };
+    }
+
+    let Expr::Slice(slice) = index else {
+        unreachable!();
+    };
+    if slice.step.is_some() && constant_slice(slice).is_none() {
+        return None;
+    }
+
+    fn integer(expression: &Expr) -> Option<usize> {
+        match fold_constant(expression)? {
+            Constant::Bool(value) => Some(usize::from(value)),
+            Constant::Int(value) => usize::try_from(value).ok(),
+            Constant::SignedInt(value) if value >= 0 => usize::try_from(value).ok(),
+            Constant::SignedInt(_) => None,
+            Constant::BigInt {
+                negative: false, ..
+            } => Some(usize::MAX),
+            Constant::BigInt { negative: true, .. } => None,
+            _ => None,
+        }
+    }
+
+    fn bound(expression: Option<&Expr>, length: usize, default: usize) -> Option<usize> {
+        let Some(expression) = expression else {
+            return Some(default);
+        };
+        integer(expression).map(|value| value.min(length))
+    }
+
+    fn indices(slice: &ruff_python_ast::ExprSlice, length: usize) -> Option<Vec<usize>> {
+        let lower = bound(slice.lower.as_deref(), length, 0)?;
+        let upper = bound(slice.upper.as_deref(), length, length)?;
+        let step = slice.step.as_deref().map_or(Some(1), integer)?;
+        if step == 0 {
+            return None;
+        }
+        Some((lower.min(upper)..upper).step_by(step).collect())
+    }
+
+    match value {
+        Constant::String(value) => {
+            let characters = value.chars().collect::<Vec<_>>();
+            Some(Constant::String(
+                indices(slice, characters.len())?
+                    .into_iter()
+                    .map(|index| characters[index])
+                    .collect(),
+            ))
+        }
+        Constant::Bytes(value) => Some(Constant::Bytes(
+            indices(slice, value.len())?
+                .into_iter()
+                .map(|index| value[index])
+                .collect(),
+        )),
+        Constant::Tuple(value) => Some(Constant::Tuple(
+            indices(slice, value.len())?
+                .into_iter()
+                .map(|index| value[index].clone())
+                .collect(),
+        )),
         _ => None,
     }
 }
@@ -11003,15 +13310,32 @@ fn folded_bool_operand(expression: &Expr) -> Option<(&Expr, Constant)> {
     };
     let (last, leading) = boolean.values.split_last()?;
     for value in leading {
-        let (origin, constant) = folded_bool_operand(value)?;
+        if matches!(value, Expr::BoolOp(_)) {
+            return None;
+        }
+        let constant = fold_constant(value)?;
         let truthiness = constant_truthiness(&constant)?;
         if matches!(boolean.op, BoolOp::And) && !truthiness
             || matches!(boolean.op, BoolOp::Or) && truthiness
         {
-            return Some((origin, constant));
+            return Some((value, constant));
         }
     }
-    folded_bool_operand(last)
+    if matches!(last, Expr::BoolOp(_)) {
+        None
+    } else {
+        fold_constant(last).map(|constant| (last, constant))
+    }
+}
+
+fn constant_complex_parts(constant: &Constant) -> Option<(f64, f64)> {
+    match constant {
+        Constant::Int(value) => Some((*value as f64, 0.0)),
+        Constant::SignedInt(value) => Some((*value as f64, 0.0)),
+        Constant::Float(value) => Some((*value, 0.0)),
+        Constant::Complex { real, imag } => Some((*real, *imag)),
+        _ => None,
+    }
 }
 
 fn constant_truthiness(constant: &Constant) -> Option<bool> {
@@ -11021,7 +13345,7 @@ fn constant_truthiness(constant: &Constant) -> Option<bool> {
         Constant::Ellipsis | Constant::Slice { .. } | Constant::Code(_) => Some(true),
         Constant::Int(value) => Some(*value != 0),
         Constant::SignedInt(value) => Some(*value != 0),
-        Constant::BigInt(_) => None,
+        Constant::BigInt { digits, .. } => Some(!digits.is_empty()),
         Constant::Float(value) => Some(*value != 0.0),
         Constant::Complex { real, imag } => Some(*real != 0.0 || *imag != 0.0),
         Constant::String(value) => Some(!value.is_empty()),
@@ -11032,7 +13356,7 @@ fn constant_truthiness(constant: &Constant) -> Option<bool> {
 
 fn constant_slice(slice: &ruff_python_ast::ExprSlice) -> Option<Constant> {
     fn bound(expression: Option<&Expr>) -> Option<Constant> {
-        expression.map_or(Some(Constant::None), fold_constant)
+        expression.map_or(Some(Constant::None), literal_constant)
     }
 
     Some(Constant::Slice {
@@ -11040,6 +13364,10 @@ fn constant_slice(slice: &ruff_python_ast::ExprSlice) -> Option<Constant> {
         upper: Box::new(bound(slice.upper.as_deref())?),
         step: Box::new(bound(slice.step.as_deref())?),
     })
+}
+
+fn two_element_slice_optimization(slice: &ruff_python_ast::ExprSlice) -> bool {
+    slice.step.is_none() && constant_slice(slice).is_none()
 }
 
 fn first_literal_constant(expression: &Expr) -> Option<Constant> {
@@ -11129,8 +13457,11 @@ fn statement_terminates(statement: &Stmt) -> bool {
     match statement {
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(_) | Stmt::Raise(_) => true,
         Stmt::While(statement) => {
-            literal_truthiness(&statement.test) == Some(true)
+            early_condition_truthiness(&statement.test) == Some(true)
                 && !suite_contains_loop_break(&statement.body)
+        }
+        Stmt::For(statement) => {
+            !suite_contains_loop_break(&statement.body) && suite_terminates(&statement.orelse)
         }
         Stmt::If(statement) => {
             suite_terminates(&statement.body)
@@ -11148,6 +13479,21 @@ fn statement_terminates(statement: &Stmt) -> bool {
     }
 }
 
+fn terminating_if_fallthrough_test(statement: &ruff_python_ast::StmtIf) -> Option<&Expr> {
+    if !suite_terminates(&statement.body) {
+        return None;
+    }
+    let mut final_test = statement.test.as_ref();
+    for clause in &statement.elif_else_clauses {
+        let test = clause.test.as_ref()?;
+        if !suite_terminates(&clause.body) {
+            return None;
+        }
+        final_test = test;
+    }
+    Some(final_test)
+}
+
 fn terminal_exception_handler_if_supported(statement: &ruff_python_ast::StmtIf) -> bool {
     std::iter::once(statement.body.as_slice())
         .chain(
@@ -11163,7 +13509,9 @@ fn terminal_exception_handler_if_supported(statement: &ruff_python_ast::StmtIf) 
 }
 
 fn statement_uses_implicit_return_location(statement: &Stmt) -> bool {
-    matches!(statement, Stmt::Expr(expression) if fold_constant(&expression.value).is_some())
+    matches!(statement, Stmt::Assign(assignment) if assignment.targets.len() > 1 || matches!(assignment.targets.last(), Some(Expr::List(_) | Expr::Tuple(_))))
+        || matches!(statement, Stmt::Assign(assignment) if expression_defers_async_comprehension_restore(&assignment.value))
+        || matches!(statement, Stmt::Expr(expression) if fold_constant(&expression.value).is_some())
         || matches!(
             statement,
             Stmt::AnnAssign(assignment)
@@ -11171,12 +13519,44 @@ fn statement_uses_implicit_return_location(statement: &Stmt) -> bool {
                     && matches!(assignment.target.as_ref(), Expr::Subscript(_))
         )
         || matches!(statement, Stmt::While(statement) if statement.orelse.is_empty())
-        || matches!(statement, Stmt::For(statement) if statement.orelse.is_empty())
+        || matches!(
+            statement,
+            Stmt::For(statement)
+                if statement.orelse.is_empty()
+                    && !suite_contains_loop_break(&statement.body)
+        )
 }
 
-fn implicit_return_range(statement: &Stmt) -> ruff_text_size::TextRange {
+fn expression_defers_async_comprehension_restore(expression: &Expr) -> bool {
+    match expression {
+        Expr::ListComp(comprehension) => comprehension
+            .generators
+            .iter()
+            .any(|generator| generator.is_async),
+        Expr::SetComp(comprehension) => comprehension
+            .generators
+            .iter()
+            .any(|generator| generator.is_async),
+        Expr::DictComp(comprehension) => comprehension
+            .generators
+            .iter()
+            .any(|generator| generator.is_async),
+        _ => false,
+    }
+}
+
+fn implicit_return_range(compiler: &Compiler, statement: &Stmt) -> ruff_text_size::TextRange {
     match statement {
-        Stmt::Expr(expression) => expression.value.range(),
+        Stmt::Assign(assignment) => assignment
+            .targets
+            .last()
+            .map_or(statement.range(), |target| {
+                last_store_target_range(compiler, target)
+            }),
+        Stmt::Expr(expression) => match expression.value.as_ref() {
+            Expr::FString(fstring) => compiler.fstring_result_range(fstring),
+            expression => expression.range(),
+        },
         Stmt::AnnAssign(assignment) => {
             let Expr::Subscript(subscript) = assignment.target.as_ref() else {
                 return statement.range();
@@ -11189,20 +13569,59 @@ fn implicit_return_range(statement: &Stmt) -> ruff_text_size::TextRange {
     }
 }
 
+fn last_store_target_range(compiler: &Compiler, expression: &Expr) -> ruff_text_size::TextRange {
+    match expression {
+        Expr::List(list) => list.elts.last().map_or(expression.range(), |target| {
+            last_store_target_range(compiler, target)
+        }),
+        Expr::Tuple(tuple) => tuple.elts.last().map_or(expression.range(), |target| {
+            last_store_target_range(compiler, target)
+        }),
+        Expr::Starred(starred) => last_store_target_range(compiler, &starred.value),
+        Expr::Attribute(attribute) => compiler.attribute_opcode_range(attribute),
+        _ => expression.range(),
+    }
+}
+
 fn statement_execution_range(statement: &Stmt) -> ruff_text_size::TextRange {
     match statement {
-        Stmt::Assign(statement) => statement.value.range(),
+        Stmt::Assign(statement) => first_expression_instruction_range(&statement.value),
         Stmt::AnnAssign(statement) => statement
             .value
             .as_deref()
-            .map_or(statement.range, Ranged::range),
-        Stmt::AugAssign(statement) => statement.value.range(),
-        Stmt::Expr(statement) => statement.value.range(),
+            .map_or(statement.range, first_expression_instruction_range),
+        Stmt::AugAssign(statement) => first_expression_instruction_range(&statement.target),
+        Stmt::Expr(statement) => first_expression_instruction_range(&statement.value),
         Stmt::Return(statement) => statement
             .value
             .as_deref()
-            .map_or(statement.range, Ranged::range),
+            .map_or(statement.range, first_expression_instruction_range),
         _ => statement.range(),
+    }
+}
+
+fn first_expression_instruction_range(expression: &Expr) -> ruff_text_size::TextRange {
+    if matches!(
+        expression,
+        Expr::BinOp(_) | Expr::Name(_) | Expr::UnaryOp(_) | Expr::Tuple(_)
+    ) && fold_constant(expression).is_some()
+    {
+        return expression.range();
+    }
+    match expression {
+        Expr::Attribute(attribute) => first_expression_instruction_range(&attribute.value),
+        Expr::BinOp(binary) => first_expression_instruction_range(&binary.left),
+        Expr::BoolOp(boolean) => boolean
+            .values
+            .first()
+            .map_or(expression.range(), first_expression_instruction_range),
+        Expr::Call(call) => first_expression_instruction_range(&call.func),
+        Expr::Compare(compare) => first_expression_instruction_range(&compare.left),
+        Expr::If(conditional) => first_expression_instruction_range(&conditional.test),
+        Expr::Named(named) => first_expression_instruction_range(&named.value),
+        Expr::Subscript(subscript) => first_expression_instruction_range(&subscript.value),
+        Expr::UnaryOp(unary) => first_expression_instruction_range(&unary.operand),
+        _ => expression.range(),
     }
 }
 
@@ -11236,11 +13655,20 @@ fn literal_truthiness(expression: &Expr) -> Option<bool> {
         },
         Expr::StringLiteral(value) => Some(!value.value.is_empty()),
         Expr::BytesLiteral(value) => Some(!value.value.is_empty()),
-        Expr::List(value) => Some(!value.elts.is_empty()),
+        Expr::FString(_) => match fold_constant(expression)? {
+            Constant::String(value) => Some(!value.is_empty()),
+            _ => None,
+        },
         Expr::Tuple(value) => Some(!value.elts.is_empty()),
-        Expr::Set(value) => Some(!value.elts.is_empty()),
-        Expr::Dict(value) => Some(!value.items.is_empty()),
         _ => None,
+    }
+}
+
+fn early_condition_truthiness(expression: &Expr) -> Option<bool> {
+    if matches!(expression, Expr::Tuple(_)) {
+        None
+    } else {
+        literal_truthiness(expression)
     }
 }
 
@@ -11276,7 +13704,9 @@ fn suite_contains_loop_break(body: &[Stmt]) -> bool {
             .cases
             .iter()
             .any(|case| suite_contains_loop_break(&case.body)),
-        Stmt::For(_) | Stmt::While(_) | Stmt::FunctionDef(_) | Stmt::ClassDef(_) => false,
+        Stmt::For(statement) => suite_contains_loop_break(&statement.orelse),
+        Stmt::While(statement) => suite_contains_loop_break(&statement.orelse),
+        Stmt::FunctionDef(_) | Stmt::ClassDef(_) => false,
         _ => false,
     })
 }
@@ -11427,18 +13857,121 @@ fn expression_name(expression: &Expr) -> &'static str {
 }
 
 fn unparse_annotation(expression: &Expr) -> String {
+    if let Expr::StringLiteral(string) = expression {
+        return python_string_repr(string.value.to_str());
+    }
     let indentation = Indentation::default();
     let mut annotation = Generator::new(&indentation, LineEnding::Lf)
         .with_mode(CodegenMode::AstUnparse)
         .expr(expression);
-    if matches!(expression, Expr::Subscript(subscript) if matches!(subscript.slice.as_ref(), Expr::Tuple(_)))
-        && annotation.ends_with(")]")
-        && let Some(opening) = annotation.rfind("[(")
-    {
-        annotation.remove(opening + 1);
-        annotation.remove(annotation.len() - 2);
+    let bytes = annotation.as_bytes();
+    let mut stack = Vec::<(u8, usize)>::new();
+    let mut parenthesis_pairs = HashSet::new();
+    let mut bracket_pairs = Vec::new();
+    let mut quote = None::<(u8, bool)>;
+    let mut index = 0_usize;
+    while index < bytes.len() {
+        if let Some((delimiter, triple)) = quote {
+            if bytes[index] == b'\\' {
+                index = (index + 2).min(bytes.len());
+                continue;
+            }
+            if bytes[index] == delimiter
+                && (!triple
+                    || bytes.get(index + 1) == Some(&delimiter)
+                        && bytes.get(index + 2) == Some(&delimiter))
+            {
+                index += if triple { 3 } else { 1 };
+                quote = None;
+                continue;
+            }
+            index += 1;
+            continue;
+        }
+        match bytes[index] {
+            delimiter @ (b'\'' | b'"') => {
+                let triple = bytes.get(index + 1) == Some(&delimiter)
+                    && bytes.get(index + 2) == Some(&delimiter);
+                quote = Some((delimiter, triple));
+                index += if triple { 3 } else { 1 };
+                continue;
+            }
+            delimiter @ (b'(' | b'[' | b'{') => stack.push((delimiter, index)),
+            b')' | b']' | b'}' => {
+                let closing = bytes[index];
+                let expected = match closing {
+                    b')' => b'(',
+                    b']' => b'[',
+                    _ => b'{',
+                };
+                if let Some((opening, opening_index)) = stack.pop()
+                    && opening == expected
+                {
+                    if opening == b'(' {
+                        parenthesis_pairs.insert((opening_index, index));
+                    } else if opening == b'[' {
+                        bracket_pairs.push((opening_index, index));
+                    }
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    let mut removals = bracket_pairs
+        .into_iter()
+        .filter_map(|(opening, closing)| {
+            let is_subscript = annotation.as_bytes()[..opening]
+                .iter()
+                .rev()
+                .find(|byte| !byte.is_ascii_whitespace())
+                .is_some_and(|byte| {
+                    byte.is_ascii_alphanumeric()
+                        || matches!(byte, b'_' | b')' | b']' | b'}' | b'\'' | b'"')
+                });
+            (is_subscript
+                && closing.saturating_sub(opening) > 3
+                && parenthesis_pairs.contains(&(opening + 1, closing.saturating_sub(1))))
+            .then_some([opening + 1, closing - 1])
+        })
+        .flatten()
+        .collect::<Vec<_>>();
+    removals.sort_unstable_by(|left, right| right.cmp(left));
+    for index in removals {
+        annotation.remove(index);
     }
     annotation
+}
+
+fn python_string_repr(value: &str) -> String {
+    let quote = if value.contains('\'') && !value.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut repr = String::with_capacity(value.len() + 2);
+    repr.push(quote);
+    for character in value.chars() {
+        match character {
+            '\\' => repr.push_str("\\\\"),
+            '\n' => repr.push_str("\\n"),
+            '\r' => repr.push_str("\\r"),
+            '\t' => repr.push_str("\\t"),
+            '\x08' => repr.push_str("\\b"),
+            '\x0c' => repr.push_str("\\f"),
+            character if character == quote => {
+                repr.push('\\');
+                repr.push(character);
+            }
+            character if character.is_control() => {
+                use std::fmt::Write;
+                write!(repr, "\\x{:02x}", u32::from(character)).unwrap();
+            }
+            character => repr.push(character),
+        }
+    }
+    repr.push(quote);
+    repr
 }
 
 fn clean_doc(docstring: &str) -> String {

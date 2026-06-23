@@ -32,7 +32,7 @@ enum ObjectKey {
     Ellipsis,
     Int(u64),
     SignedInt(i64),
-    BigInt(Vec<u16>),
+    BigInt(bool, Vec<u16>),
     Float(u64),
     Complex(u64, u64),
     String(String),
@@ -43,6 +43,7 @@ enum ObjectKey {
     AnnotationLocals(usize),
     EmptyTuple,
     Slice(Box<Self>, Box<Self>, Box<Self>),
+    SliceMember(usize),
     Code(usize),
     CodeBytes(usize),
     LocalKinds(usize),
@@ -73,6 +74,8 @@ impl ObjectGraph {
             return;
         }
         self.record(code_bytes_key(code));
+        self.interned_strings
+            .extend(code.interned_constant_strings.iter().cloned());
         self.visit_constants_tuple(&code.constants);
         self.visit_strings_tuple(&code.names);
         self.visit_locals_tuple(code);
@@ -128,8 +131,8 @@ impl ObjectGraph {
             Constant::SignedInt(value) => {
                 self.record(ObjectKey::SignedInt(*value));
             }
-            Constant::BigInt(value) => {
-                self.record(ObjectKey::BigInt(value.clone()));
+            Constant::BigInt { negative, digits } => {
+                self.record(ObjectKey::BigInt(*negative, digits.clone()));
             }
             Constant::Float(value) => {
                 self.record(ObjectKey::Float(value.to_bits()));
@@ -160,12 +163,20 @@ impl ObjectGraph {
             Constant::Slice { lower, upper, step } => {
                 let key = constant_key(value);
                 if self.record(key) {
-                    self.visit_constant(lower);
-                    self.visit_constant(upper);
-                    self.visit_constant(step);
+                    self.visit_slice_member(lower);
+                    self.visit_slice_member(upper);
+                    self.visit_slice_member(step);
                 }
             }
             Constant::Code(code) => self.visit_code(code),
+        }
+    }
+
+    fn visit_slice_member(&mut self, value: &Constant) {
+        if slice_member_uses_identity(value) {
+            self.record(ObjectKey::SliceMember(std::ptr::from_ref(value).addr()));
+        } else {
+            self.visit_constant(value);
         }
     }
 
@@ -177,7 +188,7 @@ impl ObjectGraph {
             ObjectKey::Int(value) => *value <= 256,
             ObjectKey::SignedInt(value) => (-5..=256).contains(value),
             ObjectKey::String(value) => self.interned_strings.contains(value),
-            ObjectKey::Bytes(value) => value.is_empty(),
+            ObjectKey::Bytes(value) => value.len() <= 1,
             ObjectKey::EmptyTuple => true,
             _ => false,
         }
@@ -361,7 +372,9 @@ impl Writer<'_> {
             Constant::Ellipsis => self.byte(TYPE_ELLIPSIS),
             Constant::Int(value) => self.integer(*value, force_reference),
             Constant::SignedInt(value) => self.signed_integer(*value, force_reference),
-            Constant::BigInt(value) => self.big_integer(value, force_reference),
+            Constant::BigInt { negative, digits } => {
+                self.big_integer(digits, *negative, force_reference);
+            }
             Constant::Float(value) => {
                 let Some(flag) =
                     self.begin_object(ObjectKey::Float(value.to_bits()), force_reference)
@@ -414,11 +427,107 @@ impl Writer<'_> {
                     return;
                 };
                 self.byte(TYPE_SLICE | flag);
-                self.constant(lower);
-                self.constant(upper);
-                self.constant(step);
+                self.slice_member(lower);
+                self.slice_member(upper);
+                self.slice_member(step);
             }
             Constant::Code(code) => self.write_code(code, false),
+        }
+    }
+
+    fn slice_member(&mut self, value: &Constant) {
+        if !slice_member_uses_identity(value) {
+            self.constant(value);
+            return;
+        }
+        let key = ObjectKey::SliceMember(std::ptr::from_ref(value).addr());
+        let Some(flag) = self.begin_object(key, false) else {
+            return;
+        };
+        match value {
+            Constant::Int(value) => {
+                if let Ok(value) = i32::try_from(*value) {
+                    self.byte(TYPE_INT | flag);
+                    self.output.extend_from_slice(&value.to_le_bytes());
+                } else {
+                    self.byte(TYPE_LONG | flag);
+                    let digit_count = (64 - value.leading_zeros()).div_ceil(15).max(1);
+                    self.long(digit_count);
+                    let mut remaining = *value;
+                    for _ in 0..digit_count {
+                        self.output
+                            .extend_from_slice(&((remaining & 0x7fff) as u16).to_le_bytes());
+                        remaining >>= 15;
+                    }
+                }
+            }
+            Constant::SignedInt(value) => {
+                if let Ok(value) = i32::try_from(*value) {
+                    self.byte(TYPE_INT | flag);
+                    self.output.extend_from_slice(&value.to_le_bytes());
+                } else {
+                    self.byte(TYPE_LONG | flag);
+                    let magnitude = value.unsigned_abs();
+                    let digit_count = (64 - magnitude.leading_zeros()).div_ceil(15).max(1);
+                    self.long(0_u32.wrapping_sub(digit_count));
+                    let mut remaining = magnitude;
+                    for _ in 0..digit_count {
+                        self.output
+                            .extend_from_slice(&((remaining & 0x7fff) as u16).to_le_bytes());
+                        remaining >>= 15;
+                    }
+                }
+            }
+            Constant::BigInt { negative, digits } => {
+                self.byte(TYPE_LONG | flag);
+                let digit_count =
+                    u32::try_from(digits.len()).expect("marshal integer limit exceeded");
+                self.long(if *negative {
+                    0_u32.wrapping_sub(digit_count)
+                } else {
+                    digit_count
+                });
+                for digit in digits {
+                    self.output.extend_from_slice(&digit.to_le_bytes());
+                }
+            }
+            Constant::Float(value) => {
+                self.byte(TYPE_BINARY_FLOAT | flag);
+                self.output.extend_from_slice(&value.to_le_bytes());
+            }
+            Constant::Complex { real, imag } => {
+                self.byte(TYPE_BINARY_COMPLEX | flag);
+                self.output.extend_from_slice(&real.to_le_bytes());
+                self.output.extend_from_slice(&imag.to_le_bytes());
+            }
+            Constant::String(value) => {
+                let bytes = value.as_bytes();
+                if value.is_ascii() && bytes.len() < 256 {
+                    self.byte(TYPE_SHORT_ASCII | flag);
+                    self.byte(
+                        u8::try_from(bytes.len()).expect("short ASCII string length fits in u8"),
+                    );
+                } else {
+                    self.byte(if value.is_ascii() {
+                        TYPE_ASCII | flag
+                    } else {
+                        TYPE_UNICODE | flag
+                    });
+                    self.long(
+                        bytes
+                            .len()
+                            .try_into()
+                            .expect("marshal string exceeds 4 GiB"),
+                    );
+                }
+                self.output.extend_from_slice(bytes);
+            }
+            Constant::Bytes(value) => {
+                self.byte(TYPE_BYTES | flag);
+                self.long(value.len().try_into().expect("marshal value exceeds 4 GiB"));
+                self.output.extend_from_slice(value);
+            }
+            _ => unreachable!("only non-cached scalar slice members use identity keys"),
         }
     }
 
@@ -465,18 +574,19 @@ impl Writer<'_> {
         }
     }
 
-    fn big_integer(&mut self, value: &[u16], force_reference: bool) {
-        let Some(flag) = self.begin_object(ObjectKey::BigInt(value.to_vec()), force_reference)
+    fn big_integer(&mut self, value: &[u16], negative: bool, force_reference: bool) {
+        let Some(flag) =
+            self.begin_object(ObjectKey::BigInt(negative, value.to_vec()), force_reference)
         else {
             return;
         };
         self.byte(TYPE_LONG | flag);
-        self.long(
-            value
-                .len()
-                .try_into()
-                .expect("marshal integer limit exceeded"),
-        );
+        let digit_count = u32::try_from(value.len()).expect("marshal integer limit exceeded");
+        self.long(if negative {
+            0_u32.wrapping_sub(digit_count)
+        } else {
+            digit_count
+        });
         for digit in value {
             self.output.extend_from_slice(&digit.to_le_bytes());
         }
@@ -522,6 +632,23 @@ fn local_kinds_key(code: &CodeObject) -> ObjectKey {
     }
 }
 
+fn slice_member_uses_identity(value: &Constant) -> bool {
+    match value {
+        Constant::Int(value) => *value > 256,
+        Constant::SignedInt(value) => !(-5..=256).contains(value),
+        Constant::BigInt { .. } | Constant::Float(_) | Constant::Complex { .. } => true,
+        Constant::String(value) => !should_intern(value),
+        Constant::Bytes(value) => value.len() > 1,
+        Constant::None
+        | Constant::Bool(_)
+        | Constant::Ellipsis
+        | Constant::Tuple(_)
+        | Constant::FrozenSet(_)
+        | Constant::Slice { .. }
+        | Constant::Code(_) => false,
+    }
+}
+
 fn constant_key(value: &Constant) -> ObjectKey {
     match value {
         Constant::None => ObjectKey::None,
@@ -529,7 +656,7 @@ fn constant_key(value: &Constant) -> ObjectKey {
         Constant::Ellipsis => ObjectKey::Ellipsis,
         Constant::Int(value) => ObjectKey::Int(*value),
         Constant::SignedInt(value) => ObjectKey::SignedInt(*value),
-        Constant::BigInt(value) => ObjectKey::BigInt(value.clone()),
+        Constant::BigInt { negative, digits } => ObjectKey::BigInt(*negative, digits.clone()),
         Constant::Float(value) => ObjectKey::Float(value.to_bits()),
         Constant::Complex { real, imag } => ObjectKey::Complex(real.to_bits(), imag.to_bits()),
         Constant::String(value) => ObjectKey::String(value.clone()),
@@ -588,14 +715,19 @@ fn constant_sort_key(value: &Constant) -> Vec<u8> {
                     }
                 }
             }
-            Constant::BigInt(value) => {
+            Constant::BigInt { negative, digits } => {
                 output.push(TYPE_LONG | flag);
+                let digit_count =
+                    u32::try_from(digits.len()).expect("sort-key integer length fits in u32");
                 output.extend_from_slice(
-                    &u32::try_from(value.len())
-                        .expect("sort-key integer length fits in u32")
-                        .to_le_bytes(),
+                    &if *negative {
+                        0_u32.wrapping_sub(digit_count)
+                    } else {
+                        digit_count
+                    }
+                    .to_le_bytes(),
                 );
-                for digit in value {
+                for digit in digits {
                     output.extend_from_slice(&digit.to_le_bytes());
                 }
             }
@@ -735,8 +867,12 @@ fn locals_tuple_key(code: &CodeObject) -> ObjectKey {
 }
 
 fn should_intern(value: &str) -> bool {
-    value.len() <= 1
-        || value
-            .chars()
-            .all(|character| character == '_' || character.is_alphanumeric())
+    value
+        .chars()
+        .next()
+        .is_some_and(|character| value.chars().nth(1).is_none() && u32::from(character) <= 0xff)
+        || value.is_ascii()
+            && value
+                .bytes()
+                .all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
 }
