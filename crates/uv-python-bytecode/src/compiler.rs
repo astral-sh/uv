@@ -4231,6 +4231,10 @@ impl Compiler {
             for exclusions in &mut self.active_exception_region_exclusions {
                 exclusions.push((statement_nop_start, statement_nop_end));
             }
+            if self.generator_region_start.is_some() {
+                self.generator_region_exclusions
+                    .push((statement_nop_start, statement_nop_end));
+            }
         }
         self.assembler.mark(try_start);
         self.active_exception_region_exclusions.push(Vec::new());
