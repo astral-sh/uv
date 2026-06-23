@@ -6611,6 +6611,24 @@ enum LockErrorKind {
         /// The ID of the package.
         name: PackageName,
     },
+    /// An error that occurs when a concrete root package does not belong to the lock.
+    #[error("Could not find root package `{id}` in lock", id = id.cyan())]
+    RootPackageMissingFromLock {
+        /// The ID of the package.
+        id: PackageId,
+    },
+    /// A dependency marker depends on a package outside the selected subgraph.
+    #[error(
+        "Cannot materialize dependency `{dependency}` of `{package}` because its conflict marker depends on a package outside the selected subgraph",
+        package = package.cyan(),
+        dependency = dependency.cyan()
+    )]
+    DependencyConflictOutsideSubgraph {
+        /// The ID of the package that declares the dependency.
+        package: PackageId,
+        /// The ID of the dependency whose inclusion is ambiguous.
+        dependency: PackageId,
+    },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]
     Resolution {

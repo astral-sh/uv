@@ -1353,6 +1353,17 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
      + urllib3==2.2.1
     ");
 
+    // Selecting a member still includes the non-project root's default dependency group.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    Checked 10 packages in [TIME]
+    ");
+
     Ok(())
 }
 
