@@ -381,6 +381,59 @@ fn interrupted_uninstall_during_directory_cleanup_can_be_retried() -> Result<()>
 
 #[test]
 #[cfg(unix)]
+fn interrupted_uninstall_with_missing_nested_parent_can_be_retried() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = context.site_packages();
+    let package = site_packages.join("interrupted_nested_cleanup");
+    let nested_package = package.join("nested");
+    let bytecode = package.join("__pycache__");
+    let dist_info = site_packages.join("interrupted_nested_cleanup-1.0.0.dist-info");
+    fs_err::create_dir_all(&nested_package)?;
+    fs_err::create_dir_all(&bytecode)?;
+    fs_err::create_dir_all(&dist_info)?;
+    fs_err::write(nested_package.join("module.py"), "")?;
+    fs_err::write(
+        dist_info.join("METADATA"),
+        "Metadata-Version: 2.1\nName: interrupted-nested-cleanup\nVersion: 1.0.0\n",
+    )?;
+
+    let record_path = dist_info.join("RECORD");
+    fs_err::write(
+        &record_path,
+        "interrupted_nested_cleanup-1.0.0.dist-info/METADATA,,\n\
+         interrupted_nested_cleanup-1.0.0.dist-info/RECORD,,\n\
+         interrupted_nested_cleanup/nested/module.py,,\n",
+    )?;
+    for index in 0..10_000 {
+        fs_err::write(bytecode.join(format!("module_{index:05}.pyc")), "")?;
+    }
+
+    let first_bytecode_file = bytecode.join("module_00000.pyc");
+    let last_bytecode_file = bytecode.join("module_09999.pyc");
+    let mut command = context.pip_uninstall();
+    command.arg("interrupted-nested-cleanup");
+    let interrupted = interrupt_when(&mut command, || {
+        record_path.exists() && first_bytecode_file.exists() != last_bytecode_file.exists()
+    })?;
+    assert!(
+        interrupted,
+        "failed to interrupt uv during nested directory cleanup"
+    );
+    assert!(!nested_package.exists());
+
+    context
+        .pip_uninstall()
+        .arg("interrupted-nested-cleanup")
+        .assert()
+        .success();
+    assert!(!package.exists());
+    assert!(!dist_info.exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
 fn interrupted_uninstall_by_path_can_be_retried() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let distribution = create_direct_url_distribution(&context, "interrupted-url")?;

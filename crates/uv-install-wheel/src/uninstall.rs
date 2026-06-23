@@ -144,11 +144,17 @@ pub fn uninstall_wheel(
                 Err(err) => return Err(err.into()),
             }
 
-            // Try to read from the directory. If it doesn't exist, assume we deleted it in a
-            // previous iteration.
+            // Try to read from the directory. If it doesn't exist, continue with its parent since
+            // a previous uninstall attempt may have removed only part of the directory tree.
             let mut read_dir = match fs_err::read_dir(path) {
                 Ok(read_dir) => read_dir,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => break,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    if let Some(parent) = path.parent() {
+                        path = parent;
+                        continue;
+                    }
+                    break;
+                }
                 Err(err) => return Err(err.into()),
             };
 
