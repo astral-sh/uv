@@ -2841,10 +2841,27 @@ impl Compiler {
             &mut self.exclude_terminal_if_not_taken,
             !self.active_with_region_exclusions.is_empty(),
         );
-        self.compile_jump_if(&statement.test, false, failure)?;
+        if let Expr::BoolOp(boolean) = statement.test.as_ref()
+            && boolean.op == BoolOp::Or
+            && let Some((last, leading)) = boolean.values.split_last()
+        {
+            for value in leading {
+                let next = self.assembler.label();
+                self.compile_jump_if(value, false, next)?;
+                self.assembler
+                    .set_location(self.source_location(value.range()));
+                self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+                self.assembler.mark(next);
+            }
+            self.compile_jump_if(last, false, failure)?;
+            self.assembler
+                .set_location(self.source_location(last.range()));
+        } else {
+            self.compile_jump_if(&statement.test, false, failure)?;
+            self.assembler
+                .set_location(self.source_location(statement.test.range()));
+        }
         self.exclude_terminal_if_not_taken = previous_exclusion;
-        self.assembler
-            .set_location(self.source_location(statement.test.range()));
         self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
 
         self.assembler.mark(failure);
