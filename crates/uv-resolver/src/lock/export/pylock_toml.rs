@@ -1492,6 +1492,7 @@ impl PylockTomlWheel {
             filename,
             file,
             index,
+            proxy: None,
         })
     }
 }
@@ -1655,6 +1656,7 @@ impl PylockTomlSdist {
             file,
             ext,
             index,
+            proxy: None,
             wheels: vec![],
         })
     }

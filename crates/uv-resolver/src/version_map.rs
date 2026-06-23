@@ -47,6 +47,7 @@ impl VersionMap {
         simple_metadata: OwnedArchive<SimpleDetailMetadata>,
         package_name: &PackageName,
         index: IndexUrl,
+        physical_index: IndexUrl,
         tags: Option<Tags>,
         requires_python: RequiresPython,
         allowed_yanks: AllowedYanks,
@@ -59,6 +60,7 @@ impl VersionMap {
         let mut stable = false;
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
+        let proxy = (physical_index != index).then_some(physical_index);
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
         // isn't done until that specific version is requested.
@@ -102,6 +104,7 @@ impl VersionMap {
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index,
+                proxy,
                 tags,
                 allowed_yanks,
                 hasher,
@@ -508,6 +511,8 @@ struct VersionMapLazy {
     no_build: bool,
     /// The URL of the index where this package came from.
     index: IndexUrl,
+    /// The physical proxy endpoint used to retrieve this package, if any.
+    proxy: Option<IndexUrl>,
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
@@ -527,6 +532,11 @@ struct VersionMapLazy {
 impl VersionMapLazy {
     /// Returns the registry-provided metadata for the given version, if it exists.
     fn get_metadata(&self, version: &Version) -> Option<ResolutionMetadata> {
+        // Version-level metadata is not bound to an artifact. When routing through a proxy,
+        // use artifact metadata so canonicalization can validate its provenance.
+        if self.proxy.is_some() {
+            return None;
+        }
         let archived = self
             .map
             .get(version)
@@ -706,6 +716,7 @@ impl VersionMapLazy {
                             filename,
                             file: Box::new(file),
                             index: self.index.clone(),
+                            proxy: self.proxy.clone(),
                         };
                         priority_dist.insert_built(dist, hashes, compatibility);
                     }
@@ -724,6 +735,7 @@ impl VersionMapLazy {
                             ext: filename.extension,
                             file: Box::new(file),
                             index: self.index.clone(),
+                            proxy: self.proxy.clone(),
                             wheels: vec![],
                         };
                         priority_dist.insert_source(dist, hashes, compatibility);
@@ -904,5 +916,107 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 
     fn end_bound(&self) -> Bound<&'a Version> {
         self.max
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use serde_json::json;
+    use tokio::sync::Semaphore;
+    use uv_cache::Cache;
+    use uv_client::{BaseClientBuilder, MetadataFormat, RegistryClientBuilder};
+    use uv_distribution_types::{
+        Index, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexReference, ProxyIndex,
+    };
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    type Error = Box<dyn std::error::Error>;
+
+    #[tokio::test]
+    async fn proxied_resolution_metadata_is_bound_to_artifacts() -> Result<(), Error> {
+        let proxy_server = MockServer::start().await;
+        let filename = "example-1.0.0-py3-none-any.whl";
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_raw(
+                    json!({
+                        "files": [{
+                            "filename": filename,
+                            "url": format!("https://artifacts.example.com/{filename}"),
+                            "hashes": {},
+                            "core-metadata": true
+                        }],
+                        "core-metadata": {
+                            "1.0.0": {}
+                        }
+                    })
+                    .to_string(),
+                    "application/vnd.pyx.simple.v1+json",
+                ),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let locations =
+            IndexLocations::new(vec![Index::from(canonical.clone())], Vec::new(), false)
+                .with_proxy_indexes(vec![ProxyIndex {
+                    index: IndexReference::Url(canonical.clone()),
+                    url: proxy.clone(),
+                }]);
+        let client = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations)
+            .build()?;
+        let package = PackageName::from_str("example")?;
+        let response = client
+            .simple_detail(
+                &package,
+                Some(IndexMetadataRef::from(&canonical)),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected proxy metadata")?;
+        let MetadataFormat::Simple(simple_metadata) = response.format else {
+            return Err("expected Simple API metadata".into());
+        };
+
+        let version = Version::from_str("1.0.0")?;
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&Version::from_str("3.8")?);
+        let version_map = VersionMap::from_simple_metadata(
+            simple_metadata,
+            &package,
+            response.index_route.canonical.clone(),
+            response.index_route.physical.clone(),
+            None,
+            requires_python,
+            AllowedYanks::default(),
+            HashStrategy::default(),
+            None,
+            None,
+            None,
+            &BuildOptions::default(),
+        );
+
+        assert!(version_map.get_metadata(&version).is_none());
+        let (wheel, _) = version_map
+            .get(&version)
+            .and_then(PrioritizedDist::best_wheel)
+            .ok_or("expected a proxied wheel")?;
+        assert_eq!(wheel.index, canonical);
+        assert_eq!(wheel.proxy.as_ref(), Some(&proxy));
+        assert_eq!(wheel.physical_index(), &proxy);
+        Ok(())
     }
 }

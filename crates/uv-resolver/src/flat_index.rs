@@ -116,6 +116,7 @@ impl FlatDistributions {
                     filename,
                     file: Box::new(file),
                     index,
+                    proxy: None,
                 };
                 match self.0.entry(version) {
                     Entry::Occupied(mut entry) => {
@@ -139,6 +140,7 @@ impl FlatDistributions {
                     ext: filename.extension,
                     file: Box::new(file),
                     index,
+                    proxy: None,
                     wheels: vec![],
                 };
                 match self.0.entry(filename.version) {

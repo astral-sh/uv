@@ -71,6 +71,8 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+    #[error(transparent)]
+    ProxyIndex(#[from] uv_distribution_types::ProxyIndexError),
 }
 
 /// Selectively skip parts or the entire auth middleware.

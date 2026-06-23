@@ -20,9 +20,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
-    RegistryBuiltWheel, Zstd,
+    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexRoute, IndexRoutes, IndexStatusCodeDecision, IndexStatusCodeStrategy,
+    IndexUrl, Name, RegistryBuiltWheel, Zstd,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -142,7 +142,7 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Add all authenticated sources to the cache.
-    fn cache_index_credentials(&mut self) -> Result<(), ClientBuildError> {
+    fn cache_index_credentials(&self) -> Result<(), ClientBuildError> {
         for index in self.index_locations.known_indexes() {
             if let Some(credentials) = index.credentials()? {
                 trace!(
@@ -153,6 +153,18 @@ impl<'a> RegistryClientBuilder<'a> {
                         .map(ToString::to_string)
                         .unwrap_or_else(|| index.url.to_string())
                 );
+                if let Some(root_url) = index.root_url() {
+                    self.base_client_builder
+                        .store_credentials(&root_url, credentials.clone());
+                }
+                self.base_client_builder
+                    .store_credentials(index.raw_url(), credentials);
+            }
+        }
+        for proxy_index in self.index_locations.proxy_indexes() {
+            let index = Index::from(proxy_index.url.clone());
+            if let Some(credentials) = index.credentials()? {
+                trace!("Read credentials for proxy index {}", index.url);
                 if let Some(root_url) = index.root_url() {
                     self.base_client_builder
                         .store_credentials(&root_url, credentials.clone());
@@ -174,9 +186,10 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     fn build_inner(
-        mut self,
+        self,
         existing: Option<&BaseClient>,
     ) -> Result<RegistryClient, ClientBuildError> {
+        let routes = IndexRoutes::try_from(&self.index_locations)?;
         self.cache_index_credentials()?;
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -197,6 +210,7 @@ impl<'a> RegistryClientBuilder<'a> {
 
         Ok(RegistryClient {
             indexes: self.index_locations,
+            routes,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -214,6 +228,8 @@ impl<'a> RegistryClientBuilder<'a> {
 pub struct RegistryClient {
     /// The indexes to use for fetching packages.
     indexes: IndexLocations,
+    /// Validated routes from canonical indexes to physical metadata endpoints.
+    routes: IndexRoutes,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
     /// The strategy to use when selecting a PyTorch backend, if any.
@@ -242,10 +258,23 @@ pub enum MetadataFormat {
     Flat(Vec<FlatIndexEntry>),
 }
 
+/// Package metadata returned for an index.
+#[derive(Debug)]
+pub struct IndexMetadataResponse<'index> {
+    /// The index route used to fetch this metadata.
+    pub index_route: IndexRoute<'index>,
+    pub format: MetadataFormat,
+}
+
 impl RegistryClient {
     /// Return the [`CachedClient`] used by this client.
     pub fn cached_client(&self) -> &CachedClient {
         &self.client
+    }
+
+    /// Return the validated [`IndexRoutes`] used by this client.
+    pub fn index_routes(&self) -> &IndexRoutes {
+        &self.routes
     }
 
     /// Return the [`BaseClient`] used by this client.
@@ -317,7 +346,7 @@ impl RegistryClient {
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
-    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+    ) -> Result<Vec<IndexMetadataResponse<'index>>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
         if self.indexes.no_index() {
@@ -339,19 +368,23 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
+                            let index_route = self.routes.route_for(index.url);
                             let status_code_strategy =
-                                self.indexes.status_code_strategy_for(index.url);
+                                self.indexes.status_code_strategy_for(index_route.physical);
                             match self
                                 .simple_detail_single_index(
                                     package_name,
-                                    index.url,
+                                    index_route.physical,
                                     capabilities,
                                     &status_code_strategy,
                                 )
                                 .await?
                             {
                                 SimpleMetadataSearchOutcome::Found(metadata) => {
-                                    results.push((index.url, MetadataFormat::Simple(metadata)));
+                                    results.push(IndexMetadataResponse {
+                                        index_route,
+                                        format: MetadataFormat::Simple(metadata),
+                                    });
                                     break;
                                 }
                                 // Package not found, so we will continue on to the next index (if there is one)
@@ -369,7 +402,13 @@ impl RegistryClient {
                         IndexFormat::Flat => {
                             let entries = self.flat_single_index(package_name, index.url).await?;
                             if !entries.is_empty() {
-                                results.push((index.url, MetadataFormat::Flat(entries)));
+                                results.push(IndexMetadataResponse {
+                                    index_route: IndexRoute {
+                                        canonical: index.url,
+                                        physical: index.url,
+                                    },
+                                    format: MetadataFormat::Flat(entries),
+                                });
                                 break;
                             }
                         }
@@ -384,13 +423,14 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
+                                let index_route = self.routes.route_for(index.url);
                                 // For unsafe matches, ignore authentication failures.
                                 let status_code_strategy =
                                     IndexStatusCodeStrategy::ignore_authentication_error_codes();
                                 let metadata = match self
                                     .simple_detail_single_index(
                                         package_name,
-                                        index.url,
+                                        index_route.physical,
                                         capabilities,
                                         &status_code_strategy,
                                     )
@@ -399,21 +439,26 @@ impl RegistryClient {
                                     SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
                                     _ => None,
                                 };
-                                Ok((index.url, metadata.map(MetadataFormat::Simple)))
+                                Ok(metadata.map(|metadata| IndexMetadataResponse {
+                                    index_route,
+                                    format: MetadataFormat::Simple(metadata),
+                                }))
                             }
                             IndexFormat::Flat => {
                                 let entries =
                                     self.flat_single_index(package_name, index.url).await?;
-                                Ok((index.url, Some(MetadataFormat::Flat(entries))))
+                                Ok(Some(IndexMetadataResponse {
+                                    index_route: IndexRoute {
+                                        canonical: index.url,
+                                        physical: index.url,
+                                    },
+                                    format: MetadataFormat::Flat(entries),
+                                }))
                             }
                         }
                     })
                     .buffered(8)
-                    .filter_map(async |result: Result<_, Error>| match result {
-                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                        Ok((_, None)) => None,
-                        Err(err) => Some(Err(err)),
-                    })
+                    .filter_map(async |result: Result<_, Error>| result.transpose())
                     .try_collect::<Vec<_>>()
                     .await?;
             }
@@ -757,6 +802,8 @@ impl RegistryClient {
         &self,
         index_url: &IndexUrl,
     ) -> Result<SimpleIndexMetadata, Error> {
+        let route = self.routes.route_for(index_url);
+        let index_url = route.physical;
         // Format the URL for PyPI.
         let mut url = index_url.url().clone();
         url.path_segments_mut()
@@ -1089,8 +1136,22 @@ impl RegistryClient {
             filename,
             file,
             index,
+            ..
         } = wheel;
 
+        let route = self.routes.route_for(index);
+        self.wheel_metadata_registry_at(filename, route.physical, file, url, capabilities)
+            .await
+    }
+
+    async fn wheel_metadata_registry_at(
+        &self,
+        filename: &WheelFilename,
+        index: &IndexUrl,
+        file: &File,
+        url: &DisplaySafeUrl,
+        capabilities: &IndexCapabilities,
+    ) -> Result<ResolutionMetadata, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         if file.dist_info_metadata {
             let mut url = url.clone();
@@ -1933,6 +1994,7 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use serde_json::from_str as deserialize_json;
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
@@ -1941,16 +2003,17 @@ mod tests {
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
-        SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
+        BaseClientBuilder, ClientBuildError, Connectivity, IndexMetadataResponse, MetadataFormat,
+        RegistryClient, RegistryClientBuilder, SimpleDetailMetadata, SimpleDetailMetadatum,
+        html::SimpleDetailHTML,
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
         FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        IndexReference, IndexUrl, ProxyIndex, ToUrlError,
     };
     use uv_small_str::SmallString;
-    use wiremock::matchers::{basic_auth, method, path_regex};
+    use wiremock::matchers::{basic_auth, method, path, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
@@ -2010,6 +2073,40 @@ mod tests {
                 .expect("request recording should be enabled")
                 .is_empty()
         );
+    }
+
+    fn proxy_index_locations(canonical: &IndexUrl, proxy: &IndexUrl) -> IndexLocations {
+        IndexLocations::new(vec![Index::from(canonical.clone())], Vec::new(), false)
+            .with_proxy_indexes(vec![ProxyIndex {
+                index: IndexReference::Url(canonical.clone()),
+                url: proxy.clone(),
+            }])
+    }
+
+    fn proxy_registry_client(
+        canonical: &IndexUrl,
+        proxy: &IndexUrl,
+    ) -> Result<RegistryClient, Error> {
+        Ok(
+            RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+                .index_locations(proxy_index_locations(canonical, proxy))
+                .build()?,
+        )
+    }
+
+    async fn fetch_simple_detail<'index>(
+        client: &'index RegistryClient,
+        index: &'index IndexUrl,
+        capabilities: &IndexCapabilities,
+    ) -> Result<Vec<IndexMetadataResponse<'index>>, crate::Error> {
+        client
+            .simple_detail(
+                &PackageName::from_str("example").expect("valid package name"),
+                Some(IndexMetadataRef::from(index)),
+                capabilities,
+                &Semaphore::new(1),
+            )
+            .await
     }
 
     #[tokio::test]
@@ -2081,6 +2178,212 @@ mod tests {
 
         assert_no_index(&registry_client, "validation", None).await?;
         assert_no_requests(&server).await;
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_proxy_index_rejected_by_all_build_paths() -> Result<(), Error> {
+        let index = IndexUrl::from_str("https://pypi.org/simple")?;
+        let locations = IndexLocations::default().with_proxy_indexes(vec![ProxyIndex {
+            index: IndexReference::Url(index.clone()),
+            url: index,
+        }]);
+        let builder = RegistryClientBuilder::new(BaseClientBuilder::default(), Cache::temp()?)
+            .index_locations(locations);
+
+        assert!(matches!(
+            builder.clone().build(),
+            Err(ClientBuildError::ProxyIndex(_))
+        ));
+        let base_client = BaseClientBuilder::default().build()?;
+        assert!(matches!(
+            builder.wrap_existing(&base_client),
+            Err(ClientBuildError::ProxyIndex(_))
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_routes_through_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files": []}"#, "application/vnd.pypi.simple.v1+json"),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected proxy metadata")?;
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &proxy);
+        assert!(matches!(response.format, MetadataFormat::Simple(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_does_not_route_flat_index_through_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(
+                r#"<a href="example-1.0.0-py3-none-any.whl">example</a>"#,
+                "text/html",
+            ))
+            .expect(1)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&canonical_server.uri())?;
+        let proxy = IndexUrl::from_str(&proxy_server.uri())?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = client
+            .simple_detail(
+                &PackageName::from_str("example")?,
+                Some(IndexMetadataRef {
+                    url: &canonical,
+                    format: IndexFormat::Flat,
+                }),
+                &IndexCapabilities::default(),
+                &Semaphore::new(1),
+            )
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected flat-index metadata")?;
+
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &canonical);
+        assert!(matches!(response.format, MetadataFormat::Flat(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_authenticates_to_proxy() -> Result<(), Error> {
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .and(basic_auth("proxy-user", "proxy-secret"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_raw(r#"{"files": []}"#, "application/vnd.pypi.simple.v1+json"),
+            )
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&proxy_server)
+            .await;
+        let proxy = IndexUrl::from_str(&format!(
+            "http://proxy-user:proxy-secret@{}/simple",
+            proxy_server.address()
+        ))?;
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+
+        let response = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("expected authenticated proxy metadata")?;
+
+        assert_eq!(response.index_route.canonical, &canonical);
+        assert_eq!(response.index_route.physical, &proxy);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_uses_proxy_status_code_policy() -> Result<(), Error> {
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let canonical_index = Index::from(canonical.clone());
+        let mut proxy_index = Index::from(proxy.clone());
+        proxy_index.explicit = true;
+        proxy_index.ignore_error_codes = Some(vec![deserialize_json("500")?]);
+        let locations = IndexLocations::new(vec![canonical_index, proxy_index], Vec::new(), false)
+            .with_proxy_indexes(vec![ProxyIndex {
+                index: IndexReference::Url(canonical.clone()),
+                url: proxy,
+            }]);
+        let client =
+            RegistryClientBuilder::new(BaseClientBuilder::default().retries(0), Cache::temp()?)
+                .index_locations(locations)
+                .build()?;
+
+        let error = fetch_simple_detail(&client, &canonical, &IndexCapabilities::default())
+            .await
+            .expect_err("the proxy response should be ignored by its status-code policy");
+
+        assert!(matches!(
+            error.kind(),
+            crate::ErrorKind::RemotePackageNotFound(package) if package.as_ref() == "example"
+        ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn simple_detail_attributes_authentication_failure_to_proxy() -> Result<(), Error> {
+        let canonical_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(500))
+            .expect(0)
+            .mount(&canonical_server)
+            .await;
+
+        let proxy_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/simple/example/"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&proxy_server)
+            .await;
+
+        let canonical = IndexUrl::from_str(&format!("{}/simple", canonical_server.uri()))?;
+        let proxy = IndexUrl::from_str(&format!("{}/simple", proxy_server.uri()))?;
+        let client = proxy_registry_client(&canonical, &proxy)?;
+        let capabilities = IndexCapabilities::default();
+
+        fetch_simple_detail(&client, &canonical, &capabilities)
+            .await
+            .expect_err("the proxy should reject the request");
+
+        assert!(capabilities.unauthorized(&proxy));
+        assert!(!capabilities.unauthorized(&canonical));
         Ok(())
     }
 
