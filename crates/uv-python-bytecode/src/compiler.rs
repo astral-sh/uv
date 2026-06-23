@@ -544,6 +544,9 @@ pub(crate) struct Compiler {
     active_terminal_withs: usize,
     active_exception_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_exception_handlers: Vec<ExceptionHandlerContext>,
+    // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
+    // coroutine stop-iteration handler.
+    active_normal_finally_bodies: usize,
     active_pass_finally_locations: Vec<SourceLocation>,
     active_overriding_finally_returns: usize,
     exclude_terminal_if_not_taken: bool,
@@ -608,6 +611,7 @@ impl Compiler {
             active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
@@ -727,6 +731,7 @@ impl Compiler {
             active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
@@ -831,6 +836,7 @@ impl Compiler {
             active_terminal_withs: 0,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
             exclude_terminal_if_not_taken: false,
@@ -1727,7 +1733,8 @@ impl Compiler {
                     && self.generator_region_start.is_some()
                     && self.assembler.contains_opcode(YIELD_VALUE)
                     && self.active_with_region_exclusions.is_empty()
-                    && self.active_exception_region_exclusions.is_empty();
+                    && self.active_exception_region_exclusions.is_empty()
+                    && self.active_normal_finally_bodies == 0;
                 let previous_exception_exclusion = std::mem::replace(
                     &mut self.exclude_condition_not_taken_from_exception,
                     exclude_from_generator,
@@ -5297,7 +5304,10 @@ impl Compiler {
             self.assembler.set_location(location);
             self.emit(NOP, 0, 0)?;
         } else {
-            self.compile_suite_inner(&statement.finalbody, terminal)?;
+            self.active_normal_finally_bodies += 1;
+            let result = self.compile_suite_inner(&statement.finalbody, terminal);
+            self.active_normal_finally_bodies -= 1;
+            result?;
         }
         let finalbody_emitted_fallthrough =
             std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
@@ -10198,7 +10208,8 @@ impl Compiler {
                 return Ok(());
             }
             self.emit(NOT_TAKEN, 0, 0)?;
-            self.assembler.set_last_normalized_exception_owner(false);
+            self.assembler
+                .set_last_normalized_exception_owner(self.active_normal_finally_bodies > 0);
             return Ok(());
         }
         let comparison_is_boolean = if let Expr::Compare(comparison) = expression
@@ -10258,8 +10269,9 @@ impl Compiler {
             Ok(())
         } else {
             self.emit(NOT_TAKEN, 0, 0)?;
-            self.assembler
-                .set_last_normalized_exception_owner(comparison_is_boolean);
+            self.assembler.set_last_normalized_exception_owner(
+                comparison_is_boolean || self.active_normal_finally_bodies > 0,
+            );
             Ok(())
         }
     }
