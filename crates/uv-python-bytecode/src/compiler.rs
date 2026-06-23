@@ -2788,6 +2788,12 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let base_depth = self.depth;
         if statement.elif_else_clauses.is_empty() {
+            if self.generator_region_start.is_none()
+                && let Expr::Compare(comparison) = statement.test.as_ref()
+                && comparison.ops.len() > 1
+            {
+                return self.compile_loop_tail_chained_compare(statement, comparison, restart);
+            }
             let body = statement.body.as_slice();
             let body_label = self.assembler.label();
             let generator_exclusion = self.generator_region_start.map(|_| self.assembler.label());
@@ -2879,6 +2885,68 @@ impl Compiler {
         if !has_else {
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+        }
+        Ok(())
+    }
+
+    fn compile_loop_tail_chained_compare(
+        &mut self,
+        statement: &ruff_python_ast::StmtIf,
+        comparison: &ruff_python_ast::ExprCompare,
+        restart: Label,
+    ) -> Result<(), CompileError> {
+        let base_depth = self.depth;
+        let cleanup = self.assembler.label();
+        let success = self.assembler.label();
+        let body = self.assembler.label();
+
+        self.compile_expression(&comparison.left)?;
+        for (operator, comparator) in comparison
+            .ops
+            .iter()
+            .zip(&comparison.comparators)
+            .take(comparison.ops.len() - 1)
+        {
+            self.compile_expression(comparator)?;
+            self.assembler
+                .set_location(self.source_location(comparison.range));
+            self.emit(SWAP, 2, 0)?;
+            self.emit(COPY, 2, 1)?;
+            let (opcode, argument) = comparison_operator_boolean(*operator);
+            self.emit(opcode, argument, -1)?;
+            self.emit_jump_forward(POP_JUMP_IF_FALSE, cleanup, -1)?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+        }
+
+        self.compile_expression(comparison.comparators.last().unwrap())?;
+        self.assembler
+            .set_location(self.source_location(comparison.range));
+        let (opcode, argument) = comparison_operator_boolean(*comparison.ops.last().unwrap());
+        self.emit(opcode, argument, -1)?;
+        self.emit_jump_forward(POP_JUMP_IF_TRUE, success, -1)?;
+        self.emit(NOT_TAKEN, 0, 0)?;
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+
+        self.assembler.mark(success);
+        self.set_depth(base_depth);
+        self.assembler
+            .set_location(self.source_location(comparison.range));
+        self.emit_jump_forward(JUMP_FORWARD, body, 0)?;
+
+        self.assembler.mark(cleanup);
+        self.set_depth(base_depth + 1);
+        self.assembler
+            .set_location(self.source_location(comparison.range));
+        self.emit(POP_TOP, 0, -1)?;
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+
+        self.assembler.mark(body);
+        self.set_depth(base_depth);
+        let body_start = self.assembler.instruction_count();
+        let nested_tail = self.compile_loop_tail_suite(&statement.body, restart)?;
+        if !nested_tail && !suite_terminates(&statement.body) {
+            self.set_branch_end_location(&statement.body, body_start);
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
         }
         Ok(())
