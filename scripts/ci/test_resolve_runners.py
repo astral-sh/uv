@@ -64,6 +64,27 @@ class ResolveRunnersTest(unittest.TestCase):
             resolve_runners(config, free_only=True),
         )
 
+    def test_build_dev_workflow_has_no_hardcoded_private_runners(self) -> None:
+        root = Path(__file__).parents[2]
+        config = load_config(root / ".github" / "runners.json")
+        private_labels = {
+            candidate["label"]
+            for candidates in config.values()
+            for candidate in candidates
+            if not candidate["free"]
+        }
+        workflow = (
+            root / ".github" / "workflows" / "build-dev-binaries.yml"
+        ).read_text()
+        hardcoded = [
+            line.strip().removeprefix("runs-on: ")
+            for line in workflow.splitlines()
+            if line.strip().startswith("runs-on: ")
+            and line.strip().removeprefix("runs-on: ") in private_labels
+        ]
+
+        self.assertEqual(hardcoded, [])
+
     def test_rejects_missing_fields(self) -> None:
         with self.assertRaisesRegex(ConfigError, "missing: free"):
             validate_config({"linux": [{"label": "runner"}]})

@@ -94,8 +94,8 @@ jobs:
 
   build-binary-linux-armv7-gnueabihf:
     name: "linux armv7 gnueabihf"
-    timeout-minutes: 15
-    runs-on: github-ubuntu-24.04-x86_64-8
+    timeout-minutes: ${{ inputs.is-fork && 30 || 15 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
