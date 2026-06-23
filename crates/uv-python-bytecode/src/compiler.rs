@@ -2631,7 +2631,15 @@ impl Compiler {
                 .set_location(self.source_location(statement.test.range()));
             self.emit(NOP, 0, 0)?;
             if truthiness {
+                let body_start = self.assembler.instruction_count();
                 self.compile_suite(&statement.body)?;
+                if self.assembler.instruction_count() == body_start
+                    && let Some(Stmt::Pass(statement)) = statement.body.last()
+                {
+                    self.assembler
+                        .set_location(self.source_location(statement.range()));
+                    self.emit(NOP, 0, 0)?;
+                }
                 for clause in &statement.elif_else_clauses {
                     self.pre_register_suite_names(&clause.body)?;
                 }
@@ -2639,7 +2647,15 @@ impl Compiler {
                 self.pre_register_suite_names(&statement.body)?;
                 self.assembler.disable_load_fast_borrowing();
                 if let Some(clause) = statement.elif_else_clauses.first() {
+                    let body_start = self.assembler.instruction_count();
                     self.compile_suite(&clause.body)?;
+                    if self.assembler.instruction_count() == body_start
+                        && let Some(Stmt::Pass(statement)) = clause.body.last()
+                    {
+                        self.assembler
+                            .set_location(self.source_location(statement.range()));
+                        self.emit(NOP, 0, 0)?;
+                    }
                 }
             }
             return Ok(());
@@ -2669,9 +2685,27 @@ impl Compiler {
                         && suite_terminates(body));
                 let previous_exclusion =
                     std::mem::replace(&mut self.exclude_terminal_if_not_taken, exclude_not_taken);
+                let retain_folded_test_in_protected_region = branch_index == 0
+                    && early_condition_truthiness(test) == Some(true)
+                    && (!self.active_with_region_exclusions.is_empty()
+                        || !self.active_exception_region_exclusions.is_empty()
+                        || self.generator_region_start.is_some());
                 let condition_result = self.compile_jump_if(test, false, next);
                 self.exclude_terminal_if_not_taken = previous_exclusion;
                 condition_result?;
+                if retain_folded_test_in_protected_region {
+                    // CPython keeps the first folded branch marker inside the surrounding
+                    // protected region instead of treating it as an artificial condition NOP.
+                    if self.generator_region_start.is_some() {
+                        self.generator_region_exclusions.pop();
+                    }
+                    for exclusions in &mut self.active_with_region_exclusions {
+                        exclusions.pop();
+                    }
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.pop();
+                    }
+                }
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
                 self.compile_with_strict_owned_loads(matches!(test, Expr::If(_)), |compiler| {
@@ -4586,6 +4620,9 @@ impl Compiler {
             for exclusions in &mut self.active_exception_region_exclusions {
                 exclusions.push((statement_nop_start, statement_nop_end));
             }
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.push((statement_nop_start, statement_nop_end));
+            }
             if self.generator_region_start.is_some() {
                 self.generator_region_exclusions
                     .push((statement_nop_start, statement_nop_end));
@@ -5501,6 +5538,9 @@ impl Compiler {
         let statement_nop_end = self.assembler.label();
         self.assembler.mark(statement_nop_end);
         for exclusions in &mut self.active_exception_region_exclusions {
+            exclusions.push((statement_nop_start, statement_nop_end));
+        }
+        for exclusions in &mut self.active_with_region_exclusions {
             exclusions.push((statement_nop_start, statement_nop_end));
         }
         if self.generator_region_start.is_some() {
