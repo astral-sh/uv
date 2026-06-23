@@ -4275,10 +4275,13 @@ impl Compiler {
                     .as_except_handler()
                     .is_some_and(|handler| matches!(handler.body.as_slice(), [Stmt::Pass(_)]))
             });
-            let exit_exclusion_start = if body_noop_location.is_some()
-                && !self.active_exception_region_exclusions.is_empty()
-                && (self.active_overriding_finally_returns > 0
-                    || (pass_only_handlers && !self.prevent_try_exit_inlining))
+            let body_ends_with_overridden_return = self.active_overriding_finally_returns > 0
+                && matches!(statement.body.last(), Some(Stmt::Return(_)));
+            let exit_exclusion_start = if !self.active_exception_region_exclusions.is_empty()
+                && (body_ends_with_overridden_return
+                    || (body_noop_location.is_some()
+                        && (self.active_overriding_finally_returns > 0
+                            || (pass_only_handlers && !self.prevent_try_exit_inlining))))
             {
                 let start = self.assembler.label();
                 self.assembler.mark(start);
@@ -5080,6 +5083,11 @@ impl Compiler {
         let finally_handler = self.assembler.label();
         let cleanup = self.assembler.label();
         let end = self.assembler.label();
+        if !statement.handlers.is_empty() {
+            // Removing the inner try's normal exit leaves an empty CPython CFG block before the
+            // normal finally body. Its borrow traversal stops at that empty block.
+            self.assembler.prevent_borrow_reachability(protected_end);
+        }
 
         let statement_nop_start = self.assembler.label();
         self.assembler.mark(statement_nop_start);

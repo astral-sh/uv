@@ -67,6 +67,7 @@ pub(crate) struct Assembler {
     location: SourceLocation,
     exception_regions: Vec<ExceptionRegion>,
     preserved_block_boundaries: HashSet<Label>,
+    borrow_unreachable_blocks: HashSet<Label>,
     load_fast_borrowing_enabled: bool,
     strict_owned_loads: bool,
 }
@@ -114,6 +115,7 @@ impl Default for Assembler {
             location: SourceLocation::NONE,
             exception_regions: Vec::new(),
             preserved_block_boundaries: HashSet::new(),
+            borrow_unreachable_blocks: HashSet::new(),
             load_fast_borrowing_enabled: true,
             strict_owned_loads: false,
         }
@@ -171,6 +173,11 @@ impl Assembler {
     /// Keep a source CFG boundary after jump threading removes its last incoming edge.
     pub(crate) fn preserve_block_boundary(&mut self, label: Label) {
         self.preserved_block_boundaries.insert(label);
+    }
+
+    /// Keeps CPython's block-local borrowed-load optimizer from visiting this block.
+    pub(crate) fn prevent_borrow_reachability(&mut self, label: Label) {
+        self.borrow_unreachable_blocks.insert(label);
     }
 
     pub(crate) fn mark_before_trailing_instructions(&mut self, label: Label, count: usize) {
@@ -2408,6 +2415,7 @@ impl Assembler {
         for region in &self.exception_regions {
             block_labels.insert(region.target);
         }
+        block_labels.extend(self.borrow_unreachable_blocks.iter().copied());
 
         let mut blocks = Vec::<Vec<usize>>::new();
         let mut block = Vec::new();
@@ -2451,12 +2459,20 @@ impl Assembler {
                 Item::Label(_) => {}
             }
         }
+        let borrow_unreachable_blocks = self
+            .borrow_unreachable_blocks
+            .iter()
+            .filter_map(|label| label_blocks.get(label).copied())
+            .collect::<HashSet<_>>();
         let mut reachable = vec![false; blocks.len()];
         let mut pending = (!blocks.is_empty())
             .then_some(0)
             .into_iter()
             .collect::<Vec<_>>();
         while let Some(block_index) = pending.pop() {
+            if borrow_unreachable_blocks.contains(&block_index) {
+                continue;
+            }
             if std::mem::replace(&mut reachable[block_index], true) {
                 continue;
             }
