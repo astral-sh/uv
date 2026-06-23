@@ -2014,7 +2014,8 @@ impl Assembler {
     /// Applies stack swaps statically by reordering local stores and pops.
     ///
     /// This is the `apply_static_swaps` half of CPython's `swaptimize` pass and
-    /// must run before adjacent local stores are fused.
+    /// must run before adjacent local stores are fused. Reverse traversal applies
+    /// consecutive swaps from right to left, matching CPython's per-run handoff.
     fn apply_static_swaps(&mut self) {
         const NOP: u8 = 27;
         const POP_TOP: u8 = 31;
@@ -2094,21 +2095,19 @@ impl Assembler {
 
         let mut block_start = 0;
         for block_end in block_ends {
-            let mut index = block_start;
-            while index < block_end {
+            let mut index = block_end;
+            while index > block_start {
+                index -= 1;
                 let Item::Instruction(swap) = self.items[index] else {
-                    index += 1;
                     continue;
                 };
                 if swap.opcode.code != SWAP {
-                    index += 1;
                     continue;
                 }
                 let Operand::Value(depth) = swap.operand else {
                     unreachable!();
                 };
                 let Some(first) = next_swappable(&self.items, index + 1, block_end, None) else {
-                    index += 1;
                     continue;
                 };
                 let Item::Instruction(first_instruction) = self.items[first] else {
@@ -2126,7 +2125,6 @@ impl Assembler {
                     last = next;
                 }
                 if !valid {
-                    index += 1;
                     continue;
                 }
                 let Item::Instruction(first_instruction) = self.items[first] else {
@@ -2140,7 +2138,6 @@ impl Assembler {
                 // CPython sees locationless cleanup pops at this stage and
                 // therefore does not move a traced pop across them.
                 if first_store.is_none() && last_store.is_none() {
-                    index += 1;
                     continue;
                 }
                 if first_store.is_some() || last_store.is_some() {
@@ -2154,7 +2151,6 @@ impl Assembler {
                             })
                         })
                     {
-                        index += 1;
                         continue;
                     }
                 }
@@ -2165,7 +2161,6 @@ impl Assembler {
                 swap.opcode = Opcode::new(NOP, 0);
                 swap.operand = Operand::Value(0);
                 self.items.swap(first, last);
-                index += 1;
             }
             block_start = block_end;
         }

@@ -3293,6 +3293,39 @@ impl Compiler {
         if only_wildcards {
             return self.emit(POP_TOP, 0, -1);
         }
+        if let Some(starred) = starred
+            && matches!(&pattern.patterns[starred], Pattern::MatchStar(pattern) if pattern.name.is_none())
+        {
+            context.on_top += 1;
+            for (index, subpattern) in pattern.patterns.iter().enumerate() {
+                if index == starred || is_wildcard_pattern(subpattern) {
+                    continue;
+                }
+                self.assembler
+                    .set_location(self.source_location(pattern.range));
+                self.emit(COPY, 1, 1)?;
+                if index < starred {
+                    self.emit(LOAD_SMALL_INT, to_u32(index, "sequence pattern index")?, 1)?;
+                } else {
+                    self.emit(GET_LEN, 0, 1)?;
+                    self.emit(
+                        LOAD_SMALL_INT,
+                        to_u32(
+                            pattern.patterns.len() - index,
+                            "sequence pattern suffix index",
+                        )?,
+                        1,
+                    )?;
+                    self.emit(BINARY_OP, binary_operator(Operator::Sub, false), -1)?;
+                }
+                self.emit(BINARY_OP, 26, -1)?;
+                self.compile_stack_pattern(subpattern, context)?;
+            }
+            context.on_top -= 1;
+            self.assembler
+                .set_location(self.source_location(pattern.range));
+            return self.emit(POP_TOP, 0, -1);
+        }
         if let Some(starred) = starred {
             let before = to_u32(starred, "sequence pattern prefix length")?;
             let after = to_u32(
