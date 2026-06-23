@@ -24,8 +24,10 @@ pub fn uninstall_wheel(
         ));
     };
 
-    // Read the RECORD file.
     let record_path = dist_info.join("RECORD");
+    let direct_url_path = dist_info.join("direct_url.json");
+
+    // Read the RECORD file.
     let record = {
         let mut record_file = match fs_err::File::open(&record_path) {
             Ok(record_file) => record_file,
@@ -45,8 +47,9 @@ pub fn uninstall_wheel(
 
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
+
+    // Normalize the metadata paths for comparison with RECORD entries.
     let normalized_record_path = normalize_path(&record_path);
-    let direct_url_path = dist_info.join("direct_url.json");
     let normalized_direct_url_path = normalize_path(&direct_url_path);
     for entry in &record {
         let path = site_packages.join(&entry.path);
