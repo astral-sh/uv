@@ -49,6 +49,8 @@ struct Instruction {
     preserve_direct_inlined_jump_nop: Option<Label>,
     // Whether an incoming jump may be threaded through this instruction.
     allow_jump_threading_target: bool,
+    // Whether an unlocated block ending in this instruction may be inlined into predecessors.
+    allow_no_location_block_inlining: bool,
     preserve_no_location: bool,
     prevent_fusion_with_next: bool,
     prevent_fusion_with_previous: bool,
@@ -283,6 +285,19 @@ impl Assembler {
             .find(|item| matches!(item, Item::Instruction(_)))
         {
             instruction.allow_jump_threading_target = false;
+        }
+    }
+
+    pub(crate) fn prepare_last_no_location_block_for_inlining(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.location = SourceLocation::NONE;
+            instruction.allow_jump_threading_target = false;
+            instruction.allow_no_location_block_inlining = true;
         }
     }
 
@@ -526,6 +541,7 @@ impl Assembler {
             preserve_inlined_jump_nop: false,
             preserve_direct_inlined_jump_nop: None,
             allow_jump_threading_target: true,
+            allow_no_location_block_inlining: false,
             preserve_no_location: false,
             prevent_fusion_with_next: false,
             prevent_fusion_with_previous: false,
@@ -1119,6 +1135,7 @@ impl Assembler {
                         .find(|item| matches!(item, Item::Instruction(_)))
                     && next.location.line < 0
                     && !next.preserve_no_location
+                    && !next.allow_no_location_block_inlining
                 {
                     next.location = instruction.location;
                 }
@@ -1293,6 +1310,7 @@ impl Assembler {
                         preserve_inlined_jump_nop: false,
                         preserve_direct_inlined_jump_nop: None,
                         allow_jump_threading_target: true,
+                        allow_no_location_block_inlining: false,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -1535,7 +1553,10 @@ impl Assembler {
             vec![Vec::<(Label, Label)>::new(); self.exception_regions.len()];
         let mut drop_block = vec![false; blocks.len()];
         let mut remaining_predecessors = predecessors.clone();
-        for source in 0..blocks.len() {
+        let mut sources = (0..blocks.len()).collect::<Vec<_>>();
+        let mut source_cursor = 0;
+        while let Some(&source) = sources.get(source_cursor) {
+            source_cursor += 1;
             let Some(target_label) = block_jump_target(&blocks[source]) else {
                 continue;
             };
@@ -1579,13 +1600,30 @@ impl Assembler {
             let target_has_no_location = blocks[target].iter().all(|item| {
                 !matches!(item, Item::Instruction(instruction) if instruction.location.line >= 0)
             });
+            let target_allows_no_location_block_inlining = blocks[target]
+                .iter()
+                .rev()
+                .find_map(|item| match item {
+                    Item::Instruction(instruction) => {
+                        Some(instruction.allow_no_location_block_inlining)
+                    }
+                    Item::Label(_) => None,
+                })
+                .unwrap_or(false);
+            let target_is_no_location_no_fallthrough = target_has_no_location
+                && target_allows_no_location_block_inlining
+                && !block_has_fallthrough(&blocks[target]);
             let inline_small_exit = !source_has_fallthrough
                 && target_is_small_exit
                 && source_allows_small_exit_inlining
                 && !target_contains_end_send
                 && !exception_handler_blocks[target];
-            if !inline_small_exit
-                && (!exit_without_unique_predecessor[target] || remaining_predecessors[target] <= 1)
+            let inline_no_location_block =
+                !source_has_fallthrough && target_is_no_location_no_fallthrough;
+            if !(inline_small_exit || inline_no_location_block)
+                && (!(exit_without_unique_predecessor[target]
+                    || target_is_no_location_no_fallthrough)
+                    || remaining_predecessors[target] <= 1)
             {
                 continue;
             }
@@ -1659,6 +1697,7 @@ impl Assembler {
                         preserve_inlined_jump_nop: false,
                         preserve_direct_inlined_jump_nop: None,
                         allow_jump_threading_target: true,
+                        allow_no_location_block_inlining: false,
                         preserve_no_location: false,
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
@@ -1669,7 +1708,7 @@ impl Assembler {
                     }),
                 );
             }
-            if target_has_no_location {
+            if target_has_no_location && !(inline_no_location_block && predecessors[source] > 1) {
                 if let Some(Item::Instruction(instruction)) = copied
                     .iter_mut()
                     .find(|item| matches!(item, Item::Instruction(_)))
@@ -1714,7 +1753,7 @@ impl Assembler {
                     }
                 }
             }
-            if inline_small_exit {
+            if inline_small_exit || inline_no_location_block {
                 if let Some(position) = blocks[source]
                     .iter()
                     .rposition(|item| matches!(item, Item::Instruction(_)))
@@ -1728,7 +1767,19 @@ impl Assembler {
             {
                 instruction.operand = Operand::Forward(copied_label);
             }
-            if source_has_fallthrough {
+            if inline_no_location_block {
+                blocks[source].extend(copied);
+                // The copied jump can turn this source into another eligible unlocated block.
+                // Revisit earlier jump predecessors until the chain reaches a fixed point.
+                for predecessor in 0..source {
+                    if block_jump_target(&blocks[predecessor])
+                        .and_then(|label| label_blocks.get(&label).copied())
+                        == Some(source)
+                    {
+                        sources.push(predecessor);
+                    }
+                }
+            } else if source_has_fallthrough {
                 target_copies[target].push(copied);
             } else {
                 inline_copies[source].push(copied);
@@ -2979,6 +3030,8 @@ impl Assembler {
                 preserve_direct_inlined_jump_nop: None,
                 allow_jump_threading_target: first.allow_jump_threading_target
                     && second.allow_jump_threading_target,
+                allow_no_location_block_inlining: first.allow_no_location_block_inlining
+                    || second.allow_no_location_block_inlining,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
                 prevent_fusion_with_next: second.prevent_fusion_with_next,
                 prevent_fusion_with_previous: first.prevent_fusion_with_previous,

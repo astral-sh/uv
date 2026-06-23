@@ -1482,7 +1482,7 @@ impl Compiler {
                         let previous = self.assembler.location();
                         self.assembler
                             .set_location(self.source_location(statement.range));
-                        let result = self.compile_try_inner(statement, true, true);
+                        let result = self.compile_try_inner(statement, true, true, false);
                         self.assembler.set_location(previous);
                         result?;
                         self.emitted_fallthrough_return = true;
@@ -2794,6 +2794,42 @@ impl Compiler {
         }
     }
 
+    fn compile_while_tail_suite(
+        &mut self,
+        body: &[Stmt],
+        restart: Label,
+    ) -> Result<bool, CompileError> {
+        if let Some((Stmt::Try(statement), leading)) = body.split_last()
+            && try_requires_loop_tail_inlining(statement)
+        {
+            self.compile_suite(leading)?;
+            self.compile_try_inner(statement, false, true, true)?;
+            Ok(false)
+        } else {
+            self.compile_loop_tail_suite(body, restart)
+        }
+    }
+
+    fn emit_while_backedge(
+        &mut self,
+        body: &[Stmt],
+        body_start: usize,
+        restart: Label,
+    ) -> Result<(), CompileError> {
+        let inline_try_tail = matches!(
+            body.last(),
+            Some(Stmt::Try(statement)) if try_requires_loop_tail_inlining(statement)
+        );
+        if !inline_try_tail {
+            self.set_branch_end_location(body, body_start);
+        }
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+        if inline_try_tail {
+            self.assembler.prepare_last_no_location_block_for_inlining();
+        }
+        Ok(())
+    }
+
     fn compile_loop_tail_assert(
         &mut self,
         statement: &ruff_python_ast::StmtAssert,
@@ -3961,11 +3997,10 @@ impl Compiler {
                     == Some(statement.range),
             });
             let body_start = self.assembler.instruction_count();
-            let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
+            let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
             self.loops.pop();
             if !tail_jumps && !suite_terminates(&statement.body) {
-                self.set_branch_end_location(&statement.body, body_start);
-                self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
+                self.emit_while_backedge(&statement.body, body_start, start)?;
             }
             self.pre_register_suite_names(&statement.orelse)?;
             self.assembler.mark(end);
@@ -4005,11 +4040,10 @@ impl Compiler {
                 == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
-        let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
+        let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
         self.loops.pop();
         if !tail_jumps && !suite_terminates(&statement.body) {
-            self.set_branch_end_location(&statement.body, body_start);
-            self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
+            self.emit_while_backedge(&statement.body, body_start, start)?;
         }
 
         self.assembler.mark(else_label);
@@ -4486,7 +4520,7 @@ impl Compiler {
     }
 
     fn compile_try(&mut self, statement: &ruff_python_ast::StmtTry) -> Result<(), CompileError> {
-        self.compile_try_inner(statement, false, true)
+        self.compile_try_inner(statement, false, true, false)
     }
 
     fn compile_try_inner(
@@ -4494,6 +4528,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtTry,
         terminal: bool,
         emit_statement_nop: bool,
+        exclude_terminal_body_not_taken: bool,
     ) -> Result<(), CompileError> {
         if !statement.finalbody.is_empty() {
             return self.compile_try_finally(statement, terminal);
@@ -4538,7 +4573,20 @@ impl Compiler {
             None
         } else {
             let body_instruction_count = self.assembler.instruction_count();
-            self.compile_suite(&statement.body)?;
+            if exclude_terminal_body_not_taken
+                && let Some((last @ Stmt::If(_), leading)) = statement.body.split_last()
+            {
+                self.compile_suite(leading)?;
+                let previous = std::mem::replace(&mut self.exclude_terminal_if_not_taken, true);
+                let previous_exception =
+                    std::mem::replace(&mut self.exclude_condition_not_taken_from_exception, true);
+                let result = self.compile_statement(last);
+                self.exclude_terminal_if_not_taken = previous;
+                self.exclude_condition_not_taken_from_exception = previous_exception;
+                result?;
+            } else {
+                self.compile_suite(&statement.body)?;
+            }
             let location = (self.assembler.instruction_count() == body_instruction_count)
                 .then(|| {
                     statement
@@ -5483,7 +5531,7 @@ impl Compiler {
                 let mut inner = statement.clone();
                 inner.finalbody.clear();
                 let previous = std::mem::replace(&mut self.prevent_try_exit_inlining, true);
-                let result = self.compile_try_inner(&inner, false, false);
+                let result = self.compile_try_inner(&inner, false, false, false);
                 self.prevent_try_exit_inlining = previous;
                 result?;
                 Ok(true)
@@ -12929,6 +12977,18 @@ fn code_objects_equal(left: &CodeObject, right: &CodeObject) -> bool {
 
 fn suite_terminates(body: &[Stmt]) -> bool {
     body.iter().any(statement_terminates)
+}
+
+fn try_requires_loop_tail_inlining(statement: &ruff_python_ast::StmtTry) -> bool {
+    !statement.is_star
+        && statement.finalbody.is_empty()
+        && statement.orelse.is_empty()
+        && matches!(
+            statement.body.last(),
+            Some(Stmt::If(statement))
+                if statement.elif_else_clauses.is_empty()
+                    && !suite_terminates(&statement.body)
+        )
 }
 
 fn suite_contains_yield(body: &[Stmt]) -> bool {
