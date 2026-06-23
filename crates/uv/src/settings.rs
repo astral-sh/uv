@@ -1,4 +1,5 @@
 use std::env::VarError;
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::process;
@@ -4267,11 +4268,34 @@ pub(crate) struct InstallerSettingsRef<'a> {
     pub(crate) extra_build_dependencies: &'a ExtraBuildDependencies,
     pub(crate) extra_build_variables: &'a ExtraBuildVariables,
     pub(crate) exclude_newer: &'a ExcludeNewer,
-    pub(crate) link_mode: LinkMode,
+    pub(crate) link_mode: Option<LinkMode>,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
     pub(crate) sources: NoSources,
+}
+
+/// An explicitly configured link mode with the effective mode used for settings output.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ResolvedLinkMode(Option<LinkMode>);
+
+impl ResolvedLinkMode {
+    /// Return the explicitly configured link mode, if any.
+    pub(crate) fn explicit(self) -> Option<LinkMode> {
+        self.0
+    }
+}
+
+impl From<Option<LinkMode>> for ResolvedLinkMode {
+    fn from(link_mode: Option<LinkMode>) -> Self {
+        Self(link_mode)
+    }
+}
+
+impl fmt::Debug for ResolvedLinkMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.unwrap_or_default().fmt(formatter)
+    }
 }
 
 /// The resolved settings to use for an invocation of the uv CLI when resolving dependencies.
@@ -4289,7 +4313,7 @@ pub(crate) struct ResolverSettings {
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) link_mode: LinkMode,
+    pub(crate) link_mode: ResolvedLinkMode,
     pub(crate) build_isolation: BuildIsolation,
     pub(crate) extra_build_dependencies: ExtraBuildDependencies,
     pub(crate) extra_build_variables: ExtraBuildVariables,
@@ -4378,7 +4402,7 @@ impl From<ResolverOptions> for ResolverSettings {
                     .map(Into::into)
                     .collect(),
             ),
-            link_mode: value.link_mode.unwrap_or_default(),
+            link_mode: value.link_mode.into(),
             torch_backend: value.torch_backend,
             cuda_driver_version: None,
             amd_gpu_architecture: None,
@@ -4496,7 +4520,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 index_locations,
                 index_strategy: value.index_strategy.unwrap_or_default(),
                 keyring_provider: value.keyring_provider.unwrap_or_default(),
-                link_mode: value.link_mode.unwrap_or_default(),
+                link_mode: value.link_mode.into(),
                 build_isolation: value.build_isolation.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
@@ -4568,7 +4592,7 @@ pub(crate) struct PipSettings {
     pub(crate) emit_marker_expression: bool,
     pub(crate) emit_index_annotation: bool,
     pub(crate) annotation_style: AnnotationStyle,
-    pub(crate) link_mode: LinkMode,
+    pub(crate) link_mode: ResolvedLinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) sources: NoSources,
     pub(crate) hash_checking: Option<HashCheckingMode>,
@@ -4875,7 +4899,7 @@ impl PipSettings {
                 .emit_index_annotation
                 .combine(emit_index_annotation)
                 .unwrap_or_default(),
-            link_mode: args.link_mode.combine(link_mode).unwrap_or_default(),
+            link_mode: args.link_mode.combine(link_mode).into(),
             hash_checking: HashCheckingMode::from_args(
                 args.require_hashes.combine(require_hashes),
                 args.verify_hashes.combine(verify_hashes),
@@ -4962,7 +4986,7 @@ impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
             extra_build_dependencies: &settings.resolver.extra_build_dependencies,
             extra_build_variables: &settings.resolver.extra_build_variables,
             exclude_newer: &settings.resolver.exclude_newer,
-            link_mode: settings.resolver.link_mode,
+            link_mode: settings.resolver.link_mode.explicit(),
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,
             build_options: &settings.resolver.build_options,

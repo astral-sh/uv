@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
@@ -16462,4 +16462,292 @@ fn handle_record_mismatches() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn binary_payloads_use_archive_file_store() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((
+        r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
+        ".venv/[BIN]/[PYTHON]",
+    ));
+    let wheel = binary_payload_wheel(&context)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let archive_file_root = context.cache_dir.child("archive-files-v0");
+    let archive_files = cache_files(archive_file_root.path())?;
+    assert_eq!(archive_files.len(), 1);
+    let archive_file = &archive_files[0];
+
+    let archive_metadata_root = context.cache_dir.child("archive-metadata-v0");
+    let manifests = cache_files(archive_metadata_root.path())?
+        .into_iter()
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|file_name| file_name == "manifest.json")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(manifests.len(), 1);
+    let archive_id = manifests[0]
+        .parent()
+        .and_then(Path::file_name)
+        .ok_or_else(|| anyhow!("archive-file manifest path has no archive ID"))?;
+
+    let manifest = fs_err::read_to_string(&manifests[0])?;
+    let manifest: serde_json::Value = serde_json::from_str(&manifest)?;
+    let files = manifest["files"]
+        .as_array()
+        .ok_or_else(|| anyhow!("archive-file manifest is missing a files array"))?;
+    assert_eq!(files.len(), 1);
+    let manifest_path = files[0]["path"]
+        .as_str()
+        .ok_or_else(|| anyhow!("archive-file manifest entry is missing a path"))?;
+    assert!(manifest_path.ends_with("native.so"));
+
+    let archive_root = context.cache_dir.child("archive-v0");
+    let archive_binary = archive_root
+        .path()
+        .join(archive_id)
+        .join("binary_payload")
+        .join("native.so");
+    let installed_binary = context
+        .site_packages()
+        .join("binary_payload")
+        .join("native.so");
+
+    assert_same_file(&installed_binary, archive_file);
+    assert!(!archive_binary.exists());
+    assert!(
+        !archive_root
+            .path()
+            .join(archive_id)
+            .join("manifest.json")
+            .exists()
+    );
+
+    fs_err::remove_file(&installed_binary)?;
+    uv_snapshot!(context.filters(), context.prune(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+    assert!(archive_file.exists());
+
+    let copy_target = context.temp_dir.child("copy-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target")
+        .arg(copy_target.path())
+        .arg("--link-mode")
+        .arg("copy")
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    #[cfg(any(unix, windows))]
+    assert_different_file(
+        &copy_target.path().join("binary_payload").join("native.so"),
+        archive_file,
+    );
+    assert_eq!(
+        fs_err::read(copy_target.path().join("binary_payload").join("native.so"))?,
+        BINARY_PAYLOAD_CONTENTS,
+    );
+
+    let clone_target = context.temp_dir.child("clone-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target")
+        .arg(clone_target.path())
+        .arg("--link-mode")
+        .arg("clone")
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    assert_eq!(
+        fs_err::read(clone_target.path().join("binary_payload").join("native.so"))?,
+        fs_err::read(archive_file)?,
+    );
+
+    Ok(())
+}
+
+/// Requires `UV_INTERNAL__TEST_ALT_FS`.
+#[test]
+fn binary_payload_copy_fallback_uses_archive_file_store() -> Result<()> {
+    let Some(context) = uv_test::test_context!("3.12")
+        .with_filter((
+            r"\.venv[\\/](?:bin[\\/]python3|Scripts[\\/]python\.exe)",
+            ".venv/[BIN]/[PYTHON]",
+        ))
+        .with_cache_on_alt_fs()?
+    else {
+        return Ok(());
+    };
+    let wheel = binary_payload_wheel(&context)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+             If the cache and target directories are on different filesystems, hardlinking may not be supported.
+             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    let archive_files = cache_files(context.cache_dir.child("archive-files-v0").path())?;
+    assert_eq!(archive_files.len(), 1);
+
+    let manifests = cache_files(context.cache_dir.child("archive-metadata-v0").path())?
+        .into_iter()
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|file_name| file_name == "manifest.json")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(manifests.len(), 1);
+    let archive_id = manifests[0]
+        .parent()
+        .and_then(Path::file_name)
+        .ok_or_else(|| anyhow!("archive-file manifest path has no archive ID"))?;
+    let archive_binary = context
+        .cache_dir
+        .child("archive-v0")
+        .path()
+        .join(archive_id)
+        .join("binary_payload")
+        .join("native.so");
+
+    assert!(!archive_binary.exists());
+
+    let target = context.temp_dir.child("fallback-target");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--target")
+        .arg(target.path())
+        .arg(&wheel), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+             If the cache and target directories are on different filesystems, hardlinking may not be supported.
+             If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+    Installed 1 package in [TIME]
+     + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
+    ");
+
+    assert_eq!(
+        fs_err::read(target.path().join("binary_payload").join("native.so"))?,
+        BINARY_PAYLOAD_CONTENTS,
+    );
+
+    Ok(())
+}
+
+const BINARY_PAYLOAD_CONTENTS: &[u8] = b"binary payload contents\n";
+
+fn binary_payload_wheel(context: &TestContext) -> Result<PathBuf> {
+    const METADATA: &[u8] = b"Metadata-Version: 2.1\nName: binary-payload\nVersion: 0.1.0\n";
+    const WHEEL: &[u8] =
+        b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n";
+    const RECORD: &[u8] = b"binary_payload/__init__.py,,\n\
+binary_payload/module.py,,\n\
+binary_payload/native.so,,\n\
+binary_payload-0.1.0.dist-info/METADATA,,\n\
+binary_payload-0.1.0.dist-info/WHEEL,,\n\
+binary_payload-0.1.0.dist-info/RECORD,,\n";
+
+    let wheel = context
+        .temp_dir
+        .join("binary_payload-0.1.0-py3-none-any.whl");
+    let mut writer = ZipFileWriter::new(Vec::new());
+    for (name, contents) in [
+        ("binary_payload/__init__.py", &[][..]),
+        (
+            "binary_payload/module.py",
+            b"VALUE = 'not binary'\n" as &[u8],
+        ),
+        ("binary_payload/native.so", BINARY_PAYLOAD_CONTENTS),
+        ("binary_payload-0.1.0.dist-info/METADATA", METADATA),
+        ("binary_payload-0.1.0.dist-info/WHEEL", WHEEL),
+        ("binary_payload-0.1.0.dist-info/RECORD", RECORD),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents))?;
+    }
+    fs_err::write(&wheel, block_on(writer.close())?)?;
+
+    Ok(wheel)
+}
+
+fn cache_files(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in WalkDir::new(root).min_depth(1) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            files.push(entry.path().to_path_buf());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn assert_same_file(left: &Path, right: &Path) {
+    assert_eq!(
+        uv_fs::is_same_file_allow_missing(left, right),
+        Some(true),
+        "{} and {} should refer to the same file",
+        left.display(),
+        right.display(),
+    );
+}
+
+fn assert_different_file(left: &Path, right: &Path) {
+    assert_eq!(
+        uv_fs::is_same_file_allow_missing(left, right),
+        Some(false),
+        "{} and {} should refer to different files",
+        left.display(),
+        right.display(),
+    );
 }

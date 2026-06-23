@@ -11,12 +11,16 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
+pub use archive_file_manifest::{
+    ARCHIVE_FILE_MANIFEST, ArchiveFileManifest, ArchiveFileManifestEntry,
+};
 pub use install::install_wheel;
 pub use linker::{InstallState, LinkMode};
 pub use record::RecordEntry;
 pub use uninstall::{Uninstall, uninstall_egg, uninstall_legacy_editable, uninstall_wheel};
 pub use wheel::{WheelFile, read_record, validate_and_heal_record};
 
+mod archive_file_manifest;
 mod install;
 mod linker;
 mod record;
