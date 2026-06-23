@@ -2259,6 +2259,13 @@ impl Compiler {
             Stmt::For(statement) if statement.is_async => self.compile_async_for(statement)?,
             Stmt::For(statement) => self.compile_for(statement)?,
             Stmt::Break(_) => {
+                // Loop-control cleanup runs after CPython unwinds the active exception block.
+                let exclusion_start =
+                    (!self.active_exception_region_exclusions.is_empty()).then(|| {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        start
+                    });
                 let unreachable_depth = self.depth;
                 let context = self
                     .loops
@@ -2275,14 +2282,35 @@ impl Compiler {
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, context.break_label, 0)?;
                 }
+                if let Some(exclusion_start) = exclusion_start {
+                    let exclusion_end = self.assembler.label();
+                    self.assembler.mark(exclusion_end);
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((exclusion_start, exclusion_end));
+                    }
+                }
                 self.set_depth(unreachable_depth);
             }
             Stmt::Continue(_) => {
+                // Loop-control cleanup runs after CPython unwinds the active exception block.
+                let exclusion_start =
+                    (!self.active_exception_region_exclusions.is_empty()).then(|| {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        start
+                    });
                 let context =
                     self.loops.last().copied().ok_or_else(|| {
                         CompileError::Internal("continue outside loop".to_string())
                     })?;
                 self.emit_jump_backward(JUMP_BACKWARD, context.continue_label, 0)?;
+                if let Some(exclusion_start) = exclusion_start {
+                    let exclusion_end = self.assembler.label();
+                    self.assembler.mark(exclusion_end);
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((exclusion_start, exclusion_end));
+                    }
+                }
             }
             Stmt::Return(statement) => {
                 if !matches!(self.scope, Scope::Function { .. }) {
@@ -4263,6 +4291,12 @@ impl Compiler {
         } else {
             if let Some(location) = orelse_noop_location {
                 self.assembler.set_location(location);
+            } else if statement.orelse.is_empty()
+                && let Some(Stmt::If(statement)) = statement.body.last()
+                && let Some(test) = terminating_if_fallthrough_test(statement)
+            {
+                self.assembler
+                    .set_location(self.source_location(test.range()));
             } else if statement.orelse.is_empty()
                 && let Some(location) = body_noop_location
             {
