@@ -19,6 +19,8 @@ use nix::sys::signal::{Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 #[cfg(unix)]
 use nix::unistd::Pid;
+#[cfg(unix)]
+use url::Url;
 
 use uv_test::uv_snapshot;
 
@@ -297,6 +299,61 @@ fn interrupted_uninstall_during_directory_cleanup_can_be_retried() -> Result<()>
         .arg("interrupted-cleanup")
         .assert()
         .success();
+    assert!(!package.exists());
+    assert!(!dist_info.exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn interrupted_uninstall_by_path_can_be_retried() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let source = context.temp_dir.join("interrupted-url");
+    fs_err::create_dir_all(&source)?;
+    fs_err::write(
+        source.join("pyproject.toml"),
+        "[project]\nname = 'interrupted-url'\nversion = '1.0.0'\n",
+    )?;
+    let source_url = Url::from_file_path(&source).expect("source path is a valid file URL");
+
+    let site_packages = context.site_packages();
+    let package = site_packages.join("interrupted_url");
+    let dist_info = site_packages.join("interrupted_url-1.0.0.dist-info");
+    fs_err::create_dir_all(&package)?;
+    fs_err::create_dir_all(&dist_info)?;
+    fs_err::write(
+        dist_info.join("METADATA"),
+        "Metadata-Version: 2.1\nName: interrupted-url\nVersion: 1.0.0\n",
+    )?;
+    fs_err::write(
+        dist_info.join("direct_url.json"),
+        format!(r#"{{"url":"{source_url}","dir_info":{{}}}}"#),
+    )?;
+
+    let record_path = dist_info.join("RECORD");
+    let mut record = String::from(
+        "interrupted_url-1.0.0.dist-info/METADATA,,\n\
+         interrupted_url-1.0.0.dist-info/RECORD,,\n\
+         interrupted_url-1.0.0.dist-info/direct_url.json,,\n",
+    );
+    for index in 0..1_000 {
+        let relative_path = format!("interrupted_url/module_{index:04}.py");
+        fs_err::write(site_packages.join(&relative_path), "")?;
+        writeln!(record, "{relative_path},,")?;
+    }
+    fs_err::write(&record_path, record)?;
+
+    let first_payload_file = package.join("module_0000.py");
+    let last_payload_file = package.join("module_0999.py");
+    let mut command = context.pip_uninstall();
+    command.arg(&source);
+    let interrupted = interrupt_when(&mut command, || {
+        first_payload_file.exists() != last_payload_file.exists()
+    })?;
+    assert!(interrupted, "failed to interrupt uv during path uninstall");
+
+    context.pip_uninstall().arg(&source).assert().success();
     assert!(!package.exists());
     assert!(!dist_info.exists());
 

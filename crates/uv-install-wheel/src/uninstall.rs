@@ -46,12 +46,17 @@ pub fn uninstall_wheel(
     // Uninstall the files, keeping track of any directories that are left empty.
     let mut visited = BTreeSet::new();
     let normalized_record_path = normalize_path(&record_path);
+    let direct_url_path = dist_info.join("direct_url.json");
+    let normalized_direct_url_path = normalize_path(&direct_url_path);
     for entry in &record {
         let path = site_packages.join(&entry.path);
 
-        // Keep RECORD available until every other entry has been removed so an interrupted
-        // uninstall can be retried.
-        if path.ends_with("RECORD") && normalize_path(&path) == normalized_record_path {
+        // Keep the uninstall journal and direct URL identity available until every other entry has
+        // been removed so an interrupted uninstall can be retried by name or URL.
+        if (path.ends_with("RECORD") && normalize_path(&path) == normalized_record_path)
+            || (path.ends_with("direct_url.json")
+                && normalize_path(&path) == normalized_direct_url_path)
+        {
             continue;
         }
 
@@ -163,6 +168,16 @@ pub fn uninstall_wheel(
                 break;
             }
         }
+    }
+
+    // Preserve URL identity through general cleanup, then remove it immediately before RECORD.
+    match fs_err::remove_file(&direct_url_path) {
+        Ok(()) => {
+            trace!("Removed file: {}", direct_url_path.display());
+            file_count += 1;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
     }
 
     // RECORD is the uninstall journal, so remove it after cleaning up every other file and
