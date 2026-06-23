@@ -1505,15 +1505,18 @@ impl Compiler {
                     self.emit(NOP, 0, 0)?;
                     let noop_end = self.assembler.label();
                     self.assembler.mark(noop_end);
-                    if self.generator_region_start.is_some() {
+                    let final_statement = index + 1 == body.len();
+                    if final_statement && self.generator_region_start.is_some() {
                         self.generator_region_exclusions
                             .push((noop_start, noop_end));
                     }
-                    for exclusions in &mut self.active_with_region_exclusions {
-                        exclusions.push((noop_start, noop_end));
-                    }
-                    for exclusions in &mut self.active_exception_region_exclusions {
-                        exclusions.push((noop_start, noop_end));
+                    if final_statement {
+                        for exclusions in &mut self.active_with_region_exclusions {
+                            exclusions.push((noop_start, noop_end));
+                        }
+                        for exclusions in &mut self.active_exception_region_exclusions {
+                            exclusions.push((noop_start, noop_end));
+                        }
                     }
                 }
             } else {
