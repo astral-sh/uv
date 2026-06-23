@@ -4055,21 +4055,14 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("requirements.in"),
         @r#"
     ...
-                 Verify,
-             ),
-             upgrade: Upgrade {
-    -            strategy: Some(
-    -                {
-    -                    PackageName(
+                 strategy: Some(
+                     {
+                         PackageName(
     -                        "sniffio",
-    -                    ),
-    -                },
-    -                {},
-    -            ),
-    +            strategy: None,
-                 constraints: {},
-             },
-             reinstall: None,
+    +                        "idna",
+                         ),
+                     },
+                     {},
     ...
     "#
     );
@@ -4121,14 +4114,21 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+                 Verify,
+             ),
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: None,
+                 constraints: {},
+             },
+             reinstall: None,
     ...
     "#
     );
@@ -4140,14 +4140,21 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+                 Verify,
+             ),
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: All,
+                 constraints: {},
+             },
+             reinstall: None,
     ...
     "#
     );
@@ -4248,21 +4255,14 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--show-settings"),
         @r#"
     ...
-             cuda_driver_version: None,
-             amd_gpu_architecture: None,
-             upgrade: Upgrade {
-    -            strategy: Some(
-    -                {
-    -                    PackageName(
+                 strategy: Some(
+                     {
+                         PackageName(
     -                        "sniffio",
-    -                    ),
-    -                },
-    -                {},
-    -            ),
-    +            strategy: None,
-                 constraints: {},
-             },
-         },
+    +                        "idna",
+                         ),
+                     },
+                     {},
     ...
     "#
     );
@@ -4320,14 +4320,21 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--no-upgrade")
             .arg("--show-settings"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: None,
+                 constraints: {},
+             },
+         },
     ...
     "#
     );
@@ -4338,14 +4345,21 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
             .arg("--upgrade")
             .arg("--show-settings"), @r#"
     ...
-                 strategy: Some(
-                     {
-                         PackageName(
+             cuda_driver_version: None,
+             amd_gpu_architecture: None,
+             upgrade: Upgrade {
+    -            strategy: Some(
+    -                {
+    -                    PackageName(
     -                        "sniffio",
-    +                        "idna",
-                         ),
-                     },
-                     {},
+    -                    ),
+    -                },
+    -                {},
+    -            ),
+    +            strategy: All,
+                 constraints: {},
+             },
+         },
     ...
     "#
     );
