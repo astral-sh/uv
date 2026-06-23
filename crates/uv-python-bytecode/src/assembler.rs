@@ -2372,6 +2372,7 @@ impl Assembler {
             block.push(index);
             if !matches!(instruction.operand, Operand::Value(_))
                 || matches!(instruction.opcode.code, 35 | 104 | 105)
+                || (instruction.opcode.code == 27 && instruction.preserve_inlined_jump_nop)
             {
                 blocks.push(std::mem::take(&mut block));
             }
@@ -2415,7 +2416,12 @@ impl Assembler {
             let Item::Instruction(last) = self.items[last_index] else {
                 unreachable!();
             };
-            if block_has_fallthrough(&[Item::Instruction(last)]) && block_index + 1 < blocks.len() {
+            let folded_jump_has_no_fallthrough =
+                last.opcode.code == 27 && last.preserve_inlined_jump_nop;
+            if !folded_jump_has_no_fallthrough
+                && block_has_fallthrough(&[Item::Instruction(last)])
+                && block_index + 1 < blocks.len()
+            {
                 pending.push(block_index + 1);
             }
             if let Operand::Forward(label) | Operand::Backward(label) = last.operand
