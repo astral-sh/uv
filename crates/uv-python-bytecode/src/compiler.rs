@@ -6931,6 +6931,7 @@ impl Compiler {
         if matches!(expression, Expr::BoolOp(_))
             && let Some((origin, constant)) = folded_bool_operand(expression)
         {
+            self.pre_register_expression_names(expression)?;
             let expression_location = self.source_location(expression.range());
             let origin_location = self.source_location(origin.range());
             if expression_location.line != origin_location.line {
