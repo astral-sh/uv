@@ -4092,9 +4092,9 @@ impl Compiler {
             break_returns: false,
         });
         let body_start = self.assembler.instruction_count();
-        self.compile_suite(&statement.body)?;
+        let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
         self.loops.pop();
-        if !suite_terminates(&statement.body) {
+        if !tail_jumps && !suite_terminates(&statement.body) {
             if self.assembler.instruction_count() > body_start
                 && let Some(location) = self.assembler.last_instruction_location()
             {

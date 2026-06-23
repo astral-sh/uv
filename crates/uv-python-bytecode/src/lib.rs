@@ -374,15 +374,15 @@ mod tests {
     }
 
     #[test]
-    fn matches_cpython_marshal_for_chained_comparison_loop_tail() {
+    fn matches_cpython_marshal_for_loop_tail_conditionals() {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def f():\n    for value in range(10):\n        if 2 <= value <= 8:\n            print(value)\n";
+        let source = "def f():\n    for value in range(10):\n        if 2 <= value <= 8:\n            print(value)\n\nasync def async_tail(items, result):\n    async for value in items:\n        if value:\n            result.append(value)\n";
         let expected = Command::new(python)
             .args([
                 "-c",
-                "import marshal, sys; code = compile(sys.stdin.read(), 'chained_loop.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'loop_tail.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -394,7 +394,7 @@ mod tests {
             .unwrap();
         assert!(expected.status.success());
         assert_eq!(
-            compile(source, "chained_loop.py").unwrap().marshal(),
+            compile(source, "loop_tail.py").unwrap().marshal(),
             expected.stdout
         );
     }
