@@ -13871,15 +13871,17 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                         .and_then(|right| left.checked_shr(right))
                         .map(Constant::Int)
                 }
-                (Constant::Int(left), Operator::BitAnd, Constant::Int(right)) => {
-                    Some(Constant::Int(left & right))
-                }
-                (Constant::Int(left), Operator::BitOr, Constant::Int(right)) => {
-                    Some(Constant::Int(left | right))
-                }
-                (Constant::Int(left), Operator::BitXor, Constant::Int(right)) => {
-                    Some(Constant::Int(left ^ right))
-                }
+                (
+                    left @ (Constant::Int(_)
+                    | Constant::BigInt {
+                        negative: false, ..
+                    }),
+                    operator @ (Operator::BitAnd | Operator::BitOr | Operator::BitXor),
+                    right @ (Constant::Int(_)
+                    | Constant::BigInt {
+                        negative: false, ..
+                    }),
+                ) => fold_positive_integer_bitwise(&left, operator, &right),
                 (Constant::Float(left), Operator::Add, Constant::Float(right)) => {
                     Some(Constant::Float(left + right))
                 }
@@ -13992,6 +13994,70 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
             }
         }
         _ => None,
+    }
+}
+
+fn fold_positive_integer_bitwise(
+    left: &Constant,
+    operator: Operator,
+    right: &Constant,
+) -> Option<Constant> {
+    let left = positive_integer_digits(left)?;
+    let right = positive_integer_digits(right)?;
+    let length = match operator {
+        Operator::BitAnd => left.len().min(right.len()),
+        Operator::BitOr | Operator::BitXor => left.len().max(right.len()),
+        _ => unreachable!(),
+    };
+    let mut digits = Vec::with_capacity(length);
+    for index in 0..length {
+        let left = left.get(index).copied().unwrap_or(0);
+        let right = right.get(index).copied().unwrap_or(0);
+        digits.push(match operator {
+            Operator::BitAnd => left & right,
+            Operator::BitOr => left | right,
+            Operator::BitXor => left ^ right,
+            _ => unreachable!(),
+        });
+    }
+    Some(positive_integer_constant(digits))
+}
+
+fn positive_integer_digits(value: &Constant) -> Option<Vec<u16>> {
+    match value {
+        Constant::Int(value) => {
+            let mut value = *value;
+            let mut digits = Vec::new();
+            while value != 0 {
+                digits.push((value & 0x7fff) as u16);
+                value >>= 15;
+            }
+            Some(digits)
+        }
+        Constant::BigInt {
+            negative: false,
+            digits,
+        } => Some(normalized_digits(digits.clone())),
+        _ => None,
+    }
+}
+
+fn positive_integer_constant(digits: Vec<u16>) -> Constant {
+    let digits = normalized_digits(digits);
+    if digits.len() <= 5 {
+        let value = digits
+            .iter()
+            .enumerate()
+            .fold(0_u128, |value, (index, digit)| {
+                value | (u128::from(*digit) << (index * 15))
+            });
+        if let Ok(value) = u64::try_from(value) {
+            return Constant::Int(value);
+        }
+    }
+    Constant::BigInt {
+        negative: false,
+        digits,
     }
 }
 

@@ -535,6 +535,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_folded_large_integer_bitwise_operations() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "bit_and = 99999999999999999999999 & 0o200000\nbit_or = 99999999999999999999999 | 0o777\nbit_xor = 18446744073709551616 ^ 18446744073709551616\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'large_bitwise.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "large_bitwise.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_folded_branches_in_a_with_statement() {
         let Some(python) = python_314() else {
             return;
