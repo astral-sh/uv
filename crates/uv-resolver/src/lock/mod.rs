@@ -1311,7 +1311,7 @@ impl Lock {
         }
 
         // The simplified marker space covered by this resolution.
-        let simplified_fork_environment =
+        let simplified_environment =
             SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union())
                 .as_simplified_marker_tree();
 
@@ -1629,7 +1629,7 @@ impl Lock {
         for dist in &self.packages {
             packages.push(dist.to_toml(
                 &self.requires_python,
-                simplified_fork_environment,
+                simplified_environment,
                 &dist_count_by_name,
             )?);
         }
@@ -3679,7 +3679,7 @@ impl Package {
     fn to_toml(
         &self,
         requires_python: &RequiresPython,
-        simplified_fork_environment: MarkerTree,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
@@ -3697,7 +3697,7 @@ impl Package {
 
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
-                dep.to_toml(simplified_fork_environment, dist_count_by_name)
+                dep.to_toml(simplified_environment, dist_count_by_name)
                     .into_inline_table()
             }));
             table.insert("dependencies", value(deps));
@@ -3707,7 +3707,7 @@ impl Package {
             let mut optional_deps = Table::new();
             for (extra, deps) in &self.optional_dependencies {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(simplified_fork_environment, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -3723,7 +3723,7 @@ impl Package {
             let mut dependency_groups = Table::new();
             for (extra, deps) in &self.dependency_groups {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(simplified_fork_environment, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -5750,7 +5750,7 @@ impl Dependency {
     /// Returns the TOML representation of this dependency.
     fn to_toml(
         &self,
-        simplified_fork_environment: MarkerTree,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Table {
         let mut table = Table::new();
@@ -5769,7 +5769,7 @@ impl Dependency {
             .simplified_marker
             .as_simplified_marker_tree()
             .negate()
-            .is_disjoint(simplified_fork_environment)
+            .is_disjoint(simplified_environment)
             && let Some(marker) = self.simplified_marker.try_to_string()
         {
             table.insert("marker", value(marker));
