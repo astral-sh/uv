@@ -23,6 +23,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-pep740 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
@@ -42,6 +43,7 @@ reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sigstore-oidc = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
@@ -53,6 +55,7 @@ anstream = { workspace = true }
 fastrand = { workspace = true }
 insta = { workspace = true }
 wiremock = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 # Test only feature to enable non-HTTPS URL handling

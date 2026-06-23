@@ -33,8 +33,8 @@ use uv_cli::{
 };
 use uv_client::Connectivity;
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
+    Attest, BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode,
+    EnvFile, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
     InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, PipCompileFormat,
     ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost,
     TrustedPublishing, Upgrade, VersionControlSystem,
@@ -4980,7 +4980,6 @@ pub(crate) struct PublishSettings {
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
     pub(crate) dry_run: bool,
-    pub(crate) no_attestations: bool,
     pub(crate) direct: bool,
 
     // Both CLI and configuration.
@@ -4988,6 +4987,7 @@ pub(crate) struct PublishSettings {
     pub(crate) trusted_publishing: TrustedPublishing,
     pub(crate) keyring_provider: KeyringProviderType,
     pub(crate) check_url: Option<IndexUrl>,
+    pub(crate) attest: Attest,
 
     // Configuration only
     pub(crate) index_locations: IndexLocations,
@@ -5022,12 +5022,18 @@ impl PublishSettings {
             (args.username, args.password)
         };
 
+        let attest = if args.no_attestations {
+            Attest::Never
+        } else {
+            args.attest
+        };
+
         Self {
             files: args.files,
             username,
             password,
             dry_run: args.dry_run,
-            no_attestations: args.no_attestations,
+            attest,
             direct: args.direct,
             publish_url: args
                 .publish_url
