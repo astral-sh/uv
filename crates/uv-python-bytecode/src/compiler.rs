@@ -1295,8 +1295,19 @@ impl Compiler {
             .iter()
             .map(|name| self.mangled_name(name))
             .collect();
+        let parameter_count = usize::try_from(
+            self.arg_count
+                + self.keyword_only_arg_count
+                + u32::from(self.flags & CO_VARARGS != 0)
+                + u32::from(self.flags & CO_VARKEYWORDS != 0),
+        )
+        .unwrap_or(usize::MAX);
         let (bytecode, line_table, exception_table, assembled_max_depth, removed_max_depth) =
-            self.assembler.finish_code(self.first_line_number)?;
+            self.assembler.finish_code(
+                self.first_line_number,
+                self.fast_local_count,
+                parameter_count,
+            )?;
         let max_depth =
             if removed_max_depth == Some(self.max_depth) && assembled_max_depth < self.max_depth {
                 assembled_max_depth

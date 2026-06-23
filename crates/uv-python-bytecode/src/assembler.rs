@@ -400,12 +400,15 @@ impl Assembler {
 
     #[cfg(test)]
     pub(crate) fn finish(self) -> Result<Vec<u8>, CompileError> {
-        self.finish_code(1).map(|(bytecode, _, _, _, _)| bytecode)
+        self.finish_code(1, 0, 0)
+            .map(|(bytecode, _, _, _, _)| bytecode)
     }
 
     pub(crate) fn finish_code(
         mut self,
         first_line_number: u32,
+        local_count: usize,
+        parameter_count: usize,
     ) -> Result<EncodedCode, CompileError> {
         let mut removed_max_depth = self.remove_unreachable_instructions();
         self.optimize_boolean_conversions();
@@ -416,9 +419,10 @@ impl Assembler {
         self.remove_redundant_forward_jumps();
         self.optimize_swap_runs();
         self.apply_static_swaps();
+        self.duplicate_exit_blocks();
+        self.add_checks_for_uninitialized_loads(local_count, parameter_count);
         self.fuse_superinstructions();
         self.push_cold_blocks_to_end();
-        self.duplicate_exit_blocks();
         self.remove_redundant_checked_loads();
         self.propagate_locations_within_blocks();
         self.remove_redundant_swaps_before_pops();
@@ -2040,6 +2044,194 @@ impl Assembler {
                 index += 1;
             }
             block_start = block_end;
+        }
+    }
+
+    /// Converts potentially uninitialized local loads to checked loads.
+    ///
+    /// Mirrors CPython's `add_checks_for_loads_of_uninitialized_variables`
+    /// flow-graph pass. A set bit means that a local may be uninitialized on
+    /// at least one path into the block.
+    fn add_checks_for_uninitialized_loads(&mut self, local_count: usize, parameter_count: usize) {
+        const DELETE_FAST: u8 = 63;
+        const LOAD_FAST: u8 = 84;
+        const LOAD_FAST_AND_CLEAR: u8 = 85;
+        const LOAD_FAST_CHECK: u8 = 88;
+        const STORE_FAST: u8 = 112;
+
+        if local_count == 0 {
+            return;
+        }
+
+        let mut block_labels = HashSet::new();
+        for item in &self.items {
+            if let Item::Instruction(Instruction {
+                operand: Operand::Forward(label) | Operand::Backward(label),
+                ..
+            }) = item
+            {
+                block_labels.insert(*label);
+            }
+        }
+        for region in &self.exception_regions {
+            block_labels.insert(region.target);
+        }
+
+        let mut blocks = Vec::<Vec<usize>>::new();
+        let mut block = Vec::new();
+        for (index, item) in self.items.iter().enumerate() {
+            if matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
+                && !block.is_empty()
+            {
+                blocks.push(std::mem::take(&mut block));
+            }
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            block.push(index);
+            if !matches!(instruction.operand, Operand::Value(_))
+                || matches!(instruction.opcode.code, 35 | 104 | 105)
+            {
+                blocks.push(std::mem::take(&mut block));
+            }
+        }
+        if !block.is_empty() {
+            blocks.push(block);
+        }
+        if blocks.is_empty() {
+            return;
+        }
+
+        let mut item_blocks = vec![None; self.items.len()];
+        for (block_index, block) in blocks.iter().enumerate() {
+            for index in block {
+                item_blocks[*index] = Some(block_index);
+            }
+        }
+        let mut label_blocks = HashMap::new();
+        let mut label_positions = HashMap::new();
+        let mut next_block = None;
+        for (index, item) in self.items.iter().enumerate().rev() {
+            match item {
+                Item::Instruction(_) => next_block = item_blocks[index],
+                Item::Label(label) => {
+                    label_positions.insert(*label, index);
+                    if block_labels.contains(label)
+                        && let Some(block) = next_block
+                    {
+                        label_blocks.insert(*label, block);
+                    }
+                }
+            }
+        }
+
+        let mut exception_successors = HashMap::new();
+        for (index, item) in self.items.iter().enumerate() {
+            if !matches!(item, Item::Instruction(_)) {
+                continue;
+            }
+            let mut innermost = None::<(usize, usize, usize)>;
+            for region in &self.exception_regions {
+                let (Some(&start), Some(&end), Some(&target)) = (
+                    label_positions.get(&region.start),
+                    label_positions.get(&region.end),
+                    label_blocks.get(&region.target),
+                ) else {
+                    continue;
+                };
+                if start <= index && index < end {
+                    let span = end - start;
+                    if innermost.is_none_or(|(best_start, best_span, _)| {
+                        start > best_start || (start == best_start && span < best_span)
+                    }) {
+                        innermost = Some((start, span, target));
+                    }
+                }
+            }
+            if let Some((_, _, target)) = innermost {
+                exception_successors.insert(index, target);
+            }
+        }
+
+        let mut unsafe_at_entry = vec![vec![false; local_count]; blocks.len()];
+        for local in parameter_count.min(local_count)..local_count {
+            unsafe_at_entry[0][local] = true;
+        }
+        let mut needs_check = HashSet::new();
+        let mut pending = (0..blocks.len()).collect::<Vec<_>>();
+        let mut queued = vec![true; blocks.len()];
+
+        while let Some(block_index) = pending.pop() {
+            queued[block_index] = false;
+            let mut unsafe_locals = unsafe_at_entry[block_index].clone();
+            for local in 64..local_count {
+                unsafe_locals[local] = true;
+            }
+
+            let mut propagate = |target: usize, state: &[bool]| {
+                let mut changed = false;
+                for (current, incoming) in unsafe_at_entry[target].iter_mut().zip(state) {
+                    if *incoming && !*current {
+                        *current = true;
+                        changed = true;
+                    }
+                }
+                if changed && !queued[target] {
+                    queued[target] = true;
+                    pending.push(target);
+                }
+            };
+
+            for index in &blocks[block_index] {
+                if let Some(target) = exception_successors.get(index).copied() {
+                    propagate(target, &unsafe_locals);
+                }
+                let Item::Instruction(instruction) = self.items[*index] else {
+                    unreachable!();
+                };
+                let Operand::Value(argument) = instruction.operand else {
+                    continue;
+                };
+                let Ok(local) = usize::try_from(argument) else {
+                    continue;
+                };
+                if local >= local_count {
+                    continue;
+                }
+                match instruction.opcode.code {
+                    DELETE_FAST | LOAD_FAST_AND_CLEAR => unsafe_locals[local] = true,
+                    STORE_FAST | LOAD_FAST_CHECK => unsafe_locals[local] = false,
+                    LOAD_FAST => {
+                        if unsafe_locals[local] {
+                            needs_check.insert(*index);
+                        }
+                        unsafe_locals[local] = false;
+                    }
+                    _ => {}
+                }
+            }
+
+            let block_items = blocks[block_index]
+                .iter()
+                .map(|index| self.items[*index])
+                .collect::<Vec<_>>();
+            if block_has_fallthrough(&block_items) && block_index + 1 < blocks.len() {
+                propagate(block_index + 1, &unsafe_locals);
+            }
+            if let Some(target) = block_jump_target(&block_items)
+                && let Some(target) = label_blocks.get(&target).copied()
+            {
+                propagate(target, &unsafe_locals);
+            }
+        }
+
+        for index in needs_check {
+            let Item::Instruction(instruction) = &mut self.items[index] else {
+                unreachable!();
+            };
+            if instruction.opcode.code == LOAD_FAST {
+                instruction.opcode = Opcode::new(LOAD_FAST_CHECK, 0);
+            }
         }
     }
 
