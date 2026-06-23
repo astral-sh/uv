@@ -46,6 +46,9 @@ struct Instruction {
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
     preserve_no_location: bool,
+    // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
+    // whatever exception target remains in its reused CFG slot, if there is one.
+    normalized_exception_owner: Option<bool>,
     // CPython's cold-block optimizer retains stale exception ownership for the short form of
     // certain synthetic handler-exit jumps, but not when the jump needs an `EXTENDED_ARG`.
     exclude_exception_if_extended: bool,
@@ -269,6 +272,17 @@ impl Assembler {
         }
     }
 
+    pub(crate) fn set_last_normalized_exception_owner(&mut self, has_owner: bool) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.normalized_exception_owner = Some(has_owner);
+        }
+    }
+
     pub(crate) fn emit(&mut self, opcode: Opcode, argument: u32) {
         self.emit_operand(opcode, Operand::Value(argument));
     }
@@ -415,6 +429,7 @@ impl Assembler {
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
             preserve_no_location: false,
+            normalized_exception_owner: None,
             exclude_exception_if_extended: false,
         }));
     }
@@ -1166,6 +1181,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        normalized_exception_owner: None,
                         exclude_exception_if_extended,
                     }),
                 ],
@@ -1517,6 +1533,7 @@ impl Assembler {
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
+                        normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
                     }),
                 );
@@ -2765,6 +2782,9 @@ impl Assembler {
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,
+                normalized_exception_owner: first
+                    .normalized_exception_owner
+                    .or(second.normalized_exception_owner),
                 exclude_exception_if_extended: first.exclude_exception_if_extended
                     || second.exclude_exception_if_extended,
             }));
@@ -2799,7 +2819,7 @@ impl Assembler {
                 ))
             })
             .collect::<Result<Vec<_>, CompileError>>()?;
-        let extended_jump_exclusions = self
+        let mut late_exception_exclusions = self
             .items
             .iter()
             .filter_map(|item| {
@@ -2817,11 +2837,74 @@ impl Assembler {
                 ))
             })
             .collect::<Vec<_>>();
+        let mut block_labels = self.preserved_block_boundaries.clone();
+        let mut setup_labels = HashSet::new();
+        for region in &self.exception_regions {
+            block_labels.insert(region.target);
+            setup_labels.insert(region.start);
+        }
+        for item in &self.items {
+            if let Item::Instruction(Instruction {
+                operand: Operand::Forward(label) | Operand::Backward(label),
+                ..
+            }) = item
+            {
+                block_labels.insert(*label);
+            }
+        }
+        let mut instruction_index = 0;
+        let mut block_has_instruction = false;
+        let mut block_has_stale_exception_owner = false;
+        for item in &self.items {
+            match item {
+                Item::Label(label) => {
+                    if block_has_instruction && block_labels.contains(label) {
+                        block_has_instruction = false;
+                        block_has_stale_exception_owner = false;
+                    }
+                    if setup_labels.contains(label) {
+                        block_has_stale_exception_owner = true;
+                    }
+                }
+                Item::Instruction(instruction) => {
+                    if instruction.normalized_exception_owner == Some(false)
+                        && !block_has_stale_exception_owner
+                    {
+                        let position = positions[instruction_index];
+                        late_exception_exclusions.push((
+                            position,
+                            position
+                                + u32::from(extended_args[instruction_index])
+                                + 1
+                                + u32::from(instruction.opcode.caches),
+                        ));
+                    }
+                    if matches!(instruction.opcode.code, 87 | 89 | 113 | 114)
+                        || matches!(
+                            (instruction.opcode.code, instruction.operand),
+                            (92, Operand::Value(argument)) if argument & 1 != 0
+                        )
+                    {
+                        block_has_stale_exception_owner = true;
+                    }
+                    instruction_index += 1;
+                    block_has_instruction = true;
+                    if instruction.opcode.code == 28
+                        || (!matches!(instruction.opcode.code, 100..=103)
+                            && (!matches!(instruction.operand, Operand::Value(_))
+                                || matches!(instruction.opcode.code, 35 | 104 | 105)))
+                    {
+                        block_has_instruction = false;
+                        block_has_stale_exception_owner = false;
+                    }
+                }
+            }
+        }
         let mut boundaries = regions
             .iter()
             .flat_map(|(start, end, _, _, _, _)| [*start, *end])
             .chain(
-                extended_jump_exclusions
+                late_exception_exclusions
                     .iter()
                     .flat_map(|(start, end)| [*start, *end]),
             )
@@ -2836,7 +2919,7 @@ impl Assembler {
             if end <= start {
                 continue;
             }
-            if extended_jump_exclusions
+            if late_exception_exclusions
                 .iter()
                 .any(|(excluded_start, excluded_end)| {
                     *excluded_start <= start && *excluded_end >= end

@@ -10035,7 +10035,9 @@ impl Compiler {
                 }
                 return Ok(());
             }
-            return self.emit(NOT_TAKEN, 0, 0);
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.assembler.set_last_normalized_exception_owner(false);
+            return Ok(());
         }
         let comparison_is_boolean = if let Expr::Compare(comparison) = expression
             && comparison.ops.len() == 1
@@ -10075,6 +10077,8 @@ impl Compiler {
             let exclusion_start = self.assembler.label();
             self.assembler.mark(exclusion_start);
             self.emit(NOT_TAKEN, 0, 0)?;
+            self.assembler
+                .set_last_normalized_exception_owner(comparison_is_boolean);
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
             if exclude_from_generator {
@@ -10091,7 +10095,10 @@ impl Compiler {
             }
             Ok(())
         } else {
-            self.emit(NOT_TAKEN, 0, 0)
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.assembler
+                .set_last_normalized_exception_owner(comparison_is_boolean);
+            Ok(())
         }
     }
 
