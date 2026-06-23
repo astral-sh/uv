@@ -143,11 +143,16 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
 
 /// Remove any entrypoints attached to the [`Tool`].
 pub(crate) fn remove_entrypoints(tool: &Tool) {
-    for executable in tool
-        .entrypoints()
-        .iter()
-        .map(|entrypoint| &entrypoint.install_path)
-    {
+    remove_entrypoint_paths(
+        tool.entrypoints()
+            .iter()
+            .map(|entrypoint| entrypoint.install_path.as_path()),
+    );
+}
+
+/// Remove the entrypoints at the given paths.
+fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
+    for executable in entrypoints {
         debug!("Removing executable: `{}`", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
@@ -740,7 +745,7 @@ pub(crate) fn finalize_tool_install(
         executable_directory.user_display()
     );
 
-    let mut installed_entrypoints = Vec::new();
+    let mut installed_entrypoints: Vec<ToolEntrypoint> = Vec::new();
     let site_packages = SitePackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
@@ -759,9 +764,29 @@ pub(crate) fn finalize_tool_install(
         }
 
         let installed = site_packages.get_packages(package);
-        let dist = installed
-            .first()
-            .context("Expected at least one requirement")?;
+        let Some(dist) = installed.first() else {
+            if package != name {
+                bail!("Expected package `{package}` to be installed");
+            }
+
+            writeln!(
+                printer.stdout(),
+                "No executables are provided by package `{}`; removing tool",
+                package.cyan()
+            )?;
+            remove_entrypoint_paths(
+                installed_entrypoints
+                    .iter()
+                    .map(|entrypoint| entrypoint.install_path.as_path()),
+            );
+            installed_tools.remove_environment(name)?;
+
+            return Err(NoExecutablesError::Root {
+                package: package.clone(),
+                matching_dependency_packages: Vec::new(),
+            }
+            .into());
+        };
         let dist_entrypoints = entrypoint_paths(&site_packages, dist.name(), dist.version())?;
 
         // Determine the entry points targets. Use a sorted collection for deterministic output.
@@ -814,6 +839,11 @@ pub(crate) fn finalize_tool_install(
             )?;
 
             // Clean up the environment we just created.
+            remove_entrypoint_paths(
+                installed_entrypoints
+                    .iter()
+                    .map(|entrypoint| entrypoint.install_path.as_path()),
+            );
             installed_tools.remove_environment(name)?;
 
             return Err(err.into());
@@ -827,6 +857,11 @@ pub(crate) fn finalize_tool_install(
                 .peekable();
             if existing_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
+                remove_entrypoint_paths(
+                    installed_entrypoints
+                        .iter()
+                        .map(|entrypoint| entrypoint.install_path.as_path()),
+                );
                 installed_tools.remove_environment(name)?;
 
                 let existing_entrypoints = existing_entrypoints
