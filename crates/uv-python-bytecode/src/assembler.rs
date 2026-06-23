@@ -42,6 +42,7 @@ struct Instruction {
     location: SourceLocation,
     depth_after: Option<u32>,
     force_owned_load: bool,
+    strict_owned_load: bool,
     inline_small_exit: bool,
     preserve_inlined_jump_nop: bool,
     preserve_no_location: bool,
@@ -61,6 +62,7 @@ pub(crate) struct Assembler {
     exception_regions: Vec<ExceptionRegion>,
     preserved_block_boundaries: HashSet<Label>,
     load_fast_borrowing_enabled: bool,
+    strict_owned_loads: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -107,6 +109,7 @@ impl Default for Assembler {
             exception_regions: Vec::new(),
             preserved_block_boundaries: HashSet::new(),
             load_fast_borrowing_enabled: true,
+            strict_owned_loads: false,
         }
     }
 }
@@ -114,6 +117,11 @@ impl Default for Assembler {
 impl Assembler {
     pub(crate) fn disable_load_fast_borrowing(&mut self) {
         self.load_fast_borrowing_enabled = false;
+    }
+
+    /// Prevents local loads emitted while enabled from becoming borrowed loads.
+    pub(crate) fn set_strict_owned_loads(&mut self, enabled: bool) -> bool {
+        std::mem::replace(&mut self.strict_owned_loads, enabled)
     }
 
     pub(crate) fn location(&self) -> SourceLocation {
@@ -370,8 +378,10 @@ impl Assembler {
         operand: Operand,
         depth_after: Option<u32>,
     ) {
-        let force_owned_load =
-            opcode.code == 121 || (opcode.code == 84 && !self.load_fast_borrowing_enabled);
+        let strict_owned_load = self.strict_owned_loads && matches!(opcode.code, 84 | 121);
+        let force_owned_load = strict_owned_load
+            || opcode.code == 121
+            || (opcode.code == 84 && !self.load_fast_borrowing_enabled);
         if force_owned_load {
             opcode = Opcode::new(84, 0);
         }
@@ -381,6 +391,7 @@ impl Assembler {
             location: self.location,
             depth_after,
             force_owned_load,
+            strict_owned_load,
             inline_small_exit: true,
             preserve_inlined_jump_nop: false,
             preserve_no_location: false,
@@ -1115,6 +1126,7 @@ impl Assembler {
                         location,
                         depth_after: None,
                         force_owned_load: false,
+                        strict_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
@@ -1464,6 +1476,7 @@ impl Assembler {
                         location: source_location,
                         depth_after: None,
                         force_owned_load: false,
+                        strict_owned_load: false,
                         inline_small_exit: false,
                         preserve_inlined_jump_nop: false,
                         preserve_no_location: false,
@@ -2412,10 +2425,15 @@ impl Assembler {
                 if unsafe_loads.contains(&index) {
                     continue;
                 }
-                let force_owned_load = match self.items[index] {
-                    Item::Instruction(instruction) => instruction.force_owned_load,
+                let (force_owned_load, strict_owned_load) = match self.items[index] {
+                    Item::Instruction(instruction) => {
+                        (instruction.force_owned_load, instruction.strict_owned_load)
+                    }
                     Item::Label(_) => unreachable!(),
                 };
+                if strict_owned_load {
+                    continue;
+                }
                 if force_owned_load {
                     let following = block[position + 1..]
                         .iter()
@@ -2508,6 +2526,7 @@ impl Assembler {
                 location: first.location,
                 depth_after: second.depth_after,
                 force_owned_load: first.force_owned_load || second.force_owned_load,
+                strict_owned_load: first.strict_owned_load || second.strict_owned_load,
                 inline_small_exit: first.inline_small_exit && second.inline_small_exit,
                 preserve_inlined_jump_nop: false,
                 preserve_no_location: first.preserve_no_location || second.preserve_no_location,

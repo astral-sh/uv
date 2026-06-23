@@ -2558,7 +2558,9 @@ impl Compiler {
                 condition_result?;
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
-                self.compile_suite(body)?;
+                self.compile_with_strict_owned_loads(matches!(test, Expr::If(_)), |compiler| {
+                    compiler.compile_suite(body)
+                })?;
                 if self.assembler.instruction_count() == body_start
                     && let Some(statement) = body.last()
                 {
@@ -2620,6 +2622,19 @@ impl Compiler {
         }
     }
 
+    fn compile_with_strict_owned_loads<T>(
+        &mut self,
+        strict: bool,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<T, CompileError> {
+        let previous = strict.then(|| self.assembler.set_strict_owned_loads(true));
+        let result = compile(self);
+        if let Some(previous) = previous {
+            self.assembler.set_strict_owned_loads(previous);
+        }
+        result
+    }
+
     fn compile_loop_tail_suite(
         &mut self,
         body: &[Stmt],
@@ -2657,7 +2672,10 @@ impl Compiler {
             }
             self.set_depth(base_depth);
             let body_start = self.assembler.instruction_count();
-            let nested_tail = self.compile_loop_tail_suite(body, restart)?;
+            let nested_tail = self.compile_with_strict_owned_loads(
+                matches!(statement.test.as_ref(), Expr::If(_)),
+                |compiler| compiler.compile_loop_tail_suite(body, restart),
+            )?;
             if !nested_tail && !suite_terminates(body) {
                 self.set_branch_end_location(body, body_start);
                 self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
@@ -2694,7 +2712,10 @@ impl Compiler {
                 }
                 self.set_depth(base_depth);
                 let body_start = self.assembler.instruction_count();
-                let nested_tail = self.compile_loop_tail_suite(body, restart)?;
+                let nested_tail = self
+                    .compile_with_strict_owned_loads(matches!(test, Expr::If(_)), |compiler| {
+                        compiler.compile_loop_tail_suite(body, restart)
+                    })?;
                 if !nested_tail && !suite_terminates(body) {
                     self.set_branch_end_location(body, body_start);
                     self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
@@ -2705,7 +2726,10 @@ impl Compiler {
             if let (Some(test), Some(next)) = (test, next) {
                 self.compile_jump_if(test, false, next)?;
             }
-            let nested_tail = self.compile_loop_tail_suite(body, restart)?;
+            let nested_tail = self.compile_with_strict_owned_loads(
+                test.is_some_and(|test| matches!(test, Expr::If(_))),
+                |compiler| compiler.compile_loop_tail_suite(body, restart),
+            )?;
             if !nested_tail && !suite_terminates(body) {
                 if let Some(location) = self.assembler.last_instruction_location() {
                     self.assembler.set_location(location);
