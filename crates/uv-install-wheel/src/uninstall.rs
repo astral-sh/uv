@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex, OnceLock};
 
-use tracing::trace;
+use tracing::{trace, warn};
 
 use uv_fs::write_atomic_sync;
 use uv_pypi_types::Identifier;
@@ -179,38 +179,27 @@ pub fn uninstall_wheel(
         }
     }
 
-    // RECORD is the uninstall journal, so remove it after cleaning up every other file and
-    // directory. Keep direct URL identity until this succeeds so a failed finalization can still
-    // be retried by URL.
-    match fs_err::remove_file(&record_path) {
-        Ok(()) => {
-            trace!("Removed file: {}", record_path.display());
-            file_count += 1;
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
+    file_count += usize::from(record_path.try_exists()?);
+    file_count += usize::from(direct_url_path.try_exists()?);
 
-    match fs_err::remove_file(&direct_url_path) {
-        Ok(()) => {
-            trace!("Removed file: {}", direct_url_path.display());
-            file_count += 1;
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
-    }
+    // Atomically make the distribution metadata undiscoverable. The temporary directory is a
+    // sibling of `dist_info`, so the rename stays on the same filesystem. If it fails, RECORD and
+    // direct URL identity remain available for a retry; once it succeeds, deletion is best-effort.
+    let temporary_directory = tempfile::tempdir_in(site_packages)?;
+    let temporary_dist_info = temporary_directory.path().join("dist-info");
+    fs_err::rename(dist_info, &temporary_dist_info)?;
+    trace!(
+        "Moved directory for removal: {}",
+        temporary_dist_info.display()
+    );
+    dir_count += 1;
 
-    // Removing the final metadata may leave an empty dist-info directory behind.
-    match fs_err::read_dir(dist_info) {
-        Ok(mut entries) => {
-            if entries.next().is_none() {
-                fs_err::remove_dir(dist_info)?;
-                trace!("Removed directory: {}", dist_info.display());
-                dir_count += 1;
-            }
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => return Err(err.into()),
+    let temporary_path = temporary_directory.path().to_path_buf();
+    if let Err(err) = temporary_directory.close() {
+        warn!(
+            "Failed to remove temporary uninstall directory at {}: {err}",
+            temporary_path.display()
+        );
     }
 
     Ok(Uninstall {
