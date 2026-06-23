@@ -428,6 +428,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_import_originated_calls() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "import sys\n\ndef reimported():\n    import sys\n    sys.exit(1)\n\ndef shadowed(sys):\n    sys.exit(1)\n\ndef only_local():\n    import os\n    os._exit(1)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'imported_calls.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "imported_calls.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_a_nested_if_branch_exit() {
         let Some(python) = python_314() else {
             return;

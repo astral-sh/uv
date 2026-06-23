@@ -8332,22 +8332,8 @@ impl Compiler {
         let Expr::Name(name) = attribute.value.as_ref() else {
             return false;
         };
-        if !self.imported_scope_names.contains(name.id.as_str()) {
-            return false;
-        }
-        match &self.scope {
-            Scope::Module | Scope::Class { .. } => true,
-            Scope::Function {
-                indices,
-                free_indices,
-                globals,
-                ..
-            } => {
-                globals.contains(name.id.as_str())
-                    || (!indices.contains_key(name.id.as_str())
-                        && !free_indices.contains_key(name.id.as_str()))
-            }
-        }
+        // CPython only checks whether the name is import-originated in the module symbol table.
+        self.imported_scope_names.contains(name.id.as_str())
     }
 
     fn compile_super_attribute(
