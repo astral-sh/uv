@@ -933,6 +933,8 @@ impl Compiler {
                 self.emit(LOAD_CONST, constant, 1)?;
                 self.store_name("__doc__")?;
                 &body[1..]
+            } else if module_annotations && fold_constant(&expression.value).is_some() {
+                &body[1..]
             } else {
                 body.as_slice()
             }
