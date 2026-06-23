@@ -374,6 +374,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_a_nested_if_branch_exit() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "if a:\n    if b:\n        body()\nelif c:\n    other()\nafter1(); after2(); after3(); after4(); after5(); after6()\n\ndef terminating_nested_if(x, y):\n    if x:\n        if y:\n            raise Exception()\n        else:\n            body()\n    else:\n        other()\n    after()\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'nested_if.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "nested_if.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_local_borrowing_across_exception_regions() {
         let Some(python) = python_314() else {
             return;

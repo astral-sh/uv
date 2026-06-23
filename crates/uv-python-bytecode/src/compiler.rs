@@ -2567,8 +2567,19 @@ impl Compiler {
                     self.emit(NOP, 0, 0)?;
                 }
                 if !suite_terminates(body) && branch_index + 1 < branch_count {
-                    self.set_branch_end_location(body, body_start);
+                    let nested_if_body_falls_through = matches!(
+                        body.last(),
+                        Some(Stmt::If(statement)) if !suite_terminates(&statement.body)
+                    );
+                    if nested_if_body_falls_through {
+                        self.assembler.set_location(SourceLocation::NONE);
+                    } else {
+                        self.set_branch_end_location(body, body_start);
+                    }
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+                    if nested_if_body_falls_through {
+                        self.assembler.preserve_last_no_location();
+                    }
                 }
                 self.assembler.mark(next);
                 self.set_depth(base_depth);
