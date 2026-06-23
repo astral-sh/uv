@@ -3096,6 +3096,17 @@ impl Compiler {
                 if let Some(truthiness) = early_condition_truthiness(guard) {
                     self.record_folded_value(guard)?;
                     irrefutable_true_guard = truthiness && context.fail_pop.is_empty();
+                    if irrefutable_true_guard {
+                        let location = self.source_location(guard.range());
+                        if self
+                            .assembler
+                            .last_instruction_location()
+                            .is_none_or(|previous| previous.line != location.line)
+                        {
+                            self.assembler.set_location(location);
+                            self.emit(NOP, 0, 0)?;
+                        }
+                    }
                     if !truthiness || !context.fail_pop.is_empty() {
                         let range = if is_wildcard_pattern(&case.pattern) {
                             case.pattern.range()
