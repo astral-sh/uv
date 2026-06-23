@@ -1891,7 +1891,12 @@ impl Assembler {
             .iter()
             .enumerate()
             .filter_map(|(index, item)| match item {
-                Item::Label(label) if block_labels.contains(label) => Some(index),
+                Item::Label(label)
+                    if block_labels.contains(label)
+                        || self.preserved_block_boundaries.contains(label) =>
+                {
+                    Some(index)
+                }
                 Item::Instruction(instruction)
                     if !matches!(instruction.operand, Operand::Value(_))
                         || matches!(instruction.opcode.code, 35 | 104 | 105) =>
@@ -2068,7 +2073,12 @@ impl Assembler {
             .iter()
             .enumerate()
             .filter_map(|(index, item)| match item {
-                Item::Label(label) if block_labels.contains(label) => Some(index),
+                Item::Label(label)
+                    if block_labels.contains(label)
+                        || self.preserved_block_boundaries.contains(label) =>
+                {
+                    Some(index)
+                }
                 Item::Instruction(instruction)
                     if !matches!(instruction.operand, Operand::Value(_))
                         || matches!(instruction.opcode.code, 35 | 104 | 105) =>

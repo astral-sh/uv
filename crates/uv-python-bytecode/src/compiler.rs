@@ -2026,6 +2026,9 @@ impl Compiler {
             self.compile_terminal_bool_expression(last)?;
         } else {
             self.compile_expression(last)?;
+            let result = self.assembler.label();
+            self.assembler.preserve_block_boundary(result);
+            self.assembler.mark(result);
             self.assembler
                 .set_location(self.source_location(last.range()));
             self.emit(POP_TOP, 0, -1)?;
