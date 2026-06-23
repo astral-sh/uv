@@ -8916,6 +8916,8 @@ impl Compiler {
         child
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
+        // CPython only inserts `.<locals>` for function, async-function, and lambda parents.
+        child.child_qualified_name_parent = Some(child.qualified_name.clone());
         child.emit_function_prologue()?;
         child
             .assembler
