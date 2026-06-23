@@ -323,6 +323,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_small_with_exits() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def normal():\n    with manager:\n        value = 0\n    value = 1\n\ndef terminal():\n    with manager:\n        value = 0\n        return 1\n    value = 1\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'with_exit.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "with_exit.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_pass_only_try_else_finally() {
         let Some(python) = python_314() else {
             return;

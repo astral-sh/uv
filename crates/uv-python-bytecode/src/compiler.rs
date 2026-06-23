@@ -5967,9 +5967,7 @@ impl Compiler {
                 self.emit_implicit_return()?;
             } else {
                 self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                if self.active_exception_region_exclusions.is_empty()
-                    || self.active_finally_try_bodies > 0
-                {
+                if self.active_finally_try_bodies > 0 {
                     self.assembler.prevent_last_jump_inlining();
                 }
             }
@@ -6022,9 +6020,7 @@ impl Compiler {
             self.emit_implicit_return()?;
         } else {
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-            if self.active_exception_region_exclusions.is_empty()
-                || self.active_finally_try_bodies > 0
-            {
+            if self.active_finally_try_bodies > 0 {
                 self.assembler.prevent_last_jump_inlining();
             }
         }
