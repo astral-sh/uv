@@ -375,6 +375,35 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_nested_async_comprehension_cleanup_order() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source =
+            "async def test(): return [[x async for x in elements(n)] async for n in range(3)]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'nested_async_comprehension.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "nested_async_comprehension.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_multiline_constant_match_guards() {
         let Some(python) = python_314() else {
             return;

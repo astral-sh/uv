@@ -1341,6 +1341,77 @@ impl Assembler {
                 }
             }
         }
+
+        // `codegen_add_yield_from` creates the `CLEANUP_THROW` block before it resumes
+        // compiling the expression that follows the await. Our structured compiler creates the
+        // same labels up front, but emits async-iterator cleanup blocks while unwinding nested
+        // generators. Restore CPython's creation order when the cold blocks are collected.
+        let cleanup_throw_positions = order
+            .iter()
+            .enumerate()
+            .filter_map(|(position, old_index)| {
+                (position + 1 < order.len()
+                    && block_jump_target(&blocks[order[position + 1]]).is_some()
+                    && blocks[*old_index]
+                    .iter()
+                    .any(|item| {
+                        matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 7)
+                    }))
+                    .then_some(position)
+            })
+            .collect::<Vec<_>>();
+        if cleanup_throw_positions.windows(2).any(|positions| {
+            block_labels[order[positions[0]]].0 > block_labels[order[positions[1]]].0
+        }) {
+            let insertion_position = cleanup_throw_positions[0];
+            let mut cleanup_throw_groups = cleanup_throw_positions
+                .iter()
+                .map(|position| [order[*position], order[*position + 1]])
+                .collect::<Vec<_>>();
+            let grouped_blocks = cleanup_throw_groups
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<HashSet<_>>();
+            order.retain(|old_index| !grouped_blocks.contains(old_index));
+            cleanup_throw_groups.sort_by_key(|[cleanup, _]| block_labels[*cleanup].0);
+            order.splice(
+                insertion_position..insertion_position,
+                cleanup_throw_groups.into_iter().flatten(),
+            );
+
+            // The outer inlined comprehension's successful restore was compiled after its
+            // exceptional restore in our unwind order. CPython compiled it before the nested
+            // handlers, so collecting those handlers also makes the terminal restore the
+            // fallthrough from `END_ASYNC_FOR` and eliminates the synthetic forward jump.
+            let terminal_restore = (0..order.len().saturating_sub(1)).find_map(|position| {
+                let target = blocks[order[position]]
+                    .iter()
+                    .any(|item| {
+                        matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 68)
+                    })
+                    .then(|| block_jump_target(&blocks[order[position + 1]]))
+                    .flatten()
+                    .and_then(|target| label_blocks.get(&target).copied())?;
+                let start = order.iter().position(|old_index| *old_index == target)?;
+                let mut end = start;
+                while end + 1 < order.len() && block_has_fallthrough(&blocks[order[end]]) {
+                    end += 1;
+                }
+                let exits_scope = blocks[order[end]].iter().rev().find_map(|item| {
+                    if let Item::Instruction(instruction) = item {
+                        Some(matches!(instruction.opcode.code, 35 | 104 | 105))
+                    } else {
+                        None
+                    }
+                });
+                (exits_scope == Some(true)).then_some((position + 2, start, end))
+            });
+            if let Some((insertion_position, start, end)) = terminal_restore {
+                let terminal_restore = order.drain(start..=end).collect::<Vec<_>>();
+                order.splice(insertion_position..insertion_position, terminal_restore);
+            }
+        }
         let mut reordered = order
             .iter()
             .map(|old_index| blocks[*old_index].clone())
