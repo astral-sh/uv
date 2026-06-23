@@ -226,6 +226,7 @@ struct LoopContext {
     break_label: Label,
     iterator_cleanup: IteratorCleanup,
     break_returns: bool,
+    preserve_break_exit: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -558,6 +559,7 @@ pub(crate) struct Compiler {
     active_normal_finally_bodies: usize,
     active_pass_finally_locations: Vec<SourceLocation>,
     active_overriding_finally_returns: usize,
+    preserve_finally_break_exit_loop_range: Option<ruff_text_size::TextRange>,
     exclude_terminal_if_not_taken: bool,
     exclude_condition_not_taken_from_exception: bool,
     prevent_try_exit_inlining: bool,
@@ -624,6 +626,7 @@ impl Compiler {
             active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
+            preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -745,6 +748,7 @@ impl Compiler {
             active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
+            preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -851,6 +855,7 @@ impl Compiler {
             active_normal_finally_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
+            preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
             prevent_try_exit_inlining: false,
@@ -1619,6 +1624,7 @@ impl Compiler {
             break_label: condition_false,
             iterator_cleanup: IteratorCleanup::None,
             break_returns: true,
+            preserve_break_exit: false,
         });
         self.compile_suite(&statement.body)?;
         self.loops.pop();
@@ -2327,6 +2333,13 @@ impl Compiler {
                     self.emit_implicit_return()?;
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, context.break_label, 0)?;
+                    if context.preserve_break_exit {
+                        // CPython inlines small exit blocks before removing a jump to the next
+                        // block. Keep this terminal protected-loop break through that pass so
+                        // the following finally return is copied onto the edge.
+                        self.assembler.defer_last_jump_removal();
+                        self.assembler.preserve_last_inlined_jump_nop();
+                    }
                 }
                 if let Some(exclusion_start) = exclusion_start {
                     let exclusion_end = self.assembler.label();
@@ -3926,6 +3939,8 @@ impl Compiler {
                 break_label: end,
                 iterator_cleanup: IteratorCleanup::None,
                 break_returns: false,
+                preserve_break_exit: self.preserve_finally_break_exit_loop_range
+                    == Some(statement.range),
             });
             let body_start = self.assembler.instruction_count();
             let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
@@ -3962,6 +3977,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::None,
             break_returns: false,
+            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+                == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
@@ -4025,6 +4042,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::Sync,
             break_returns: false,
+            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+                == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
@@ -4112,6 +4131,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::Async,
             break_returns: false,
+            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+                == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
@@ -5399,6 +5420,27 @@ impl Compiler {
         if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
             self.active_overriding_finally_returns += 1;
         }
+        let previous_break_exit_loop_range = self.preserve_finally_break_exit_loop_range;
+        self.preserve_finally_break_exit_loop_range =
+            if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
+                match statement.body.last() {
+                    Some(Stmt::While(loop_statement))
+                        if loop_statement.orelse.is_empty()
+                            && suite_contains_loop_break(&loop_statement.body) =>
+                    {
+                        Some(loop_statement.range)
+                    }
+                    Some(Stmt::For(loop_statement))
+                        if loop_statement.orelse.is_empty()
+                            && suite_contains_loop_break(&loop_statement.body) =>
+                    {
+                        Some(loop_statement.range)
+                    }
+                    _ => previous_break_exit_loop_range,
+                }
+            } else {
+                previous_break_exit_loop_range
+            };
         let protected_result = (|| -> Result<bool, CompileError> {
             if statement.handlers.is_empty() {
                 let instruction_count = self.assembler.instruction_count();
@@ -5422,6 +5464,7 @@ impl Compiler {
                 Ok(true)
             }
         })();
+        self.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
         self.active_overriding_finally_returns = previous_overriding_finally_returns;
         let protected_has_instructions = protected_result?;
         if pass_finally_location.is_some() {
@@ -5459,6 +5502,12 @@ impl Compiler {
                     .push((exit_nop_start, exit_nop_end));
             }
         }
+        // `POP_BLOCK` is converted to a NOP before CPython's CFG optimizer runs. It normally
+        // disappears, but can retain the sole predecessor's line when a small finally exit is
+        // copied onto another edge.
+        self.assembler.set_location(SourceLocation::NONE);
+        self.emit(NOP, 0, 0)?;
+        self.assembler.mark_last_as_converted_pop_block();
         let previous_fallthrough = std::mem::replace(&mut self.emitted_fallthrough_return, false);
         if let Some(location) = pass_finally_location {
             self.assembler.set_location(location);

@@ -53,6 +53,7 @@ struct Instruction {
     prevent_fusion_with_next: bool,
     prevent_fusion_with_previous: bool,
     defer_redundant_jump_removal: bool,
+    converted_pop_block: bool,
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
     normalized_exception_owner: Option<bool>,
@@ -296,6 +297,17 @@ impl Assembler {
         }
     }
 
+    pub(crate) fn mark_last_as_converted_pop_block(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.converted_pop_block = true;
+        }
+    }
+
     /// Removes a trailing NOP and returns its location and immediate exclusion labels, if any.
     pub(crate) fn take_trailing_nop_location(
         &mut self,
@@ -518,6 +530,7 @@ impl Assembler {
             prevent_fusion_with_next: false,
             prevent_fusion_with_previous: false,
             defer_redundant_jump_removal: false,
+            converted_pop_block: false,
             normalized_exception_owner: None,
             exclude_exception_if_extended: false,
         }));
@@ -1284,6 +1297,7 @@ impl Assembler {
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
                         defer_redundant_jump_removal: false,
+                        converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended,
                     }),
@@ -1650,6 +1664,7 @@ impl Assembler {
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
                         defer_redundant_jump_removal: false,
+                        converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
                     }),
@@ -1756,6 +1771,37 @@ impl Assembler {
             if exception_handler_blocks[target] {
                 continue;
             }
+            if remaining_predecessors[target] == 1
+                && let Some(Item::Instruction(first)) = blocks[target]
+                    .iter()
+                    .find(|item| matches!(item, Item::Instruction(_)))
+                && first.opcode.code == 27
+                && first.converted_pop_block
+                && first.location.line < 0
+                && !first.preserve_no_location
+                && let Some(location) = blocks.iter().enumerate().find_map(|(_, block)| {
+                    block_jump_target(block)
+                        .and_then(|label| label_blocks.get(&label).copied())
+                        .filter(|index| *index == target)
+                        .and_then(|_| {
+                            block.iter().rev().find_map(|item| {
+                                if let Item::Instruction(instruction) = item {
+                                    Some(instruction.location)
+                                } else {
+                                    None
+                                }
+                            })
+                        })
+                })
+                && let Some(Item::Instruction(first)) = blocks[target]
+                    .iter_mut()
+                    .find(|item| matches!(item, Item::Instruction(_)))
+            {
+                // A converted `POP_BLOCK` inherits the line of its sole jump predecessor.
+                // This remains observable when another predecessor copied the small exit.
+                first.location = location;
+                continue;
+            }
             if !blocks[target].iter().all(|item| {
                 !matches!(item, Item::Instruction(instruction) if instruction.location.line >= 0)
             }) {
@@ -1854,6 +1900,20 @@ impl Assembler {
                 continue;
             }
             if instruction.location.line < 0 {
+                self.items.remove(index);
+                continue;
+            }
+            if instruction.converted_pop_block
+                && let Some(previous) = self.items[..index].iter().rev().find_map(|item| {
+                    if let Item::Instruction(instruction) = item {
+                        Some(instruction)
+                    } else {
+                        None
+                    }
+                })
+                && previous.location.line == instruction.location.line
+                && !matches!(previous.opcode.code, 35 | 75..=77 | 104 | 105)
+            {
                 self.items.remove(index);
                 continue;
             }
@@ -2925,6 +2985,7 @@ impl Assembler {
                 prevent_fusion_with_previous: first.prevent_fusion_with_previous,
                 defer_redundant_jump_removal: first.defer_redundant_jump_removal
                     || second.defer_redundant_jump_removal,
+                converted_pop_block: first.converted_pop_block || second.converted_pop_block,
                 normalized_exception_owner: first
                     .normalized_exception_owner
                     .or(second.normalized_exception_owner),
