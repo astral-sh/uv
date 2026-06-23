@@ -69,6 +69,7 @@ uv-preview = { version = "0.0.56", path = "crates/uv-preview" }
 uv-publish = { version = "0.0.56", path = "crates/uv-publish" }
 uv-pypi-types = { version = "0.0.56", path = "crates/uv-pypi-types" }
 uv-python = { version = "0.0.56", path = "crates/uv-python" }
+uv-python-bytecode = { version = "0.0.56", path = "crates/uv-python-bytecode" }
 uv-redacted = { version = "0.0.56", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.56", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.56", path = "crates/uv-requirements-txt" }
@@ -232,6 +233,11 @@ reqwest-retry = { version = "0.9.1", package = "astral-reqwest-retry", features 
 ] }
 rkyv = { version = "0.8.14", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff", rev = "e4a063a136ae0e3d6801bd0dad47d09a0f419530" }
+ruff_python_codegen = { git = "https://github.com/astral-sh/ruff", rev = "e4a063a136ae0e3d6801bd0dad47d09a0f419530" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff", rev = "e4a063a136ae0e3d6801bd0dad47d09a0f419530" }
+ruff_source_file = { git = "https://github.com/astral-sh/ruff", rev = "e4a063a136ae0e3d6801bd0dad47d09a0f419530" }
+ruff_text_size = { git = "https://github.com/astral-sh/ruff", rev = "e4a063a136ae0e3d6801bd0dad47d09a0f419530" }
 rustc-hash = { version = "2.0.0" }
 rustls-native-certs = { version = "0.8.3" }
 rustls-pki-types = { version = "1.14.0" }
