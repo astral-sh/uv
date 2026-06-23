@@ -7605,6 +7605,17 @@ impl Compiler {
     ) -> String {
         let start = usize::from(interpolation.range.start()) + 1;
         let expression_end = usize::from(interpolation.expression.range().end());
+        // CPython truncates the stored expression text at a top-level `!=`
+        // when the interpolation has a format specifier.
+        if interpolation.format_spec.is_some()
+            && interpolation.debug_text.is_none()
+            && interpolation.conversion == ConversionFlag::None
+            && let Expr::Compare(comparison) = interpolation.expression.as_ref()
+            && comparison.ops.contains(&CmpOp::NotEq)
+            && let Some(offset) = self.source[start..expression_end].find("!=")
+        {
+            return strip_expression_comments(self.source[start..start + offset].trim_end());
+        }
         let interpolation_end = usize::from(interpolation.range.end()).saturating_sub(1);
         let trailing = &self.source[expression_end..interpolation_end];
         let delimiter = if interpolation.debug_text.is_some() {
