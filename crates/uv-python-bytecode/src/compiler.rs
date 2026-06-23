@@ -1971,19 +1971,40 @@ impl Compiler {
         assignment: &ruff_python_ast::StmtAssign,
         expression: &ruff_python_ast::ExprIf,
     ) -> Result<(), CompileError> {
+        self.compile_terminal_assignment_if_expression_inner(assignment, expression, false)
+    }
+
+    fn compile_terminal_assignment_if_expression_inner(
+        &mut self,
+        assignment: &ruff_python_ast::StmtAssign,
+        expression: &ruff_python_ast::ExprIf,
+        preserve_fallthrough_join_nop: bool,
+    ) -> Result<(), CompileError> {
         let base_depth = self.depth;
         let otherwise = self.assembler.label();
         self.compile_jump_if(&expression.test, false, otherwise)?;
-        self.compile_expression(&expression.body)?;
+        self.pre_register_expression_names(&expression.body)?;
         self.pre_register_expression_names(&expression.orelse)?;
-        self.compile_assignment_targets(&assignment.targets)?;
-        self.assembler
-            .set_location(self.source_location(assignment.targets[0].range()));
-        self.emit_deferred_implicit_return()?;
+        if let Expr::If(body) = expression.body.as_ref() {
+            // CPython copies the terminal assignment and return into the nested branches. The
+            // nested expression's fallthrough join survives that copy as a source-position NOP.
+            self.compile_terminal_assignment_if_expression_inner(assignment, body, true)?;
+        } else {
+            self.compile_expression(&expression.body)?;
+            self.compile_assignment_targets(&assignment.targets)?;
+            self.assembler
+                .set_location(self.source_location(assignment.targets[0].range()));
+            self.emit_deferred_implicit_return()?;
+        }
 
         self.assembler.mark(otherwise);
         self.set_depth(base_depth);
         self.compile_expression(&expression.orelse)?;
+        if preserve_fallthrough_join_nop {
+            self.assembler
+                .set_location(self.source_location(expression.orelse.range()));
+            self.emit(NOP, 0, 0)?;
+        }
         self.compile_assignment_targets(&assignment.targets)?;
         self.assembler
             .set_location(self.source_location(assignment.targets[0].range()));
@@ -10218,11 +10239,21 @@ impl Compiler {
             }
             self.pre_register_expression_names(&expression.body)?;
             self.pre_register_expression_names(&expression.orelse)?;
-            return self.compile_expression(if truthiness {
+            let selected = if truthiness {
                 &expression.body
             } else {
                 &expression.orelse
-            });
+            };
+            if self.source_location(expression.test.range()).line
+                != self.source_location(selected.range()).line
+            {
+                // Folding a multiline condition leaves its source-position marker in CPython's
+                // optimized flow graph.
+                self.assembler
+                    .set_location(self.source_location(expression.test.range()));
+                self.emit(NOP, 0, 0)?;
+            }
+            return self.compile_expression(selected);
         }
         let base_depth = self.depth;
         let else_label = self.assembler.label();
