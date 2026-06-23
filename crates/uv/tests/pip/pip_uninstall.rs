@@ -9,7 +9,9 @@ use std::process::{Child, Command};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
+#[cfg(unix)]
+use anyhow::bail;
 use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
