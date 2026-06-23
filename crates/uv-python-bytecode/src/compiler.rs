@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
+use ruff_python_ast::visitor::{Visitor, walk_expr, walk_pattern, walk_stmt};
 use ruff_python_ast::{
     BoolOp, CmpOp, ConversionFlag, Expr, ExprBinOp, ExprContext, FStringPart,
     InterpolatedStringElement, Keyword, Number, Operator, Pattern, Singleton, Stmt, StmtClassDef,
@@ -10726,6 +10726,19 @@ impl Compiler {
                 }
                 walk_expr(self, expression);
             }
+
+            fn visit_pattern(&mut self, pattern: &'ast Pattern) {
+                let capture = match pattern {
+                    Pattern::MatchAs(pattern) => pattern.name.as_ref(),
+                    Pattern::MatchStar(pattern) => pattern.name.as_ref(),
+                    Pattern::MatchMapping(pattern) => pattern.rest.as_ref(),
+                    _ => None,
+                };
+                if let Some(name) = capture {
+                    self.names.push((name.as_str().to_string(), false));
+                }
+                walk_pattern(self, pattern);
+            }
         }
 
         let mut collector = Collector::default();
@@ -10737,7 +10750,7 @@ impl Compiler {
                 &self.scope,
                 Scope::Function { indices, globals, .. }
                     if indices.contains_key(&name) && !globals.contains(&name)
-            );
+            ) || self.temporary_indices.contains_key(&name);
             if force_name || !is_fast_local {
                 self.name_index(&name)?;
             }

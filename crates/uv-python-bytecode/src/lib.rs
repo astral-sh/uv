@@ -195,7 +195,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "match foo:\n    case foo_bar: ...\nmatch foo:\n    case _: ...\nmatch 1:\n    case _ if (True): ...\nmatch (1, 2):\n    case _: ...\nmatch subject:\n    case [a, b]: ...\n    case (a, b): ...\nmatch value:\n    case 1:\n        h(x)\n    case _:\n        ...\ndef terminal_try_star():\n    try:\n        assigned = 1\n    except* ValueError:\n        assigned = 2\ntry: ...\nexcept* ValueError: ...\n";
+        let source = "match foo:\n    case foo_bar: ...\nmatch foo:\n    case _: ...\nmatch 1:\n    case _ if (True): ...\nmatch (1, 2):\n    case _: ...\nmatch subject:\n    case [a, b]: ...\n    case (a, b): ...\nmatch value:\n    case 1:\n        h(x)\n    case _:\n        ...\ndef terminal_try_star():\n    try:\n        assigned = 1\n    except* ValueError:\n        assigned = 2\ntry: ...\nexcept* ValueError: ...\nraise terminal\nmatch subject:\n    case unreachable_capture:\n        pass\n[temporary for temporary in values]\n";
         let expected = Command::new(python)
             .args([
                 "-c",
