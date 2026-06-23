@@ -9031,6 +9031,9 @@ impl Compiler {
         if inline_cleanup {
             let normal_cleanup = self.assembler.label();
             self.emit_jump_forward(JUMP_FORWARD, normal_cleanup, 0)?;
+            if discard_result && generators.iter().any(|generator| generator.is_async) {
+                self.assembler.prevent_last_jump_inlining();
+            }
             self.assembler.mark(cleanup);
             self.set_depth(base_depth + i32::try_from(temporary_indices.len()).unwrap() + 2);
             self.assembler.set_location(SourceLocation::NONE);
