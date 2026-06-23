@@ -1,0 +1,18 @@
+services:
+  index:
+    build:
+      context: ..
+      dockerfile: antithesis/Dockerfile
+      target: index
+
+  client:
+    build:
+      context: ..
+      dockerfile: antithesis/Dockerfile
+      target: client
+    environment:
+      ANTITHESIS_SDK_LOCAL_OUTPUT: /state/antithesis-sdk-client.jsonl
+
+  client-b:
+    environment:
+      ANTITHESIS_SDK_LOCAL_OUTPUT: /state/antithesis-sdk-client-b.jsonl

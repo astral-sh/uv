@@ -1,0 +1,60 @@
+name: uv-antithesis
+
+services:
+  index:
+    image: uv-antithesis-index:latest
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/simple/', timeout=1)"
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  client:
+    image: uv-antithesis-client:latest
+    depends_on:
+      client-b:
+        condition: service_healthy
+      index:
+        condition: service_healthy
+    environment:
+      UV_CACHE_DIR: /state/cache
+      UV_ANTITHESIS_INDEX_URL: http://index:8000/simple
+    volumes:
+      - state:/state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from pathlib import Path; assert Path('/tmp/uv-antithesis-ready').exists()"
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  client-b:
+    image: uv-antithesis-client:latest
+    depends_on:
+      index:
+        condition: service_healthy
+    environment:
+      UV_ANTITHESIS_EMIT_SETUP_COMPLETE: "0"
+      UV_CACHE_DIR: /state/cache
+      UV_ANTITHESIS_INDEX_URL: http://index:8000/simple
+    volumes:
+      - state:/state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from pathlib import Path; assert Path('/tmp/uv-antithesis-ready').exists()"
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+volumes:
+  state:
