@@ -492,27 +492,29 @@ pub(crate) async fn check(
 
         if ty_path.is_none()
             && ty_version.is_none()
-            && let Some(package) = project::tool_from_lock::package_from_lock(
+            && let Some(tool) = project::toolchain::find_locked_tool(
                 project,
                 result.lock(),
                 lock_interpreter,
                 &PackageName::from_str("ty")?,
+                &DEV_DEPENDENCIES,
+                &groups,
             )?
         {
-            locked_ty_path = Some(if groups.contains(&DEV_DEPENDENCIES) && !no_sync {
-                // Synchronization will install the locked development dependency into the
-                // selected project or isolated environment.
+            locked_ty_path = Some(if !tool.requires_separate_environment() && !no_sync {
+                // Synchronization will install the locked tool into the selected project or
+                // isolated environment.
                 venv.scripts()
                     .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
             } else {
-                // Do not modify the selected environment when synchronization is disabled or
-                // its development group is excluded. Install only the locked `ty` subgraph.
+                // Do not modify the selected environment when synchronization is disabled or the
+                // locked tool is excluded from it. Install only the locked `ty` subgraph.
                 let base_interpreter =
                     CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
-                let resolution = project::tool_from_lock::resolution_from_lock(
+                let resolution = project::toolchain::resolution_from_lock(
                     project,
                     result.lock(),
-                    package,
+                    tool.package(),
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;

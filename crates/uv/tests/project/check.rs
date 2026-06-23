@@ -517,7 +517,7 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
 
 #[test]
 #[cfg(feature = "test-pypi")]
-fn check_uses_exact_ty_version_from_new_lock() -> Result<()> {
+fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
 
@@ -544,7 +544,9 @@ fn check_uses_exact_ty_version_from_new_lock() -> Result<()> {
         context.filters(),
         context
             .check()
-            .arg("--no-dev")
+            .arg("--no-default-groups")
+            .arg("--group")
+            .arg("typing")
             .arg("--exclude-newer")
             .arg("2026-02-15T00:00:00Z")
             .arg("--show-version"),
@@ -562,7 +564,51 @@ fn check_uses_exact_ty_version_from_new_lock() -> Result<()> {
     );
 
     assert!(context.temp_dir.child("uv.lock").exists());
-    assert!(!context.site_packages().join("ty").exists());
+    assert!(context.site_packages().join("ty").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_uses_applicable_ty_version_from_runtime_dependency() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "ty==0.0.17 ; python_version < '3.12'",
+            "ty==0.0.16 ; python_version >= '3.12'",
+        ]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.16
+    "
+    );
+
+    assert!(context.site_packages().join("ty").exists());
 
     Ok(())
 }

@@ -822,6 +822,56 @@ impl Lock {
         }
     }
 
+    /// Returns `true` if the package is selected by an enabled dependency group.
+    pub fn is_package_in_dependency_groups(
+        &self,
+        project_name: Option<&PackageName>,
+        package: &Package,
+        marker_environment: &MarkerEnvironment,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<bool, String> {
+        match project_name {
+            Some(project_name) => {
+                let Some(project) = self.find_by_name(project_name)? else {
+                    return Ok(false);
+                };
+                for group in project
+                    .resolved_dependency_groups()
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                {
+                    if self.find_project_dependency_group_package(
+                        project_name,
+                        group,
+                        package.name(),
+                        marker_environment,
+                    )? == Some(package)
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+            None => {
+                for group in self
+                    .manifest
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                {
+                    if self.find_virtual_root_dependency_group_package(
+                        group,
+                        package.name(),
+                        marker_environment,
+                    )? == Some(package)
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
     /// Returns the package selected by a dependency group on a virtual workspace root.
     ///
     /// Virtual root groups are stored directly on the lock manifest because there is no locked
@@ -848,10 +898,7 @@ impl Lock {
         self.find_by_markers(dependency_name, marker_environment)
     }
 
-    /// Returns the package selected by a dependency group on a concrete project.
-    ///
-    /// Project groups are stored as resolved dependency edges on the locked project package, so
-    /// this lookup evaluates those edges rather than the lock manifest's requirements.
+    /// Returns the package selected by a dependency group on a non-virtual project.
     fn find_project_dependency_group_package(
         &self,
         project_name: &PackageName,
@@ -892,6 +939,46 @@ impl Lock {
             if selected.is_some_and(|selected: &Package| selected.id != package.id) {
                 return Err(format!(
                     "found multiple packages matching `{dependency_name}` in dependency group `{group}` for `{project_name}`"
+                ));
+            }
+            selected = Some(package);
+        }
+        Ok(selected)
+    }
+
+    /// Returns the package selected by a runtime dependency on a non-virtual project.
+    pub fn find_dependency_package(
+        &self,
+        project_name: &PackageName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let Some(project) = self.find_by_name(project_name)? else {
+            return Ok(None);
+        };
+
+        let mut selected = None;
+        for dependency in project
+            .dependencies()
+            .iter()
+            .filter(|dependency| &dependency.package_id.name == dependency_name)
+        {
+            if !dependency.complexified_marker.evaluate(
+                marker_environment,
+                std::iter::once(project_name),
+                dependency
+                    .extra
+                    .iter()
+                    .map(|extra| (&dependency.package_id.name, extra)),
+                std::iter::empty::<(&PackageName, &GroupName)>(),
+            ) {
+                continue;
+            }
+
+            let package = self.find_by_id(&dependency.package_id);
+            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+                return Err(format!(
+                    "found multiple packages matching runtime dependency `{dependency_name}` for `{project_name}`"
                 ));
             }
             selected = Some(package);
