@@ -11317,6 +11317,12 @@ impl Compiler {
                             .push((definition.name.as_str().to_string(), false));
                         return;
                     }
+                    Stmt::TypeAlias(statement) => {
+                        if let Expr::Name(name) = statement.name.as_ref() {
+                            self.names.push((name.id.as_str().to_string(), false));
+                        }
+                        return;
+                    }
                     Stmt::Import(import) => {
                         for alias in &import.names {
                             let imported = alias.name.as_str();

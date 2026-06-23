@@ -637,7 +637,7 @@ fn slice_member_uses_identity(value: &Constant) -> bool {
         Constant::Int(value) => *value > 256,
         Constant::SignedInt(value) => !(-5..=256).contains(value),
         Constant::BigInt { .. } | Constant::Float(_) | Constant::Complex { .. } => true,
-        Constant::String(value) => !should_intern(value),
+        Constant::String(value) => !is_cached_character(value),
         Constant::Bytes(value) => value.len() > 1,
         Constant::None
         | Constant::Bool(_)
@@ -867,12 +867,16 @@ fn locals_tuple_key(code: &CodeObject) -> ObjectKey {
 }
 
 fn should_intern(value: &str) -> bool {
-    value
-        .chars()
-        .next()
-        .is_some_and(|character| value.chars().nth(1).is_none() && u32::from(character) <= 0xff)
+    is_cached_character(value)
         || value.is_ascii()
             && value
                 .bytes()
                 .all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+}
+
+fn is_cached_character(value: &str) -> bool {
+    let mut characters = value.chars();
+    characters
+        .next()
+        .is_some_and(|character| characters.next().is_none() && u32::from(character) <= 0xff)
 }

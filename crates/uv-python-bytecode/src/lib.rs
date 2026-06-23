@@ -245,6 +245,58 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_an_unreachable_generic_type_alias() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "raise Exception\nassert False\ntype X[T] = T\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'type_alias.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "type_alias.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
+    fn matches_cpython_marshal_for_string_slice_constants() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "subject[\"fine\":\"fine\"]\nsubject[\"x\":\"x\"]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'slice.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "slice.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_pass_only_try_else_finally() {
         let Some(python) = python_314() else {
             return;
