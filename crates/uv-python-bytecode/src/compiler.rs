@@ -1713,8 +1713,18 @@ impl Compiler {
                         && suite_terminates(body));
                 let previous_exclusion =
                     std::mem::replace(&mut self.exclude_terminal_if_not_taken, exclude_not_taken);
+                let exclude_from_generator = self.flags & CO_COROUTINE != 0
+                    && self.generator_region_start.is_some()
+                    && self.assembler.contains_opcode(YIELD_VALUE)
+                    && self.active_with_region_exclusions.is_empty()
+                    && self.active_exception_region_exclusions.is_empty();
+                let previous_exception_exclusion = std::mem::replace(
+                    &mut self.exclude_condition_not_taken_from_exception,
+                    exclude_from_generator,
+                );
                 let condition_result = self.compile_jump_if(test, false, next);
                 self.exclude_terminal_if_not_taken = previous_exclusion;
+                self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
                 condition_result?;
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();

@@ -146,6 +146,12 @@ impl Assembler {
             .count()
     }
 
+    pub(crate) fn contains_opcode(&self, opcode: Opcode) -> bool {
+        self.items.iter().any(
+            |item| matches!(item, Item::Instruction(instruction) if instruction.opcode.code == opcode.code),
+        )
+    }
+
     pub(crate) fn label(&mut self) -> Label {
         let label = Label(self.next_label);
         self.next_label += 1;
