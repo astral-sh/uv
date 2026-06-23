@@ -3126,6 +3126,14 @@ impl Compiler {
                     self.source_location(case.pattern.range()),
                     failure_depth,
                 )?;
+                if index + 1 != matched_cases {
+                    // CPython starts every following case in a fresh CFG block. Keep the
+                    // failure cleanup separate so it cannot absorb the next case as a small
+                    // exit when a large OR pattern pushes its success target out of range.
+                    let boundary = self.assembler.label();
+                    self.assembler.preserve_block_boundary(boundary);
+                    self.assembler.mark(boundary);
+                }
                 failure_reaches_end = true;
             } else {
                 failure_reaches_end = false;

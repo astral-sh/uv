@@ -1417,10 +1417,9 @@ impl Assembler {
         let mut blocks = Vec::<Vec<Item>>::new();
         let mut block = Vec::new();
         for item in std::mem::take(&mut self.items) {
-            if matches!(item, Item::Label(_))
-                && block
-                    .iter()
-                    .any(|item| matches!(item, Item::Instruction(_)))
+            if matches!(item, Item::Label(label) if
+                block.iter().any(|item| matches!(item, Item::Instruction(_)))
+                    || (!block.is_empty() && self.preserved_block_boundaries.contains(&label)))
             {
                 blocks.push(std::mem::take(&mut block));
             }
