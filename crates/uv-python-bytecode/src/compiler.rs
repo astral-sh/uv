@@ -2569,7 +2569,9 @@ impl Compiler {
                 if !suite_terminates(body) && branch_index + 1 < branch_count {
                     let nested_if_body_falls_through = matches!(
                         body.last(),
-                        Some(Stmt::If(statement)) if !suite_terminates(&statement.body)
+                        Some(Stmt::If(statement))
+                            if early_condition_truthiness(&statement.test).is_none()
+                                && !suite_terminates(&statement.body)
                     );
                     if nested_if_body_falls_through {
                         self.assembler.set_location(SourceLocation::NONE);
@@ -9735,6 +9737,26 @@ impl Compiler {
             && unary.op == UnaryOp::Not
         {
             return self.compile_jump_if(&unary.operand, !jump_on, label);
+        }
+        if let Expr::If(conditional) = expression
+            && let Some(truthiness) = early_condition_truthiness(&conditional.test)
+        {
+            if let Some(constant) = fold_constant(&conditional.test)
+                && (self.constants.is_empty() || matches!(constant, Constant::None))
+            {
+                self.add_constant(constant)?;
+            }
+            self.pre_register_expression_names(&conditional.body)?;
+            self.pre_register_expression_names(&conditional.orelse)?;
+            return self.compile_jump_if(
+                if truthiness {
+                    &conditional.body
+                } else {
+                    &conditional.orelse
+                },
+                jump_on,
+                label,
+            );
         }
         let constant_truthiness = match expression {
             Expr::EllipsisLiteral(_) => Some(true),

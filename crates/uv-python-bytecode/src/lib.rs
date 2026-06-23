@@ -378,7 +378,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "if a:\n    if b:\n        body()\nelif c:\n    other()\nafter1(); after2(); after3(); after4(); after5(); after6()\n\ndef terminating_nested_if(x, y):\n    if x:\n        if y:\n            raise Exception()\n        else:\n            body()\n    else:\n        other()\n    after()\n";
+        let source = "if a:\n    if b:\n        body()\nelif c:\n    other()\nafter1(); after2(); after3(); after4(); after5(); after6()\n\nif x:\n    if True:\n        body()\nelif y:\n    other()\n\nif False if True else False:\n    body()\nelif True:\n    other()\nelse:\n    unreachable()\n\ndef terminating_nested_if(x, y):\n    if x:\n        if y:\n            raise Exception()\n        else:\n            body()\n    else:\n        other()\n    after()\n";
         let expected = Command::new(python)
             .args([
                 "-c",

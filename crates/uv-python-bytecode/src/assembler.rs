@@ -855,7 +855,9 @@ impl Assembler {
             else {
                 continue;
             };
-            if matches!(instruction.opcode.code, 75..=77)
+            // A jump retained as a source-position NOP remains a CFG boundary.
+            if !instruction.preserve_inlined_jump_nop
+                && matches!(instruction.opcode.code, 75..=77)
                 && let operand @ (Operand::Forward(_) | Operand::Backward(_)) = instruction.operand
             {
                 jump_targets.insert(*label, (operand, instruction.opcode.code));
