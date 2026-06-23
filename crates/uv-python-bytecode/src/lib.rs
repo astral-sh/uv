@@ -404,7 +404,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "seed = '\u{a0}'\nassert True, print('hidden', print.__name__, sep=None)\ncondition = 'used'\n";
+        let source = "seed = '\u{a0}'\nassert True, print('hidden', print.__name__, sep=None)\ncondition = 'used'\n\ndef loop_tail_assert(values):\n    for value in values:\n        assert value\n";
         let expected = Command::new(python)
             .args([
                 "-c",

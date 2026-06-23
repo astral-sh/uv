@@ -2691,13 +2691,58 @@ impl Compiler {
         body: &[Stmt],
         restart: Label,
     ) -> Result<bool, CompileError> {
-        let Some((Stmt::If(statement), leading)) = body.split_last() else {
-            self.compile_suite(body)?;
-            return Ok(false);
-        };
-        self.compile_suite(leading)?;
-        self.compile_loop_tail_if(statement, restart)?;
-        Ok(true)
+        match body.split_last() {
+            Some((Stmt::If(statement), leading)) => {
+                self.compile_suite(leading)?;
+                self.compile_loop_tail_if(statement, restart)?;
+                Ok(true)
+            }
+            Some((Stmt::Assert(statement), leading))
+                if early_condition_truthiness(&statement.test).is_none() =>
+            {
+                self.compile_suite(leading)?;
+                self.compile_loop_tail_assert(statement, restart)?;
+                Ok(true)
+            }
+            _ => {
+                self.compile_suite(body)?;
+                Ok(false)
+            }
+        }
+    }
+
+    fn compile_loop_tail_assert(
+        &mut self,
+        statement: &ruff_python_ast::StmtAssert,
+        restart: Label,
+    ) -> Result<(), CompileError> {
+        let base_depth = self.depth;
+        let failure = self.assembler.label();
+        let previous_exclusion = std::mem::replace(
+            &mut self.exclude_terminal_if_not_taken,
+            !self.active_with_region_exclusions.is_empty(),
+        );
+        self.compile_jump_if(&statement.test, false, failure)?;
+        self.exclude_terminal_if_not_taken = previous_exclusion;
+        self.assembler
+            .set_location(self.source_location(statement.test.range()));
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+
+        self.assembler.mark(failure);
+        self.set_depth(base_depth);
+        self.assembler
+            .set_location(self.source_location(statement.range));
+        self.emit(LOAD_COMMON_CONSTANT, 0, 1)?;
+        if let Some(message) = &statement.msg {
+            self.compile_expression(message)?;
+            self.assembler
+                .set_location(self.source_location(statement.range));
+            self.emit(CALL, 0, -1)?;
+        }
+        self.assembler
+            .set_location(self.source_location(statement.test.range()));
+        self.emit(RAISE_VARARGS, 1, -1)?;
+        Ok(())
     }
 
     fn compile_loop_tail_if(
