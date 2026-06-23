@@ -5249,6 +5249,33 @@ impl Compiler {
             .pop()
             .expect("active protected region has exclusion collector");
         self.assembler.mark(protected_end);
+        if terminal
+            && pass_finally_location.is_some()
+            && !statement.handlers.is_empty()
+            && suite_terminates(&statement.body)
+            && statement.handlers.iter().any(|handler| {
+                handler
+                    .as_except_handler()
+                    .is_some_and(|handler| !suite_terminates(&handler.body))
+            })
+            && let Some(location) = statement.handlers.iter().rev().find_map(|handler| {
+                handler
+                    .as_except_handler()
+                    .and_then(|handler| handler.body.last())
+                    .map(|statement| self.source_location(statement.range()))
+            })
+        {
+            let exit_nop_start = self.assembler.label();
+            self.assembler.mark(exit_nop_start);
+            self.assembler.set_location(location);
+            self.emit(NOP, 0, 0)?;
+            let exit_nop_end = self.assembler.label();
+            self.assembler.mark(exit_nop_end);
+            if self.generator_region_start.is_some() {
+                self.generator_region_exclusions
+                    .push((exit_nop_start, exit_nop_end));
+            }
+        }
         let previous_fallthrough = std::mem::replace(&mut self.emitted_fallthrough_return, false);
         if let Some(location) = pass_finally_location {
             self.assembler.set_location(location);

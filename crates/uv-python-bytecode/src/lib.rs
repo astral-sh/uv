@@ -482,7 +482,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def generator(flag):\n    if flag:\n        try:\n            yield\n        finally:\n            pass\n    else:\n        yield\n";
+        let source = "def generator(flag):\n    if flag:\n        try:\n            yield\n        finally:\n            pass\n    else:\n        yield\n\ndef terminating_try_except_finally():\n    try:\n        raise StopIteration\n    except ValueError:\n        yield 1\n    finally:\n        pass\n";
         let expected = Command::new(python)
             .args([
                 "-c",
