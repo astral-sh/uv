@@ -10,8 +10,8 @@ use uv_pep440::Version;
 use uv_pypi_types::HashDigests;
 
 pub use crate::resolution::display::{AnnotationStyle, DisplayResolutionGraph};
-pub(crate) use crate::resolution::output::ResolutionGraphNode;
 pub use crate::resolution::output::{ConflictingDistributionError, ResolverOutput};
+pub(crate) use crate::resolution::output::{ResolutionGraphEdge, ResolutionGraphNode};
 pub(crate) use crate::resolution::requirements_txt::RequirementsTxtDist;
 use crate::universal_marker::UniversalMarker;
 

@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::borrow::Borrow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -19,7 +20,9 @@ use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_pypi_types::{
+    ConflictItem, Conflicts, HashDigests, Inference, ParsedUrlError, VerbatimParsedUrl, Yanked,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -40,7 +43,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ResolverOutput {
     /// The underlying graph.
-    pub(crate) graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
+    pub(crate) graph: Graph<ResolutionGraphNode, ResolutionGraphEdge, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
@@ -63,6 +66,85 @@ pub struct ResolverOutput {
 pub(crate) enum ResolutionGraphNode {
     Root,
     Dist(AnnotatedDist),
+}
+
+/// The marker attached to an edge in the resolution graph.
+///
+/// We retain both the complete marker and the marker before it was joined with
+/// the fork marker. The latter lets lockfile serialization remove a redundant
+/// fork marker without losing an edge-specific marker.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ResolutionGraphEdge {
+    /// The marker including the fork marker.
+    marker: UniversalMarker,
+    /// The marker before joining it with the fork marker.
+    marker_without_fork: UniversalMarker,
+    /// Whether the marker without the fork is equivalent within the resolution's marker space.
+    omit_fork_marker: bool,
+}
+
+impl ResolutionGraphEdge {
+    fn new(marker_without_fork: UniversalMarker, fork_marker: UniversalMarker) -> Self {
+        let mut marker = marker_without_fork;
+        marker.and(fork_marker);
+        Self {
+            marker,
+            marker_without_fork,
+            omit_fork_marker: false,
+        }
+    }
+
+    /// Returns the marker including the fork marker.
+    pub(crate) fn marker(self) -> UniversalMarker {
+        self.marker
+    }
+
+    /// Records whether the marker before joining it with the fork marker is equivalent within the
+    /// resolution's marker space.
+    fn remove_redundant_fork_marker(&mut self, fork_markers_union: UniversalMarker) {
+        let mut marker = self.marker_without_fork;
+        marker.and(fork_markers_union);
+        self.omit_fork_marker = marker == self.marker;
+    }
+
+    /// Returns the marker without a redundant fork marker.
+    pub(crate) fn marker_without_redundant_fork(self) -> UniversalMarker {
+        if self.omit_fork_marker {
+            self.marker_without_fork
+        } else {
+            self.marker
+        }
+    }
+
+    fn or(&mut self, other: Self) {
+        self.marker.or(other.marker);
+        self.marker_without_fork.or(other.marker_without_fork);
+    }
+
+    pub(crate) fn imbibe(&mut self, conflicts: ConflictMarker) {
+        self.marker.imbibe(conflicts);
+    }
+
+    pub(crate) fn evaluate_only_extras<P, E, G>(self, extras: &[(P, E)], groups: &[(P, G)]) -> bool
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
+        self.marker.evaluate_only_extras(extras, groups)
+    }
+
+    pub(crate) fn assume_conflict_item(&mut self, item: &ConflictItem) {
+        self.marker.assume_conflict_item(item);
+    }
+
+    pub(crate) fn assume_not_conflict_item(&mut self, item: &ConflictItem) {
+        self.marker.assume_not_conflict_item(item);
+    }
+
+    pub(crate) fn unify_inference_sets(&mut self, inference_sets: &[BTreeSet<Inference>]) {
+        self.marker.unify_inference_sets(inference_sets);
+    }
 }
 
 impl ResolutionGraphNode {
@@ -136,7 +218,7 @@ impl ResolverOutput {
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
-        let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
+        let mut graph: Graph<ResolutionGraphNode, ResolutionGraphEdge, Directed> =
             Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -206,6 +288,24 @@ impl ResolverOutput {
         // Compute and apply the marker reachability.
         let mut reachability = marker_reachability(&graph, &fork_markers);
 
+        // Record redundant fork markers before imbibing conflict knowledge. Conflict
+        // normalization adds branches that are impossible under the declared conflicts, which
+        // would obscure whether the original dependency marker covers the entire fork universe.
+        let fork_markers_union = if fork_markers.is_empty() {
+            UniversalMarker::TRUE
+        } else {
+            fork_markers
+                .iter()
+                .copied()
+                .fold(UniversalMarker::FALSE, |mut union, fork_marker| {
+                    union.or(fork_marker);
+                    union
+                })
+        };
+        for edge in graph.edge_weights_mut() {
+            edge.remove_redundant_fork_marker(fork_markers_union);
+        }
+
         // Apply the reachability to the graph and imbibe world
         // knowledge about conflicts.
         let conflict_marker = ConflictMarker::from_conflicts(conflicts);
@@ -215,8 +315,8 @@ impl ResolverOutput {
                 dist.marker.imbibe(conflict_marker);
             }
         }
-        for weight in graph.edge_weights_mut() {
-            weight.imbibe(conflict_marker);
+        for edge in graph.edge_weights_mut() {
+            edge.imbibe(conflict_marker);
         }
 
         simplify_conflict_markers(conflicts, &mut graph);
@@ -281,7 +381,7 @@ impl ResolverOutput {
     }
 
     fn add_edge(
-        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
+        graph: &mut Graph<ResolutionGraphNode, ResolutionGraphEdge>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
@@ -306,11 +406,7 @@ impl ResolverOutput {
             group: edge.to_group.as_ref(),
         }];
 
-        let edge_marker = {
-            let mut edge_marker = edge.universal_marker();
-            edge_marker.and(marker);
-            edge_marker
-        };
+        let edge_marker = ResolutionGraphEdge::new(edge.universal_marker(), marker);
 
         if let Some(weight) = graph
             .find_edge(from_index, to_index)
@@ -325,7 +421,7 @@ impl ResolverOutput {
     }
 
     fn add_version<'a>(
-        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
+        graph: &mut Graph<ResolutionGraphNode, ResolutionGraphEdge>,
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
@@ -925,7 +1021,7 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
 fn report_missing_lower_bounds(
-    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
+    graph: &Graph<ResolutionGraphNode, ResolutionGraphEdge>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
     constraints: &Constraints,
     overrides: &Overrides,
@@ -947,7 +1043,7 @@ fn report_missing_lower_bounds(
 fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
-    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
+    graph: &Graph<ResolutionGraphNode, ResolutionGraphEdge>,
     constraints: &Constraints,
     overrides: &Overrides,
 ) -> bool {

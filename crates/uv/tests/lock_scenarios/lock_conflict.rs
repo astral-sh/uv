@@ -2473,8 +2473,9 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // The `anyio` dependency is shared by every fork, so it carries no marker,
-    // while the forked `numpy` dependencies keep theirs.
+    // The `anyio` dependency is shared by every fork, so it carries no marker. Its
+    // Python-version-gated dependencies retain only their edge markers, while the
+    // version-forked `tqdm` dependencies keep their fork markers.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -2505,10 +2506,10 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "4.11.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "exceptiongroup", marker = "(python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.11' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
             { name = "idna" },
             { name = "sniffio" },
-            { name = "typing-extensions", marker = "(python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/78/7d432127c41b50bccba979505f272c16cbcadcc33645d5fa3a738110ae75/anyio-4.11.0.tar.gz", hash = "sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4", size = 219094, upload-time = "2025-09-23T09:19:12.58Z" }
         wheels = [
@@ -2547,7 +2548,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "(python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
         wheels = [
@@ -6366,7 +6367,7 @@ fn extra_inferences() -> Result<()> {
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
         wheels = [
@@ -6387,7 +6388,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.8.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/75/32/cdfba08674d72fe7895a8ec7be8f171e8502274999cae9497e4545404873/colorlog-4.8.0.tar.gz", hash = "sha256:59b53160c60902c405cdec28d38356e09d40686659048893e026ecbd589516b1", size = 28770, upload-time = "2021-03-22T11:26:32.319Z" }
         wheels = [
@@ -6461,7 +6462,7 @@ fn extra_inferences() -> Result<()> {
         version = "42.0.5"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/13/9e/a55763a32d340d7b06d045753c186b690e7d88780cafce5f88cb931536be/cryptography-42.0.5.tar.gz", hash = "sha256:6fe07eec95dfd477eb9530aef5bead34fec819b3aaf6c5bd6d20565da607bfe1", size = 671025, upload-time = "2024-02-24T01:17:48.141Z" }
         wheels = [
@@ -7165,7 +7166,7 @@ fn extra_inferences() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "python-dateutil" },
-            { name = "time-machine", marker = "implementation_name != 'pypy' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "time-machine", marker = "implementation_name != 'pypy'" },
             { name = "tzdata" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b8/fe/27c7438c6ac8b8f8bef3c6e571855602ee784b85d072efddfff0ceb1cd77/pendulum-3.0.0.tar.gz", hash = "sha256:5d034998dea404ec31fae27af6b22cff1708f830a1ed7353be4d1019bb9f584e", size = 84524, upload-time = "2023-12-16T21:27:19.742Z" }
@@ -7550,7 +7551,7 @@ fn extra_inferences() -> Result<()> {
         version = "1.4.52"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8a/a4/b5991829c34af0505e0f2b1ccf9588d1ba90f2d984ee208c90c985f1265a/SQLAlchemy-1.4.52.tar.gz", hash = "sha256:80e63bbdc5217dad3485059bdf6f65a7d43f33c8bde619df5c220edf03d87296", size = 8514200, upload-time = "2024-03-04T13:29:44.258Z" }
         wheels = [
@@ -13947,7 +13948,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "8.1.8"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "colorama", marker = "sys_platform == 'win32'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/b9/2e/0090cbf739cee7d23781ad4b89a9894a41538e4fcf4c31dcdd705b78eb8b/click-8.1.8.tar.gz", hash = "sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a", size = 226593, upload-time = "2024-12-21T18:38:44.339Z" }
         wheels = [

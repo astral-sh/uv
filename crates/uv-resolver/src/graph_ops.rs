@@ -9,7 +9,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, Conflicts, Inference};
 
-use crate::resolution::ResolutionGraphNode;
+use crate::resolution::{ResolutionGraphEdge, ResolutionGraphNode};
 use crate::universal_marker::UniversalMarker;
 
 /// Determine the markers under which a package is reachable in the dependency tree.
@@ -25,7 +25,7 @@ pub(crate) fn marker_reachability<
     Edge: Reachable<Marker>,
 >(
     graph: &Graph<Node, Edge>,
-    fork_markers: &[Edge],
+    fork_markers: &[Marker],
 ) -> FxHashMap<NodeIndex, Marker> {
     // Note that we build including the virtual packages due to how we propagate markers through
     // the graph, even though we then only read the markers for base packages.
@@ -52,8 +52,8 @@ pub(crate) fn marker_reachability<
     } else {
         fork_markers
             .iter()
-            .fold(Edge::false_marker(), |mut acc, edge| {
-                acc.or(edge.marker());
+            .fold(Edge::false_marker(), |mut acc, marker| {
+                acc.or(*marker);
                 acc
             })
     };
@@ -98,7 +98,7 @@ pub(crate) fn marker_reachability<
 /// with `true`).
 pub(crate) fn simplify_conflict_markers(
     conflicts: &Conflicts,
-    graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
+    graph: &mut Graph<ResolutionGraphNode, ResolutionGraphEdge>,
 ) {
     // Do nothing if there are no declared conflicts. Without any declared
     // conflicts, we know we have no conflict markers and thus nothing to
@@ -311,6 +311,20 @@ impl Reachable<Self> for UniversalMarker {
 
     fn marker(&self) -> Self {
         *self
+    }
+}
+
+impl Reachable<UniversalMarker> for ResolutionGraphEdge {
+    fn true_marker() -> UniversalMarker {
+        UniversalMarker::TRUE
+    }
+
+    fn false_marker() -> UniversalMarker {
+        UniversalMarker::FALSE
+    }
+
+    fn marker(&self) -> UniversalMarker {
+        (*self).marker()
     }
 }
 

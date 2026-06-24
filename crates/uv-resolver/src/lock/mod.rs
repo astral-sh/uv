@@ -388,7 +388,7 @@ impl Lock {
                 else {
                     continue;
                 };
-                let marker = *edge.weight();
+                let marker = edge.weight().marker_without_redundant_fork();
                 package.add_dependency(&requires_python, dependency_dist, marker, root)?;
             }
 
@@ -421,7 +421,7 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = *edge.weight();
+                    let marker = edge.weight().marker_without_redundant_fork();
                     package.add_optional_dependency(
                         &requires_python,
                         extra.clone(),
@@ -446,7 +446,7 @@ impl Lock {
                     else {
                         continue;
                     };
-                    let marker = *edge.weight();
+                    let marker = edge.weight().marker_without_redundant_fork();
                     package.add_group_dependency(
                         &requires_python,
                         group.clone(),
