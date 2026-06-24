@@ -365,7 +365,7 @@ async fn upgrade_tool(
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
         let site_packages = SitePackages::from_environment(environment.environment())?;
-        let universal_resolution = resolve_environment(
+        let mut universal_resolution = resolve_environment(
             tool_environment_spec(spec, None, Some(&site_packages)),
             EnvironmentResolution::Universal,
             target_interpreter,
@@ -383,6 +383,8 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
+        universal_resolution
+            .canonicalize_proxy_artifact_urls_for_lock(&settings.resolver.index_locations, &[])?;
         let tool_lock = ToolLock::from_resolution(
             &tool_dir,
             &universal_resolution,

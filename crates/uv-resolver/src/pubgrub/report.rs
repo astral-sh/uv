@@ -2730,9 +2730,10 @@ mod tests {
 
     use pubgrub::{DefaultStringReporter, Reporter};
     use uv_distribution_types::{
-        IndexReference, IndexStatusCodeStrategy, ProxyIndex, RequiresPython,
+        ArtifactUrlMap, IndexReference, IndexStatusCodeStrategy, ProxyIndex, RequiresPython,
     };
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
@@ -2808,10 +2809,18 @@ mod tests {
             ProxyIndex {
                 index: IndexReference::Url(canonical_without_response.clone()),
                 url: physical.clone(),
+                artifact_url_map: ArtifactUrlMap::single(
+                    DisplaySafeUrl::parse("https://proxy.example.com/files")?,
+                    DisplaySafeUrl::parse("https://canonical-a.example.com/files")?,
+                ),
             },
             ProxyIndex {
                 index: IndexReference::Url(canonical_with_response.clone()),
                 url: physical.clone(),
+                artifact_url_map: ArtifactUrlMap::single(
+                    DisplaySafeUrl::parse("https://proxy.example.com/files")?,
+                    DisplaySafeUrl::parse("https://canonical-b.example.com/files")?,
+                ),
             },
         ]);
         // URL-form routes that are otherwise unconfigured can satisfy existing locks, but they

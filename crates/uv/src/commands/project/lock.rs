@@ -986,7 +986,7 @@ async fn do_lock(
             );
 
             // Resolve the requirements.
-            let (resolution, _) = pip::operations::resolve(
+            let (mut resolution, _) = pip::operations::resolve(
                 ExtrasResolver::new(&hasher, state.index(), database)
                     .with_reporter(Arc::new(ResolverReporter::from(printer)))
                     .resolve(target.members_requirements())
@@ -1057,10 +1057,15 @@ async fn do_lock(
             .relative_to(target.install_path())?;
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
+            let supported_environments = lock_supported_environments.clone().into_markers();
+            resolution.canonicalize_proxy_artifact_urls_for_lock(
+                index_locations,
+                &supported_environments,
+            )?;
             let lock = Lock::from_resolution(
                 &resolution,
                 target.install_path(),
-                lock_supported_environments.clone().into_markers(),
+                supported_environments,
                 index_locations,
             )?
             .with_manifest(manifest)

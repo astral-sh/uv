@@ -14,7 +14,9 @@ use uv_small_str::SmallString;
 use crate::exclude_newer::ExcludeNewerOverride;
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
+use crate::{
+    ArtifactUrlMap, IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode,
+};
 
 /// Cache control configuration for an index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -328,6 +330,8 @@ pub struct ProxyIndex {
     pub index: IndexReference,
     /// The proxy index URL.
     pub url: IndexUrl,
+    /// One-way physical-to-canonical URL prefixes for artifacts emitted in a new lock.
+    pub artifact_url_map: ArtifactUrlMap,
 }
 
 impl PartialEq for Index {

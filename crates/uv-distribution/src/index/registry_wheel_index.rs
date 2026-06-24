@@ -557,10 +557,11 @@ mod tests {
     use anyhow::anyhow;
     use uv_distribution_filename::SourceDistExtension;
     use uv_distribution_types::{
-        File, FileLocation, Index, IndexReference, ProxyIndex, RegistryBuiltWheel,
+        ArtifactUrlMap, File, FileLocation, Index, IndexReference, ProxyIndex, RegistryBuiltWheel,
     };
     use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
     use uv_pypi_types::HashDigests;
+    use uv_redacted::DisplaySafeUrl;
 
     use super::*;
 
@@ -672,6 +673,10 @@ mod tests {
                 .with_proxy_indexes(vec![ProxyIndex {
                     index: IndexReference::Url(canonical.clone()),
                     url: proxy_b.clone(),
+                    artifact_url_map: ArtifactUrlMap::single(
+                        DisplaySafeUrl::parse("https://proxy-b.example/files")?,
+                        DisplaySafeUrl::parse("https://canonical.example/files")?,
+                    ),
                 }]);
         let platform = Platform::new(
             Os::Manylinux {

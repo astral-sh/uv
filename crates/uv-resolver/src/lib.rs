@@ -21,7 +21,8 @@ pub use prerelease::PrereleaseMode;
 pub use pubgrub::PubGrubHint;
 pub use python_requirement::PythonRequirement;
 pub use resolution::{
-    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph, ResolverOutput,
+    AnnotationStyle, ConflictingDistributionError, DisplayResolutionGraph,
+    ProxyCanonicalizationError, ResolverOutput,
 };
 pub use resolution_mode::ResolutionMode;
 pub use resolver::{

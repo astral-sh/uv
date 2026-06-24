@@ -17,7 +17,10 @@ use crate::universal_marker::UniversalMarker;
 
 mod display;
 mod output;
+mod proxy;
 mod requirements_txt;
+
+pub use proxy::ProxyCanonicalizationError;
 
 /// A pinned package with its resolved distribution and metadata. The [`ResolvedDist`] refers to a
 /// specific distribution (e.g., a specific wheel), while the [`Metadata23`] refers to the metadata

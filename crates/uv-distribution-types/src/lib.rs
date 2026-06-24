@@ -57,6 +57,7 @@ use uv_redacted::DisplaySafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
+pub use crate::artifact_url::*;
 pub use crate::build_info::*;
 pub use crate::build_requires::*;
 pub use crate::buildable::*;
@@ -89,6 +90,7 @@ pub use crate::traits::*;
 
 mod annotation;
 mod any;
+mod artifact_url;
 mod build_info;
 mod build_requires;
 mod buildable;
