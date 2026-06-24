@@ -1149,6 +1149,7 @@ impl Compiler {
             body.as_slice()
         };
         let body_start = self.assembler.instruction_count();
+        let mut footer_location = SourceLocation::NONE;
         self.compile_suite(body)?;
         if let Some(Stmt::Expr(expression)) = body.last()
             && fold_constant(&expression.value).is_some()
@@ -1160,6 +1161,13 @@ impl Compiler {
             };
             self.assembler.set_location(self.source_location(range));
             self.emit(NOP, 0, 0)?;
+        } else if let Some(Stmt::If(statement)) = body.last()
+            && matches!(statement.test.as_ref(), Expr::EllipsisLiteral(_))
+            && let Some(Stmt::Expr(expression)) = statement.body.last()
+            && fold_constant(&expression.value).is_some()
+        {
+            // CPython transfers the final folded expression's location to the class footer.
+            footer_location = self.source_location(expression.range);
         } else if self.assembler.instruction_count() > body_start
             && let Some(location) = self.assembler.last_instruction_location()
         {
@@ -1189,7 +1197,7 @@ impl Compiler {
             self.store_name("__annotate_func__")?;
         }
 
-        self.assembler.set_location(SourceLocation::NONE);
+        self.assembler.set_location(footer_location);
         let static_attributes = self.add_constant(Constant::Tuple(
             class_static_attributes(body)
                 .into_iter()
@@ -2954,6 +2962,10 @@ impl Compiler {
         let has_terminating_else = branches
             .last()
             .is_some_and(|(test, body)| test.is_none() && suite_terminates(body));
+        // The remaining branches still compile for symbol and constant-table side effects, but
+        // their exception handlers do not contribute to CPython's stack size.
+        let first_branch_is_always_true = jump_constant_truthiness(&statement.test) == Some(true);
+        let mut first_branch_max_depth = None;
         for (branch_index, (test, body)) in branches.into_iter().enumerate() {
             if let Some(test) = test {
                 let next = self.assembler.label();
@@ -2996,6 +3008,9 @@ impl Compiler {
                     self.assembler
                         .set_location(self.source_location(statement.range()));
                     self.emit(NOP, 0, 0)?;
+                }
+                if branch_index == 0 && first_branch_is_always_true {
+                    first_branch_max_depth = Some(self.max_depth);
                 }
                 if !suite_terminates(body) && branch_index + 1 < branch_count {
                     let nested_if_body_falls_through = matches!(
@@ -3052,6 +3067,9 @@ impl Compiler {
 
         self.assembler.mark(end);
         self.set_depth(base_depth);
+        if let Some(max_depth) = first_branch_max_depth {
+            self.max_depth = max_depth;
+        }
         Ok(())
     }
 
@@ -3738,7 +3756,8 @@ impl Compiler {
                             });
                         if irrefutable_true_guard
                             || (self.assembler.instruction_count() == body_start + 1
-                                && !previous_instruction_covers_branch)
+                                && !previous_instruction_covers_branch
+                                && !matches!(self.scope, Scope::Class { .. }))
                         {
                             self.assembler.preserve_last_inlined_jump_nop();
                         }
@@ -11400,21 +11419,7 @@ impl Compiler {
                 label,
             );
         }
-        let constant_truthiness = match expression {
-            Expr::EllipsisLiteral(_) => Some(true),
-            Expr::Name(name)
-                if name.ctx == ExprContext::Load && name.id.as_str() == "__debug__" =>
-            {
-                Some(true)
-            }
-            Expr::NoneLiteral(_)
-            | Expr::BooleanLiteral(_)
-            | Expr::NumberLiteral(_)
-            | Expr::StringLiteral(_)
-            | Expr::BytesLiteral(_)
-            | Expr::FString(_) => literal_truthiness(expression),
-            _ => None,
-        };
+        let constant_truthiness = jump_constant_truthiness(expression);
         if let Some(truthiness) = constant_truthiness {
             self.record_folded_value(expression)?;
             self.assembler
@@ -15753,6 +15758,22 @@ fn literal_truthiness(expression: &Expr) -> Option<bool> {
             _ => None,
         },
         Expr::Tuple(value) => Some(!value.elts.is_empty()),
+        _ => None,
+    }
+}
+
+fn jump_constant_truthiness(expression: &Expr) -> Option<bool> {
+    match expression {
+        Expr::EllipsisLiteral(_) => Some(true),
+        Expr::Name(name) if name.ctx == ExprContext::Load && name.id.as_str() == "__debug__" => {
+            Some(true)
+        }
+        Expr::NoneLiteral(_)
+        | Expr::BooleanLiteral(_)
+        | Expr::NumberLiteral(_)
+        | Expr::StringLiteral(_)
+        | Expr::BytesLiteral(_)
+        | Expr::FString(_) => literal_truthiness(expression),
         _ => None,
     }
 }

@@ -1774,6 +1774,21 @@ impl Assembler {
                 && !exception_handler_blocks[target];
             let inline_no_location_block =
                 !source_has_fallthrough && target_is_no_location_no_fallthrough;
+            let later_jump_predecessor = (source + 1..blocks.len()).any(|predecessor| {
+                block_jump_target(&blocks[predecessor])
+                    .and_then(|label| label_blocks.get(&label).copied())
+                    == Some(target)
+            });
+            if exit_without_unique_predecessor[target]
+                && target_pre_fusion_size > 4
+                && remaining_predecessors[target] > 1
+                && later_jump_predecessor
+            {
+                // CPython's second exit-duplication pass runs after cold blocks move. For a
+                // large class footer shared by warm and cold jumps, that makes the cold, later
+                // predecessor receive the copy while the warm predecessor keeps the original.
+                continue;
+            }
             if !(inline_small_exit || inline_no_location_block)
                 && (!(exit_without_unique_predecessor[target]
                     || target_is_no_location_no_fallthrough)
