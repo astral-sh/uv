@@ -3453,7 +3453,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(
-        "a==1.0.0 --hash=sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097",
+        "a==1.0.0 --hash=sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5",
     )?;
 
     uv_snapshot!(context.pip_sync()
@@ -5722,12 +5722,12 @@ fn pep_751_validates_remote_archive_size() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
-        .arg("pylock.toml"), @r#"
+        .arg("pylock.toml"), @"
     exit_code: 1 (failure)
     ----- stderr -----
       × Failed to download and build `a==1.0.0`
-      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 453 bytes
-    "#);
+      ╰─▶ Size mismatch for `a==1.0.0`: expected 1 bytes, but downloaded 607 bytes
+    ");
 
     Ok(())
 }

@@ -1397,7 +1397,7 @@ fn lock_sdist_url() -> Result<()> {
         name = "a"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097" }
+        sdist = { hash = "sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5" }
 
         [[package]]
         name = "project"
@@ -24277,7 +24277,7 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         resolution-markers = [
             "python_full_version < '3.12'",
         ]
-        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:4816d803f3b4985959b41da3ae6da7ae3951b56465a53602dedc92c0c12ca685", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:c3fcce2546460649c16b57883cf8b2ee43b02a1abaa1ff82f36faf7e551881d3", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
         ]
@@ -24289,7 +24289,7 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         resolution-markers = [
             "python_full_version >= '3.12'",
         ]
-        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:0818a47dd4fc0083f2e9dfc1486f9663e79b3c1ec8308803472c32d46a9dfa1c", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:f04a987d93ab70a7ae7b47fc34226d808822483dd50d87dcc8acf36011964f16", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:498db1c24445774dde1dddcb558593590642d426a15b384c9f870fa89ddd24b4", upload-time = "2024-03-24T00:00:00Z" },
         ]
@@ -24364,7 +24364,7 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:4816d803f3b4985959b41da3ae6da7ae3951b56465a53602dedc92c0c12ca685", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:c3fcce2546460649c16b57883cf8b2ee43b02a1abaa1ff82f36faf7e551881d3", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
         ]
@@ -24439,7 +24439,7 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:0818a47dd4fc0083f2e9dfc1486f9663e79b3c1ec8308803472c32d46a9dfa1c", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:f04a987d93ab70a7ae7b47fc34226d808822483dd50d87dcc8acf36011964f16", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:498db1c24445774dde1dddcb558593590642d426a15b384c9f870fa89ddd24b4", upload-time = "2024-03-24T00:00:00Z" },
         ]
@@ -37203,7 +37203,7 @@ fn lock_android() -> Result<()> {
         name = "deltachat-rpc-server"
         version = "1.159.5"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:b923352b2b7253d068cdba7d1d23f36bc82a8dc7eb7f0e3860a1379324c62c32", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:692864680c65a20745fd19ac0fd459cce7540087e99b39832490ac79d001ae8d", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:a09292118bd3cbe9133c410c8228399a65467f1bcacbfbd35ffa27a2c1e8b3c3", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:fcedd34dfec4397a5f516266e7d38237b01133e2fbfe29f08140d04cf8ea5b64", upload-time = "2024-03-24T00:00:00Z" },

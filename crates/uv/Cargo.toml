@@ -100,6 +100,7 @@ rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tar-codec = { workspace = true }
 tempfile = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
@@ -134,6 +135,7 @@ uv-test = { workspace = true }
 
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
+astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["zstd"] }
 backon = { workspace = true }
 byteorder = { workspace = true }
@@ -150,7 +152,6 @@ predicates = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"], default-features = false }
 sha2 = { workspace = true }
-astral-tokio-tar = { workspace = true }
 tempfile = { workspace = true }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }

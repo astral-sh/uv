@@ -2822,7 +2822,7 @@ fn force_pep517() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn venv_included_in_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"at byte \d+", "at byte [OFFSET]"));
 
     context
         .init()
@@ -2854,7 +2854,7 @@ fn venv_included_in_sdist() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
 
-    // context.filters()
+    // The default astral-tokio-tar backend recognizes the external virtual-environment link.
     uv_snapshot!(context.filters(), context.build(), @"
     exit_code: 2 (failure)
     ----- stderr -----
@@ -2866,6 +2866,22 @@ fn venv_included_in_sdist() -> Result<()> {
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     ");
+
+    // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
+    // user-facing hint.
+    uv_snapshot!(context.filters(), context
+        .build()
+        .arg("--preview-features")
+        .arg("tar-codec"), @r#"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid tar file
+      Caused by: at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
+
+    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
+    "#);
 
     uv_snapshot!(context.filters(), context.build().arg("-q"), @"
     exit_code: 2 (failure)
