@@ -723,7 +723,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "module_any = any(value for value in values)\nmodule_all = all(value for value in values)\nmodule_tuple = tuple(value for value in values)\n\n\ndef optimized(values):\n    return (\n        any(value for value in values),\n        all(value for value in values),\n        tuple(value for value in values),\n    )\n\n\ndef rebound(values, any):\n    return any(value for value in values)\n";
+        let source = "module_any = any(value for value in values)\nmodule_all = all(value for value in values)\nmodule_tuple = tuple(value for value in values)\nany(value for value in values)\nall(value for value in values)\ntuple(value for value in values)\nafter = None\n\n\ndef optimized(values):\n    return (\n        any(value for value in values),\n        all(value for value in values),\n        tuple(value for value in values),\n    )\n\n\ndef rebound(values, any):\n    return any(value for value in values)\n";
         let expected = Command::new(python)
             .args([
                 "-c",

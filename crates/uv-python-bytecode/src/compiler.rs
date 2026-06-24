@@ -2306,7 +2306,11 @@ impl Compiler {
                     expression.value.as_ref(),
                     Expr::BoolOp(_) | Expr::If(_)
                 ) || matches!(expression.value.as_ref(), Expr::Compare(compare) if compare.ops.len() > 1);
-                if preserve_no_location {
+                let optimized_generator_call = matches!(
+                    expression.value.as_ref(),
+                    Expr::Call(call) if optimized_generator_callable(call).is_some()
+                );
+                if preserve_no_location || optimized_generator_call {
                     self.assembler.set_location(SourceLocation::NONE);
                 } else {
                     let discard_range = match expression.value.as_ref() {
@@ -8593,12 +8597,8 @@ impl Compiler {
     }
 
     fn compile_call(&mut self, call: &ruff_python_ast::ExprCall) -> Result<(), CompileError> {
-        if let Expr::Name(name) = call.func.as_ref()
-            && matches!(name.id.as_str(), "all" | "any" | "tuple")
-            && let [Expr::Generator(_)] = call.arguments.args.as_ref()
-            && call.arguments.keywords.is_empty()
-        {
-            return self.compile_optimized_generator_call(call, name.id.as_str());
+        if let Some(callable) = optimized_generator_callable(call) {
+            return self.compile_optimized_generator_call(call, callable);
         }
 
         let has_starred = call.arguments.args.iter().any(Expr::is_starred_expr);
@@ -13370,6 +13370,19 @@ fn expression_contains_inlined_comprehension(expression: &Expr) -> bool {
     let mut collector = Collector::default();
     collector.visit_expr(expression);
     collector.found
+}
+
+fn optimized_generator_callable(call: &ruff_python_ast::ExprCall) -> Option<&str> {
+    let Expr::Name(name) = call.func.as_ref() else {
+        return None;
+    };
+    if !matches!(name.id.as_str(), "all" | "any" | "tuple")
+        || !matches!(call.arguments.args.as_ref(), [Expr::Generator(_)])
+        || !call.arguments.keywords.is_empty()
+    {
+        return None;
+    }
+    Some(name.id.as_str())
 }
 
 fn expression_contains_await(expression: &Expr) -> bool {
