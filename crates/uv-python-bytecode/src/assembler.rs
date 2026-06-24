@@ -1361,24 +1361,34 @@ impl Assembler {
             })
             .collect::<Vec<_>>();
         if cleanup_throw_positions.windows(2).any(|positions| {
-            block_labels[order[positions[0]]].0 > block_labels[order[positions[1]]].0
+            cleanup_block_creation_order(&blocks[order[positions[0]]])
+                > cleanup_block_creation_order(&blocks[order[positions[1]]])
         }) {
-            let insertion_position = cleanup_throw_positions[0];
-            let mut cleanup_throw_groups = cleanup_throw_positions
+            let cleanup_throw_blocks = cleanup_throw_positions
                 .iter()
-                .map(|position| [order[*position], order[*position + 1]])
-                .collect::<Vec<_>>();
-            let grouped_blocks = cleanup_throw_groups
-                .iter()
-                .flatten()
-                .copied()
+                .map(|position| order[*position])
                 .collect::<HashSet<_>>();
-            order.retain(|old_index| !grouped_blocks.contains(old_index));
-            cleanup_throw_groups.sort_by_key(|[cleanup, _]| block_labels[*cleanup].0);
-            order.splice(
-                insertion_position..insertion_position,
-                cleanup_throw_groups.into_iter().flatten(),
-            );
+            // Move each cleanup and its continuation as a pair. Intervening cold handler blocks
+            // retain their relative position, as they do in CPython's block list.
+            loop {
+                let ordered_cleanup_blocks = order
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, old_index)| cleanup_throw_blocks.contains(old_index))
+                    .collect::<Vec<_>>();
+                let Some(inversion) = ordered_cleanup_blocks.windows(2).find(|blocks_in_order| {
+                    cleanup_block_creation_order(&blocks[*blocks_in_order[0].1])
+                        > cleanup_block_creation_order(&blocks[*blocks_in_order[1].1])
+                }) else {
+                    break;
+                };
+                let insertion_position = inversion[0].0;
+                let group_position = inversion[1].0;
+                let group = order
+                    .drain(group_position..group_position + 2)
+                    .collect::<Vec<_>>();
+                order.splice(insertion_position..insertion_position, group);
+            }
 
             // The outer inlined comprehension's successful restore was compiled after its
             // exceptional restore in our unwind order. CPython compiled it before the nested
@@ -3514,6 +3524,19 @@ fn block_has_fallthrough(block: &[Item]) -> bool {
         return true;
     };
     !matches!(instruction.opcode.code, 35 | 75..=77 | 104 | 105)
+}
+
+fn cleanup_block_creation_order(block: &[Item]) -> u32 {
+    block
+        .iter()
+        .filter_map(|item| {
+            let Item::Label(label) = item else {
+                return None;
+            };
+            Some(label.0)
+        })
+        .min()
+        .expect("cleanup block has a label")
 }
 
 fn block_jump_target(block: &[Item]) -> Option<Label> {
