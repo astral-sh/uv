@@ -540,13 +540,9 @@ fn jax_instability() -> Result<()> {
         "#);
     });
 
-    // Back to where we started.
-    //
-    // Note that this is wrong! This demonstrates that `uv` sometimes does
-    // not produce a stable resolution.
-    //
-    // See: https://github.com/astral-sh/uv/issues/6063
-    // See: https://github.com/astral-sh/uv/issues/6158
+    // Back to where we started. This was previously unstable because regenerating the lock added
+    // a Python marker to the `zipp` edge. That marker is implied by the parent package's
+    // reachability, so both resolutions now use the same canonical edge.
     let new_lock = context.read("uv.lock");
     let diff = diff_snapshot(&lock, &new_lock, 10);
     insta::with_settings!({
