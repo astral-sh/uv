@@ -15223,6 +15223,9 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
             let left = fold_constant(&binary.left)?;
             let right = fold_constant(&binary.right)?;
             match (left, binary.op, right) {
+                (Constant::Bool(left), Operator::Add, Constant::Bool(right)) => {
+                    Some(Constant::Int(u64::from(left) + u64::from(right)))
+                }
                 (Constant::Int(left), Operator::Add, Constant::Int(right)) => {
                     left.checked_add(right).map(Constant::Int)
                 }
