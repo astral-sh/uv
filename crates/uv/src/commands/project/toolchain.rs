@@ -28,7 +28,8 @@ impl<'lock> LockedTool<'lock> {
     }
 }
 
-/// Find a tool in a dependency group, falling back to the current project's runtime dependencies.
+/// Find a tool in a dependency group, falling back to the current project's production
+/// dependencies.
 pub(crate) fn find_locked_tool<'lock>(
     project: &VirtualProject,
     lock: &'lock Lock,
@@ -46,7 +47,7 @@ pub(crate) fn find_locked_tool<'lock>(
             marker_environment.markers(),
         )
         .map_err(anyhow::Error::msg)?;
-    let runtime_package = if group_package.is_none()
+    let production_package = if group_package.is_none()
         && let Some(project_name) = project.project_name()
     {
         lock.find_dependency_package(project_name, package_name, marker_environment.markers())
@@ -54,11 +55,11 @@ pub(crate) fn find_locked_tool<'lock>(
     } else {
         None
     };
-    let Some(package) = group_package.or(runtime_package) else {
+    let Some(package) = group_package.or(production_package) else {
         return Ok(None);
     };
 
-    let installed_by_runtime = groups.prod() && runtime_package == Some(package);
+    let installed_by_production = groups.prod() && production_package == Some(package);
     let installed_by_group = lock
         .is_package_in_dependency_groups(
             project.project_name(),
@@ -70,7 +71,7 @@ pub(crate) fn find_locked_tool<'lock>(
 
     Ok(Some(LockedTool {
         package,
-        requires_separate_environment: !(installed_by_runtime || installed_by_group),
+        requires_separate_environment: !(installed_by_production || installed_by_group),
     }))
 }
 

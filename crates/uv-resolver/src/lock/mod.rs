@@ -873,9 +873,6 @@ impl Lock {
     }
 
     /// Returns the package selected by a dependency group on a virtual workspace root.
-    ///
-    /// Virtual root groups are stored directly on the lock manifest because there is no locked
-    /// project package whose dependency edges can be traversed.
     fn find_virtual_root_dependency_group_package(
         &self,
         group: &GroupName,
@@ -946,7 +943,7 @@ impl Lock {
         Ok(selected)
     }
 
-    /// Returns the package selected by a runtime dependency on a non-virtual project.
+    /// Returns the package selected by a production dependency on a non-virtual project.
     pub fn find_dependency_package(
         &self,
         project_name: &PackageName,
@@ -978,7 +975,7 @@ impl Lock {
             let package = self.find_by_id(&dependency.package_id);
             if selected.is_some_and(|selected: &Package| selected.id != package.id) {
                 return Err(format!(
-                    "found multiple packages matching runtime dependency `{dependency_name}` for `{project_name}`"
+                    "found multiple packages matching production dependency `{dependency_name}` for `{project_name}`"
                 ));
             }
             selected = Some(package);

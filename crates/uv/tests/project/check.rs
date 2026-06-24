@@ -571,7 +571,7 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
 
 #[test]
 #[cfg(feature = "test-pypi")]
-fn check_uses_ty_version_from_runtime_dependency() -> Result<()> {
+fn check_uses_ty_version_from_production_dependency() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
 
