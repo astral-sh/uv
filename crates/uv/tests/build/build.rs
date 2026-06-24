@@ -2815,7 +2815,7 @@ fn force_pep517() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn venv_included_in_sdist() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12").with_filter((r"at byte \d+", "at byte [OFFSET]"));
 
     context
         .init()
@@ -2848,7 +2848,7 @@ fn venv_included_in_sdist() -> Result<()> {
     context.venv().arg("--clear").assert().success();
 
     // context.filters()
-    uv_snapshot!(context.filters(), context.build(), @"
+    uv_snapshot!(context.filters(), context.build(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2857,10 +2857,9 @@ fn venv_included_in_sdist() -> Result<()> {
     Building source distribution...
       × Failed to build `[TEMP_DIR]/`
       ├─▶ Invalid tar file
-      ├─▶ failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
-      ╰─▶ symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+      ╰─▶ at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
       help: This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions.
-    ");
+    "#);
 
     Ok(())
 }

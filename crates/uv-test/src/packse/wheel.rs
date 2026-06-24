@@ -5,7 +5,6 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::io::Cursor;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
@@ -16,7 +15,8 @@ use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
@@ -104,29 +104,27 @@ pub fn generate_sdist(
     let normalized = name.as_dist_info_name();
     let prefix = format!("{normalized}-{version}");
 
-    let buf = Vec::new();
-    let encoder = GzEncoder::new(buf, Compression::fast());
-    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
     let pyproject = build_pyproject_toml(name, version, requires, extras, requires_python);
-    append_tar_file(
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/pyproject.toml"),
         pyproject.as_bytes(),
     );
 
     let pkg_info = build_metadata(name, version, requires, extras, requires_python);
-    append_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
+    add_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
 
     let init_py = format!("__version__ = \"{version}\"\n");
-    append_tar_file(
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/src/{normalized}/__init__.py"),
         init_py.as_bytes(),
     );
 
-    let writer = block_on(tar.into_inner()).expect("failed to finish in-memory source archive");
-    let encoder = writer.into_inner().into_inner();
+    block_on(tar.finish()).expect("failed to finish in-memory source archive");
     let bytes = encoder
         .finish()
         .expect("failed to finish in-memory gzip stream");
@@ -232,22 +230,13 @@ fn build_pyproject_toml(
     }
 }
 
-/// Append a file entry to a tar archive from a byte slice.
-fn append_tar_file<W>(tar: &mut tokio_tar::Builder<W>, path: &str, data: &[u8])
+/// Add a file entry to a tar archive from a byte slice.
+fn add_tar_file<W>(tar: &mut tar_codec::Builder<TarEncoder<W>>, path: &str, data: &[u8])
 where
-    W: tokio::io::AsyncWrite + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin,
 {
-    let mut header = tokio_tar::Header::new_gnu();
-    header.set_entry_type(tokio_tar::EntryType::Regular);
-    header.set_size(data.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    block_on(tar.append_data(
-        &mut header,
-        path,
-        AllowStdIo::new(Cursor::new(data)).compat(),
-    ))
-    .expect("failed to append file to in-memory source archive");
+    block_on(tar.add_file(path, data, EntryMetadata::default()))
+        .expect("failed to add file to in-memory source archive");
 }
 
 /// Compute the SHA-256 hex digest of a byte slice.
@@ -259,10 +248,11 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::pin::Pin;
+    use std::io::Cursor;
     use std::str::FromStr;
 
-    use futures::StreamExt;
+    use tar_codec::{Archive as _, Member, TarArchive};
+    use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use super::*;
 
@@ -344,20 +334,18 @@ mod tests {
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 
         let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
-        let mut archive = tokio_tar::Archive::new(AllowStdIo::new(decoder).compat());
+        let archive = TarArchive::new(AllowStdIo::new(decoder).compat());
         let names = block_on(async {
-            let mut entries = archive.entries().expect("sdist archive should be readable");
-            let mut entries = Pin::new(&mut entries);
+            let mut members = archive.members();
             let mut names = Vec::new();
-            while let Some(entry) = entries.next().await {
-                let entry = entry.expect("sdist archive entry should be readable");
-                names.push(
-                    entry
-                        .path()
-                        .expect("sdist archive entry should have a path")
-                        .to_string_lossy()
-                        .to_string(),
-                );
+            while let Some(member) = members
+                .next()
+                .await
+                .expect("sdist archive member should be readable")
+            {
+                if let Member::File { metadata, .. } = member {
+                    names.push(metadata.path);
+                }
             }
             names
         });
