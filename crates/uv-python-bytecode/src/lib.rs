@@ -1374,6 +1374,40 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_a_large_constant_list() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = format!(
+            "large = [{}]\n",
+            (0..31)
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'large_constant_list.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.take().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(&source, "large_constant_list.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_annotation_thunk_edges() {
         let Some(python) = python_314() else {
             return;

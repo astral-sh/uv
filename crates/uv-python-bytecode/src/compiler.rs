@@ -11088,6 +11088,17 @@ impl Compiler {
                 }
                 return self.emit_deferred_constant(Constant::Tuple(constants));
             }
+            if elements.len() > 30 {
+                self.emit(kind.build_opcode_for_unpacking(), 0, 1)?;
+                for element in elements {
+                    self.compile_expression(element)?;
+                    self.emit(kind.append_opcode(), 1, -1)?;
+                }
+                if kind == CollectionKind::Tuple {
+                    self.emit(CALL_INTRINSIC_1, 6, 0)?;
+                }
+                return Ok(());
+            }
             if matches!(kind, CollectionKind::List | CollectionKind::Set)
                 && elements.len() >= 3
                 && let Some(constants) = elements
@@ -11123,17 +11134,6 @@ impl Compiler {
                     1,
                     -1,
                 )?;
-                return Ok(());
-            }
-            if elements.len() > 30 {
-                self.emit(kind.build_opcode_for_unpacking(), 0, 1)?;
-                for element in elements {
-                    self.compile_expression(element)?;
-                    self.emit(kind.append_opcode(), 1, -1)?;
-                }
-                if kind == CollectionKind::Tuple {
-                    self.emit(CALL_INTRINSIC_1, 6, 0)?;
-                }
                 return Ok(());
             }
             for element in elements {
