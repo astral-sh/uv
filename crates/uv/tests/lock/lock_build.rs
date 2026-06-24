@@ -4997,6 +4997,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/",
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -5071,6 +5075,11 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
               "id": "dep==0.1.0@directory+[TEMP_DIR]/dep"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
         }
       }
     }

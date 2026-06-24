@@ -747,7 +747,7 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
-        let resolver_output = resolver.resolve().await.with_context(|| {
+        let resolver_output = resolver.resolve().boxed_local().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
                 requirements

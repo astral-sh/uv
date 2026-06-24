@@ -10454,13 +10454,9 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "sys_platform != 'darwin'",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -10470,6 +10466,16 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
             "app",
             "lib",
         ]
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "sys_platform != 'darwin'" }
 
         [[package]]
         name = "app"
@@ -34949,7 +34955,7 @@ fn lock_exclude_newer_disable_cli() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -34997,7 +35003,7 @@ fn lock_exclude_newer_disable_environment() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -35045,7 +35051,7 @@ fn lock_exclude_newer_disable_config() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
