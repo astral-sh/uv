@@ -2900,7 +2900,10 @@ impl TryFrom<LockWire> for Lock {
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .map(UniversalMarker::from_combined)
             .collect::<Vec<_>>();
-        let environment = fork_markers_union(&fork_markers, &wire.requires_python);
+        let environment = SimplifiedMarkerTree::new(
+            &wire.requires_python,
+            fork_markers_union(&fork_markers, &wire.requires_python),
+        );
         let packages = wire
             .packages
             .into_iter()
@@ -3993,7 +3996,7 @@ impl PackageWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
-        environment: MarkerTree,
+        environment: SimplifiedMarkerTree,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
@@ -5787,15 +5790,16 @@ impl DependencyWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
-        environment: MarkerTree,
+        environment: SimplifiedMarkerTree,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let mut complexified_marker = self.marker.into_marker(requires_python);
-        complexified_marker.and(environment);
+        let mut simplified_marker = self.marker;
+        simplified_marker.and(environment);
+        let complexified_marker = simplified_marker.into_marker(requires_python);
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
-            simplified_marker: SimplifiedMarkerTree::new(requires_python, complexified_marker),
+            simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
         })
     }

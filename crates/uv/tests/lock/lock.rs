@@ -33073,7 +33073,7 @@ fn windows_arm() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "pywin32", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+            { name = "pywin32", marker = "sys_platform == 'win32'" },
         ]
 
         [package.metadata]
