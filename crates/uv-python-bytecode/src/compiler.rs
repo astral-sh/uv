@@ -10641,8 +10641,15 @@ impl Compiler {
         accepted: Label,
         restart: Label,
     ) -> Result<(), CompileError> {
-        if early_condition_truthiness(condition) == Some(true) {
+        if comprehension_filter_truthiness(condition) == Some(true) {
             self.record_folded_value(condition)?;
+            if matches!(condition, Expr::UnaryOp(unary) if unary.op == UnaryOp::Not) {
+                self.emit_folded_tuple_not_nops(condition)?;
+            } else {
+                self.assembler
+                    .set_location(self.source_location(condition.range()));
+                self.emit(NOP, 0, 0)?;
+            }
             return Ok(());
         }
         if let Expr::BoolOp(boolean) = condition
@@ -16006,6 +16013,16 @@ fn early_condition_truthiness(expression: &Expr) -> Option<bool> {
         None
     } else {
         literal_truthiness(expression)
+    }
+}
+
+fn comprehension_filter_truthiness(expression: &Expr) -> Option<bool> {
+    if let Expr::UnaryOp(unary) = expression
+        && unary.op == UnaryOp::Not
+    {
+        jump_constant_truthiness(&unary.operand).map(|truthiness| !truthiness)
+    } else {
+        early_condition_truthiness(expression)
     }
 }
 
