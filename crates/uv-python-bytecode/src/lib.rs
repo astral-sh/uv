@@ -483,7 +483,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def sync_context(manager, items):\n    for item in items:\n        with manager:\n            if item > 0:\n                continue\n            break\n\ndef exception_handler(items):\n    for item in items:\n        try:\n            consume(item)\n        except Exception:\n            handle(item)\n            continue\n        use(item)\n";
+        let source = "def sync_context(manager, items):\n    for item in items:\n        with manager:\n            if item > 0:\n                continue\n            break\n\ndef exception_handler(items):\n    for item in items:\n        try:\n            consume(item)\n        except Exception:\n            handle(item)\n            continue\n        use(item)\n\ntry:\n    for item in items:\n        consume(item)\n        break\nexcept TypeError:\n    handle()\nafter()\n";
         let expected = Command::new(python)
             .args([
                 "-c",

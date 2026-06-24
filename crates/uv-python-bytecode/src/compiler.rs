@@ -2532,6 +2532,16 @@ impl Compiler {
                 if context.break_returns {
                     self.emit_implicit_return()?;
                 } else {
+                    let jump_exclusion_start = (self.active_exception_region_exclusions.len()
+                        == context.exception_region_depth
+                        && context.exception_region_depth > 0
+                        && context.finally_end_depth == 0
+                        && self.active_exception_handlers.is_empty())
+                    .then(|| {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        start
+                    });
                     self.emit_jump_forward(JUMP_FORWARD, context.break_label, 0)?;
                     if context.preserve_break_exit {
                         // CPython inlines small exit blocks before removing a jump to the next
@@ -2539,6 +2549,13 @@ impl Compiler {
                         // the following finally return is copied onto the edge.
                         self.assembler.defer_last_jump_removal();
                         self.assembler.preserve_last_inlined_jump_nop();
+                    }
+                    if let Some(jump_exclusion_start) = jump_exclusion_start {
+                        let jump_exclusion_end = self.assembler.label();
+                        self.assembler.mark(jump_exclusion_end);
+                        for exclusions in &mut self.active_exception_region_exclusions {
+                            exclusions.push((jump_exclusion_start, jump_exclusion_end));
+                        }
                     }
                 }
                 if exclusion_start.is_some() || !with_unwind_starts.is_empty() {
@@ -5193,6 +5210,13 @@ impl Compiler {
         let handler_start = self.assembler.label();
         let common_cleanup = self.assembler.label();
         let end = self.assembler.label();
+        let body_ends_with_break_loop = statement.orelse.is_empty()
+            && matches!(
+                statement.body.last(),
+                Some(Stmt::For(statement))
+                    if statement.orelse.is_empty()
+                        && suite_contains_loop_break(&statement.body)
+            );
 
         if emit_statement_nop {
             let statement_nop_start = self.assembler.label();
@@ -5325,6 +5349,13 @@ impl Compiler {
                 None
             };
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            if body_ends_with_break_loop {
+                // CPython's `POP_BLOCK` initially prevents the loop break from threading
+                // through this normal try exit. Once `POP_BLOCK` disappears, the exit jump
+                // is retained as the loop cleanup's source-position NOP.
+                self.assembler
+                    .preserve_last_redundant_jump_nop_after_threading();
+            }
             if statement.orelse.is_empty() && body_noop_location.is_some() {
                 // Keep the pass line when direct exit duplication replaces this jump.
                 self.assembler.preserve_last_direct_inlined_jump_nop();

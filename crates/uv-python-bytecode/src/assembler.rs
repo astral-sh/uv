@@ -55,6 +55,7 @@ struct Instruction {
     prevent_fusion_with_next: bool,
     prevent_fusion_with_previous: bool,
     defer_redundant_jump_removal: bool,
+    preserve_nop_after_jump_threading: bool,
     converted_pop_block: bool,
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
@@ -280,6 +281,19 @@ impl Assembler {
             .find(|item| matches!(item, Item::Instruction(_)))
         {
             instruction.defer_redundant_jump_removal = true;
+        }
+    }
+
+    /// Allows incoming jumps to thread through the last jump before retaining it as a NOP.
+    pub(crate) fn preserve_last_redundant_jump_nop_after_threading(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.defer_redundant_jump_removal = true;
+            instruction.preserve_nop_after_jump_threading = true;
         }
     }
 
@@ -588,6 +602,7 @@ impl Assembler {
             prevent_fusion_with_next: false,
             prevent_fusion_with_previous: false,
             defer_redundant_jump_removal: false,
+            preserve_nop_after_jump_threading: false,
             converted_pop_block: false,
             normalized_exception_owner: None,
             exclude_exception_if_extended: false,
@@ -1162,6 +1177,10 @@ impl Assembler {
                     unreachable!();
                 };
                 instruction.defer_redundant_jump_removal = false;
+                if instruction.preserve_nop_after_jump_threading {
+                    instruction.preserve_nop_after_jump_threading = false;
+                    instruction.preserve_inlined_jump_nop = true;
+                }
                 index += 1;
                 continue;
             }
@@ -1387,6 +1406,7 @@ impl Assembler {
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
                         defer_redundant_jump_removal: false,
+                        preserve_nop_after_jump_threading: false,
                         converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended,
@@ -1871,6 +1891,7 @@ impl Assembler {
                         prevent_fusion_with_next: false,
                         prevent_fusion_with_previous: false,
                         defer_redundant_jump_removal: false,
+                        preserve_nop_after_jump_threading: false,
                         converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
@@ -3219,6 +3240,8 @@ impl Assembler {
                 prevent_fusion_with_previous: first.prevent_fusion_with_previous,
                 defer_redundant_jump_removal: first.defer_redundant_jump_removal
                     || second.defer_redundant_jump_removal,
+                preserve_nop_after_jump_threading: first.preserve_nop_after_jump_threading
+                    || second.preserve_nop_after_jump_threading,
                 converted_pop_block: first.converted_pop_block || second.converted_pop_block,
                 normalized_exception_owner: first
                     .normalized_exception_owner
