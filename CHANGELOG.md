@@ -3,6 +3,287 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.24
+
+Released on 2026-06-23.
+
+### Python
+
+- Add CPython 3.15.0b3 ([#19964](https://github.com/astral-sh/uv/pull/19964))
+
+### Preview features
+
+- Make project environments relocatable under preview ([#19965](https://github.com/astral-sh/uv/pull/19965))
+
+### Performance
+
+- Use a compact index for lazy version maps ([#19959](https://github.com/astral-sh/uv/pull/19959))
+
+### Bug fixes
+
+- Allow disabling `exclude-newer` ([#19934](https://github.com/astral-sh/uv/pull/19934))
+- Avoid archive id collisions ([#19949](https://github.com/astral-sh/uv/pull/19949))
+- Reapply "Fix transparent Python upgrades in project environments" ([#19928](https://github.com/astral-sh/uv/pull/19928))
+- Clean up partial tool entrypoint installs ([#19966](https://github.com/astral-sh/uv/pull/19966))
+- Fix relocatable `activate.fish` and broaden Fish version support ([#19856](https://github.com/astral-sh/uv/pull/19856))
+
+
+## 0.11.23
+
+Released on 2026-06-19.
+
+### Bug fixes
+
+- Revert "Fix transparent Python upgrades in project environments" to mitigate unintended breakage in `pre-commit-uv` ([#19925](https://github.com/astral-sh/uv/pull/19925))
+- Restore old behavior where workspace members "hidden" by an intermediate `pyproject.toml` would be treated as standalone projects ([#19926](https://github.com/astral-sh/uv/pull/19926))
+
+## 0.11.22
+
+Released on 2026-06-18.
+
+### Enhancements
+
+- Publish wheels before sdists in `uv publish` ([#19831](https://github.com/astral-sh/uv/pull/19831))
+- Add `TY` and `RUFF` env vars for providing paths for binaries used by `uv format` and `uv check` ([#19821](https://github.com/astral-sh/uv/pull/19821))
+
+### Preview features
+
+- Allow configuring preview features in `uv.toml` and `pyproject.toml` ([#18437](https://github.com/astral-sh/uv/pull/18437))
+- Update the lockfile during `uv check --no-sync` ([#19909](https://github.com/astral-sh/uv/pull/19909))
+- Add `--script` to `uv check` and `uv metadata` ([#19860](https://github.com/astral-sh/uv/pull/19860))
+- Report workspace-exclusive dependency groups in `workspace metadata` ([#19862](https://github.com/astral-sh/uv/pull/19862))
+- Support SARIF as a `uv audit` output ([#19872](https://github.com/astral-sh/uv/pull/19872))
+
+### Performance
+
+- Use a more deadlock-resistant concurrent hashmap in the resolver ([#19532](https://github.com/astral-sh/uv/pull/19532))
+
+### Bug fixes
+
+- Update string marker ordering semantics to match [upstream clarified rules](https://github.com/pypa/packaging.python.org/pull/1988) ([#19808](https://github.com/astral-sh/uv/pull/19808))
+- Reject extras that have the same normalized name ([#19871](https://github.com/astral-sh/uv/pull/19871))
+- Reject dependency group `include-group` entries that have additional fields ([#19866](https://github.com/astral-sh/uv/pull/19866))
+- Reject invalid UTF-8 URL credentials ([#19814](https://github.com/astral-sh/uv/pull/19814))
+- Validate that PEP 517 `backend-path`s exist when building sdists ([#19834](https://github.com/astral-sh/uv/pull/19834))
+- Validate that `pylock.toml` files do not have an unsupported a `lock-version` ([#19869](https://github.com/astral-sh/uv/pull/19869))
+- Validate that the environment satisfies the `packages.requires-python` of a `pylock.toml` ([#19868](https://github.com/astral-sh/uv/pull/19868))
+- Allow `uv` to be recursively invoked by PEP 517 build hooks ([#19879](https://github.com/astral-sh/uv/pull/19879))
+- Allow empty `credentials.toml` files ([#19815](https://github.com/astral-sh/uv/pull/19815))
+- Fix transparent Python upgrades in project environments ([#19890](https://github.com/astral-sh/uv/pull/19890))
+- Handle non-file editable URLs in `uv pip list` ([#19867](https://github.com/astral-sh/uv/pull/19867))
+- Fix incorrect output from `uv tree --invert` ([#19910](https://github.com/astral-sh/uv/pull/19910))
+- Fix environment locking of `uv venv` in a project ([#19837](https://github.com/astral-sh/uv/pull/19837))
+- Fix handling of workspace-exclusive dependency groups in `uv tree` ([#19905](https://github.com/astral-sh/uv/pull/19905))
+
+### Documentation
+
+- Archive the 0.10.x changelog ([#19813](https://github.com/astral-sh/uv/pull/19813))
+
+### Other changes
+
+- Mark more tests as requiring network for vendors that need to run tests offline ([#19819](https://github.com/astral-sh/uv/pull/19819))
+
+## 0.11.21
+
+Released on 2026-06-11.
+
+### Python
+
+- Add CPython 3.13.14 and 3.14.6 ([#19787](https://github.com/astral-sh/uv/pull/19787))
+
+### Preview features
+
+- Add `environment.root` to `uv workspace metadata --sync` ([#19760](https://github.com/astral-sh/uv/pull/19760))
+- Allow `uv upgrade` to update a single dependency constraint ([#19738](https://github.com/astral-sh/uv/pull/19738))
+- Compute and pass `uv workspace metadata` payload in `ty check` ([#19763](https://github.com/astral-sh/uv/pull/19763))
+- Make packaged applications the default for `uv init` ([#17841](https://github.com/astral-sh/uv/pull/17841))
+
+### Performance
+
+- Add parallel discovery of Python versions for `uv python list` ([#18684](https://github.com/astral-sh/uv/pull/18684))
+- Avoid normalizing source distribution names twice ([#19784](https://github.com/astral-sh/uv/pull/19784))
+
+### Bug fixes
+
+- Improve cache robustness and pruning behavior
+  - Allow CI cache pruning without an sdist bucket ([#19802](https://github.com/astral-sh/uv/pull/19802))
+  - Avoid overflow when reading malformed cache entries ([#19799](https://github.com/astral-sh/uv/pull/19799))
+  - Preserve cached Python downloads during cache pruning ([#19795](https://github.com/astral-sh/uv/pull/19795))
+  - Reject running inside the cache ([#19659](https://github.com/astral-sh/uv/pull/19659))
+- Fix Python discovery and version request edge cases
+  - Avoid panics for Unicode Python version requests ([#19797](https://github.com/astral-sh/uv/pull/19797))
+  - Fix handling of non-critical errors in `uv python list` with path requests ([#19774](https://github.com/astral-sh/uv/pull/19774))
+  - Fix stop-discovery-at regression ([#19769](https://github.com/astral-sh/uv/pull/19769))
+- Harden parsing and validation for package metadata, requirements, markers, URLs, and conflict sets
+  - Allow trailing commas in version specifiers ([#19806](https://github.com/astral-sh/uv/pull/19806))
+  - Avoid panics for invalid UTF-8 URL credentials ([#19800](https://github.com/astral-sh/uv/pull/19800))
+  - Avoid panics for malformed source distribution filenames ([#19776](https://github.com/astral-sh/uv/pull/19776))
+  - Avoid panics for trailing extra separators ([#19779](https://github.com/astral-sh/uv/pull/19779))
+  - Avoid stack overflow for recursive requirements path aliases ([#19777](https://github.com/astral-sh/uv/pull/19777))
+  - Ignore reversed string compatible-release markers ([#19782](https://github.com/astral-sh/uv/pull/19782))
+  - Reject duplicate entries in conflict sets ([#19801](https://github.com/astral-sh/uv/pull/19801))
+  - Reject malformed hash options in requirements files ([#19783](https://github.com/astral-sh/uv/pull/19783))
+  - Reject source distribution filenames without a separator ([#19803](https://github.com/astral-sh/uv/pull/19803))
+  - Use UTF-8 lengths for requirement errors ([#19781](https://github.com/astral-sh/uv/pull/19781))
+  - Use UTF-8 lengths for trailing marker errors ([#19796](https://github.com/astral-sh/uv/pull/19796))
+  - Use byte offsets when peeking over requirements ([#19780](https://github.com/astral-sh/uv/pull/19780))
+  - Validate GraalPy ABI suffixes ([#19805](https://github.com/astral-sh/uv/pull/19805))
+- Improve wheel entry-point error handling and virtual environment activation quoting
+  - Propagate errors when reading wheel entry points ([#19794](https://github.com/astral-sh/uv/pull/19794))
+  - Quote virtual environment activation paths with shell metacharacters ([#19798](https://github.com/astral-sh/uv/pull/19798))
+
+## 0.11.20
+
+Released on 2026-06-10.
+
+### Enhancements
+
+- Add `--emit-index-url` and `--emit-find-links` to `uv export` ([#18370](https://github.com/astral-sh/uv/pull/18370))
+- Add `--find-links` support for `uv pip list` ([#16103](https://github.com/astral-sh/uv/pull/16103))
+- Group executable install errors during `uv python install` ([#19691](https://github.com/astral-sh/uv/pull/19691))
+- Use ICF in macOS release builds to reduce binary sizes ([#19615](https://github.com/astral-sh/uv/pull/19615))
+
+### Preview features
+
+- Add initial hidden `uv upgrade` command ([#19678](https://github.com/astral-sh/uv/pull/19678))
+- Reject Git revisions in `uv upgrade` ([#19742](https://github.com/astral-sh/uv/pull/19742))
+
+### Configuration
+
+- Recognize `UV_NO_INSTALL_PROJECT`, `UV_NO_INSTALL_WORKSPACE`, `UV_NO_INSTALL_LOCAL` ([#19323](https://github.com/astral-sh/uv/pull/19323))
+
+### Performance
+
+- Speed up discovery of large workspaces ([#18311](https://github.com/astral-sh/uv/pull/18311))
+
+### Bug fixes
+
+- Allow unknown preview flags with a warning again ([#19669](https://github.com/astral-sh/uv/pull/19669))
+- Apply dependency exclusions to direct requirements ([#19699](https://github.com/astral-sh/uv/pull/19699))
+- Avoid following external symlinks during cache clean ([#19682](https://github.com/astral-sh/uv/pull/19682))
+- Avoid following symlinks during cache prune ([#19543](https://github.com/astral-sh/uv/pull/19543))
+- Fix Git cache keys for worktrees and packed refs ([#19706](https://github.com/astral-sh/uv/pull/19706))
+- Make resolver error handling iterative to avoid stack overflows ([#19695](https://github.com/astral-sh/uv/pull/19695))
+- Pass `VIRTUAL_ENV` through `cygpath` inside `fish` on Windows ([#19703](https://github.com/astral-sh/uv/pull/19703))
+- Rebuild explicit local directory tool installs ([#19591](https://github.com/astral-sh/uv/pull/19591))
+- Validate egg top-level entries as identifiers ([#19679](https://github.com/astral-sh/uv/pull/19679))
+
+### Documentation
+
+- Document `--find-links` caching behavior ([#19585](https://github.com/astral-sh/uv/pull/19585))
+- Add a small section for malware checks ([#19680](https://github.com/astral-sh/uv/pull/19680))
+
+## 0.11.19
+
+Released on 2026-06-03.
+
+### Python
+
+- Add CPython 3.15.0b2 ([#19531](https://github.com/astral-sh/uv/pull/19531))
+
+### Enhancements
+
+- Always compute SHA256 for remote distributions ([#19662](https://github.com/astral-sh/uv/pull/19662))
+- Add PyEmscripten platform (PEP 783) ([#19629](https://github.com/astral-sh/uv/pull/19629))
+- Add Pyodide 2025 target triple ([#19653](https://github.com/astral-sh/uv/pull/19653))
+
+### Preview features
+
+- Make preview features for commands have names that aren't ambiguous with the command ([#19645](https://github.com/astral-sh/uv/pull/19645))
+- Respect `--isolated` in `uv check` ([#19666](https://github.com/astral-sh/uv/pull/19666))
+
+### Bug fixes
+
+- Continue tool uninstall after dangling receipts ([#19623](https://github.com/astral-sh/uv/pull/19623))
+- Skip Unix-specific installation steps when cross-installing Windows Python distributions ([#19424](https://github.com/astral-sh/uv/pull/19424))
+
+## 0.11.18
+
+Released on 2026-06-01.
+
+### Performance
+
+- Fix performance regression in unzip of local wheels ([#19637](https://github.com/astral-sh/uv/pull/19637))
+
+### Preview
+
+- Add `uv check` to run `ty` from uv ([#19605](https://github.com/astral-sh/uv/pull/19605))
+
+### Bug fixes
+
+- Update activation scripts with upstream fixes ([#19628](https://github.com/astral-sh/uv/pull/19628))
+
+### Other changes
+
+- Bump MSRV to 1.94 ([#19600](https://github.com/astral-sh/uv/pull/19600))
+
+## 0.11.17
+
+Released on 2026-05-28.
+
+### Enhancements
+
+- Add a diagnostic for `uv add` with standard library modules ([#19572](https://github.com/astral-sh/uv/pull/19572))
+- Expose `uv workspace` and its `list` subcommand in help output ([#19533](https://github.com/astral-sh/uv/pull/19533))
+- Improve the "403 forbidden" hint to suggest `ignore-error-codes` when applicable ([#19521](https://github.com/astral-sh/uv/pull/19521))
+- Skip direct URL lock freshness checks while offline ([#19596](https://github.com/astral-sh/uv/pull/19596))
+- Add `import-names` and `import-namespaces` support to `uv-build` ([PEP 794](https://peps.python.org/pep-0794/)) ([#19380](https://github.com/astral-sh/uv/pull/19380))
+- Add a `--no-editable-package` flag to various commands ([#19584](https://github.com/astral-sh/uv/pull/19584))
+- Infer Python version requests from source trees in `uv tool` invocations ([#19577](https://github.com/astral-sh/uv/pull/19577))
+
+### Preview features
+
+- Add module owners to `uv workspace metadata` ([#19122](https://github.com/astral-sh/uv/pull/19122))
+- Do not allow `uv venv --clear` to remove non-virtual environments ([#19595](https://github.com/astral-sh/uv/pull/19595))
+
+### Bug fixes
+
+- Improve the performance of large entries in `tool.uv.conflicts` ([#19538](https://github.com/astral-sh/uv/pull/19538))
+- Avoid modifying the parent process' env with `--env-file` in `uv run` ([#19567](https://github.com/astral-sh/uv/pull/19567))
+- Fix script environment creation for scripts with long filenames ([#19539](https://github.com/astral-sh/uv/pull/19539))
+- Fix transitive Git archive dependencies in lockfiles ([#19589](https://github.com/astral-sh/uv/pull/19589))
+- Preserve Git repository URLs in direct URL metadata ([#19590](https://github.com/astral-sh/uv/pull/19590))
+- Support redirects in `--check-url` ([#19594](https://github.com/astral-sh/uv/pull/19594))
+- Accept case-insensitive HTML tags in `--find-links` parsing ([#19537](https://github.com/astral-sh/uv/pull/19537))
+- Reject duplicate script metadata blocks ([#19544](https://github.com/astral-sh/uv/pull/19544))
+- Ban names like "python3" as script entry points ([#19535](https://github.com/astral-sh/uv/pull/19535), [#19536](https://github.com/astral-sh/uv/pull/19536))
+- Validate Git LFS artifacts for Git archives ([#19592](https://github.com/astral-sh/uv/pull/19592))
+- Use a relative path when creating symlinks in cache to improve relocatability ([#19033](https://github.com/astral-sh/uv/pull/19033))
+
+### Documentation
+
+- Fix malformed positional anchors in the CLI reference ([#19575](https://github.com/astral-sh/uv/pull/19575))
+
+## 0.11.16
+
+Released on 2026-05-21.
+
+### Enhancements
+
+- Add support for direct archive dependencies in Git ([#10072](https://github.com/astral-sh/uv/pull/10072))
+- Adjust hint rendering ([#18090](https://github.com/astral-sh/uv/pull/18090))
+
+### Preview features
+
+- uv audit: specialize malformed OSV error ([#19515](https://github.com/astral-sh/uv/pull/19515))
+- Reject locked malware installations ([#18936](https://github.com/astral-sh/uv/pull/18936))
+
+### Configuration
+
+- Allow disabling reading the system config with `UV_NO_SYSTEM_CONFIG` ([#19476](https://github.com/astral-sh/uv/pull/19476))
+
+### Bug fixes
+
+- Allow environment variables that take a list to be empty ([#19503](https://github.com/astral-sh/uv/pull/19503))
+- Ensure that incompatible wheel hints do not leak secrets ([#19504](https://github.com/astral-sh/uv/pull/19504))
+- Reject unsafe entry points in `uv-build` ([#19495](https://github.com/astral-sh/uv/pull/19495))
+- Restrict delimiters in entry point parsing ([#19471](https://github.com/astral-sh/uv/pull/19471))
+- uv-netrc: fix multi-word no-space comment lines causing parse errors ([#19494](https://github.com/astral-sh/uv/pull/19494))
+
+### Documentation
+
+- Document and test relative exclude-newer support for uv pip ([#19475](https://github.com/astral-sh/uv/pull/19475))
+
 ## 0.11.15
 
 Released on 2026-05-18.
@@ -381,28 +662,28 @@ The changes are largely driven by the upgrade of reqwest, which powers uv's HTTP
 The following changes are included:
 
 - [`rustls-platform-verifier`](https://github.com/rustls/rustls-platform-verifier) is used instead of [`rustls-native-certs`](https://github.com/rustls/rustls-native-certs) and [`webpki`](https://github.com/rustls/webpki) for certificate verification
-  
+
   **This change should have no effect unless you are using the `native-tls` option to enable reading system certificates.**
-  
+
   `rustls-platform-verifier` delegates to the system for certificate validation (e.g., `Security.framework` on macOS) instead of eagerly loading certificates from the system and verifying them via `webpki`. The effects of this change will vary based on the operating system. In general, uv's certificate validation should now be more consistent with browsers and other native applications. However, this is the most likely cause of breaking changes in this release. Some previously failing certificate chains may succeed, and some previously accepted certificate chains may fail. In either case, we expect the validation to be more correct and welcome reports of regressions.
-  
+
   In particular, because more responsibility for validating the certificate is transferred to your system's security library, some features like [CA constraints](https://support.apple.com/en-us/103255) or [revocation of certificates](https://en.wikipedia.org/wiki/Certificate_revocation) via OCSP and CRLs may now be used.
-  
+
   This change should improve performance when using system certificate on macOS, as uv no longer needs to load all certificates from the keychain at startup.
 - [`aws-lc`](https://github.com/aws/aws-lc) is used instead of `ring` for a cryptography backend
-  
+
   There should not be breaking changes from this change. We expect this to expand support for certificate signature algorithms.
 - `--native-tls` is deprecated in favor of a new `--system-certs` flag
-  
+
   The `--native-tls` flag is still usable and has identical behavior to `--system-certs.`
-  
+
   This change was made to reduce confusion about the TLS implementation uv uses. uv always uses `rustls` not `native-tls`.
 - Building uv on x86-64 and i686 Windows requires NASM
-  
+
   NASM is required by `aws-lc`. If not found on the system, a prebuilt blob provided by `aws-lc-sys` will be used.
-  
+
   If you are not building uv from source, this change has no effect.
-  
+
   See the [CONTRIBUTING](https://github.com/astral-sh/uv/blob/b6854d77bfd0cb78157fecaf8b30126c6f16bc11/CONTRIBUTING.md#setup) guide for details.
 - Empty `SSL_CERT_FILE` values are ignored (for consistency with `SSL_CERT_DIR`)
 
@@ -445,422 +726,9 @@ See the [python-build-standalone release notes](https://github.com/astral-sh/pyt
 - Split the dependency bots page into two separate pages ([#18597](https://github.com/astral-sh/uv/pull/18597))
 - Split the alternative indexes page into separate pages ([#18607](https://github.com/astral-sh/uv/pull/18607))
 
-## 0.10.12
+## 0.10.x
 
-Released on 2026-03-19.
-
-### Python
-
-- Add pypy 3.11.15 ([#18468](https://github.com/astral-sh/uv/pull/18468))
-- Add support for using Python 3.6 interpreters ([#18454](https://github.com/astral-sh/uv/pull/18454))
-
-### Enhancements
-
-- Include uv's target triple in version report ([#18520](https://github.com/astral-sh/uv/pull/18520))
-- Allow comma separated values in `--no-emit-package` ([#18565](https://github.com/astral-sh/uv/pull/18565))
-
-### Preview features
-
-- Show `uv audit` in the CLI help ([#18540](https://github.com/astral-sh/uv/pull/18540))
-
-### Bug fixes
-
-- Improve reporting of managed interpreter symlinks in `uv python list` ([#18459](https://github.com/astral-sh/uv/pull/18459))
-- Preserve end-of-line comments on previous entries when removing dependencies ([#18557](https://github.com/astral-sh/uv/pull/18557))
-- Treat abi3 wheel Python version as a lower bound ([#18536](https://github.com/astral-sh/uv/pull/18536))
-- Detect hard-float support on aarch64 kernels running armv7 userspace ([#18530](https://github.com/astral-sh/uv/pull/18530))
-
-### Documentation
-
-- Add Python 3.15 to supported versions ([#18552](https://github.com/astral-sh/uv/pull/18552))
-- Adjust the PyPy note ([#18548](https://github.com/astral-sh/uv/pull/18548))
-- Move Pyodide to Tier 2 in the Python support policy ([#18561](https://github.com/astral-sh/uv/pull/18561))
-- Move Rust and Python version support out of the Platform support policy ([#18535](https://github.com/astral-sh/uv/pull/18535))
-- Update Docker guide with changes from `uv-docker-example` ([#18558](https://github.com/astral-sh/uv/pull/18558))
-- Update the Python version policy ([#18559](https://github.com/astral-sh/uv/pull/18559))
-
-## 0.10.11
-
-Released on 2026-03-16.
-
-### Enhancements
-
-- Fetch Ruff release metadata from an Astral mirror ([#18358](https://github.com/astral-sh/uv/pull/18358))
-- Use PEP 639 license metadata for uv itself ([#16477](https://github.com/astral-sh/uv/pull/16477))
-
-### Performance
-
-- Improve distribution id performance ([#18486](https://github.com/astral-sh/uv/pull/18486))
-
-### Bug fixes
-
-- Allow `--project` to refer to a `pyproject.toml` directly and reduce to a warning on other files ([#18513](https://github.com/astral-sh/uv/pull/18513))
-- Disable `SYSTEM_VERSION_COMPAT` when querying interpreters on macOS ([#18452](https://github.com/astral-sh/uv/pull/18452))
-- Enforce available distributions for supported environments ([#18451](https://github.com/astral-sh/uv/pull/18451))
-- Fix `uv sync --active` recreating active environments when `UV_PYTHON_INSTALL_DIR` is relative ([#18398](https://github.com/astral-sh/uv/pull/18398))
-
-### Documentation
-
-- Add missing `-o requirements.txt` in `uv pip compile` example ([#12308](https://github.com/astral-sh/uv/pull/12308))
-- Link to organization security policy ([#18449](https://github.com/astral-sh/uv/pull/18449))
-- Link to the AI policy in the contributing guide ([#18448](https://github.com/astral-sh/uv/pull/18448))
-## 0.10.10
-
-Released on 2026-03-13.
-
-### Python
-
-- Add CPython 3.15.0a7 ([#18403](https://github.com/astral-sh/uv/pull/18403))
-
-### Enhancements
-
-- Add `--outdated` flag to `uv tool list` ([#18318](https://github.com/astral-sh/uv/pull/18318))
-- Add riscv64 musl target to build-release-binaries workflow ([#18228](https://github.com/astral-sh/uv/pull/18228))
-- Fetch Ruff from an Astral mirror ([#18286](https://github.com/astral-sh/uv/pull/18286))
-- Improve error handling for platform detection in Python downloads ([#18453](https://github.com/astral-sh/uv/pull/18453))
-- Warn if `--project` directory does not exist ([#17714](https://github.com/astral-sh/uv/pull/17714))
-- Warn when workspace member scripts are skipped due to missing build system ([#18389](https://github.com/astral-sh/uv/pull/18389))
-- Update build backend versions used in `uv init` ([#18417](https://github.com/astral-sh/uv/pull/18417))
-- Log explicit config file path in verbose output ([#18353](https://github.com/astral-sh/uv/pull/18353))
-- Make `uv cache clear` an alias of `uv cache clean` ([#18420](https://github.com/astral-sh/uv/pull/18420))
-- Reject invalid classifiers, warn on license classifiers in `uv_build` ([#18419](https://github.com/astral-sh/uv/pull/18419))
-
-### Preview features
-
-- Add links to `uv audit` output ([#18392](https://github.com/astral-sh/uv/pull/18392))
-- Output/report formatting for `uv audit` ([#18193](https://github.com/astral-sh/uv/pull/18193))
-- Switch to batched OSV queries for `uv audit` ([#18394](https://github.com/astral-sh/uv/pull/18394))
-
-### Bug fixes
-
-- Avoid sharing version metadata across indexes ([#18373](https://github.com/astral-sh/uv/pull/18373))
-- Bump zlib-rs to 0.6.2 to fix panic on decompression of large wheels on Windows ([#18362](https://github.com/astral-sh/uv/pull/18362))
-- Filter out unsupported environment wheels ([#18445](https://github.com/astral-sh/uv/pull/18445))
-- Preserve absolute/relative paths in lockfiles ([#18176](https://github.com/astral-sh/uv/pull/18176))
-- Recreate Python environments under `uv tool install --force` ([#18399](https://github.com/astral-sh/uv/pull/18399))
-- Respect timestamp and other cache keys in cached environments ([#18396](https://github.com/astral-sh/uv/pull/18396))
-- Simplify selected extra markers in `uv export` ([#18433](https://github.com/astral-sh/uv/pull/18433))
-- Send pyx mint-token requests with a proper `Content-Type` ([#18334](https://github.com/astral-sh/uv/pull/18334))
-- Fix Windows operating system and version reporting ([#18383](https://github.com/astral-sh/uv/pull/18383))
-
-### Documentation
-
-- Update the platform support policy with a tier 3 section including freebsd and 32-bit windows ([#18345](https://github.com/astral-sh/uv/pull/18345))
-
-## 0.10.9
-
-Released on 2026-03-06.
-
-### Enhancements
-
-- Add `fbgemm-gpu`, `fbgemm-gpu-genai`, `torchrec`, and `torchtune` to the PyTorch list ([#18338](https://github.com/astral-sh/uv/pull/18338))
-- Add torchcodec to PyTorch List ([#18336](https://github.com/astral-sh/uv/pull/18336))
-- Log the duration we took before erroring ([#18231](https://github.com/astral-sh/uv/pull/18231))
-- Warn when using `uv_build` settings without `uv_build` ([#15750](https://github.com/astral-sh/uv/pull/15750))
-- Add fallback to `/usr/lib/os-release` on Linux system lookup failure ([#18349](https://github.com/astral-sh/uv/pull/18349))
-- Use `cargo auditable` to include SBOM in uv builds ([#18276](https://github.com/astral-sh/uv/pull/18276))
-
-### Configuration
-
-- Add an environment variable for `UV_VENV_RELOCATABLE` ([#18331](https://github.com/astral-sh/uv/pull/18331))
-
-### Performance
-
-- Avoid toml `Document` overhead ([#18306](https://github.com/astral-sh/uv/pull/18306))
-- Use a single global workspace cache ([#18307](https://github.com/astral-sh/uv/pull/18307))
-
-### Bug fixes
-
-- Continue on trampoline job assignment failures ([#18291](https://github.com/astral-sh/uv/pull/18291))
-- Handle the hard link limit gracefully instead of failing ([#17699](https://github.com/astral-sh/uv/pull/17699))
-- Respect build constraints for workspace members ([#18350](https://github.com/astral-sh/uv/pull/18350))
-- Revalidate editables and other dependencies in scripts ([#18328](https://github.com/astral-sh/uv/pull/18328))
-- Support Python 3.13+ on Android ([#18301](https://github.com/astral-sh/uv/pull/18301))
-- Support `cp3-none-any` ([#17064](https://github.com/astral-sh/uv/pull/17064))
-- Skip tool environments with broken links to Python on Windows ([#17176](https://github.com/astral-sh/uv/pull/17176))
-
-### Documentation
-
-- Add documentation for common marker values ([#18327](https://github.com/astral-sh/uv/pull/18327))
-- Improve documentation on virtual dependencies ([#18346](https://github.com/astral-sh/uv/pull/18346))
-
-## 0.10.8
-
-Released on 2026-03-03.
-
-### Python
-
-- Add CPython 3.10.20
-- Add CPython 3.11.15
-- Add CPython 3.12.13
-
-### Enhancements
-
-- Add Docker images based on Docker Hardened Images ([#18247](https://github.com/astral-sh/uv/pull/18247))
-- Add resolver hint when `--exclude-newer` filters out all versions of a package ([#18217](https://github.com/astral-sh/uv/pull/18217))
-- Configure a real retry minimum delay of 1s ([#18201](https://github.com/astral-sh/uv/pull/18201))
-- Expand `uv_build` direct build compatibility ([#17902](https://github.com/astral-sh/uv/pull/17902))
-- Fetch CPython from an Astral mirror by default ([#18207](https://github.com/astral-sh/uv/pull/18207))
-- Download uv releases from an Astral mirror in installers by default ([#18191](https://github.com/astral-sh/uv/pull/18191))
-- Add SBOM attestations to Docker images ([#18252](https://github.com/astral-sh/uv/pull/18252))
-- Improve hint for installing meson-python when missing as build backend ([#15826](https://github.com/astral-sh/uv/pull/15826))
-
-### Configuration
-
-- Add `UV_INIT_BARE` environment variable for `uv init` ([#18210](https://github.com/astral-sh/uv/pull/18210))
-
-### Bug fixes
-
-- Prevent `uv tool upgrade` from installing excluded dependencies ([#18022](https://github.com/astral-sh/uv/pull/18022))
-- Promote authentication policy when saving tool receipts ([#18246](https://github.com/astral-sh/uv/pull/18246))
-- Respect exclusions in scripts ([#18269](https://github.com/astral-sh/uv/pull/18269))
-- Retain default-branch Git SHAs in `pylock.toml` files ([#18227](https://github.com/astral-sh/uv/pull/18227))
-- Skip installed Python check for URL dependencies ([#18211](https://github.com/astral-sh/uv/pull/18211))
-- Respect constraints during `--upgrade` ([#18226](https://github.com/astral-sh/uv/pull/18226))
-- Fix `uv tree` orphaned roots and premature deduplication ([#17212](https://github.com/astral-sh/uv/pull/17212))
-
-### Documentation
-
-- Mention cooldown and tweak inline script metadata in dependency bots documentation ([#18230](https://github.com/astral-sh/uv/pull/18230))
-- Move cache prune in GitLab to `after_script` ([#18206](https://github.com/astral-sh/uv/pull/18206))
-
-## 0.10.7
-
-Released on 2026-02-27.
-
-### Bug fixes
-
-- Fix handling of junctions in Windows Containers on Windows ([#18192](https://github.com/astral-sh/uv/pull/18192))
-
-### Enhancements
-
-- Activate logging for middleware retries ([#18200](https://github.com/astral-sh/uv/pull/18200))
-- Upload uv releases to a mirror ([#18159](https://github.com/astral-sh/uv/pull/18159))
-
-## 0.10.6
-
-Released on 2026-02-24.
-
-### Bug fixes
-
-- Apply lockfile marker normalization for fork markers ([#18116](https://github.com/astral-sh/uv/pull/18116))
-- Fix Python version selection for scripts with a `requires-python` conflicting with `.python-version` ([#18097](https://github.com/astral-sh/uv/pull/18097))
-- Preserve file permissions when using reflinks on Linux ([#18187](https://github.com/astral-sh/uv/pull/18187))
-
-### Documentation
-
-- Remove verbose documentation from optional dependencies help text ([#18180](https://github.com/astral-sh/uv/pull/18180))
-
-## 0.10.5
-
-Released on 2026-02-23.
-
-### Enhancements
-
-- Add hint when named index is found in a parent config file ([#18087](https://github.com/astral-sh/uv/pull/18087))
-- Add warning for `uv lock --frozen` ([#17859](https://github.com/astral-sh/uv/pull/17859))
-- Attempt to use reflinks by default on Linux ([#18117](https://github.com/astral-sh/uv/pull/18117))
-- Fallback to hardlinks after reflink failure before copying ([#18104](https://github.com/astral-sh/uv/pull/18104))
-- Filter `pylock.toml` wheels by tags and `requires-python` ([#18081](https://github.com/astral-sh/uv/pull/18081))
-- Validate wheel filenames are normalized during `uv publish` ([#17783](https://github.com/astral-sh/uv/pull/17783))
-- Fix message when `exclude-newer` invalidates the lock file ([#18100](https://github.com/astral-sh/uv/pull/18100))
-- Change the missing files log level to debug ([#18075](https://github.com/astral-sh/uv/pull/18075))
-
-### Performance
-
-- Improve performance of repeated conflicts with an extra ([#18094](https://github.com/astral-sh/uv/pull/18094))
-
-### Bug fixes
-
-- Fix `--no-emit-workspace` with `--all-packages` on single-member workspaces ([#18098](https://github.com/astral-sh/uv/pull/18098))
-- Fix `UV_NO_DEFAULT_GROUPS` rejecting truthy values like `1` ([#18057](https://github.com/astral-sh/uv/pull/18057))
-- Fix iOS detection ([#17973](https://github.com/astral-sh/uv/pull/17973))
-- Propagate project-level conflicts to package extras ([#18096](https://github.com/astral-sh/uv/pull/18096))
-- Use a global build concurrency semaphore ([#18054](https://github.com/astral-sh/uv/pull/18054))
-
-### Documentation
-
-- Update documentation heading for environment variable files ([#18122](https://github.com/astral-sh/uv/pull/18122))
-- Fix comment about `uv export` formats ([#17900](https://github.com/astral-sh/uv/pull/17900))
-- Make it clear that Windows is supported in user- and system- level configuration docs ([#18106](https://github.com/astral-sh/uv/pull/18106))
-
-## 0.10.4
-
-Released on 2026-02-17.
-
-### Enhancements
-
-- Remove duplicate references to the affected paths when showing `uv python` errors ([#18008](https://github.com/astral-sh/uv/pull/18008))
-- Skip discovery of workspace members that contain only git-ignored files, including in sub-directories ([#18051](https://github.com/astral-sh/uv/pull/18051))
-
-### Bug fixes
-
-- Don't panic when initialising a package at the filesystem root (e.g. `uv init / --name foo`) ([#17983](https://github.com/astral-sh/uv/pull/17983))
-- Fix permissions on `wheel` and `sdist` files produced by the `uv_build` build backend ([#18020](https://github.com/astral-sh/uv/pull/18020))
-- Revert locked file change to fix locked files on NFS mounts ([#18071](https://github.com/astral-sh/uv/pull/18071))
-
-## 0.10.3
-
-Released on 2026-02-16.
-
-### Python
-
-- Add CPython 3.15.0a6
-
-### Enhancements
-
-- Don't open file locks for writing ([#17956](https://github.com/astral-sh/uv/pull/17956))
-- Make Windows trampoline error messages consistent with uv proper ([#17969](https://github.com/astral-sh/uv/pull/17969))
-- Log which preview features are enabled ([#17968](https://github.com/astral-sh/uv/pull/17968))
-
-### Preview features
-
-- Add support for ruff version constraints and `exclude-newer` in `uv format` ([#17651](https://github.com/astral-sh/uv/pull/17651))
-- Fix script path handling when `target-workspace-discovery` is enabled ([#17965](https://github.com/astral-sh/uv/pull/17965))
-- Use version constraints to select the default ruff version used by `uv format` ([#17977](https://github.com/astral-sh/uv/pull/17977))
-
-### Bug fixes
-
-- Avoid matching managed Python versions by prefixes, e.g. don't match CPython 3.10 when `cpython-3.1` is specified ([#17972](https://github.com/astral-sh/uv/pull/17972))
-- Fix handling of `--allow-existing` with minor version links on Windows ([#17978](https://github.com/astral-sh/uv/pull/17978))
-- Fix panic when encountering unmanaged workspace members ([#17974](https://github.com/astral-sh/uv/pull/17974))
-- Improve accuracy of request timing ([#18007](https://github.com/astral-sh/uv/pull/18007))
-- Reject `u64::MAX` in version segments to prevent overflow ([#17985](https://github.com/astral-sh/uv/pull/17985))
-
-### Documentation
-
-- Reference Debian Trixie instead of Bookworm ([#17991](https://github.com/astral-sh/uv/pull/17991))
-
-## 0.10.2
-
-Released on 2026-02-10.
-
-### Enhancements
-
-- Deprecate unexpected ZIP compression methods ([#17946](https://github.com/astral-sh/uv/pull/17946))
-
-### Bug fixes
-
-- Fix `cargo-install` failing due to missing `uv-test` dependency ([#17954](https://github.com/astral-sh/uv/pull/17954))
-
-## 0.10.1
-
-Released on 2026-02-10.
-
-### Enhancements
-
-- Don't panic on metadata read errors ([#17904](https://github.com/astral-sh/uv/pull/17904))
-- Skip empty workspace members instead of failing ([#17901](https://github.com/astral-sh/uv/pull/17901))
-- Don't fail creating a read-only `sdist-vX/.git` if it already exists ([#17825](https://github.com/astral-sh/uv/pull/17825))
-
-### Documentation
-
-- Suggest `uv python update-shell` over `uv tool update-shell` in Python docs ([#17941](https://github.com/astral-sh/uv/pull/17941))
-
-## 0.10.0
-
-Since we released uv [0.9.0](https://github.com/astral-sh/uv/releases/tag/0.9.0) in October of 2025, we've accumulated various changes that improve correctness and user experience, but could break some workflows. This release contains those changes; many have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
-
-This release also includes the stabilization of preview features. Python upgrades are now stable, including the `uv python upgrade` command, `uv python install --upgrade`, and automatically upgrading Python patch versions in virtual environments when a new version is installed. The `add-bounds` and `extra-build-dependencies` settings are now stable. Finally, the `uv workspace dir` and `uv workspace list` utilities for writing scripts against workspace members are now stable.
-
-There are no breaking changes to [`uv_build`](https://docs.astral.sh/uv/concepts/build-backend/). If you have an upper bound in your `[build-system]` table, you should update it, e.g., from `<0.10.0` to `<0.11.0`.
-
-### Breaking changes
-
-- **Require `--clear` to remove existing virtual environments in `uv venv`** ([#17757](https://github.com/astral-sh/uv/pull/17757))
-  
-  Previously, `uv venv` would prompt for confirmation before removing an existing virtual environment in interactive contexts, and remove it without confirmation in non-interactive contexts. Now, `uv venv` requires the `--clear` flag to remove an existing virtual environment. A warning for this change was added in [uv 0.8](https://github.com/astral-sh/uv/blob/main/changelogs/0.8.x.md#breaking-changes).
-  
-  You can opt out of this behavior by passing the `--clear` flag or setting `UV_VENV_CLEAR=1`.
-- **Error if multiple indexes include `default = true`** ([#17011](https://github.com/astral-sh/uv/pull/17011))
-  
-  Previously, uv would silently accept multiple indexes with `default = true` and use the first one. Now, uv will error if multiple indexes are marked as the default.
-  
-  You cannot opt out of this behavior. Remove `default = true` from all but one index.
-- **Error when an `explicit` index is unnamed** ([#17777](https://github.com/astral-sh/uv/pull/17777))
-  
-  Explicit indexes can only be used via the `[tool.uv.sources]` table, which requires referencing the index by name. Previously, uv would silently accept unnamed explicit indexes, which could never be referenced. Now, uv will error if an explicit index does not have a name.
-  
-  You cannot opt out of this behavior. Add a `name` to the explicit index or remove the entry.
-- **Install alternative Python executables using their implementation name** ([#17756](https://github.com/astral-sh/uv/pull/17756), [#17760](https://github.com/astral-sh/uv/pull/17760))
-  
-  Previously, `uv python install` would install PyPy, GraalPy, and Pyodide executables with names like `python3.10` into the bin directory. Now, these executables will be named using their implementation name, e.g., `pypy3.10`, `graalpy3.10`, and `pyodide3.12`, to avoid conflicting with CPython installations.
-  
-  You cannot opt out of this behavior.
-- **Respect global Python version pins in `uv tool run` and `uv tool install`** ([#14112](https://github.com/astral-sh/uv/pull/14112))
-  
-  Previously, `uv tool run` and `uv tool install` did not respect the global Python version pin (set via `uv python pin --global`). Now, these commands will use the global Python version when no explicit version is requested.
-  
-  For `uv tool install`, if the tool is already installed, the Python version will not change unless `--reinstall` or `--python` is provided. If the tool was previously installed with an explicit `--python` flag, the global pin will not override it.
-  
-  You can opt out of this behavior by providing an explicit `--python` flag.
-- **Remove Debian Bookworm, Alpine 3.21, and Python 3.8 Docker images** ([#17755](https://github.com/astral-sh/uv/pull/17755))
-  
-  The Debian Bookworm and Alpine 3.21 images were replaced by Debian Trixie and Alpine 3.22 as defaults in [uv 0.9](https://github.com/astral-sh/uv/pull/15352). These older images are now removed. Python 3.8 images are also removed, as Python 3.8 is no longer supported in the Trixie or Alpine base images.
-  
-  The following image tags are no longer published:
-  - `uv:bookworm`, `uv:bookworm-slim`
-  - `uv:alpine3.21`
-  - `uv:python3.8-*`
-  
-  Use `uv:debian` or `uv:trixie` instead of `uv:bookworm`, `uv:alpine` or `uv:alpine3.22` instead of `uv:alpine3.21`, and a newer Python version instead of `uv:python3.8-*`.
-- **Drop PPC64 (big endian) builds** ([#17626](https://github.com/astral-sh/uv/pull/17626))
-  
-  uv no longer provides pre-built binaries for PPC64 (big endian). This platform appears to be largely unused and is only supported on a single manylinux version. PPC64LE (little endian) builds are unaffected.
-  
-  Building uv from source is still supported for this platform.
-- **Skip generating `activate.csh` for relocatable virtual environments** ([#17759](https://github.com/astral-sh/uv/pull/17759))
-  
-  Previously, `uv venv --relocatable` would generate an `activate.csh` script that contained hardcoded paths, making it incompatible with relocation. Now, the `activate.csh` script is not generated for relocatable virtual environments.
-  
-  You cannot opt out of this behavior.
-- **Require username when multiple credentials match a URL** ([#16983](https://github.com/astral-sh/uv/pull/16983))
-  
-  When using `uv auth login` to store credentials, you can register multiple username and password combinations for the same host. Previously, when uv needed to authenticate and multiple credentials matched the URL (e.g., when retrieving a token with `uv auth token`), uv would pick the first match. Now, uv will error instead.
-  
-  You cannot opt out of this behavior. Include the username in the request, e.g., `uv auth token --username foo example.com`.
-- **Avoid invalidating the lockfile versions after an `exclude-newer` change** ([#17721](https://github.com/astral-sh/uv/pull/17721))
-  
-  Previously, changing the `exclude-newer` setting would cause package versions to be upgraded, ignoring the lockfile entirely. Now, uv will only change package versions if they are no longer within the `exclude-newer` range.
-  
-  You can restore the previous behavior by using `--upgrade` or `--upgrade-package` to opt-in to package version changes.
-- **Upgrade `uv format` to Ruff 0.15.0** ([#17838](https://github.com/astral-sh/uv/pull/17838))
-  
-  `uv format` now uses [Ruff 0.15.0](https://github.com/astral-sh/ruff/releases/tag/0.15.0), which uses the [2026 style guide](https://astral.sh/blog/ruff-v0.15.0#the-ruff-2026-style-guide). See the blog post for details.
-  
-  The formatting of code is likely to change. You can opt out of this behavior by requesting an older Ruff version, e.g., `uv format --version 0.14.14`.
-- **Update uv crate test features to use `test-` as a prefix** ([#17860](https://github.com/astral-sh/uv/pull/17860))
-  
-  This change only affects redistributors of uv. The Cargo features used to gate test dependencies, e.g., `pypi`, have been renamed with a `test-` prefix for clarity, e.g., `test-pypi`.
-
-### Stabilizations
-
-- **`uv python upgrade` and `uv python install --upgrade`** ([#17766](https://github.com/astral-sh/uv/pull/17766))
-  
-  When installing Python versions, an [intermediary directory](https://docs.astral.sh/uv/concepts/python-versions/#minor-version-directories) without the patch version attached will be created, and virtual environments will be transparently upgraded to new patch versions.
-  
-  See the [Python version documentation](https://docs.astral.sh/uv/concepts/python-versions/#upgrading-python-versions) for more details.
-- **`uv add --bounds` and the `add-bounds` configuration option** ([#17660](https://github.com/astral-sh/uv/pull/17660))
-  
-  This does not come with any behavior changes. You will no longer see an experimental warning when using `uv add --bounds` or `add-bounds` in configuration.
-- **`uv workspace list` and `uv workspace dir`** ([#17768](https://github.com/astral-sh/uv/pull/17768))
-  
-  This does not come with any behavior changes. You will no longer see an experimental warning when using these commands.
-- **`extra-build-dependencies`** ([#17767](https://github.com/astral-sh/uv/pull/17767))
-  
-  This does not come with any behavior changes. You will no longer see an experimental warning when using `extra-build-dependencies` in configuration.
-
-### Enhancements
-
-- Improve ABI tag error message phrasing ([#17878](https://github.com/astral-sh/uv/pull/17878))
-- Introduce a 10s connect timeout ([#17733](https://github.com/astral-sh/uv/pull/17733))
-- Allow using `pyx.dev` as a target in `uv auth` commands despite `PYX_API_URL` differing ([#17856](https://github.com/astral-sh/uv/pull/17856))
-
-### Bug fixes
-
-- Support all CPython ABI tag suffixes properly  ([#17817](https://github.com/astral-sh/uv/pull/17817))
-- Add support for detecting PowerShell on Linux and macOS ([#17870](https://github.com/astral-sh/uv/pull/17870))
-- Retry timeout errors for streams ([#17875](https://github.com/astral-sh/uv/pull/17875))
+See [changelogs/0.10.x](./changelogs/0.10.x.md)
 
 ## 0.9.x
 
@@ -899,3 +767,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
+

@@ -31,9 +31,11 @@ use uv_options_metadata::{OptionSet, OptionsMetadata, Visit};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
-    Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
+    ConflictError, Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments,
+    VerbatimParsedUrl,
 };
 use uv_redacted::DisplaySafeUrl;
+use uv_toml::deserialize_unique_map;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -55,53 +57,17 @@ pub enum PyprojectTomlError {
     MissingVersion,
 }
 
-/// Helper function to deserialize a map while ensuring all keys are unique.
-fn deserialize_unique_map<'de, D, K, V, F>(
+fn deserialize_optional_dependencies<'de, D, V>(
     deserializer: D,
-    error_msg: F,
-) -> Result<BTreeMap<K, V>, D::Error>
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
 where
     D: Deserializer<'de>,
-    K: Deserialize<'de> + Ord + std::fmt::Display,
     V: Deserialize<'de>,
-    F: FnOnce(&K) -> String,
 {
-    struct Visitor<K, V, F>(F, std::marker::PhantomData<(K, V)>);
-
-    impl<'de, K, V, F> serde::de::Visitor<'de> for Visitor<K, V, F>
-    where
-        K: Deserialize<'de> + Ord + std::fmt::Display,
-        V: Deserialize<'de>,
-        F: FnOnce(&K) -> String,
-    {
-        type Value = BTreeMap<K, V>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a map with unique keys")
-        }
-
-        fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-        where
-            M: serde::de::MapAccess<'de>,
-        {
-            use std::collections::btree_map::Entry;
-
-            let mut map = BTreeMap::new();
-            while let Some((key, value)) = access.next_entry::<K, V>()? {
-                match map.entry(key) {
-                    Entry::Occupied(entry) => {
-                        return Err(serde::de::Error::custom((self.0)(entry.key())));
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(value);
-                    }
-                }
-            }
-            Ok(map)
-        }
-    }
-
-    deserializer.deserialize_map(Visitor(error_msg, std::marker::PhantomData))
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
 }
 
 /// A `pyproject.toml` as specified in PEP 517.
@@ -121,7 +87,7 @@ pub struct PyProjectToml {
 
     /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    pub(crate) build_system: Option<serde::de::IgnoredAny>,
+    build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
@@ -170,13 +136,6 @@ impl PyProjectToml {
             .and_then(|uv| uv.package)
     }
 
-    /// Returns `true` if the project uses a dynamic version.
-    pub fn is_dynamic(&self) -> bool {
-        self.project
-            .as_ref()
-            .is_some_and(|project| project.version.is_none())
-    }
-
     /// Returns whether the project manifest contains any script table.
     pub fn has_scripts(&self) -> bool {
         if let Some(ref project) = self.project {
@@ -187,19 +146,19 @@ impl PyProjectToml {
     }
 
     /// Returns the set of conflicts for the project.
-    pub fn conflicts(&self) -> Conflicts {
+    pub(crate) fn conflicts(&self) -> Result<Conflicts, ConflictError> {
         let empty = Conflicts::empty();
         let Some(project) = self.project.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(tool) = self.tool.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(tooluv) = tool.uv.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         let Some(conflicting) = tooluv.conflicts.as_ref() else {
-            return empty;
+            return Ok(empty);
         };
         conflicting.to_conflicts_with_package_name(&project.name)
     }
@@ -230,9 +189,9 @@ pub struct Project {
     /// The name of the project
     pub name: PackageName,
     /// The version of the project
-    pub version: Option<Version>,
+    version: Option<Version>,
     /// The Python versions this project is compatible with.
-    pub requires_python: Option<VersionSpecifiers>,
+    pub(crate) requires_python: Option<VersionSpecifiers>,
     /// The dependencies of the project.
     pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.
@@ -240,10 +199,10 @@ pub struct Project {
 
     /// Used to determine whether a `gui-scripts` section is present.
     #[serde(default, skip_serializing)]
-    pub(crate) gui_scripts: Option<serde::de::IgnoredAny>,
+    gui_scripts: Option<serde::de::IgnoredAny>,
     /// Used to determine whether a `scripts` section is present.
     #[serde(default, skip_serializing)]
-    pub(crate) scripts: Option<serde::de::IgnoredAny>,
+    scripts: Option<serde::de::IgnoredAny>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -254,6 +213,7 @@ struct ProjectWire {
     dynamic: Option<Vec<String>>,
     requires_python: Option<VersionSpecifiers>,
     dependencies: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<String>>>,
     gui_scripts: Option<serde::de::IgnoredAny>,
     scripts: Option<serde::de::IgnoredAny>,
@@ -427,7 +387,7 @@ pub struct ToolUv {
             package = false
         "#
     )]
-    pub(crate) package: Option<bool>,
+    package: Option<bool>,
 
     /// The list of `dependency-groups` to install by default.
     ///
@@ -518,7 +478,7 @@ pub struct ToolUv {
             override-dependencies = ["werkzeug==2.3.0"]
         "#
     )]
-    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
     /// Dependencies to exclude when resolving the project's dependencies.
     ///
@@ -549,7 +509,7 @@ pub struct ToolUv {
             exclude-dependencies = ["werkzeug"]
         "#
     )]
-    pub exclude_dependencies: Option<Vec<PackageName>>,
+    pub(crate) exclude_dependencies: Option<Vec<PackageName>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///
@@ -580,7 +540,7 @@ pub struct ToolUv {
             constraint-dependencies = ["grpcio<1.65"]
         "#
     )]
-    pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
     /// Constraints to apply when solving build dependencies.
     ///
@@ -611,7 +571,8 @@ pub struct ToolUv {
             build-constraint-dependencies = ["setuptools==60.0.0"]
         "#
     )]
-    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) build_constraint_dependencies:
+        Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
     /// A list of supported environments against which to resolve dependencies.
     ///
@@ -732,7 +693,7 @@ pub struct ToolUv {
     /// Note that those settings only apply when using the `uv_build` backend, other build backends
     /// (such as hatchling) have their own configuration.
     #[option_group]
-    pub(crate) build_backend: Option<BuildBackendSettingsSchema>,
+    build_backend: Option<BuildBackendSettingsSchema>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -776,7 +737,7 @@ impl ToolUvSources {
 
     /// Convert the [`ToolUvSources`] into its inner `BTreeMap`.
     #[must_use]
-    pub fn into_inner(self) -> BTreeMap<PackageName, Sources> {
+    pub(crate) fn into_inner(self) -> BTreeMap<PackageName, Sources> {
         self.0
     }
 }
@@ -1061,16 +1022,6 @@ impl Sources {
     pub fn iter(&self) -> impl Iterator<Item = &Source> {
         self.0.iter()
     }
-
-    /// Returns `true` if the sources list is empty.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    /// Returns the number of sources in the list.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl FromIterator<Source> for Sources {
@@ -1141,7 +1092,7 @@ impl TryFrom<SourcesWire> for Sources {
         match wire {
             SourcesWire::One(source) => Ok(Self(vec![source])),
             SourcesWire::Many(sources) => {
-                for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
+                for [lhs, rhs] in sources.array_windows() {
                     if lhs.extra() != rhs.extra() {
                         continue;
                     }
@@ -1720,32 +1671,32 @@ impl Source {
             || rev.is_some()
             || matches!(lfs, GitLfsSetting::Enabled { .. }))
         {
-            if let Some(sources) = existing_sources {
-                if let Some(package_sources) = sources.get(name) {
-                    for existing_source in package_sources.iter() {
-                        if let Self::Git {
-                            git,
-                            subdirectory,
-                            path,
-                            marker,
-                            extra,
-                            group,
-                            ..
-                        } = existing_source
-                        {
-                            return Ok(Some(Self::Git {
-                                git: git.clone(),
-                                subdirectory: subdirectory.clone(),
-                                rev,
-                                tag,
-                                branch,
-                                lfs: lfs.into(),
-                                marker: *marker,
-                                path: path.clone(),
-                                extra: extra.clone(),
-                                group: group.clone(),
-                            }));
-                        }
+            if let Some(sources) = existing_sources
+                && let Some(package_sources) = sources.get(name)
+            {
+                for existing_source in package_sources.iter() {
+                    if let Self::Git {
+                        git,
+                        subdirectory,
+                        path,
+                        marker,
+                        extra,
+                        group,
+                        ..
+                    } = existing_source
+                    {
+                        return Ok(Some(Self::Git {
+                            git: git.clone(),
+                            subdirectory: subdirectory.clone(),
+                            rev,
+                            tag,
+                            branch,
+                            lfs: lfs.into(),
+                            marker: *marker,
+                            path: path.clone(),
+                            extra: extra.clone(),
+                            group: group.clone(),
+                        }));
                     }
                 }
             }

@@ -59,9 +59,9 @@ pub struct DirInfo {
 #[serde(rename_all = "snake_case")]
 pub struct ArchiveInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hash: Option<String>,
+    pub(crate) hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hashes: Option<BTreeMap<String, String>>,
+    pub(crate) hashes: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

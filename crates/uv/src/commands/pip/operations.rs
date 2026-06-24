@@ -219,6 +219,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 None,
                 build_dispatch.locations(),
                 build_dispatch.sources().clone(),
+                build_dispatch.cache(),
                 build_dispatch.workspace_cache(),
                 client.credentials_cache(),
             )
@@ -233,7 +234,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Complain if dependency groups are named that don't appear.
             for name in groups.explicit_names() {
                 if !metadata.dependency_groups.contains_key(name) {
-                    return Err(anyhow!(
+                    Err(anyhow!(
                         "The dependency group '{name}' was not found in the project: {}",
                         pyproject_path.user_display()
                     ))?;
@@ -1141,7 +1142,7 @@ impl uv_errors::Hint for Error {
     "Requesting extras requires a `pylock.toml`, `pyproject.toml`, `setup.cfg`, or `setup.py` file"
 )]
 pub(crate) struct ExtrasWithoutSourceError {
-    pub(crate) has_editable: bool,
+    has_editable: bool,
 }
 
 impl uv_errors::Hint for ExtrasWithoutSourceError {

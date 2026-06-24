@@ -604,7 +604,7 @@ impl ResolverOutput {
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        self.dists().any(AnnotatedDist::is_base)
+        !self.dists().any(AnnotatedDist::is_base)
     }
 
     /// Returns `true` if the graph contains the given package.

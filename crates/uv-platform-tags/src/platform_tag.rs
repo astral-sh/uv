@@ -112,6 +112,8 @@ pub enum PlatformTag {
     Solaris { release_arch: ReleaseArch },
     /// Ex) `pyodide_2024_0_wasm32`
     Pyodide { major: u16, minor: u16 },
+    /// Ex) `pyemscripten_2026_0_wasm32`
+    PyEmscripten { major: u16, minor: u16 },
     /// Ex) `ios_13_0_arm64_iphoneos` / `ios_13_0_arm64_iphonesimulator`
     Ios {
         major: u16,
@@ -148,6 +150,7 @@ impl PlatformTag {
             Self::Illumos { .. } => Some("Illumos"),
             Self::Solaris { .. } => Some("Solaris"),
             Self::Pyodide { .. } => Some("Pyodide"),
+            Self::PyEmscripten { .. } => Some("Emscripten"),
             Self::Ios { .. } => Some("iOS"),
         }
     }
@@ -465,6 +468,9 @@ impl std::fmt::Display for PlatformTag {
             Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
             Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
             Self::Pyodide { major, minor } => write!(f, "pyodide_{major}_{minor}_wasm32"),
+            Self::PyEmscripten { major, minor } => {
+                write!(f, "pyemscripten_{major}_{minor}_wasm32")
+            }
             Self::Ios {
                 major,
                 minor,
@@ -816,14 +822,14 @@ impl FromStr for PlatformTag {
                 });
             }
 
-            if let Some(release_arch) = rest.strip_suffix("_64bit") {
-                if !release_arch.is_empty() {
-                    return Ok(Self::Solaris {
-                        release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
-                            ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
-                        })?,
-                    });
-                }
+            if let Some(release_arch) = rest.strip_suffix("_64bit")
+                && !release_arch.is_empty()
+            {
+                return Ok(Self::Solaris {
+                    release_arch: release_arch.parse::<ReleaseArch>().map_err(|_| {
+                        ParsePlatformTagError::InvalidCharacters { tag: s.to_string() }
+                    })?,
+                });
             }
 
             return Err(ParsePlatformTagError::InvalidArch {
@@ -859,6 +865,35 @@ impl FromStr for PlatformTag {
                 }
             })?;
             return Ok(Self::Pyodide { major, minor });
+        }
+
+        if let Some(rest) = s.strip_prefix("pyemscripten_") {
+            let mid =
+                rest.strip_suffix("_wasm32")
+                    .ok_or_else(|| ParsePlatformTagError::InvalidArch {
+                        platform: "pyemscripten",
+                        tag: s.to_string(),
+                    })?;
+            let underscore = memchr::memchr(b'_', mid.as_bytes()).ok_or_else(|| {
+                ParsePlatformTagError::InvalidFormat {
+                    platform: "pyemscripten",
+                    tag: s.to_string(),
+                }
+            })?;
+            let major: u16 = mid[..underscore].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMajorVersion {
+                    platform: "pyemscripten",
+                    tag: s.to_string(),
+                }
+            })?;
+
+            let minor: u16 = mid[underscore + 1..].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMinorVersion {
+                    platform: "pyemscripten",
+                    tag: s.to_string(),
+                }
+            })?;
+            return Ok(Self::PyEmscripten { major, minor });
         }
 
         if let Some(rest) = s.strip_prefix("ios_") {
@@ -1270,6 +1305,27 @@ mod tests {
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "pyodide",
                 tag: "pyodide_2024_0_wasm64".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn pyemscripten_platform() {
+        let tag = PlatformTag::PyEmscripten {
+            major: 2026,
+            minor: 0,
+        };
+        assert_eq!(
+            PlatformTag::from_str("pyemscripten_2026_0_wasm32").as_ref(),
+            Ok(&tag)
+        );
+        assert_eq!(tag.to_string(), "pyemscripten_2026_0_wasm32");
+
+        assert_eq!(
+            PlatformTag::from_str("pyemscripten_2026_0_wasm64"),
+            Err(ParsePlatformTagError::InvalidArch {
+                platform: "pyemscripten",
+                tag: "pyemscripten_2026_0_wasm64".to_string()
             })
         );
     }

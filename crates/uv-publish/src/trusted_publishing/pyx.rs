@@ -12,8 +12,8 @@ use crate::trusted_publishing::{
 };
 
 pub(crate) struct PyxPublishingService<'a> {
-    pub(crate) client: &'a reqwest_middleware::ClientWithMiddleware,
-    pub(crate) registry: &'a uv_redacted::DisplaySafeUrl,
+    client: &'a reqwest_middleware::ClientWithMiddleware,
+    registry: &'a uv_redacted::DisplaySafeUrl,
 }
 
 impl<'a> PyxPublishingService<'a> {

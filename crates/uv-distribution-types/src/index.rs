@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::{AuthPolicy, Credentials};
+use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -21,10 +21,10 @@ use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatus
 pub struct IndexCacheControl {
     /// Cache control header for Simple API requests.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub api: Option<HeaderValue>,
+    pub(crate) api: Option<HeaderValue>,
     /// Cache control header for file downloads.
     #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
-    pub files: Option<HeaderValue>,
+    pub(crate) files: Option<HeaderValue>,
 }
 
 impl IndexCacheControl {
@@ -255,6 +255,14 @@ pub struct Index {
     pub exclude_newer: Option<ExcludeNewerOverride>,
 }
 
+#[derive(Debug, Error)]
+#[error("Failed to parse credentials in index URL: {url}")]
+pub struct IndexCredentialsError {
+    url: DisplaySafeUrl,
+    #[source]
+    source: CredentialsFromUrlError,
+}
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {
@@ -434,11 +442,6 @@ impl Index {
         &self.url
     }
 
-    /// Consume the [`Index`] and return the [`IndexUrl`].
-    pub fn into_url(self) -> IndexUrl {
-        self.url
-    }
-
     /// Return the raw [`Url`] of the index.
     pub fn raw_url(&self) -> &DisplaySafeUrl {
         self.url.url()
@@ -458,37 +461,58 @@ impl Index {
     /// are stripped from the stored URL.
     #[must_use]
     pub fn with_promoted_auth_policy(mut self) -> Self {
-        if matches!(self.authenticate, AuthPolicy::Auto) && self.credentials().is_some() {
+        if matches!(self.authenticate, AuthPolicy::Auto) && self.has_credentials() {
             self.authenticate = AuthPolicy::Always;
         }
         self
     }
 
+    /// Return whether credentials are configured for the index.
+    ///
+    /// This only checks for the presence of credentials. It intentionally avoids decoding URL
+    /// credentials, since this is used to preserve the authentication policy after credentials are
+    /// removed from the stored URL; parsing errors are reported when the credentials are retrieved.
+    fn has_credentials(&self) -> bool {
+        if self
+            .name
+            .as_ref()
+            .is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
+        {
+            return true;
+        }
+
+        let url = self.url.url();
+        !url.username().is_empty() || url.password().is_some()
+    }
+
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
-    pub fn credentials(&self) -> Option<Credentials> {
+    pub fn credentials(&self) -> Result<Option<Credentials>, IndexCredentialsError> {
         // If the index is named, and credentials are provided via the environment, prefer those.
         if let Some(name) = self.name.as_ref() {
             if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Some(credentials);
+                return Ok(Some(credentials));
             }
         }
 
         // Otherwise, extract the credentials from the URL.
-        Credentials::from_url(self.url.url())
+        Credentials::from_url(self.url.url()).map_err(|source| IndexCredentialsError {
+            url: self.url.url().clone(),
+            source,
+        })
     }
 
     /// Resolve the index relative to the given root directory.
     pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
-        if let IndexUrl::Path(ref url) = self.url {
-            if let Some(given) = url.given() {
-                self.url = IndexUrl::parse(given, Some(root_dir))?;
-            }
+        if let IndexUrl::Path(ref url) = self.url
+            && let Some(given) = url.given()
+        {
+            self.url = IndexUrl::parse(given, Some(root_dir))?;
         }
         Ok(self)
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+    pub(crate) fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
         if let Some(ignore_error_codes) = &self.ignore_error_codes {
             IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
         } else {
@@ -513,7 +537,7 @@ impl Index {
     }
 
     /// Return the `exclude-newer` setting for this index.
-    pub fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
+    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
         self.exclude_newer.as_ref()
     }
 }
@@ -541,24 +565,24 @@ impl FromStr for Index {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Determine whether the source is prefixed with a name, as in `name=https://pypi.org/simple`.
-        if let Some((name, url)) = s.split_once('=') {
-            if !name.chars().any(|c| c == ':') {
-                let name = IndexName::from_str(name)?;
-                let url = IndexUrl::from_str(url)?;
-                return Ok(Self {
-                    name: Some(name),
-                    url,
-                    explicit: false,
-                    default: false,
-                    origin: None,
-                    format: IndexFormat::Simple,
-                    publish_url: None,
-                    authenticate: AuthPolicy::default(),
-                    ignore_error_codes: None,
-                    cache_control: None,
-                    exclude_newer: None,
-                });
-            }
+        if let Some((name, url)) = s.split_once('=')
+            && !name.chars().any(|c| c == ':')
+        {
+            let name = IndexName::from_str(name)?;
+            let url = IndexUrl::from_str(url)?;
+            return Ok(Self {
+                name: Some(name),
+                url,
+                explicit: false,
+                default: false,
+                origin: None,
+                format: IndexFormat::Simple,
+                publish_url: None,
+                authenticate: AuthPolicy::default(),
+                ignore_error_codes: None,
+                cache_control: None,
+                exclude_newer: None,
+            });
         }
 
         // Otherwise, assume the source is a URL.
@@ -589,12 +613,6 @@ pub struct IndexMetadata {
 }
 
 impl IndexMetadata {
-    /// Return a reference to the [`IndexMetadata`].
-    pub fn as_ref(&self) -> IndexMetadataRef<'_> {
-        let Self { url, format: kind } = self;
-        IndexMetadataRef { url, format: *kind }
-    }
-
     /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
     pub fn into_url(self) -> IndexUrl {
         self.url
@@ -614,13 +632,6 @@ impl IndexMetadata {
     /// Return the [`IndexUrl`] of the index.
     pub fn url(&self) -> &IndexUrl {
         &self.url
-    }
-}
-
-impl IndexMetadataRef<'_> {
-    /// Return the [`IndexUrl`] of the index.
-    pub fn url(&self) -> &IndexUrl {
-        self.url
     }
 }
 

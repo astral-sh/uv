@@ -142,11 +142,6 @@ impl DerivationChain {
         None
     }
 
-    /// Returns the length of the derivation chain.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     /// Returns `true` if the derivation chain is empty.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

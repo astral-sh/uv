@@ -250,8 +250,8 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
 /// This pairs a [`Dist`] with the [`HashDigests`] for the specific wheel or
 /// sdist that would be installed.
 pub(crate) struct HashedDist {
-    pub(crate) dist: Dist,
-    pub(crate) hashes: HashDigests,
+    dist: Dist,
+    hashes: HashDigests,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -504,8 +504,7 @@ impl Lock {
         // check for duplicates.
         for package in &mut packages {
             package.dependencies.sort();
-            for windows in package.dependencies.windows(2) {
-                let (dep1, dep2) = (&windows[0], &windows[1]);
+            for [dep1, dep2] in package.dependencies.array_windows() {
                 if dep1 == dep2 {
                     return Err(LockErrorKind::DuplicateDependency {
                         id: package.id.clone(),
@@ -518,8 +517,7 @@ impl Lock {
             // Perform the same validation for optional dependencies.
             for (extra, dependencies) in &mut package.optional_dependencies {
                 dependencies.sort();
-                for windows in dependencies.windows(2) {
-                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                for [dep1, dep2] in dependencies.array_windows() {
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateOptionalDependency {
                             id: package.id.clone(),
@@ -534,8 +532,7 @@ impl Lock {
             // Perform the same validation for dev dependencies.
             for (group, dependencies) in &mut package.dependency_groups {
                 dependencies.sort();
-                for windows in dependencies.windows(2) {
-                    let (dep1, dep2) = (&windows[0], &windows[1]);
+                for [dep1, dep2] in dependencies.array_windows() {
                     if dep1 == dep2 {
                         return Err(LockErrorKind::DuplicateDevDependency {
                             id: package.id.clone(),
@@ -702,7 +699,7 @@ impl Lock {
     }
 
     /// Returns the lockfile revision.
-    pub fn revision(&self) -> u32 {
+    fn revision(&self) -> u32 {
         self.revision
     }
 
@@ -759,7 +756,7 @@ impl Lock {
     }
 
     /// Returns the required platforms that were used to generate this lock.
-    pub fn required_environments(&self) -> &[MarkerTree] {
+    fn required_environments(&self) -> &[MarkerTree] {
         &self.required_environments
     }
 
@@ -768,14 +765,222 @@ impl Lock {
         &self.manifest.members
     }
 
-    /// Returns the dependency groups that were used to generate this lock.
-    pub fn requirements(&self) -> &BTreeSet<Requirement> {
+    /// Returns the root requirements that were used to generate this lock.
+    fn requirements(&self) -> &BTreeSet<Requirement> {
         &self.manifest.requirements
     }
 
+    /// Intersect a requirement marker with the forks that contain a package, then simplify it
+    /// under the lockfile's Python requirement.
+    pub(crate) fn root_requirement_marker(
+        &self,
+        requirement: &Requirement,
+        package: &Package,
+    ) -> Option<MarkerTree> {
+        let marker = if package.fork_markers.is_empty() {
+            requirement.marker
+        } else {
+            let mut combined = MarkerTree::FALSE;
+            for fork_marker in &package.fork_markers {
+                combined.or(fork_marker.pep508());
+            }
+            combined.and(requirement.marker);
+            combined
+        };
+
+        (!marker.is_false()).then(|| self.simplify_environment(marker))
+    }
+
     /// Returns the dependency groups that were used to generate this lock.
-    pub fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
+    pub(crate) fn dependency_groups(&self) -> &BTreeMap<GroupName, BTreeSet<Requirement>> {
         &self.manifest.dependency_groups
+    }
+
+    /// Returns the package selected by a direct dependency in a dependency group.
+    ///
+    /// If `project_name` is provided, the dependency group attached to that package is used.
+    /// Otherwise, the dependency group attached directly to the lock manifest is used.
+    pub fn find_dependency_group_package(
+        &self,
+        project_name: Option<&PackageName>,
+        group: &GroupName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        match project_name {
+            Some(project_name) => self.find_project_dependency_group_package(
+                project_name,
+                group,
+                dependency_name,
+                marker_environment,
+            ),
+            None => self.find_virtual_root_dependency_group_package(
+                group,
+                dependency_name,
+                marker_environment,
+            ),
+        }
+    }
+
+    /// Returns `true` if the package is selected by an enabled dependency group.
+    pub fn is_package_in_dependency_groups(
+        &self,
+        project_name: Option<&PackageName>,
+        package: &Package,
+        marker_environment: &MarkerEnvironment,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<bool, String> {
+        match project_name {
+            Some(project_name) => {
+                let Some(project) = self.find_by_name(project_name)? else {
+                    return Ok(false);
+                };
+                for group in project
+                    .resolved_dependency_groups()
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                {
+                    if self.find_project_dependency_group_package(
+                        project_name,
+                        group,
+                        package.name(),
+                        marker_environment,
+                    )? == Some(package)
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+            None => {
+                for group in self
+                    .manifest
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| groups.contains(group))
+                {
+                    if self.find_virtual_root_dependency_group_package(
+                        group,
+                        package.name(),
+                        marker_environment,
+                    )? == Some(package)
+                    {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// Returns the package selected by a dependency group on a virtual workspace root.
+    fn find_virtual_root_dependency_group_package(
+        &self,
+        group: &GroupName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let Some(requirements) = self.manifest.dependency_groups.get(group) else {
+            return Ok(None);
+        };
+
+        // Confirm that the requested direct dependency applies to this environment before
+        // selecting a package with the same name from the universal lock. For example,
+        // `foo; python_version < '3.12'` must not select a locked `foo` on Python 3.12.
+        if !requirements.iter().any(|requirement| {
+            &requirement.name == dependency_name
+                && requirement.marker.evaluate(marker_environment, &[])
+        }) {
+            return Ok(None);
+        }
+        self.find_by_markers(dependency_name, marker_environment)
+    }
+
+    /// Returns the package selected by a dependency group on a non-virtual project.
+    fn find_project_dependency_group_package(
+        &self,
+        project_name: &PackageName,
+        group: &GroupName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let Some(project) = self.find_by_name(project_name)? else {
+            return Ok(None);
+        };
+        let Some(dependencies) = project.resolved_dependency_groups().get(group) else {
+            return Ok(None);
+        };
+
+        let mut selected = None;
+        for dependency in dependencies
+            .iter()
+            .filter(|dependency| &dependency.package_id.name == dependency_name)
+        {
+            // The complex marker combines the dependency's PEP 508 marker with uv's conflict
+            // markers. Evaluate it with this dependency's extras and the selected group active.
+            // For example, if this group declares `foo; sys_platform == 'linux'`, another
+            // dependency can still keep `foo` in the universal lock on macOS; this group's edge
+            // must not match there.
+            if !dependency.complexified_marker.evaluate(
+                marker_environment,
+                std::iter::empty::<&PackageName>(),
+                dependency
+                    .extra
+                    .iter()
+                    .map(|extra| (&dependency.package_id.name, extra)),
+                std::iter::once((project_name, group)),
+            ) {
+                continue;
+            }
+
+            let package = self.find_by_id(&dependency.package_id);
+            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+                return Err(format!(
+                    "found multiple packages matching `{dependency_name}` in dependency group `{group}` for `{project_name}`"
+                ));
+            }
+            selected = Some(package);
+        }
+        Ok(selected)
+    }
+
+    /// Returns the package selected by a production dependency on a non-virtual project.
+    pub fn find_dependency_package(
+        &self,
+        project_name: &PackageName,
+        dependency_name: &PackageName,
+        marker_environment: &MarkerEnvironment,
+    ) -> Result<Option<&Package>, String> {
+        let Some(project) = self.find_by_name(project_name)? else {
+            return Ok(None);
+        };
+
+        let mut selected = None;
+        for dependency in project
+            .dependencies()
+            .iter()
+            .filter(|dependency| &dependency.package_id.name == dependency_name)
+        {
+            if !dependency.complexified_marker.evaluate(
+                marker_environment,
+                std::iter::once(project_name),
+                dependency
+                    .extra
+                    .iter()
+                    .map(|extra| (&dependency.package_id.name, extra)),
+                std::iter::empty::<(&PackageName, &GroupName)>(),
+            ) {
+                continue;
+            }
+
+            let package = self.find_by_id(&dependency.package_id);
+            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+                return Err(format!(
+                    "found multiple packages matching production dependency `{dependency_name}` for `{project_name}`"
+                ));
+            }
+            selected = Some(package);
+        }
+        Ok(selected)
     }
 
     /// Returns the build constraints that were used to generate this lock.
@@ -1975,7 +2180,17 @@ impl Lock {
                 continue;
             }
 
-            if let Some(version) = package.id.version.as_ref() {
+            // Validating a direct URL package requires retrieving metadata from the remote
+            // artifact. In offline mode, preserve the metadata captured in the lockfile rather
+            // than requiring that artifact to already be present in the cache.
+            if matches!(&package.id.source, Source::Direct(..))
+                && database.client().unmanaged.connectivity().is_offline()
+            {
+                trace!(
+                    "Skipping metadata validation for `{}` because its direct URL cannot be refreshed while offline",
+                    package.id
+                );
+            } else if let Some(version) = package.id.version.as_ref() {
                 // If the distribution is a source tree, attempt to validate it from statically
                 // available `pyproject.toml` metadata before converting it to an installable
                 // distribution. This avoids requiring build permission for static local packages.
@@ -3613,8 +3828,17 @@ impl Package {
     }
 
     /// Return the fork markers for this package, if any.
-    pub fn fork_markers(&self) -> &[UniversalMarker] {
+    pub(crate) fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
+    }
+
+    /// Returns whether this package is included by the given PEP 508 marker.
+    pub fn is_included_by_marker(&self, marker: MarkerTree) -> bool {
+        self.fork_markers.is_empty()
+            || self
+                .fork_markers
+                .iter()
+                .any(|fork_marker| !fork_marker.pep508().is_disjoint(marker))
     }
 
     /// Returns the [`IndexUrl`] for the package, if it is a registry source.
@@ -3706,7 +3930,7 @@ impl Package {
     }
 
     /// Returns an [`InstallTarget`] view for filtering decisions.
-    pub(crate) fn as_install_target(&self) -> InstallTarget<'_> {
+    fn as_install_target(&self) -> InstallTarget<'_> {
         InstallTarget {
             name: self.name(),
             is_local: self.id.source.is_local(),
@@ -3826,7 +4050,7 @@ impl PackageWire {
 #[serde(rename_all = "kebab-case")]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
-    pub(crate) version: Option<Version>,
+    version: Option<Version>,
     source: Source,
 }
 
@@ -3862,7 +4086,7 @@ impl PackageId {
     fn to_toml(&self, dist_count_by_name: Option<&FxHashMap<PackageName, u64>>, table: &mut Table) {
         let count = dist_count_by_name.and_then(|map| map.get(&self.name).copied());
         table.insert("name", value(self.name.to_string()));
-        if count.map(|count| count > 1).unwrap_or(true) {
+        if count.is_none_or(|count| count > 1) {
             if let Some(version) = &self.version {
                 table.insert("version", value(version.to_string()));
             }
@@ -4281,7 +4505,7 @@ impl Source {
     }
 
     /// Check if a package is local by examining its source.
-    pub(crate) fn is_local(&self) -> bool {
+    fn is_local(&self) -> bool {
         matches!(
             self,
             Self::Path(_) | Self::Directory(_) | Self::Editable(_) | Self::Virtual(_)
@@ -4604,7 +4828,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn hash(&self) -> Option<&Hash> {
+    fn hash(&self) -> Option<&Hash> {
         match self {
             Self::Metadata { metadata } => metadata.hash.as_ref(),
             Self::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -4612,7 +4836,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn size(&self) -> Option<u64> {
+    fn size(&self) -> Option<u64> {
         match self {
             Self::Metadata { metadata } => metadata.size,
             Self::Url { metadata, .. } => metadata.size,
@@ -4620,7 +4844,7 @@ impl SourceDist {
         }
     }
 
-    pub(crate) fn upload_time(&self) -> Option<Timestamp> {
+    fn upload_time(&self) -> Option<Timestamp> {
         match self {
             Self::Metadata { metadata } => metadata.upload_time,
             Self::Url { metadata, .. } => metadata.upload_time,
@@ -5182,7 +5406,7 @@ impl Wheel {
         }
     }
 
-    pub(crate) fn to_registry_wheel(
+    fn to_registry_wheel(
         &self,
         source: &RegistrySource,
         root: &Path,
@@ -6573,6 +6797,24 @@ enum LockErrorKind {
     MissingRootPackage {
         /// The ID of the package.
         name: PackageName,
+    },
+    /// An error that occurs when a concrete root package does not belong to the lock.
+    #[error("Could not find root package `{id}` in lock", id = id.cyan())]
+    RootPackageMissingFromLock {
+        /// The ID of the package.
+        id: PackageId,
+    },
+    /// A dependency marker depends on a package outside the selected subgraph.
+    #[error(
+        "Cannot materialize dependency `{dependency}` of `{package}` because its conflict marker depends on a package outside the selected subgraph",
+        package = package.cyan(),
+        dependency = dependency.cyan()
+    )]
+    DependencyConflictOutsideSubgraph {
+        /// The ID of the package that declares the dependency.
+        package: PackageId,
+        /// The ID of the dependency whose inclusion is ambiguous.
+        dependency: PackageId,
     },
     /// An error that occurs when resolving metadata for a package.
     #[error("Failed to generate package metadata for `{id}`", id = id.cyan())]

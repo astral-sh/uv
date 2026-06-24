@@ -222,13 +222,13 @@ mod tests {
     use super::Installer;
 
     fn environment() -> PythonEnvironment {
+        let _preview = uv_preview::test::with_features(&[]);
         let cache = Cache::temp().expect("cache should be available");
         PythonEnvironment::find(
             &PythonRequest::Any,
             EnvironmentPreference::Any,
             PythonPreference::System,
             &cache,
-            Preview::default(),
         )
         .expect("Python environment should be available")
     }

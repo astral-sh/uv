@@ -42,15 +42,6 @@ impl Pep723Item {
         }
     }
 
-    /// Return the path of the PEP 723 item, if any.
-    pub fn path(&self) -> Option<&Path> {
-        match self {
-            Self::Script(script) => Some(&script.path),
-            Self::Stdin(..) => None,
-            Self::Remote(..) => None,
-        }
-    }
-
     /// Return the PEP 723 script, if any.
     pub fn as_script(&self) -> Option<&Pep723Script> {
         match self {
@@ -435,6 +426,8 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error("The script contains multiple PEP 723 metadata blocks")]
+    DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
     MissingTag,
     #[error(transparent)]
@@ -570,15 +563,65 @@ impl ScriptTag {
         // We need to discard the last two lines.
         toml.truncate(index - 1);
 
+        // Extract the remaining content.
+        let postlude = contents.lines().skip(index + 1).collect::<Vec<_>>();
+
+        // Ensure that the remaining content doesn't include another complete `script` block.
+        // A `# /// script` line can be embedded content inside another typed block.
+        let mut lines = postlude.iter().peekable();
+        while let Some(line) = lines.next() {
+            // Capture the metadata.
+            let Some(metadata_type) = line.strip_prefix("# /// ") else {
+                continue;
+            };
+
+            // Parse the metadata type per spec
+            if metadata_type.is_empty()
+                || !metadata_type
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            {
+                continue;
+            }
+
+            let is_script_block = metadata_type == "script";
+            let mut is_closed = false;
+            while let Some(line) = lines.next() {
+                // Per e.g. # dependencies = []
+                let Some(content) = line.strip_prefix('#') else {
+                    break;
+                };
+                if !(content.is_empty() || content.starts_with(' ')) {
+                    break;
+                }
+
+                if *line == "# ///" {
+                    let Some(next_line) = lines.peek() else {
+                        is_closed = true;
+                        break;
+                    };
+
+                    let Some(next_content) = next_line.strip_prefix('#') else {
+                        is_closed = true;
+                        break;
+                    };
+
+                    if !(next_content.is_empty() || next_content.starts_with(' ')) {
+                        is_closed = true;
+                        break;
+                    }
+                }
+            }
+
+            if is_script_block && is_closed {
+                return Err(Pep723Error::DuplicateBlock);
+            }
+        }
+
         // Join the lines into a single string.
         let prelude = prelude.to_string();
         let metadata = toml.join("\n") + "\n";
-        let postlude = contents
-            .lines()
-            .skip(index + 1)
-            .collect::<Vec<_>>()
-            .join("\n")
-            + "\n";
+        let postlude = postlude.join("\n") + "\n";
 
         Ok(Some(Self {
             prelude,
@@ -844,6 +887,39 @@ mod tests {
             .metadata;
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = ["requests"]
+            # ///
+
+            print("Hello, world!")
+
+            # /// script
+        "#};
+
+        assert!(ScriptTag::parse(contents.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn other_script_block_is_ignored() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = ["requests"]
+            # ///
+
+            
+            # /// other
+            # /// script
+            # ///
+
+            print("Hello, world!")
+        "#};
+
+        assert!(ScriptTag::parse(contents.as_bytes()).is_ok());
     }
 
     #[test]

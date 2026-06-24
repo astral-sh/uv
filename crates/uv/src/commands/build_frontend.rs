@@ -240,6 +240,8 @@ async fn build_impl(
         build_options,
         sources,
         torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Determine the source to build.
@@ -268,6 +270,7 @@ async fn build_impl(
     let workspace = Workspace::discover(
         src.directory(),
         &DiscoveryOptions::default(),
+        cache,
         workspace_cache,
     )
     .await;
@@ -361,7 +364,7 @@ async fn build_impl(
             python_request,
             install_mirrors.clone(),
             no_config,
-            workspace.as_ref(),
+            workspace.as_deref(),
             python_preference,
             python_downloads,
             cache,
@@ -563,7 +566,6 @@ async fn build_package(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -1014,6 +1016,7 @@ async fn build_sdist(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
                     sources,
@@ -1120,6 +1123,7 @@ async fn build_wheel(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
                     &sources,

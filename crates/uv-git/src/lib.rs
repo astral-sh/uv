@@ -1,7 +1,8 @@
 pub use crate::credentials::{store_credentials, store_credentials_from_url};
 pub use crate::git::{GIT, GIT_LFS, GitError};
 pub use crate::resolver::{
-    GitResolver, GitResolverError, RepositoryReference, ResolvedRepositoryReference,
+    GitHttpSettings, GitResolver, GitResolverError, RepositoryReference,
+    ResolvedRepositoryReference,
 };
 pub use crate::source::{Fetch, GitSource, Reporter};
 

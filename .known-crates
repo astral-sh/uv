@@ -18,6 +18,7 @@ uv-dispatch
 uv-distribution
 uv-distribution-filename
 uv-distribution-types
+uv-errors
 uv-extract
 uv-fastid
 uv-flags

@@ -1,7 +1,7 @@
 [package]
 name = "uv-fastid"
 description = "This is an internal component crate of uv"
-version = "0.0.48"
+version = "0.0.57"
 edition.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
@@ -14,7 +14,6 @@ doctest = false
 
 [dependencies]
 rand = { workspace = true }
-fastrand = { workspace = true }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

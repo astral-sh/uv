@@ -4,13 +4,13 @@ Queries information about the current Python interpreter and prints it as JSON.
 The script will exit with status 0 on known error that are turned into rust errors.
 """
 
-import site
-import sys
-
+import importlib.machinery
 import json
 import os
 import platform
+import site
 import struct
+import sys
 import sysconfig
 
 
@@ -535,8 +535,26 @@ def get_operating_system_and_architecture():
         }
         [_version, architecture, _platform] = version_arch.split("-")
     elif operating_system == "emscripten":
+        pyemscripten_platform_version = sysconfig.get_config_var(
+            "PYEMSCRIPTEN_PLATFORM_VERSION"
+        )
+        # fallback to PYODIDE_ABI_VERSION for backward compatibility
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
-        if not pyodide_abi_version:
+        if pyemscripten_platform_version:
+            version = pyemscripten_platform_version.split("_")
+            operating_system = {
+                "name": "pyemscripten",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        elif pyodide_abi_version:
+            version = pyodide_abi_version.split("_")
+            operating_system = {
+                "name": "pyodide",
+                "major": int(version[0]),
+                "minor": int(version[1]),
+            }
+        else:
             print(
                 json.dumps(
                     {
@@ -546,12 +564,6 @@ def get_operating_system_and_architecture():
                 )
             )
             sys.exit(0)
-        version = pyodide_abi_version.split("_")
-        operating_system = {
-            "name": "pyodide",
-            "major": int(version[0]),
-            "minor": int(version[1]),
-        }
     elif operating_system == "android":
         # Python 3.13+ supports Android. We map the Android ABIs to our standard architectures.
         #
@@ -682,6 +694,7 @@ def main() -> None:
         "sys_path": sys.path[1:],
         "site_packages": site.getsitepackages(),
         "stdlib": sysconfig.get_path("stdlib"),
+        "extension_suffixes": importlib.machinery.EXTENSION_SUFFIXES,
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.

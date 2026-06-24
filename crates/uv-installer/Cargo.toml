@@ -1,6 +1,6 @@
 [package]
 name = "uv-installer"
-version = "0.0.48"
+version = "0.0.57"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -55,5 +55,7 @@ url = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anstream = { workspace = true }
 insta = { workspace = true }

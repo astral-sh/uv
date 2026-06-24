@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use jiff::Timestamp;
 use tl::{HTMLTag, Node, Parser};
@@ -10,6 +10,36 @@ use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Stat
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
+
+/// Return `true` if this tag has the given HTML element name.
+fn is_tag(tag: &HTMLTag<'_>, name: &[u8]) -> bool {
+    tag.name().as_bytes().eq_ignore_ascii_case(name)
+}
+
+/// Return the value of the attribute with the given case-insensitive HTML attribute name.
+fn attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> Option<Cow<'a, str>> {
+    tag.attributes()
+        .get(name)
+        .flatten()
+        .map(tl::Bytes::as_utf8_str)
+        .or_else(|| {
+            tag.attributes().iter().find_map(|(attribute_name, value)| {
+                attribute_name
+                    .eq_ignore_ascii_case(name)
+                    .then_some(value)
+                    .flatten()
+            })
+        })
+}
+
+/// Return `true` if the tag has the given case-insensitive HTML attribute name.
+fn has_attribute<'a>(tag: &'a HTMLTag<'_>, name: &'a str) -> bool {
+    tag.attributes().contains(name)
+        || tag
+            .attributes()
+            .iter()
+            .any(|(attribute_name, _)| attribute_name.eq_ignore_ascii_case(name))
+}
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -36,13 +66,8 @@ impl SimpleDetailHTML {
         let project_status = dom
             .nodes()
             .iter()
-            .find(|node| {
-                node.as_tag()
-                    .is_some_and(|tag| tag.name().as_bytes() == b"head")
-            })
-            .map(|head| Self::parse_project_status(dom.parser(), head))
-            .transpose()?
-            .flatten()
+            .find(|node| node.as_tag().is_some_and(|tag| is_tag(tag, b"head")))
+            .and_then(|head| Self::parse_project_status(dom.parser(), head))
             .unwrap_or_default();
 
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
@@ -52,8 +77,8 @@ impl SimpleDetailHTML {
             dom.nodes()
                 .iter()
                 .filter_map(|node| node.as_tag())
-                .take_while(|tag| !matches!(tag.name().as_bytes(), b"a" | b"link"))
-                .find(|tag| tag.name().as_bytes() == b"base")
+                .take_while(|tag| !is_tag(tag, b"a") && !is_tag(tag, b"link"))
+                .find(|tag| is_tag(tag, b"base"))
                 .map(|base| Self::parse_base(base))
                 .transpose()?
                 .flatten()
@@ -65,7 +90,7 @@ impl SimpleDetailHTML {
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
-            .filter(|link| link.name().as_bytes() == b"a")
+            .filter(|link| is_tag(link, b"a"))
             .map(|link| Self::parse_anchor(link))
             .filter_map(|result| match result {
                 Ok(None) => None,
@@ -93,55 +118,38 @@ impl SimpleDetailHTML {
     /// Parse a [`ProjectStatus`] from the `<meta>` tags in the given `<head>`.
     ///
     /// Precondition: `head` is a `<head>` tag.
-    fn parse_project_status(parser: &Parser, head: &Node) -> Result<Option<ProjectStatus>, Error> {
-        /// Extract the value of the `content` attribute from a tag.
-        fn content<'a>(tag: &'a HTMLTag<'a>) -> Result<Option<&'a str>, Error> {
-            let Some(content) = tag
-                .attributes()
-                .get("content")
-                .and_then(|bytes| bytes)
-                .map(|bytes| std::str::from_utf8(bytes.as_bytes()))
-                .transpose()?
-            else {
-                return Ok(None);
-            };
-            Ok(Some(content))
-        }
-
-        let Some(children) = head.children() else {
-            return Ok(None);
-        };
+    fn parse_project_status(parser: &Parser, head: &Node) -> Option<ProjectStatus> {
+        let children = head.children()?;
 
         let mut status: Option<Status> = None;
         let mut reason: Option<SmallString> = None;
         for node in children.all(parser) {
             let tag = match node.as_tag() {
-                Some(tag) if tag.name().as_bytes() == b"meta" => tag,
+                Some(tag) if is_tag(tag, b"meta") => tag,
                 _ => continue,
             };
 
-            let name = match tag.attributes().get("name").and_then(|bytes| bytes) {
-                Some(name) => std::str::from_utf8(name.as_bytes())?,
-                None => continue,
+            let Some(name) = attribute(tag, "name") else {
+                continue;
             };
 
             // Per PEP 792: both `pypi:project-status` and `pypi:project-status-reason`
             // are optional, but if present should be well-formed.
-            match name {
+            match name.as_ref() {
                 "pypi:project-status" => {
                     status = {
-                        let Some(status) = content(tag)?.and_then(Status::new) else {
-                            return Ok(None);
-                        };
+                        let status = attribute(tag, "content").as_deref().and_then(Status::new)?;
                         Some(status)
                     };
                 }
                 "pypi:project-status-reason" => {
                     reason = {
-                        let Some(content) = content(tag)?.map(SmallString::from) else {
+                        let Some(content) =
+                            attribute(tag, "content").as_deref().map(SmallString::from)
+                        else {
                             // TODO: Make this a hard error instead?
                             warn!("Invalid project status reason (missing)");
-                            return Ok(None);
+                            return None;
                         };
                         Some(content)
                     }
@@ -152,20 +160,19 @@ impl SimpleDetailHTML {
 
         if let Some(status) = status {
             let status = ProjectStatus { status, reason };
-            Ok(Some(status))
+            Some(status)
         } else {
-            Ok(None)
+            None
         }
     }
 
     /// Parse the `href` from a `<base>` tag.
     fn parse_base(base: &HTMLTag) -> Result<Option<DisplaySafeUrl>, Error> {
-        let Some(Some(href)) = base.attributes().get("href") else {
+        let Some(href) = attribute(base, "href") else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
         let url =
-            DisplaySafeUrl::parse(href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
+            DisplaySafeUrl::parse(&href).map_err(|err| Error::UrlParse(href.to_string(), err))?;
         Ok(Some(url))
     }
 
@@ -174,18 +181,12 @@ impl SimpleDetailHTML {
     /// Returns `None` if the `<a>` doesn't have an `href` attribute.
     fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
-        let Some(href) = link
-            .attributes()
-            .get("href")
-            .flatten()
-            .filter(|bytes| !bytes.as_bytes().is_empty())
-        else {
+        let Some(href) = attribute(link, "href").filter(|href| !href.is_empty()) else {
             return Ok(None);
         };
-        let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
-        let decoded = html_escape::decode_html_entities(href);
+        let decoded = html_escape::decode_html_entities(&href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
             let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
@@ -237,8 +238,7 @@ impl SimpleDetailHTML {
 
         // Extract the `requires-python` value, which should be set on the
         // `data-requires-python` attribute.
-        let requires_python = if let Some(requires_python) =
-            link.attributes().get("data-requires-python").flatten()
+        let requires_python = if let Some(requires_python) = attribute(link, "data-requires-python")
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
@@ -250,11 +250,8 @@ impl SimpleDetailHTML {
         // Extract the `core-metadata` field, which is either set on:
         // - `data-core-metadata`, per PEP 714.
         // - `data-dist-info-metadata`, per PEP 658.
-        let core_metadata = if let Some(dist_info_metadata) = link
-            .attributes()
-            .get("data-core-metadata")
-            .flatten()
-            .or_else(|| link.attributes().get("data-dist-info-metadata").flatten())
+        let core_metadata = if let Some(dist_info_metadata) = attribute(link, "data-core-metadata")
+            .or_else(|| attribute(link, "data-dist-info-metadata"))
         {
             let dist_info_metadata = std::str::from_utf8(dist_info_metadata.as_bytes())?;
             let dist_info_metadata = html_escape::decode_html_entities(dist_info_metadata);
@@ -275,10 +272,14 @@ impl SimpleDetailHTML {
 
         // Extract the `yanked` field, which should be set on the `data-yanked`
         // attribute.
-        let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
-            let yanked = std::str::from_utf8(yanked.as_bytes())?;
-            let yanked = html_escape::decode_html_entities(yanked);
-            Some(Box::new(Yanked::Reason(yanked.into())))
+        let yanked = if has_attribute(link, "data-yanked") {
+            if let Some(yanked) = attribute(link, "data-yanked") {
+                let yanked = std::str::from_utf8(yanked.as_bytes())?;
+                let yanked = html_escape::decode_html_entities(yanked);
+                Some(Box::new(Yanked::Reason(yanked.into())))
+            } else {
+                Some(Box::new(Yanked::Bool(true)))
+            }
         } else {
             None
         };
@@ -286,24 +287,16 @@ impl SimpleDetailHTML {
         // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let size = link
-            .attributes()
-            .get("data-size")
-            .flatten()
-            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
-            .map(|size| html_escape::decode_html_entities(size))
-            .and_then(|size| size.parse().ok());
+        let size = attribute(link, "data-size")
+            .and_then(|size| html_escape::decode_html_entities(&size).parse().ok());
 
         // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
         // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
         // field isn't standardized, we discard errors.
-        let upload_time = link
-            .attributes()
-            .get("data-upload-time")
-            .flatten()
-            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
-            .map(|upload_time| html_escape::decode_html_entities(upload_time))
-            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+        let upload_time = attribute(link, "data-upload-time").and_then(|upload_time| {
+            let upload_time = html_escape::decode_html_entities(&upload_time);
+            Timestamp::from_str(&upload_time).ok()
+        });
 
         Ok(Some(PypiFile {
             core_metadata,
@@ -336,7 +329,7 @@ impl SimpleIndexHtml {
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
-            .filter(|link| link.name().as_bytes() == b"a")
+            .filter(|link| is_tag(link, b"a"))
             .filter_map(|link| Self::parse_anchor_project_name(link, parser))
             .collect::<Vec<_>>();
 
@@ -351,10 +344,7 @@ impl SimpleIndexHtml {
     /// Returns `None` if the `<a>` doesn't have an `href` attribute or text content.
     fn parse_anchor_project_name(link: &HTMLTag, parser: &tl::Parser) -> Option<PackageName> {
         // Extract the href.
-        link.attributes()
-            .get("href")
-            .flatten()
-            .filter(|bytes| !bytes.as_bytes().is_empty())?;
+        attribute(link, "href").filter(|href| !href.is_empty())?;
 
         // Extract the text content, which should be the project name.
         let inner_text = link.inner_text(parser);
@@ -1655,6 +1645,176 @@ mod tests {
             ),
         }
         "#);
+    }
+
+    /// Test that Simple API HTML element names and link `href` are ASCII case-insensitive.
+    #[test]
+    fn parse_simple_html_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<HEAD>
+    <META NAME="pypi:project-status" CONTENT="archived">
+    <META NAME="pypi:project-status-reason" CONTENT="no longer maintained">
+    <BASE HREF="https://index.python.org/">
+</HEAD>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-REQUIRES-PYTHON="&gt;=3.12" DATA-CORE-METADATA="true" DATA-YANKED="broken release">fakeproject-1.2.3.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.4.tar.gz" DATA-DIST-INFO-METADATA="false">fakeproject-1.2.4.tar.gz</A>
+    <A HREF="/files/fakeproject-1.2.5.tar.gz" DATA-YANKED>fakeproject-1.2.5.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (
+                &result.project_status,
+                result.base.as_str(),
+                &result.files,
+            ), @r#"
+        (
+            ProjectStatus {
+                status: Archived,
+                reason: Some(
+                    "no longer maintained",
+                ),
+            },
+            "https://index.python.org/",
+            [
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.3.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.12",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.3.tar.gz",
+                    yanked: Some(
+                        Reason(
+                            "broken release",
+                        ),
+                    ),
+                },
+                PypiFile {
+                    core_metadata: Some(
+                        Bool(
+                            false,
+                        ),
+                    ),
+                    filename: "fakeproject-1.2.4.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.4.tar.gz",
+                    yanked: None,
+                },
+                PypiFile {
+                    core_metadata: None,
+                    filename: "fakeproject-1.2.5.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/files/fakeproject-1.2.5.tar.gz",
+                    yanked: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                },
+            ],
+        )
+        "#);
+
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A HREF="/simple/fakeproject/">fakeproject</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleIndexHtml::parse(text).unwrap();
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleIndexHtml {
+            projects: [
+                PackageName(
+                    "fakeproject",
+                ),
+            ],
+        }
+        "#);
+    }
+
+    /// Test that optional Simple API HTML file attributes are ASCII case-insensitive.
+    #[test]
+    fn parse_optional_attributes_case_insensitively() {
+        let text = r#"
+<!DOCTYPE html>
+<HTML>
+<BODY>
+    <A HREF="/files/fakeproject-1.2.3.tar.gz" DATA-SIZE="15399" DATA-UPLOAD-TIME="2022-11-14T17:14:53.935145Z">fakeproject-1.2.3.tar.gz</A>
+</BODY>
+</HTML>
+        "#;
+
+        let result = SimpleDetailHTML::parse(
+            text,
+            &DisplaySafeUrl::parse("https://pypi.org/simple/fakeproject/").unwrap(),
+        )
+        .unwrap();
+        insta::assert_debug_snapshot!(
+            (result.files[0].size, result.files[0].upload_time.as_ref()), @r#"
+        (
+            Some(
+                15399,
+            ),
+            Some(
+                2022-11-14T17:14:53.935145Z,
+            ),
+        )
+        "#
+        );
     }
 
     // Test parsing project status metadata with emojis in the reason.

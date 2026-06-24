@@ -93,6 +93,7 @@ pub(crate) async fn remove(
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
                 package.clone(),
             )
@@ -101,6 +102,7 @@ pub(crate) async fn remove(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                cache,
                 &WorkspaceCache::default(),
             )
             .await?
@@ -208,7 +210,7 @@ pub(crate) async fn remove(
     }
 
     // Update the `pypackage.toml` in-memory.
-    let target = target.update(&content)?;
+    let target = target.update(&content, &WorkspaceCache::default())?;
 
     // Determine enabled groups and extras
     let default_groups = match &target {
@@ -243,7 +245,6 @@ pub(crate) async fn remove(
                     active,
                     cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -265,7 +266,6 @@ pub(crate) async fn remove(
                     cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -286,7 +286,6 @@ pub(crate) async fn remove(
                 active,
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter();
@@ -444,7 +443,7 @@ impl RemoveTarget {
     }
 
     /// Update the target in-memory to incorporate the new content.
-    fn update(self, content: &str) -> Result<Self, ProjectError> {
+    fn update(self, content: &str, workspace_cache: &WorkspaceCache) -> Result<Self, ProjectError> {
         match self {
             Self::Script(mut script) => {
                 script.metadata = Pep723Metadata::from_str(content)
@@ -457,6 +456,7 @@ impl RemoveTarget {
                     .update_member(
                         PyProjectToml::from_string(content.to_string(), &pyproject_path)
                             .map_err(ProjectError::PyprojectTomlParse)?,
+                        workspace_cache,
                     )?
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project))
@@ -469,10 +469,10 @@ impl RemoveTarget {
 #[derive(Debug, thiserror::Error)]
 #[error("The dependency `{package}` could not be found in {}", dependency_type.toml_table_name())]
 pub(crate) struct DependencyNotFoundError {
-    pub(crate) package: PackageName,
-    pub(crate) dependency_type: DependencyType,
+    package: PackageName,
+    dependency_type: DependencyType,
     /// Other dependency types where this package was found.
-    pub(crate) found_in: Vec<DependencyType>,
+    found_in: Vec<DependencyType>,
 }
 
 impl uv_errors::Hint for DependencyNotFoundError {

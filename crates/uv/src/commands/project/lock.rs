@@ -116,7 +116,6 @@ pub(crate) async fn lock(
                 &client_builder,
                 cache,
                 &reporter,
-                preview,
             )
             .await?;
             Some(Pep723Script::init(&path, requires_python.specifiers()).await?)
@@ -130,9 +129,13 @@ pub(crate) async fn lock(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-                .await?;
+        workspace = VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(workspace.workspace())
     };
 
@@ -165,7 +168,6 @@ pub(crate) async fn lock(
                     Some(false),
                     cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter()
@@ -182,7 +184,6 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter(),
@@ -503,6 +504,8 @@ async fn do_lock(
         build_options,
         sources,
         torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Collect the requirements, etc.
@@ -584,11 +587,7 @@ async fn do_lock(
 
         // Ensure that the environments are disjoint.
         if let Some(environments) = &environments {
-            for (lhs, rhs) in environments
-                .as_markers()
-                .iter()
-                .zip(environments.as_markers().iter().skip(1))
-            {
+            for [lhs, rhs] in environments.as_markers().array_windows() {
                 if !lhs.is_disjoint(*rhs) {
                     let mut hint = lhs.negate();
                     hint.and(*rhs);
@@ -618,11 +617,7 @@ async fn do_lock(
     let required_environments = if let Some(required_environments) = target.required_environments()
     {
         // Ensure that the environments are disjoint.
-        for (lhs, rhs) in required_environments
-            .as_markers()
-            .iter()
-            .zip(required_environments.as_markers().iter().skip(1))
-        {
+        for [lhs, rhs] in required_environments.as_markers().array_windows() {
             if !lhs.is_disjoint(*rhs) {
                 let mut hint = lhs.negate();
                 hint.and(*rhs);
@@ -702,7 +697,7 @@ async fn do_lock(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }
@@ -1456,7 +1451,7 @@ impl ValidatedLock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct LockEventVersion<'lock> {
+pub(super) struct LockEventVersion<'lock> {
     /// The version of the package, or `None` if the package has a dynamic version.
     version: Option<&'lock Version>,
     /// The short Git SHA of the package, if it was installed from a Git repository.
@@ -1485,7 +1480,7 @@ impl std::fmt::Display for LockEventVersion<'_> {
 
 /// A modification to a lockfile.
 #[derive(Debug, Clone)]
-enum LockEvent<'lock> {
+pub(super) enum LockEvent<'lock> {
     Update(
         DryRun,
         PackageName,
@@ -1498,7 +1493,7 @@ enum LockEvent<'lock> {
 
 impl<'lock> LockEvent<'lock> {
     /// Detect the change events between an (optional) existing and updated lockfile.
-    fn detect_changes(
+    pub(super) fn detect_changes(
         existing_lock: Option<&'lock Lock>,
         new_lock: &'lock Lock,
         dry_run: DryRun,
@@ -1558,6 +1553,14 @@ impl<'lock> LockEvent<'lock> {
                 }
             }
         })
+    }
+
+    pub(super) fn package(&self) -> &PackageName {
+        match self {
+            Self::Update(_, package, ..)
+            | Self::Add(_, package, ..)
+            | Self::Remove(_, package, ..) => package,
+        }
     }
 }
 

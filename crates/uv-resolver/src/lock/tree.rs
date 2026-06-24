@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, VecDeque};
 use std::fmt::Write;
 
@@ -17,7 +18,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ResolverMarkerEnvironment;
 
 use crate::lock::{Package, PackageId};
-use crate::{Lock, PackageMap};
+use crate::{ConflictMarker, Lock, PackageMap, UniversalMarker};
 
 #[derive(Debug)]
 pub struct TreeDisplay<'env> {
@@ -37,6 +38,8 @@ pub struct TreeDisplay<'env> {
     lock: &'env Lock,
     /// Whether to show sizes in the rendered output.
     show_sizes: bool,
+    /// The marker constraints imposed by declared conflicting extras and groups.
+    conflict_marker: UniversalMarker,
 }
 
 impl<'env> TreeDisplay<'env> {
@@ -75,6 +78,13 @@ impl<'env> TreeDisplay<'env> {
                 .collect()
         };
 
+        // Conflict extras and groups are encoded as marker expressions. Include the declared
+        // mutual-exclusion constraints when checking whether a universal path is satisfiable.
+        let conflict_marker = UniversalMarker::new(
+            MarkerTree::TRUE,
+            ConflictMarker::from_conflicts(lock.conflicts()),
+        );
+
         // Create a graph.
         let size_guess = lock.packages.len();
         let mut graph =
@@ -101,7 +111,7 @@ impl<'env> TreeDisplay<'env> {
                 .or_insert_with(|| graph.add_node(Node::Package(id)));
 
             // Add an edge from the root.
-            graph.add_edge(root, index, Edge::Prod(None));
+            graph.add_edge(root, index, Edge::Prod(None, UniversalMarker::TRUE));
 
             if groups.prod() {
                 // Push its dependencies on the queue.
@@ -146,7 +156,15 @@ impl<'env> TreeDisplay<'env> {
                     .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
 
                 // Add an edge from the workspace package.
-                graph.add_edge(index, dep_index, Edge::Dev(group, Some(&dep.extra)));
+                graph.add_edge(
+                    index,
+                    dep_index,
+                    Edge::Dev(
+                        group,
+                        Some(RequestedExtras::Dependency(&dep.extra)),
+                        dep.complexified_marker,
+                    ),
+                );
 
                 // Push its dependencies on the queue.
                 if seen.insert((&dep.package_id, None)) {
@@ -207,17 +225,32 @@ impl<'env> TreeDisplay<'env> {
                         .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                     // Add an edge from the root.
-                    graph.add_edge(root, *index, Edge::Prod(None));
+                    graph.add_edge(
+                        root,
+                        *index,
+                        Edge::Prod(
+                            Some(RequestedExtras::Requirement(requirement.extras.as_ref())),
+                            UniversalMarker::from_combined(marker),
+                        ),
+                    );
 
                     // Push its dependencies on the queue.
                     if seen.insert((&package.id, None)) {
                         queue.push_back((&package.id, None));
+                    }
+                    for extra in &*requirement.extras {
+                        if seen.insert((&package.id, Some(extra))) {
+                            queue.push_back((&package.id, Some(extra)));
+                        }
                     }
                 }
             }
 
             // Identify any dependency groups attached to the workspace itself.
             for (group, requirements) in lock.dependency_groups() {
+                if !groups.contains(group) {
+                    continue;
+                }
                 for requirement in requirements {
                     for package in by_name.get(&requirement.name).into_iter().flatten() {
                         // Determine whether this entry is "relevant" for the requirement, by intersecting
@@ -244,11 +277,24 @@ impl<'env> TreeDisplay<'env> {
                             .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
 
                         // Add an edge from the root.
-                        graph.add_edge(root, *index, Edge::Dev(group, None));
+                        graph.add_edge(
+                            root,
+                            *index,
+                            Edge::Dev(
+                                group,
+                                Some(RequestedExtras::Requirement(requirement.extras.as_ref())),
+                                UniversalMarker::from_combined(marker),
+                            ),
+                        );
 
                         // Push its dependencies on the queue.
                         if seen.insert((&package.id, None)) {
                             queue.push_back((&package.id, None));
+                        }
+                        for extra in &*requirement.extras {
+                            if seen.insert((&package.id, Some(extra))) {
+                                queue.push_back((&package.id, Some(extra)));
+                            }
                         }
                     }
                 }
@@ -293,9 +339,16 @@ impl<'env> TreeDisplay<'env> {
                     index,
                     dep_index,
                     if let Some(extra) = extra {
-                        Edge::Optional(extra, Some(&dep.extra))
+                        Edge::Optional(
+                            extra,
+                            Some(RequestedExtras::Dependency(&dep.extra)),
+                            dep.complexified_marker,
+                        )
                     } else {
-                        Edge::Prod(Some(&dep.extra))
+                        Edge::Prod(
+                            Some(RequestedExtras::Dependency(&dep.extra)),
+                            dep.complexified_marker,
+                        )
                     },
                 );
 
@@ -415,6 +468,7 @@ impl<'env> TreeDisplay<'env> {
             invert,
             lock,
             show_sizes,
+            conflict_marker,
         }
     }
 
@@ -440,6 +494,7 @@ impl<'env> TreeDisplay<'env> {
         let visited_node = VisitedNode {
             package_id,
             expanded_extras: expanded_extras.clone(),
+            marker: self.invert.then_some(cursor.marker()),
         };
 
         let line = {
@@ -461,11 +516,11 @@ impl<'env> TreeDisplay<'env> {
 
             if let Some(edge) = edge {
                 match edge {
-                    Edge::Prod(_) => {}
-                    Edge::Optional(extra, _) => {
+                    Edge::Prod(..) => {}
+                    Edge::Optional(extra, ..) => {
                         let _ = write!(line, " (extra: {extra})");
                     }
-                    Edge::Dev(group, _) => {
+                    Edge::Dev(group, ..) => {
                         let _ = write!(line, " (group: {group})");
                     }
                 }
@@ -507,25 +562,51 @@ impl<'env> TreeDisplay<'env> {
             line
         };
 
-        let mut dependencies = self
-            .graph
-            .edges_directed(cursor.node(), Direction::Outgoing)
-            .filter_map(|edge| match self.graph[edge.target()] {
-                Node::Root => None,
-                Node::Package(_) => {
-                    // Only include extra-conditional dependencies if the activating extra is
-                    // enabled in the current context.
-                    if !self.invert
-                        && let Edge::Optional(required_extra, _) = &self.graph[edge.id()]
-                    {
-                        if !expanded_extras.contains(required_extra) {
-                            return None;
+        let mut dependencies = if self.invert && edge.is_some_and(Edge::is_dev) {
+            // A member's dependency group is activated for the root member. It is not part of the
+            // member when that member is installed as another package's dependency.
+            Vec::new()
+        } else {
+            self.graph
+                .edges_directed(cursor.node(), Direction::Outgoing)
+                .filter_map(|edge| match self.graph[edge.target()] {
+                    Node::Root => None,
+                    Node::Package(_) => {
+                        let edge_kind = &self.graph[edge.id()];
+
+                        if self.invert {
+                            // If the path to the target requires an extra on this package, only
+                            // follow consumers that activate that extra.
+                            if !expanded_extras.is_empty()
+                                && edge_kind.extras().is_none_or(|extras| {
+                                    !expanded_extras.iter().all(|extra| extras.contains(extra))
+                                })
+                            {
+                                return None;
+                            }
+
+                            // A package node can appear in several universal marker branches. Do
+                            // not join incoming and outgoing edges that cannot coexist.
+                            let mut marker = cursor.marker();
+                            marker.and(edge_kind.marker());
+                            if marker.is_false() {
+                                return None;
+                            }
+                            Some(Cursor::new(edge.target(), edge.id(), marker))
+                        } else {
+                            // Only include extra-conditional dependencies if the activating extra
+                            // is enabled in the current context.
+                            if let Edge::Optional(required_extra, ..) = edge_kind
+                                && !expanded_extras.contains(required_extra)
+                            {
+                                return None;
+                            }
+                            Some(Cursor::new(edge.target(), edge.id(), UniversalMarker::TRUE))
                         }
                     }
-                    Some(Cursor::new(edge.target(), edge.id()))
-                }
-            })
-            .collect::<Vec<_>>();
+                })
+                .collect::<Vec<_>>()
+        };
         dependencies.sort_by_key(|cursor| {
             let node = &self.graph[cursor.node()];
             let edge = cursor
@@ -608,7 +689,7 @@ impl<'env> TreeDisplay<'env> {
                         let node = edge.target();
                         path.clear();
                         lines.extend(self.visit(
-                            Cursor::new(node, edge.id()),
+                            Cursor::new(node, edge.id(), self.conflict_marker),
                             &mut visited,
                             &mut path,
                         ));
@@ -616,7 +697,11 @@ impl<'env> TreeDisplay<'env> {
                 }
                 Node::Package(_) => {
                     path.clear();
-                    lines.extend(self.visit(Cursor::root(*node), &mut visited, &mut path));
+                    lines.extend(self.visit(
+                        Cursor::root(*node, self.conflict_marker),
+                        &mut visited,
+                        &mut path,
+                    ));
                 }
             }
         }
@@ -631,10 +716,9 @@ impl<'env> TreeDisplay<'env> {
         edge: Option<&Edge<'env>>,
     ) -> BTreeSet<&'env ExtraName> {
         if self.invert {
-            // In inverted mode, optional edges are reverse "required by extra" relationships.
-            // They do not select this package's outgoing dependencies, so de-dupe stays
-            // package-only.
-            return BTreeSet::default();
+            // In inverted mode, an optional edge records the extra that must have been activated
+            // on this package for the path to exist.
+            return edge.and_then(Edge::required_extra).into_iter().collect();
         }
 
         let Some(requested_extras) = edge.and_then(Edge::extras) else {
@@ -653,6 +737,7 @@ impl<'env> TreeDisplay<'env> {
 struct VisitedNode<'env> {
     package_id: &'env PackageId,
     expanded_extras: BTreeSet<&'env ExtraName>,
+    marker: Option<UniversalMarker>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
@@ -665,25 +750,101 @@ enum Node<'env> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 enum Edge<'env> {
-    Prod(Option<&'env BTreeSet<ExtraName>>),
-    Optional(&'env ExtraName, Option<&'env BTreeSet<ExtraName>>),
-    Dev(&'env GroupName, Option<&'env BTreeSet<ExtraName>>),
+    Prod(Option<RequestedExtras<'env>>, UniversalMarker),
+    Optional(
+        &'env ExtraName,
+        Option<RequestedExtras<'env>>,
+        UniversalMarker,
+    ),
+    Dev(
+        &'env GroupName,
+        Option<RequestedExtras<'env>>,
+        UniversalMarker,
+    ),
 }
 
 impl<'env> Edge<'env> {
-    fn extras(&self) -> Option<&'env BTreeSet<ExtraName>> {
+    fn extras(&self) -> Option<RequestedExtras<'env>> {
         match self {
-            Self::Prod(extras) => *extras,
-            Self::Optional(_, extras) => *extras,
-            Self::Dev(_, extras) => *extras,
+            Self::Prod(extras, _) => *extras,
+            Self::Optional(_, extras, _) => *extras,
+            Self::Dev(_, extras, _) => *extras,
         }
+    }
+
+    fn required_extra(&self) -> Option<&'env ExtraName> {
+        match self {
+            Self::Optional(extra, ..) => Some(extra),
+            Self::Prod(..) | Self::Dev(..) => None,
+        }
+    }
+
+    fn marker(&self) -> UniversalMarker {
+        match self {
+            Self::Prod(_, marker) | Self::Optional(_, _, marker) | Self::Dev(_, _, marker) => {
+                *marker
+            }
+        }
+    }
+
+    fn is_dev(&self) -> bool {
+        matches!(self, Self::Dev(..))
     }
 
     fn kind(&self) -> EdgeKind<'env> {
         match self {
-            Self::Prod(_) => EdgeKind::Prod,
-            Self::Optional(extra, _) => EdgeKind::Optional(extra),
-            Self::Dev(group, _) => EdgeKind::Dev(group),
+            Self::Prod(..) => EdgeKind::Prod,
+            Self::Optional(extra, ..) => EdgeKind::Optional(extra),
+            Self::Dev(group, ..) => EdgeKind::Dev(group),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum RequestedExtras<'env> {
+    Dependency(&'env BTreeSet<ExtraName>),
+    Requirement(&'env [ExtraName]),
+}
+
+impl PartialEq for RequestedExtras<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl Eq for RequestedExtras<'_> {}
+
+impl PartialOrd for RequestedExtras<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RequestedExtras<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.iter().cmp(other.iter())
+    }
+}
+
+impl<'env> RequestedExtras<'env> {
+    fn contains(self, extra: &ExtraName) -> bool {
+        match self {
+            Self::Dependency(extras) => extras.contains(extra),
+            Self::Requirement(extras) => extras.contains(extra),
+        }
+    }
+
+    fn is_empty(self) -> bool {
+        match self {
+            Self::Dependency(extras) => extras.is_empty(),
+            Self::Requirement(extras) => extras.is_empty(),
+        }
+    }
+
+    fn iter(self) -> impl Iterator<Item = &'env ExtraName> {
+        match self {
+            Self::Dependency(extras) => Either::Left(extras.iter()),
+            Self::Requirement(extras) => Either::Right(extras.iter()),
         }
     }
 }
@@ -697,17 +858,17 @@ enum EdgeKind<'env> {
 
 /// A node in the dependency graph along with the edge that led to it, or `None` for root nodes.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
-struct Cursor(NodeIndex, Option<EdgeIndex>);
+struct Cursor(NodeIndex, Option<EdgeIndex>, UniversalMarker);
 
 impl Cursor {
     /// Create a [`Cursor`] representing a node in the dependency tree.
-    fn new(node: NodeIndex, edge: EdgeIndex) -> Self {
-        Self(node, Some(edge))
+    fn new(node: NodeIndex, edge: EdgeIndex, marker: UniversalMarker) -> Self {
+        Self(node, Some(edge), marker)
     }
 
     /// Create a [`Cursor`] representing a root node in the dependency tree.
-    fn root(node: NodeIndex) -> Self {
-        Self(node, None)
+    fn root(node: NodeIndex, marker: UniversalMarker) -> Self {
+        Self(node, None, marker)
     }
 
     /// Return the [`NodeIndex`] of the node.
@@ -718,6 +879,11 @@ impl Cursor {
     /// Return the [`EdgeIndex`] of the edge that led to the node, if any.
     fn edge(&self) -> Option<EdgeIndex> {
         self.1
+    }
+
+    /// Return the marker context accumulated along the path to this node.
+    fn marker(&self) -> UniversalMarker {
+        self.2
     }
 }
 

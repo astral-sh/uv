@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
@@ -9,6 +10,7 @@ use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceError,
+    WorkspaceErrorKind,
 };
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
@@ -57,7 +59,8 @@ impl SourcedDependencyGroups {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         no_sources: NoSources,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // If the `pyproject.toml` doesn't exist, fail early.
@@ -80,15 +83,15 @@ impl SourcedDependencyGroups {
             } else {
                 MemberDiscovery::None
             },
-            ..DiscoveryOptions::default()
         };
 
         // The subsequent API takes an absolute path to the dir the pyproject is in
         let empty = PathBuf::new();
-        let absolute_pyproject_path =
-            std::path::absolute(pyproject_path).map_err(WorkspaceError::Normalize)?;
+        let absolute_pyproject_path = std::path::absolute(pyproject_path)
+            .map_err(|err| WorkspaceError::from(WorkspaceErrorKind::Normalize(err)))?;
         let project_dir = absolute_pyproject_path.parent().unwrap_or(&empty);
-        let project = VirtualProject::discover(project_dir, &discovery, cache).await?;
+        let project =
+            VirtualProject::discover(project_dir, &discovery, cache, workspace_cache).await?;
 
         // Collect the dependency groups.
         let dependency_groups =

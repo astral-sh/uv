@@ -1,6 +1,8 @@
 pub use env_vars::*;
+pub use known_stdlib::*;
 
 mod env_vars;
+mod known_stdlib;
 
 use std::borrow::Cow;
 

@@ -228,30 +228,30 @@ pub enum ArchRequest {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PlatformRequest {
-    pub(crate) os: Option<Os>,
-    pub(crate) arch: Option<ArchRequest>,
-    pub(crate) libc: Option<Libc>,
+    os: Option<Os>,
+    arch: Option<ArchRequest>,
+    libc: Option<Libc>,
 }
 
 impl PlatformRequest {
     /// Check if this platform request is satisfied by a platform.
-    pub fn matches(&self, platform: &Platform) -> bool {
-        if let Some(os) = self.os {
-            if !platform.os.supports(os) {
-                return false;
-            }
+    pub(crate) fn matches(&self, platform: &Platform) -> bool {
+        if let Some(os) = self.os
+            && !platform.os.supports(os)
+        {
+            return false;
         }
 
-        if let Some(arch) = self.arch {
-            if !arch.satisfied_by(platform) {
-                return false;
-            }
+        if let Some(arch) = self.arch
+            && !arch.satisfied_by(platform)
+        {
+            return false;
         }
 
-        if let Some(libc) = self.libc {
-            if platform.libc != libc {
-                return false;
-            }
+        if let Some(libc) = self.libc
+            && platform.libc != libc
+        {
+            return false;
         }
 
         true
@@ -302,7 +302,7 @@ impl ArchRequest {
 }
 
 impl PythonDownloadRequest {
-    pub fn new(
+    fn new(
         version: Option<VersionRequest>,
         implementation: Option<ImplementationName>,
         arch: Option<ArchRequest>,
@@ -322,7 +322,7 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
-    pub(crate) fn with_implementation(mut self, implementation: ImplementationName) -> Self {
+    fn with_implementation(mut self, implementation: ImplementationName) -> Self {
         match implementation {
             // Pyodide is actually CPython with an Emscripten OS, we paper over that for usability
             ImplementationName::Pyodide => {
@@ -443,20 +443,16 @@ impl PythonDownloadRequest {
         Ok(self)
     }
 
-    pub fn implementation(&self) -> Option<&ImplementationName> {
+    pub(crate) fn implementation(&self) -> Option<&ImplementationName> {
         self.implementation.as_ref()
     }
 
-    pub fn version(&self) -> Option<&VersionRequest> {
+    pub(crate) fn version(&self) -> Option<&VersionRequest> {
         self.version.as_ref()
     }
 
     pub fn arch(&self) -> Option<&ArchRequest> {
         self.arch.as_ref()
-    }
-
-    pub fn os(&self) -> Option<&Os> {
-        self.os.as_ref()
     }
 
     pub fn libc(&self) -> Option<&Libc> {
@@ -528,7 +524,7 @@ impl PythonDownloadRequest {
     ///
     /// The resulting string only includes explicitly-set pieces of the request and returns
     /// [`None`] when no segments are explicitly set.
-    pub fn simplified_display(self) -> Option<String> {
+    pub(crate) fn simplified_display(self) -> Option<String> {
         let parts = [
             self.implementation
                 .map(|implementation| implementation.to_string()),
@@ -559,10 +555,10 @@ impl PythonDownloadRequest {
             return false;
         }
 
-        if let Some(implementation) = &self.implementation {
-            if key.implementation != LenientImplementationName::from(*implementation) {
-                return false;
-            }
+        if let Some(implementation) = &self.implementation
+            && key.implementation != LenientImplementationName::from(*implementation)
+        {
+            return false;
         }
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && key.prerelease.is_some() {
@@ -577,10 +573,10 @@ impl PythonDownloadRequest {
             ) {
                 return false;
             }
-            if let Some(variant) = version.variant() {
-                if variant != key.variant {
-                    return false;
-                }
+            if let Some(variant) = version.variant()
+                && variant != key.variant
+            {
+                return false;
             }
         }
         true
@@ -616,7 +612,7 @@ impl PythonDownloadRequest {
     }
 
     /// Whether this download request opts-in to pre-release Python versions.
-    pub fn allows_prereleases(&self) -> bool {
+    pub(crate) fn allows_prereleases(&self) -> bool {
         self.prereleases.unwrap_or_else(|| {
             self.version
                 .as_ref()
@@ -638,14 +634,14 @@ impl PythonDownloadRequest {
 
     pub(crate) fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
         let executable = interpreter.sys_executable().display();
-        if let Some(version) = self.version() {
-            if !version.matches_interpreter(interpreter) {
-                let interpreter_version = interpreter.python_version();
-                debug!(
-                    "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
-                );
-                return false;
-            }
+        if let Some(version) = self.version()
+            && !version.matches_interpreter(interpreter)
+        {
+            let interpreter_version = interpreter.python_version();
+            debug!(
+                "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+            );
+            return false;
         }
         let platform = self.platform();
         let interpreter_platform = Platform::from(interpreter.platform());
@@ -655,20 +651,20 @@ impl PythonDownloadRequest {
             );
             return false;
         }
-        if let Some(implementation) = self.implementation() {
-            if !implementation.matches_interpreter(interpreter) {
-                debug!(
-                    "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
-                    interpreter.implementation_name(),
-                );
-                return false;
-            }
+        if let Some(implementation) = self.implementation()
+            && !implementation.matches_interpreter(interpreter)
+        {
+            debug!(
+                "Skipping interpreter at `{executable}`: implementation `{}` does not match request `{implementation}`",
+                interpreter.implementation_name(),
+            );
+            return false;
         }
         true
     }
 
     /// Extract the platform components of this request.
-    pub fn platform(&self) -> PlatformRequest {
+    pub(crate) fn platform(&self) -> PlatformRequest {
         PlatformRequest {
             os: self.os,
             arch: self.arch,
@@ -767,7 +763,7 @@ impl FromStr for PythonDownloadRequest {
         }
 
         impl Position {
-            pub(crate) fn next(&self) -> Self {
+            fn next(&self) -> Self {
                 match self {
                     Self::Start => Self::Implementation,
                     Self::Implementation => Self::Version,
@@ -1001,13 +997,12 @@ impl ManagedPythonDownloadList {
             return Ok(download);
         }
 
-        if !request.allows_prereleases() {
-            if let Some(download) = self
+        if !request.allows_prereleases()
+            && let Some(download) = self
                 .iter_matching(&request.clone().with_prereleases(true))
                 .next()
-            {
-                return Ok(download);
-            }
+        {
+            return Ok(download);
         }
 
         Err(Error::NoDownloadFound(request.clone()))
@@ -1110,7 +1105,7 @@ async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Resu
 }
 
 impl ManagedPythonDownload {
-    pub fn url(&self) -> &Cow<'static, str> {
+    pub(crate) fn url(&self) -> &Cow<'static, str> {
         &self.url
     }
 
@@ -1118,11 +1113,11 @@ impl ManagedPythonDownload {
         &self.key
     }
 
-    pub fn os(&self) -> &Os {
+    fn os(&self) -> &Os {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&Cow<'static, str>> {
+    pub(crate) fn sha256(&self) -> Option<&Cow<'static, str>> {
         self.sha256.as_ref()
     }
 
@@ -1135,7 +1130,7 @@ impl ManagedPythonDownload {
     /// For CPython without a user-configured mirror, the default Astral mirror is tried first.
     /// Each attempt tries all URLs in sequence without backoff between them; backoff is only
     /// applied after all URLs have been exhausted.
-    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip_all, fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
         client: &BaseClient,
@@ -1161,34 +1156,6 @@ impl ManagedPythonDownload {
                 reporter,
             )
         })
-        .await
-    }
-
-    /// Download and extract a Python distribution.
-    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
-    pub async fn fetch(
-        &self,
-        client: &BaseClient,
-        installation_dir: &Path,
-        scratch_dir: &Path,
-        reinstall: bool,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
-        reporter: Option<&dyn Reporter>,
-    ) -> Result<DownloadResult, Error> {
-        let urls = self.download_urls(python_install_mirror, pypy_install_mirror)?;
-        let url = urls
-            .into_iter()
-            .next()
-            .ok_or(Error::NoPythonDownloadUrlFound)?;
-        self.fetch_from_url(
-            url,
-            client,
-            installation_dir,
-            scratch_dir,
-            reinstall,
-            reporter,
-        )
         .await
     }
 
@@ -1348,17 +1315,21 @@ impl ManagedPythonDownload {
 
             // If the distribution is missing a `python` -> `pythonX.Y` symlink, add it.
             //
+            // We skip for Windows distributions, allowing cross-installs from Unix.
+            //
             // Pyodide releases never contain this link by default.
             //
             // PEP 394 permits it, and python-build-standalone releases after `20240726` include it,
             // but releases prior to that date do not.
-            match fs_err::os::unix::fs::symlink(
-                format!("python{}.{}", self.key.major, self.key.minor),
-                extracted.join("bin").join("python"),
-            ) {
-                Ok(()) => {}
-                Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(err) => return Err(err.into()),
+            if !self.os().is_windows() {
+                match fs_err::os::unix::fs::symlink(
+                    format!("python{}.{}", self.key.major, self.key.minor),
+                    extracted.join("bin").join("python"),
+                ) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => return Err(err.into()),
+                }
             }
         }
 
@@ -1477,20 +1448,6 @@ impl ManagedPythonDownload {
 
     pub fn python_version(&self) -> PythonVersion {
         self.key.version()
-    }
-
-    /// Return the primary [`Url`] to use when downloading the distribution.
-    ///
-    /// This is the first URL from [`Self::download_urls`]. For CPython without a user-configured
-    /// mirror, this is the default Astral mirror URL. Use [`Self::download_urls`] to get all
-    /// URLs including fallbacks.
-    pub fn download_url(
-        &self,
-        python_install_mirror: Option<&str>,
-        pypy_install_mirror: Option<&str>,
-    ) -> Result<DisplaySafeUrl, Error> {
-        self.download_urls(python_install_mirror, pypy_install_mirror)
-            .map(|mut urls| urls.remove(0))
     }
 
     /// Return the ordered list of [`Url`]s to try when downloading the distribution.
@@ -1683,7 +1640,7 @@ fn parse_json_downloads(
 }
 
 impl Error {
-    pub(crate) fn from_reqwest(
+    fn from_reqwest(
         url: DisplaySafeUrl,
         err: reqwest::Error,
         retries: Option<u32>,
@@ -1701,10 +1658,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn from_reqwest_middleware(
-        url: DisplaySafeUrl,
-        err: reqwest_middleware::Error,
-    ) -> Self {
+    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
         match err {
             reqwest_middleware::Error::Middleware(error) => {
                 Self::NetworkMiddlewareError(url, error)

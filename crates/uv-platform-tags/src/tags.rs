@@ -425,8 +425,7 @@ impl Tags {
     pub fn is_compatible_abi(&self, python_tag: LanguageTag, abi_tag: AbiTag) -> bool {
         self.map
             .get(&python_tag)
-            .map(|abis| abis.contains_key(&abi_tag))
-            .unwrap_or(false)
+            .is_some_and(|abis| abis.contains_key(&abi_tag))
     }
 
     pub fn python_platform(&self) -> &Platform {
@@ -586,12 +585,16 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Musllinux { major, minor }, _) => {
-            let mut platform_tags = vec![PlatformTag::Linux { arch }];
-            platform_tags.extend((0..=*minor).map(|minor| PlatformTag::Musllinux {
-                major: *major,
-                minor,
-                arch,
-            }));
+            let mut platform_tags = (0..=*minor)
+                .rev()
+                .map(|minor| PlatformTag::Musllinux {
+                    major: *major,
+                    minor,
+                    arch,
+                })
+                .collect::<Vec<_>>();
+            // Non-musllinux is given lowest priority.
+            platform_tags.push(PlatformTag::Linux { arch });
             platform_tags
         }
         (Os::Macos { major, minor }, Arch::X86_64) => {
@@ -787,10 +790,28 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             platform_tags
         }
         (Os::Pyodide { major, minor }, Arch::Wasm32) => {
-            vec![PlatformTag::Pyodide {
-                major: *major,
-                minor: *minor,
-            }]
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
+        }
+        (Os::PyEmscripten { major, minor }, Arch::Wasm32) => {
+            vec![
+                PlatformTag::PyEmscripten {
+                    major: *major,
+                    minor: *minor,
+                },
+                PlatformTag::Pyodide {
+                    major: *major,
+                    minor: *minor,
+                },
+            ]
         }
         (
             Os::Ios {
@@ -1163,6 +1184,27 @@ mod tests {
             "manylinux_2_6_x86_64",
             "manylinux_2_5_x86_64",
             "manylinux1_x86_64",
+            "linux_x86_64",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_musllinux() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Musllinux { major: 1, minor: 2 },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "musllinux_1_2_x86_64",
+            "musllinux_1_1_x86_64",
+            "musllinux_1_0_x86_64",
             "linux_x86_64",
         ]
         "#
@@ -1617,6 +1659,50 @@ mod tests {
             "ios_12_2_arm64_iphoneos",
             "ios_12_1_arm64_iphoneos",
             "ios_12_0_arm64_iphoneos",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyodide() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Pyodide {
+                major: 2025,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2025_0_wasm32",
+            "pyodide_2025_0_wasm32",
+        ]
+        "#
+        );
+    }
+
+    #[test]
+    fn test_platform_tags_pyemscripten() {
+        let tags = compatible_tags(&Platform::new(
+            Os::PyEmscripten {
+                major: 2026,
+                minor: 0,
+            },
+            Arch::Wasm32,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(
+            tags,
+            @r#"
+        [
+            "pyemscripten_2026_0_wasm32",
+            "pyodide_2026_0_wasm32",
         ]
         "#
         );

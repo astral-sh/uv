@@ -42,7 +42,7 @@ impl InstallState {
     }
 
     /// Get the underlying copy locks for use with [`uv_fs::link::link_dir`] functions.
-    pub fn copy_locks(&self) -> &CopyLocks {
+    fn copy_locks(&self) -> &CopyLocks {
         &self.locks
     }
 

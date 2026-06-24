@@ -16,7 +16,6 @@ use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -24,7 +23,7 @@ use uv_pep508::MarkerTree;
 use uv_preview::Preview;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -43,7 +42,7 @@ use crate::commands::project::{
     sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    finalize_tool_install, refine_interpreter, remove_entrypoints,
+    ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -76,6 +75,7 @@ pub(crate) async fn install(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    refresh: Refresh,
     workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
@@ -88,24 +88,46 @@ pub(crate) async fn install(
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let (python_request, explicit_python_request) = if let Some(request) = python.as_deref() {
-        (Some(PythonRequest::parse(request)), true)
-    } else {
-        // Discover a global Python version pin, if no request was made
-        (
-            PythonVersionFile::discover(
-                // TODO(zanieb): We don't use the directory, should we expose another interface?
-                // Should `no_local` be implied by `None` here?
-                &*CWD,
-                &VersionFileDiscoveryOptions::default()
-                    .with_no_config(no_config)
-                    .with_no_local(true),
+    // Initialize any shared state.
+    let state = PlatformState::default();
+
+    // Parse the input requirement.
+    let request = ToolRequest::parse(&package, from.as_deref())?;
+
+    let unresolved_target_requirements = match &request {
+        ToolRequest::Package {
+            target: Target::Unspecified(requirement),
+            ..
+        } => {
+            let source = if editable {
+                RequirementsSource::from_editable(requirement)?
+            } else {
+                RequirementsSource::from_package(requirement)?
+            };
+            Some(
+                RequirementsSpecification::from_source(&source, &client_builder)
+                    .await?
+                    .requirements,
             )
-            .await?
-            .and_then(PythonVersionFile::into_version),
-            false,
-        )
+        }
+        _ => None,
     };
+
+    let tool_python = ToolPython::from_request(
+        python.as_deref().map(PythonRequest::parse),
+        unresolved_target_requirements
+            .as_ref()
+            .and_then(|requirements| requirements.first())
+            .map(|requirement| &requirement.requirement),
+        no_config,
+        lfs,
+        state.git(),
+        &client_builder,
+        &cache,
+    )
+    .await?;
+    let explicit_python_request = tool_python.is_explicit();
+    let python_request = tool_python.python_request;
 
     // Pre-emptively identify a Python interpreter. We need an interpreter to resolve any unnamed
     // requirements, even if we end up using a different interpreter for the tool install itself.
@@ -120,23 +142,17 @@ pub(crate) async fn install(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
 
-    // Initialize any shared state.
-    let state = PlatformState::default();
-
-    // Parse the input requirement.
-    let request = ToolRequest::parse(&package, from.as_deref())?;
-
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if request.is_latest() {
-        cache.with_refresh(Refresh::All(Timestamp::now()))
+    let refresh = if request.is_latest() {
+        refresh.combine(Refresh::All(Timestamp::now()))
     } else {
-        cache
+        refresh
     };
+    let cache = cache.with_refresh(refresh.clone());
 
     // Resolve the `--from` requirement.
     let requirement = match &request {
@@ -145,14 +161,9 @@ pub(crate) async fn install(
             executable,
             target: Target::Unspecified(from),
         } => {
-            let source = if editable {
-                RequirementsSource::from_editable(from)?
-            } else {
-                RequirementsSource::from_package(from)?
-            };
-            let requirement = RequirementsSpecification::from_source(&source, &client_builder)
-                .await?
-                .requirements;
+            let requirements = unresolved_target_requirements.clone().ok_or_else(|| {
+                anyhow::anyhow!("Expected parsed requirements for unresolved target `{from}`")
+            })?;
 
             // If the user provided an executable name, verify that it matches the `--from` requirement.
             let executable = if let Some(executable) = executable {
@@ -169,7 +180,7 @@ pub(crate) async fn install(
             };
 
             let requirement = resolve_names(
-                requirement,
+                requirements,
                 &interpreter,
                 &settings,
                 &client_builder,
@@ -373,6 +384,36 @@ pub(crate) async fn install(
             .await?,
         );
         requirements
+    };
+
+    // Explicit local directory requirements should always be rebuilt and reinstalled, matching
+    // `uv pip install`. At this point, all unnamed requirements have been resolved to package names,
+    // including any requirements provided via `--with`.
+    let explicit_local_packages = requirements
+        .iter()
+        .filter(|requirement| {
+            requirement.origin.is_none()
+                && matches!(requirement.source, RequirementSource::Directory { .. })
+        })
+        .map(|requirement| requirement.name.clone())
+        .collect::<Vec<_>>();
+    let (settings, cache) = if explicit_local_packages.is_empty() {
+        (settings, cache)
+    } else {
+        let reinstall = explicit_local_packages
+            .into_iter()
+            .fold(Reinstall::None, |reinstall, package_name| {
+                reinstall.with_package(package_name)
+            })
+            .combine(settings.reinstall);
+        let cache = cache.with_refresh(refresh.combine(Refresh::from(reinstall.clone())));
+        (
+            ResolverInstallerSettings {
+                reinstall,
+                ..settings
+            },
+            cache,
+        )
     };
 
     // Resolve the constraints.
@@ -659,7 +700,6 @@ pub(crate) async fn install(
                         python_preference,
                         python_downloads,
                         &cache,
-                        preview,
                     )
                     .await
                     .ok()

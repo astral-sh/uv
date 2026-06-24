@@ -140,10 +140,10 @@ impl Conflicts {
         for (group, specifiers) in groups {
             if let Some(includer) = group_node_idxs.get(group) {
                 for specifier in specifiers {
-                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier {
-                        if let Some(included) = group_node_idxs.get(include_group) {
-                            graph.add_edge(*included, *includer, ());
-                        }
+                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier
+                        && let Some(included) = group_node_idxs.get(include_group)
+                    {
+                        graph.add_edge(*included, *includer, ());
                     }
                 }
             }
@@ -224,13 +224,6 @@ pub struct ConflictSet {
 }
 
 impl ConflictSet {
-    /// Create a pair of items that conflict with one another.
-    pub fn pair(item1: ConflictItem, item2: ConflictItem) -> Self {
-        Self {
-            set: BTreeSet::from_iter(vec![item1, item2]),
-        }
-    }
-
     /// Returns an iterator over all conflicting items.
     pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
         self.set.iter()
@@ -280,14 +273,13 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<ConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        let set = BTreeSet::from_iter(items);
+        match set.len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(Self {
-            set: BTreeSet::from_iter(items),
-        })
+        Ok(Self { set })
     }
 }
 
@@ -384,16 +376,6 @@ impl<'a> ConflictItemRef<'a> {
         self.kind
     }
 
-    /// Returns the extra name of this conflicting item.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        self.kind.extra()
-    }
-
-    /// Returns the group name of this conflicting item.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        self.kind.group()
-    }
-
     /// Converts this borrowed conflicting item to its owned variant.
     pub fn to_owned(&self) -> ConflictItem {
         ConflictItem {
@@ -444,7 +426,7 @@ pub enum ConflictKind {
 impl ConflictKind {
     /// If this conflict corresponds to an extra, then return the
     /// extra name.
-    pub fn extra(&self) -> Option<&ExtraName> {
+    fn extra(&self) -> Option<&ExtraName> {
         match self {
             Self::Extra(extra) => Some(extra),
             Self::Group(_) | Self::Project => None,
@@ -453,7 +435,7 @@ impl ConflictKind {
 
     /// If this conflict corresponds to a group, then return the
     /// group name.
-    pub fn group(&self) -> Option<&GroupName> {
+    fn group(&self) -> Option<&GroupName> {
         match self {
             Self::Group(group) => Some(group),
             Self::Extra(_) | Self::Project => None,
@@ -480,27 +462,9 @@ pub enum ConflictKindRef<'a> {
     Project,
 }
 
-impl<'a> ConflictKindRef<'a> {
-    /// If this conflict corresponds to an extra, then return the
-    /// extra name.
-    pub fn extra(&self) -> Option<&'a ExtraName> {
-        match self {
-            Self::Extra(extra) => Some(extra),
-            Self::Group(_) | Self::Project => None,
-        }
-    }
-
-    /// If this conflict corresponds to a group, then return the
-    /// group name.
-    pub fn group(&self) -> Option<&'a GroupName> {
-        match self {
-            Self::Group(group) => Some(group),
-            Self::Extra(_) | Self::Project => None,
-        }
-    }
-
+impl ConflictKindRef<'_> {
     /// Converts this borrowed conflict to its owned variant.
-    pub fn to_owned(&self) -> ConflictKind {
+    fn to_owned(self) -> ConflictKind {
         match self {
             Self::Extra(extra) => ConflictKind::Extra((*extra).clone()),
             Self::Group(group) => ConflictKind::Group((*group).clone()),
@@ -625,9 +589,7 @@ impl SchemaConflicts {
                     kind: item.kind.clone(),
                 });
             }
-            // OK because we guarantee that `SchemaConflictSet` is valid and
-            // there aren't any new errors that can occur here.
-            let set = ConflictSet::try_from(set).unwrap();
+            let set = ConflictSet::try_from(set)?;
             conflicting.push(set);
         }
         Ok(conflicting)
@@ -648,9 +610,11 @@ impl SchemaConflicts {
     /// If a conflict has an explicit package name (written by the end user),
     /// then that takes precedence over the given package name, which is only
     /// used when there is no explicit package name written.
-    pub fn to_conflicts_with_package_name(&self, package: &PackageName) -> Conflicts {
+    pub fn to_conflicts_with_package_name(
+        &self,
+        package: &PackageName,
+    ) -> Result<Conflicts, ConflictError> {
         self.to_conflicts_with_default_package(Some(package))
-            .expect("default package name should satisfy schema conflicts")
     }
 }
 
@@ -708,7 +672,7 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<SchemaConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        match items.iter().collect::<BTreeSet<_>>().len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}

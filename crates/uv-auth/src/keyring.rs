@@ -59,7 +59,7 @@ impl std::fmt::Display for KeyringProviderBackend {
 
 impl KeyringProvider {
     /// Create a new [`KeyringProvider::Native`].
-    pub fn native() -> Self {
+    pub(crate) fn native() -> Self {
         Self {
             backend: KeyringProviderBackend::Native,
         }
@@ -122,7 +122,7 @@ impl KeyringProvider {
     }
 
     /// Store credentials to the system keyring.
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(service = ?service, username = ?username))]
     async fn store_native(
         &self,
         service: &str,
@@ -204,7 +204,7 @@ impl KeyringProvider {
             "Should only use keyring for URLs without a password"
         );
         debug_assert!(
-            !username.map(str::is_empty).unwrap_or(false),
+            username.is_none_or(|username| !username.is_empty()),
             "Should only use keyring with a non-empty username"
         );
 
@@ -396,7 +396,10 @@ impl KeyringProvider {
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
     #[cfg(test)]
-    pub fn dummy<S: Into<String>, T: IntoIterator<Item = (S, &'static str, &'static str)>>(
+    pub(crate) fn dummy<
+        S: Into<String>,
+        T: IntoIterator<Item = (S, &'static str, &'static str)>,
+    >(
         iter: T,
     ) -> Self {
         Self {
@@ -410,7 +413,7 @@ impl KeyringProvider {
 
     /// Create a new provider with no credentials available.
     #[cfg(test)]
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             backend: KeyringProviderBackend::Dummy(Vec::new()),
         }

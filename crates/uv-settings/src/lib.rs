@@ -14,6 +14,7 @@ use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_redacted::DisplaySafeUrl;
 use uv_static::{EnvVars, InvalidEnvironmentVariable, parse_boolish_environment_variable};
+use uv_torch::AmdGpuArchitecture;
 use uv_warnings::warn_user;
 
 pub use crate::combine::*;
@@ -30,12 +31,6 @@ impl FilesystemOptions {
     /// Convert the [`FilesystemOptions`] into [`Options`].
     pub fn into_options(self) -> Options {
         self.0
-    }
-
-    /// Set the [`Origin`] on all indexes without an existing origin.
-    #[must_use]
-    pub fn with_origin(self, origin: Origin) -> Self {
-        Self(self.0.with_origin(origin))
     }
 }
 
@@ -124,7 +119,7 @@ impl FilesystemOptions {
 
     /// Load a [`FilesystemOptions`] from a directory, preferring a `uv.toml` file over a
     /// `pyproject.toml` file.
-    pub fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
+    fn from_directory(dir: &Path) -> Result<Option<Self>, Error> {
         // Read a `uv.toml` file in the current directory.
         let path = dir.join("uv.toml");
         match fs_err::read_to_string(&path) {
@@ -486,8 +481,10 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if cache_dir.is_some() {
         masked_fields.push("cache-dir");
     }
-    if preview.is_some() {
-        masked_fields.push("preview");
+    match preview {
+        Some(PreviewOption::Preview(_)) => masked_fields.push("preview"),
+        Some(PreviewOption::PreviewFeatures(_)) => masked_fields.push("preview-features"),
+        None => (),
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");
@@ -705,7 +702,7 @@ pub struct EnvFlag {
 
 impl EnvFlag {
     /// Create a new [`EnvFlag`] by parsing the given environment variable.
-    pub fn new(env_var: &'static str) -> Result<Self, Error> {
+    fn new(env_var: &'static str) -> Result<Self, Error> {
         Ok(Self {
             value: parse_boolish_environment_variable(env_var)?,
             env_var,
@@ -719,6 +716,8 @@ impl EnvFlag {
 /// the CLI level, however there are limited semantics in that context.
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
+    pub ruff_path: Option<PathBuf>,
+    pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
@@ -727,6 +726,8 @@ pub struct EnvironmentOptions {
     pub install_mirrors: PythonInstallMirrors,
     pub log_context: Option<bool>,
     pub lfs: Option<bool>,
+    pub cuda_driver_version: Option<Version>,
+    pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
     pub http_connect_timeout: Duration,
     pub http_read_timeout: Duration,
     /// There's no upload timeout in reqwest, instead we have to use a read timeout as upload
@@ -752,6 +753,12 @@ pub struct EnvironmentOptions {
     pub no_dev: EnvFlag,
     pub show_resolution: EnvFlag,
     pub no_editable: EnvFlag,
+    pub no_install_project: EnvFlag,
+    pub no_install_workspace: EnvFlag,
+    pub no_install_local: EnvFlag,
+    pub only_install_project: EnvFlag,
+    pub only_install_workspace: EnvFlag,
+    pub only_install_local: EnvFlag,
     pub no_env_file: EnvFlag,
     pub no_group: Option<Vec<GroupName>>,
     pub no_binary_package: Option<Vec<PackageName>>,
@@ -785,6 +792,8 @@ impl EnvironmentOptions {
         .map(Duration::from_secs);
 
         Ok(Self {
+            ruff_path: parse_path_environment_variable(EnvVars::RUFF),
+            ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
@@ -818,6 +827,14 @@ impl EnvironmentOptions {
             },
             log_context: parse_boolish_environment_variable(EnvVars::UV_LOG_CONTEXT)?,
             lfs: parse_boolish_environment_variable(EnvVars::UV_GIT_LFS)?,
+            cuda_driver_version: parse_typed_environment_variable(
+                EnvVars::UV_CUDA_DRIVER_VERSION,
+                None,
+            )?,
+            amd_gpu_architecture: parse_typed_environment_variable(
+                EnvVars::UV_AMD_GPU_ARCHITECTURE,
+                None,
+            )?,
             http_read_timeout_upload: parse_integer_environment_variable(
                 EnvVars::UV_UPLOAD_HTTP_TIMEOUT,
                 Some("value should be an integer number of seconds"),
@@ -854,6 +871,12 @@ impl EnvironmentOptions {
             no_dev: EnvFlag::new(EnvVars::UV_NO_DEV)?,
             show_resolution: EnvFlag::new(EnvVars::UV_SHOW_RESOLUTION)?,
             no_editable: EnvFlag::new(EnvVars::UV_NO_EDITABLE)?,
+            no_install_project: EnvFlag::new(EnvVars::UV_NO_INSTALL_PROJECT)?,
+            no_install_workspace: EnvFlag::new(EnvVars::UV_NO_INSTALL_WORKSPACE)?,
+            no_install_local: EnvFlag::new(EnvVars::UV_NO_INSTALL_LOCAL)?,
+            only_install_project: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_PROJECT)?,
+            only_install_workspace: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_WORKSPACE)?,
+            only_install_local: EnvFlag::new(EnvVars::UV_ONLY_INSTALL_LOCAL)?,
             no_env_file: EnvFlag::new(EnvVars::UV_NO_ENV_FILE)?,
             no_group: parse_name_list_environment_variable(EnvVars::UV_NO_GROUP)?,
             no_binary_package: parse_name_list_environment_variable(EnvVars::UV_NO_BINARY_PACKAGE)?,
@@ -934,6 +957,49 @@ where
     }
 }
 
+fn parse_typed_environment_variable<T>(
+    name: &'static str,
+    help: Option<&str>,
+) -> Result<Option<T>, Error>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    let value = match std::env::var(name) {
+        Ok(v) => v,
+        Err(e) => {
+            return match e {
+                std::env::VarError::NotPresent => Ok(None),
+                std::env::VarError::NotUnicode(err) => Err(Error::InvalidEnvironmentVariable(
+                    InvalidEnvironmentVariable {
+                        name: name.to_string(),
+                        value: err.to_string_lossy().to_string(),
+                        err: "expected a valid UTF-8 string".to_string(),
+                    },
+                )),
+            };
+        }
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+
+    match value.parse::<T>() {
+        Ok(v) => Ok(Some(v)),
+        Err(err) => Err(Error::InvalidEnvironmentVariable(
+            InvalidEnvironmentVariable {
+                name: name.to_string(),
+                value,
+                err: if let Some(help) = help {
+                    format!("{err}; {help}")
+                } else {
+                    err.to_string()
+                },
+            },
+        )),
+    }
+}
+
 fn parse_integer_environment_variable<T>(
     name: &'static str,
     help: Option<&str>,
@@ -977,7 +1043,6 @@ where
     }
 }
 
-#[cfg(feature = "tracing-durations-export")]
 /// Parse a path environment variable.
 fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
     let value = std::env::var_os(name)?;

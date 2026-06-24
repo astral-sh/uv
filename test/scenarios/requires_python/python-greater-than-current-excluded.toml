@@ -1,0 +1,23 @@
+name = "python-greater-than-current-excluded"
+description = "The user requires a package where recent versions require a Python version greater than the current version, but an excluded older version is compatible."
+
+[root]
+requires = ["a>=2.0.0"]
+
+[expected]
+satisfiable = false
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.9"
+
+[packages.a.versions."2.0.0"]
+requires_python = ">=3.10"
+
+[packages.a.versions."3.0.0"]
+requires_python = ">=3.11"
+
+[packages.a.versions."4.0.0"]
+requires_python = ">=3.12"
+
+[environment]
+python = "3.9"

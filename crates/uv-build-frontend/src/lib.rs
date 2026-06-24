@@ -28,6 +28,7 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, warn};
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_configuration::{BuildKind, BuildOutput, NoSources};
 use uv_distribution::BuildRequires;
@@ -94,7 +95,7 @@ struct BuildSystem {
     requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
-    /// Specify that their backend code is hosted in-tree, this key contains a list of directories.
+    /// Specifies that backend code is hosted in-tree, this key contains a list of directories.
     backend_path: Option<BackendPath>,
 }
 
@@ -267,7 +268,7 @@ pub struct SourceBuild {
     /// Distribution identifier, e.g., `foo-1.2.3`. Used for error reporting if the name and
     /// version are unknown.
     version_id: Option<String>,
-    /// Whether we do a regular PEP 517 build or an PEP 660 editable build
+    /// Whether we do a regular PEP 517 build or a PEP 660 editable build
     build_kind: BuildKind,
     /// Whether to send build output to `stderr` or `tracing`, etc.
     level: BuildOutput,
@@ -288,6 +289,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         install_path: &Path,
+        stop_discovery_at: Option<&Path>,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
@@ -321,6 +323,8 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            stop_discovery_at,
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )
@@ -380,7 +384,7 @@ impl SourceBuild {
         };
 
         // Set up the build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Resolving build requirements");
 
@@ -439,7 +443,7 @@ impl SourceBuild {
         };
 
         // Create the PEP 517 build environment. If build isolation is disabled, we assume the build
-        // environment is already setup.
+        // environment is already set up.
         let runner = PythonRunner::new(source_build_context.concurrent_build_slots.clone(), level);
         if build_isolation.is_isolated(package_name.as_ref()) {
             debug!("Creating PEP 517 build environment");
@@ -456,6 +460,7 @@ impl SourceBuild {
                 version_id,
                 locations,
                 no_sources,
+                stop_discovery_at,
                 workspace_cache,
                 build_stack,
                 build_kind,
@@ -572,6 +577,8 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        stop_discovery_at: Option<&Path>,
+        cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
@@ -603,6 +610,19 @@ impl SourceBuild {
             .build_system
             .as_ref()
             .and_then(|build_system| build_system.build_backend.as_deref());
+
+        if let Some(backend_path) = pyproject_toml
+            .build_system
+            .as_ref()
+            .and_then(|build_system| build_system.backend_path.as_ref())
+        {
+            for path in backend_path.iter() {
+                if !source_tree.join(path).is_dir() {
+                    return Err(Box::new(Error::InvalidBackendPath(path.to_string())));
+                }
+            }
+        }
+
         // Only show the warning for first party and URL dependencies, not for registry dependencies
         // (which have sources disabled).
         if !no_sources.all()
@@ -610,8 +630,7 @@ impl SourceBuild {
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .map(|uv| uv.build_backend.is_some())
-                .unwrap_or(false)
+                .is_some_and(|uv| uv.build_backend.is_some())
             && build_backend != Some("uv_build")
             && let Some(package_name) =
                 package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))
@@ -652,6 +671,8 @@ impl SourceBuild {
                     locations,
                     no_sources,
                     true,
+                    stop_discovery_at,
+                    cache,
                     workspace_cache,
                     credentials_cache,
                 )
@@ -723,7 +744,7 @@ impl SourceBuild {
 
     /// Try calling `prepare_metadata_for_build_wheel` to get the metadata without executing the
     /// actual build.
-    pub async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
+    async fn get_metadata_without_build(&mut self) -> Result<Option<PathBuf>, Error> {
         // We've already called this method; return the existing result.
         if let Some(metadata_dir) = &self.metadata_directory {
             return Ok(Some(metadata_dir.clone()));
@@ -994,6 +1015,7 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     no_sources: NoSources,
+    stop_discovery_at: Option<&Path>,
     workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
@@ -1100,6 +1122,8 @@ async fn create_pep517_build_environment(
             build_context
                 .source_tree_editable_policy()
                 .workspace_member_editable(None),
+            stop_discovery_at,
+            build_context.cache(),
             workspace_cache,
             credentials_cache,
         )
@@ -1204,6 +1228,7 @@ impl PythonRunner {
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
+            .env(EnvVars::UV_INTERNAL__BUILD_DIR, source_tree)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
             // NOTE: it would be nice to get colored output from build backends,

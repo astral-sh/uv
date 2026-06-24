@@ -160,7 +160,11 @@ fn get_script_executable(python_executable: &Path, is_gui: bool) -> PathBuf {
     }
 }
 
-const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 3] = &["python", "pythonw", "python3"];
+const RESERVED_SCRIPT_NAMES_ERROR: &[&str; 7] = &[
+    "python", "pythonw", "python3", "graalpy", "pypy", "pypy2", "pypy3",
+];
+const RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR: &str = "python3.";
+const RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR: &[&str; 2] = &["python3.", "pythonw3."];
 const RESERVED_SCRIPT_NAMES_WARN: &[&str; 2] = &["activate", "activate_this.py"];
 
 /// A form of [`Script`] guaranteed by [`ValidatedScript::try_from_script`] to be constrained to
@@ -193,25 +197,32 @@ impl<'script> ValidatedScript<'script> {
             );
         }
 
-        if RESERVED_SCRIPT_NAMES_ERROR.contains(&name.as_str())
-            || name
-                .strip_prefix("python3.")
-                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        // Reserve launcher basenames emitted by `uv venv` across supported platforms.
+        // Apply the Windows launcher normalization before checking so wheel validity is portable.
+        // FIXME: What are the in-reality rules here for name normalization?
+        let normalized_name = name.strip_suffix(".py").unwrap_or(name.as_str());
+        if RESERVED_SCRIPT_NAMES_ERROR.contains(&normalized_name)
+            || normalized_name
+                .strip_prefix(RESERVED_VERSIONED_SCRIPT_NAME_PREFIX_ERROR)
+                .is_some_and(|minor| minor.parse::<u8>().is_ok())
+            || RESERVED_FREE_THREADED_SCRIPT_NAME_PREFIXES_ERROR
+                .iter()
+                .any(|prefix| {
+                    normalized_name
+                        .strip_prefix(prefix)
+                        .and_then(|minor| minor.strip_suffix('t'))
+                        .is_some_and(|minor| minor.parse::<u8>().is_ok())
+                })
         {
             return Err(Error::ReservedScriptName {
-                reserved: name,
+                reserved: normalized_name.to_string(),
                 declared: script.name.clone(),
             });
         }
 
         let path = if cfg!(windows) {
             // On Windows we actually build an `.exe` wrapper.
-            let name = name
-                // FIXME: What are the in-reality rules here for names?
-                .strip_suffix(".py")
-                .unwrap_or(&name)
-                .to_string()
-                + std::env::consts::EXE_SUFFIX;
+            let name = normalized_name.to_string() + std::env::consts::EXE_SUFFIX;
 
             layout.scheme.scripts.join(name)
         } else {
@@ -1048,8 +1059,12 @@ pub(crate) fn parse_scripts(
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
     // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = fs::read_to_string(entry_points_path) else {
-        return Ok((Vec::new(), Vec::new()));
+    let ini = match fs::read_to_string(entry_points_path) {
+        Ok(ini) => ini,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     scripts_from_ini(extras, python_minor, ini)
@@ -1088,7 +1103,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
+    use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1097,7 +1112,7 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record, write_installer_metadata,
+        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
 
     #[test]
@@ -1173,6 +1188,25 @@ mod test {
         }
         WheelFile::parse(&wheel_with_version("1.0")).unwrap();
         WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
+    }
+
+    #[test]
+    fn invalid_utf8_entry_points() -> Result<()> {
+        let wheel = assert_fs::TempDir::new()?;
+        wheel
+            .child("example-1.0.0.dist-info/entry_points.txt")
+            .write_binary(&[0xff])?;
+
+        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
+
+        assert!(matches!(
+            error,
+            Error::Io(err) if err.kind() == ErrorKind::InvalidData
+        ));
+
+        Ok(())
     }
 
     #[test]

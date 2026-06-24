@@ -11,7 +11,7 @@ echo "Updating metadata with rooster..."
 cd "$project_root"
 
 # Update the changelog
-uvx --python 3.12 rooster@0.1.1 release "$@"
+uv run --locked --python 3.12 --only-group release rooster release "$@"
 
 # Bump library crate versions
 uv run "$project_root/scripts/bump-workspace-crate-versions.py"
@@ -22,13 +22,13 @@ uv run "$project_root/scripts/generate-crate-readmes.py"
 echo "Updating lockfiles..."
 cargo update -p uv
 pushd crates/uv-trampoline; cargo update -p uv-trampoline; popd
-uv lock
+uv lock --no-config
 
 echo "Generating JSON schema..."
 cargo dev generate-json-schema
 
 echo "Checking crates.io publish setup..."
-uv run "$project_root/scripts/setup-crates-io-publish.py" --quiet
+uv run --no-config "$project_root/scripts/setup-crates-io-publish.py" --quiet
 
 echo "Creating release branch..."
 git checkout -b "release/$(uv version --short)"
