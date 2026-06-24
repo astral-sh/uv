@@ -10,9 +10,30 @@ use crate::{FileLocation, UrlString};
 
 /// A one-way mapping from physical proxy artifact URL prefixes to canonical URL prefixes.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(transparent)]
 pub struct ArtifactUrlMap(BTreeMap<DisplaySafeUrl, DisplaySafeUrl>);
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ArtifactUrlMap {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ArtifactUrlMap")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "One-way physical proxy artifact URL prefixes (keys) to canonical lock artifact URL prefixes (values).",
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+                "format": "uri"
+            },
+            "additionalProperties": {
+                "type": "string",
+                "format": "uri"
+            }
+        })
+    }
+}
 
 impl<'de> Deserialize<'de> for ArtifactUrlMap {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

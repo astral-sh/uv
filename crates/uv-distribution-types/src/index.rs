@@ -291,6 +291,16 @@ pub enum IndexReference {
     Url(IndexUrl),
 }
 
+impl IndexReference {
+    /// Resolve an index URL relative to the given root directory.
+    fn relative_to(self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        match self {
+            Self::Name(name) => Ok(Self::Name(name)),
+            Self::Url(url) => Ok(Self::Url(url.relative_to(root_dir)?)),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for IndexReference {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -332,6 +342,15 @@ pub struct ProxyIndex {
     pub url: IndexUrl,
     /// One-way physical-to-canonical URL prefixes for artifacts emitted in a new lock.
     pub artifact_url_map: ArtifactUrlMap,
+}
+
+impl ProxyIndex {
+    /// Resolve index URLs relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        self.index = self.index.relative_to(root_dir)?;
+        self.url = self.url.relative_to(root_dir)?;
+        Ok(self)
+    }
 }
 
 impl PartialEq for Index {

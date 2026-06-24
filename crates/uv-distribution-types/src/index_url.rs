@@ -49,6 +49,16 @@ impl IndexUrl {
         Ok(Self::from(url))
     }
 
+    /// Resolve a path-backed index URL relative to the given root directory.
+    pub(crate) fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        if let Self::Path(url) = &self
+            && let Some(given) = url.given()
+        {
+            self = Self::parse(given, Some(root_dir))?;
+        }
+        Ok(self)
+    }
+
     /// Return the root [`Url`] of the index, if applicable.
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment

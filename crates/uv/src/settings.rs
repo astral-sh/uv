@@ -1295,10 +1295,11 @@ impl ToolListSettings {
         } = args;
 
         let filesystem = filesystem.map(FilesystemOptions::into_options);
-        let filesystem = ResolverInstallerOptions {
-            exclude_newer: filesystem.and_then(|options| options.top_level.exclude_newer),
-            ..ResolverInstallerOptions::default()
-        };
+        let filesystem = ResolverInstallerOptions::from(
+            filesystem
+                .map(|options| options.top_level)
+                .unwrap_or_default(),
+        );
 
         Ok(Self {
             show_paths,
@@ -4364,7 +4365,8 @@ impl From<ResolverOptions> for ResolverSettings {
                 .map(Index::from)
                 .collect(),
             value.no_index.unwrap_or_default(),
-        );
+        )
+        .with_proxy_indexes(value.proxy_index.unwrap_or_default());
         Self {
             index_locations,
             resolution: value.resolution.unwrap_or_default(),
@@ -4479,7 +4481,8 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 .map(Index::from)
                 .collect(),
             value.no_index.unwrap_or_default(),
-        );
+        )
+        .with_proxy_indexes(value.proxy_index.unwrap_or_default());
         Self {
             resolver: ResolverSettings {
                 build_options: BuildOptions::new(
@@ -4670,6 +4673,7 @@ impl PipSettings {
 
         let ResolverInstallerSchema {
             index: top_level_index,
+            proxy_index: top_level_proxy_index,
             index_url: top_level_index_url,
             extra_index_url: top_level_extra_index_url,
             no_index: top_level_no_index,
@@ -4767,7 +4771,8 @@ impl PipSettings {
                     .map(Index::from)
                     .collect(),
                 args.no_index.combine(no_index).unwrap_or_default(),
-            ),
+            )
+            .with_proxy_indexes(top_level_proxy_index.unwrap_or_default()),
             extras: ExtrasSpecification::from_args(
                 args.extra.combine(extra).unwrap_or_default(),
                 args.no_extra.combine(no_extra).unwrap_or_default(),
@@ -5040,6 +5045,7 @@ impl PublishSettings {
         let ResolverInstallerSchema {
             keyring_provider,
             index,
+            proxy_index,
             extra_index_url,
             index_url,
             ..
@@ -5081,7 +5087,8 @@ impl PublishSettings {
                     .collect(),
                 Vec::new(),
                 false,
-            ),
+            )
+            .with_proxy_indexes(proxy_index.unwrap_or_default()),
         }
     }
 }
@@ -5179,6 +5186,279 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uv_distribution_types::{ArtifactUrlMap, IndexReference, IndexRoutes, ProxyIndexError};
+
+    #[test]
+    fn proxy_index_uv_toml_resolves_relative_urls() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("uv.toml");
+        fs_err::write(
+            &path,
+            r#"
+            [[proxy-index]]
+            index = "./canonical"
+            url = "./proxy"
+            artifact-url-map = { "https://proxy.example/files" = "https://canonical.example/packages" }
+            "#,
+        )?;
+
+        let filesystem = FilesystemOptions::from_file(path)?;
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            Some(filesystem),
+            &EnvironmentOptions::new()?,
+        );
+        let proxy_index = settings
+            .index_locations
+            .proxy_indexes()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("expected proxy index"))?;
+
+        assert_eq!(
+            proxy_index.index,
+            IndexReference::Url(IndexUrl::parse("./canonical", Some(root.path()))?)
+        );
+        assert_eq!(
+            proxy_index.url,
+            IndexUrl::parse("./proxy", Some(root.path()))?
+        );
+        assert_eq!(
+            proxy_index.artifact_url_map,
+            ArtifactUrlMap::single(
+                DisplaySafeUrl::parse("https://proxy.example/files")?,
+                DisplaySafeUrl::parse("https://canonical.example/packages")?,
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_configuration_preserves_declaration_order() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let system = root.path().join("system");
+        let user = root.path().join("user");
+        let project = root.path().join("project");
+        fs_err::create_dir_all(&system)?;
+        fs_err::create_dir_all(&user)?;
+        fs_err::create_dir_all(&project)?;
+
+        fs_err::write(
+            system.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://download.pytorch.org/whl/cu130"
+            url = "https://system.example/pytorch/cu130"
+            artifact-url-map = { "https://system.example/pytorch/files" = "https://download.pytorch.org/whl/cu130" }
+            "#,
+        )?;
+        fs_err::write(
+            user.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://user.example/simple"
+            url = "https://proxy-user.example/simple"
+            artifact-url-map = { "https://proxy-user.example/files" = "https://user.example/packages" }
+            "#,
+        )?;
+        fs_err::write(
+            project.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple"
+            url = "https://project.example/pypi/simple"
+            artifact-url-map = { "https://project.example/files" = "https://files.pythonhosted.org/packages" }
+            "#,
+        )?;
+
+        let filesystem = Some(FilesystemOptions::from_file(project.join("uv.toml"))?)
+            .combine(Some(FilesystemOptions::from_file(user.join("uv.toml"))?))
+            .combine(Some(FilesystemOptions::from_file(system.join("uv.toml"))?));
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            filesystem,
+            &EnvironmentOptions::new()?,
+        );
+        IndexRoutes::try_from(&settings.index_locations)?;
+        let proxy_indexes = settings.index_locations.proxy_indexes().collect::<Vec<_>>();
+
+        assert_eq!(
+            proxy_indexes
+                .iter()
+                .map(|proxy_index| proxy_index.url.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "https://project.example/pypi/simple",
+                "https://proxy-user.example/simple",
+                "https://system.example/pytorch/cu130",
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_validates_lower_precedence_declarations() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let user = root.path().join("user");
+        let project = root.path().join("project");
+        fs_err::create_dir_all(&user)?;
+        fs_err::create_dir_all(&project)?;
+
+        fs_err::write(
+            user.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "unknown"
+            url = "https://user.example/simple"
+            artifact-url-map = { "https://user.example/files" = "https://canonical.example/packages" }
+            "#,
+        )?;
+        fs_err::write(
+            project.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple"
+            url = "https://project.example/simple"
+            artifact-url-map = { "https://project.example/files" = "https://files.pythonhosted.org/packages" }
+            "#,
+        )?;
+
+        let filesystem = Some(FilesystemOptions::from_file(project.join("uv.toml"))?)
+            .combine(Some(FilesystemOptions::from_file(user.join("uv.toml"))?));
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            filesystem,
+            &EnvironmentOptions::new()?,
+        );
+
+        assert!(matches!(
+            IndexRoutes::try_from(&settings.index_locations),
+            Err(ProxyIndexError::UnknownIndex { .. })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_cross_layer_canonical_url_duplicate() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let user = root.path().join("user");
+        let project = root.path().join("project");
+        fs_err::create_dir_all(&user)?;
+        fs_err::create_dir_all(&project)?;
+
+        fs_err::write(
+            user.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple/"
+            url = "https://user.example/pypi/simple"
+            artifact-url-map = { "https://user.example/files" = "https://user-canonical.example/packages" }
+            "#,
+        )?;
+        fs_err::write(
+            project.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple"
+            url = "https://project.example/pypi/simple"
+            artifact-url-map = { "https://project.example/files" = "https://project-canonical.example/packages" }
+            "#,
+        )?;
+
+        let filesystem = Some(FilesystemOptions::from_file(project.join("uv.toml"))?)
+            .combine(Some(FilesystemOptions::from_file(user.join("uv.toml"))?));
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            filesystem,
+            &EnvironmentOptions::new()?,
+        );
+        assert!(matches!(
+            IndexRoutes::try_from(&settings.index_locations),
+            Err(ProxyIndexError::Duplicate { .. })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_cross_layer_named_url_duplicate() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let user = root.path().join("user");
+        let project = root.path().join("project");
+        fs_err::create_dir_all(&user)?;
+        fs_err::create_dir_all(&project)?;
+
+        fs_err::write(
+            user.join("uv.toml"),
+            r#"
+            [[proxy-index]]
+            index = "https://pypi.org/simple/"
+            url = "https://user.example/pypi/simple"
+            artifact-url-map = { "https://user.example/files" = "https://user-canonical.example/packages" }
+            "#,
+        )?;
+        fs_err::write(
+            project.join("uv.toml"),
+            r#"
+            [[index]]
+            name = "canonical"
+            url = "https://pypi.org/simple"
+
+            [[proxy-index]]
+            index = "canonical"
+            url = "https://project.example/pypi/simple"
+            artifact-url-map = { "https://project.example/files" = "https://project-canonical.example/packages" }
+            "#,
+        )?;
+
+        let filesystem = Some(FilesystemOptions::from_file(project.join("uv.toml"))?)
+            .combine(Some(FilesystemOptions::from_file(user.join("uv.toml"))?));
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            filesystem,
+            &EnvironmentOptions::new()?,
+        );
+        assert!(matches!(
+            IndexRoutes::try_from(&settings.index_locations),
+            Err(ProxyIndexError::Duplicate { .. })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_duplicate_in_one_layer_uses_canonical_identity() -> anyhow::Result<()> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("uv.toml");
+        fs_err::write(
+            &path,
+            r#"
+            [[index]]
+            name = "canonical"
+            url = "https://pypi.org/simple"
+
+            [[proxy-index]]
+            index = "canonical"
+            url = "https://one.example/pypi/simple"
+            artifact-url-map = { "https://one.example/files" = "https://one-canonical.example/packages" }
+
+            [[proxy-index]]
+            index = "https://pypi.org/simple/"
+            url = "https://two.example/pypi/simple"
+            artifact-url-map = { "https://two.example/files" = "https://two-canonical.example/packages" }
+            "#,
+        )?;
+
+        let filesystem = FilesystemOptions::from_file(path)?;
+        let settings = ResolverSettings::combine(
+            ResolverOptions::default(),
+            Some(filesystem),
+            &EnvironmentOptions::new()?,
+        );
+
+        assert!(matches!(
+            IndexRoutes::try_from(&settings.index_locations),
+            Err(ProxyIndexError::Duplicate { .. })
+        ));
+        Ok(())
+    }
 
     #[test]
     fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {

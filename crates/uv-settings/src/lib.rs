@@ -396,6 +396,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
         top_level:
             ResolverInstallerSchema {
                 index,
+                proxy_index,
                 index_url,
                 extra_index_url,
                 no_index,
@@ -515,6 +516,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if index.is_some() {
         masked_fields.push("index");
+    }
+    if proxy_index.is_some() {
+        masked_fields.push("proxy-index");
     }
     if index_url.is_some() {
         masked_fields.push("index-url");

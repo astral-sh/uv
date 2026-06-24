@@ -3,7 +3,7 @@ use std::process::Command;
 use anyhow::{Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use serde_json::json;
@@ -1060,6 +1060,265 @@ fn tool_upgrade_settings() {
      + black==24.3.0
     Installed 2 executables: black, blackd
     ");
+}
+
+#[tokio::test]
+async fn tool_upgrade_reuses_receipt_and_validates_filesystem_proxy_configuration() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_filter((
+            r"WARN Retry attempt #[0-9]+\. Sleeping .+ before the next attempt\n",
+            "",
+        ));
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[proxy-index]]
+        index = "canonical"
+        url = "{proxy_index}"
+        artifact-url-map = {{ "{physical_artifacts}" = "https://files.pythonhosted.org/packages" }}
+        "#,
+        proxy_index = proxy.authenticated_url("public", "heron", "/basic-auth/simple"),
+        physical_artifacts = proxy.url("/basic-auth/files"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+    let receipt = fs_err::read_to_string(
+        tool_dir
+            .join("executable-application")
+            .join("uv-receipt.toml"),
+    )?;
+    assert!(receipt.contains("proxy-index"));
+    assert!(!receipt.contains("public"));
+    assert!(!receipt.contains("heron"));
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "https://pypi.org/simple"
+        default = true
+
+        [[proxy-index]]
+        index = "canonical"
+        url = "{proxy_index}"
+        artifact-url-map = {{}}
+        "#,
+        proxy_index = proxy.authenticated_url("public", "heron", "/basic-auth/simple"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade executable-application
+      Caused by: Invalid artifact URL map for proxy index `http://[LOCALHOST]/basic-auth/simple`
+      Caused by: Artifact URL map must contain at least one physical-to-canonical prefix mapping
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_upgrade_resolves_proxy_name_from_cli_index() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_filter((
+            r"WARN Retry attempt #[0-9]+\. Sleeping .+ before the next attempt\n",
+            "",
+        ));
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let index = "canonical=https://canonical.example/simple";
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&formatdoc! {r#"
+        [[proxy-index]]
+        index = "canonical"
+        url = "{proxy_index}"
+        artifact-url-map = {{ "{physical_artifacts}" = "https://files.pythonhosted.org/packages" }}
+        "#,
+        proxy_index = proxy.url("/simple"),
+        physical_artifacts = proxy.url("/files"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .arg("--index")
+        .arg(index)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .arg("--index")
+        .arg(index)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn tool_upgrade_reconciles_proxies_with_cli_index_override() -> Result<()> {
+    let proxy = crate::pypi_proxy::start().await;
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix()
+        .with_filter((
+            r"WARN Retry attempt #[0-9]+\. Sleeping .+ before the next attempt\n",
+            "",
+        ));
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let original_index = "https://canonical-a.invalid/simple";
+    let replacement_index = "https://canonical-b.invalid/simple";
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "{original_index}"
+        default = true
+
+        [[proxy-index]]
+        index = "canonical"
+        url = "{proxy_index}"
+        artifact-url-map = {{ "{physical_artifacts}" = "https://files.pythonhosted.org/packages" }}
+        "#,
+        proxy_index = proxy.url("/simple"),
+        physical_artifacts = proxy.url("/files"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + executable-application==0.3.0
+    Installed 1 executable: app
+    ");
+
+    uv_toml.write_str(&formatdoc! {r#"
+        [[index]]
+        name = "canonical"
+        url = "{original_index}"
+        default = true
+
+        [[proxy-index]]
+        index = "{replacement_index}"
+        url = "{lower_proxy_index}"
+        artifact-url-map = {{ "{lower_physical_artifacts}" = "https://files.pythonhosted.org/packages" }}
+        "#,
+        lower_proxy_index = proxy.url("/missing/simple"),
+        lower_physical_artifacts = proxy.url("/missing/files"),
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("executable-application")
+        .arg("--config-file")
+        .arg(uv_toml.path())
+        .arg("--index")
+        .arg(format!("canonical={replacement_index}"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    ");
+
+    Ok(())
 }
 
 #[test]

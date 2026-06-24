@@ -544,6 +544,7 @@ pub fn resolver_options(
             index_args.default_index.as_ref(),
             index_args.index.as_deref(),
         ),
+        proxy_index: None,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -673,6 +674,7 @@ pub fn resolver_installer_options_with_indexes(
 
     Ok(ResolverInstallerOptions {
         index,
+        proxy_index: None,
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url

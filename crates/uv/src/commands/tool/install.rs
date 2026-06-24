@@ -14,8 +14,8 @@ use uv_configuration::{
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirementSpecification,
+    ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, ProxyArtifactRoutes,
+    Requirement, RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
@@ -84,6 +84,7 @@ pub(crate) async fn install(
     preview: Preview,
 ) -> Result<ExitStatus> {
     let tool_locks = preview.is_enabled(PreviewFeature::ToolInstallLocks);
+    ProxyArtifactRoutes::try_from(&settings.resolver.index_locations)?;
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."

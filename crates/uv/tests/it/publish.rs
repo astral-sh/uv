@@ -575,6 +575,101 @@ async fn read_index_credential_env_vars_for_check_url() {
 }
 
 #[tokio::test]
+async fn check_url_routes_through_proxy_index() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let canonical = MockServer::start().await;
+    let proxy = MockServer::start().await;
+    let chained = MockServer::start().await;
+    let upload = MockServer::start().await;
+    let wheel = basic_package_wheel();
+    let filename = "basic_package-0.1.0-py3-none-any.whl";
+    let sha256 = format!("{:x}", Sha256::digest(fs_err::read(&wheel)?));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+
+            [[tool.uv.index]]
+            name = "canonical"
+            url = "{canonical}/simple"
+            publish-url = "{upload}/upload"
+
+            [[tool.uv.index]]
+            name = "proxy"
+            url = "{proxy}/simple"
+
+            [[tool.uv.proxy-index]]
+            index = "canonical"
+            url = "{proxy}/simple"
+            artifact-url-map = {{ "{proxy}/files" = "{canonical}/files" }}
+
+            [[tool.uv.proxy-index]]
+            index = "proxy"
+            url = "{chained}/simple"
+            artifact-url-map = {{ "{chained}/files" = "{proxy}/files" }}
+            "#,
+            canonical = canonical.uri(),
+            proxy = proxy.uri(),
+            chained = chained.uri(),
+            upload = upload.uri(),
+        })?;
+
+    let simple_index = json!({
+        "name": "basic-package",
+        "files": [{
+            "filename": filename,
+            "hashes": { "sha256": sha256 },
+            "url": format!("{}/files/{filename}", proxy.uri()),
+        }],
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&canonical)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .expect(1)
+        .mount(&proxy)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/basic-package/"))
+        .respond_with(ResponseTemplate::new(500))
+        .expect(0)
+        .mount(&chained)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg(&wheel)
+        .arg("--index")
+        .arg("canonical")
+        .arg("--trusted-publishing")
+        .arg("never")
+        .current_dir(context.temp_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    File basic_package-0.1.0-py3-none-any.whl already exists, skipping
+    ");
+    assert!(canonical.received_requests().await.unwrap().is_empty());
+    assert!(chained.received_requests().await.unwrap().is_empty());
+    assert!(upload.received_requests().await.unwrap().is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn check_url_missing_package_ignores_content_type() {
     let context = uv_test::test_context!("3.12");
 
