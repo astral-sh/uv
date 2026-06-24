@@ -7093,31 +7093,36 @@ impl Compiler {
                 self.emit_build(BUILD_TUPLE, positional_count + 2)?;
             }
             if let Some(arguments) = arguments.filter(|arguments| !arguments.keywords.is_empty()) {
-                if arguments
-                    .keywords
-                    .iter()
-                    .all(|keyword| keyword.arg.is_some())
-                {
-                    for keyword in &arguments.keywords {
-                        let name = keyword.arg.as_ref().unwrap();
-                        let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
-                        self.emit(LOAD_CONST, key, 1)?;
-                        self.compile_expression(&keyword.value)?;
+                let mut have_dict = false;
+                let mut named_start = 0;
+                for (index, keyword) in arguments.keywords.iter().enumerate() {
+                    if keyword.arg.is_some() {
+                        continue;
                     }
-                    self.assembler.set_location(definition_location);
-                    self.emit_build_map(arguments.keywords.len())?;
-                } else {
-                    self.emit(BUILD_MAP, 0, 1)?;
-                    for keyword in &arguments.keywords {
-                        if let Some(name) = &keyword.arg {
-                            let key =
-                                self.add_constant(Constant::String(name.as_str().to_string()))?;
-                            self.emit(LOAD_CONST, key, 1)?;
-                            self.compile_expression(&keyword.value)?;
-                            self.emit(BUILD_MAP, 1, -1)?;
-                        } else {
-                            self.compile_expression(&keyword.value)?;
+                    if named_start < index {
+                        self.compile_class_keyword_map(
+                            &arguments.keywords[named_start..index],
+                            definition_location,
+                        )?;
+                        if have_dict {
+                            self.emit(DICT_MERGE, 1, -1)?;
                         }
+                        have_dict = true;
+                    }
+                    if !have_dict {
+                        self.emit(BUILD_MAP, 0, 1)?;
+                        have_dict = true;
+                    }
+                    self.compile_expression(&keyword.value)?;
+                    self.emit(DICT_MERGE, 1, -1)?;
+                    named_start = index + 1;
+                }
+                if named_start < arguments.keywords.len() {
+                    self.compile_class_keyword_map(
+                        &arguments.keywords[named_start..],
+                        definition_location,
+                    )?;
+                    if have_dict {
                         self.emit(DICT_MERGE, 1, -1)?;
                     }
                 }
@@ -7169,6 +7174,22 @@ impl Compiler {
         } else {
             self.store_name(definition.name.as_str())
         }
+    }
+
+    fn compile_class_keyword_map(
+        &mut self,
+        keywords: &[Keyword],
+        definition_location: SourceLocation,
+    ) -> Result<(), CompileError> {
+        debug_assert!(!keywords.is_empty() && keywords.iter().all(|keyword| keyword.arg.is_some()));
+        for keyword in keywords {
+            let name = keyword.arg.as_ref().unwrap();
+            let key = self.add_constant(Constant::String(name.as_str().to_string()))?;
+            self.emit(LOAD_CONST, key, 1)?;
+            self.compile_expression(&keyword.value)?;
+        }
+        self.assembler.set_location(definition_location);
+        self.emit_build_map(keywords.len())
     }
 
     fn compile_type_parameters(
