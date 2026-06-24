@@ -3213,31 +3213,8 @@ impl Compiler {
             }
             let body = statement.body.as_slice();
             let body_label = self.assembler.label();
-            let control_region = (early_condition_truthiness(&statement.test).is_none()
-                && self.has_active_control_flow_region())
-            .then(|| (self.assembler.label(), self.assembler.label()));
-            let generator_exclusion = (control_region.is_none()
-                && self.generator_region_start.is_some())
-            .then(|| self.assembler.label());
-            self.compile_jump_if(&statement.test, true, body_label)?;
-            if let Some((control_start, _)) = control_region {
-                self.assembler
-                    .mark_before_trailing_instructions(control_start, 2);
-            }
-            if let Some(exclusion_start) = generator_exclusion {
-                self.assembler
-                    .mark_before_trailing_instructions(exclusion_start, 2);
-            }
-            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
-            if let Some((control_start, control_end)) = control_region {
-                self.assembler.mark(control_end);
-                self.add_control_flow_region_exclusion(control_start, control_end);
-            }
+            self.compile_loop_tail_condition(&statement.test, true, body_label, restart)?;
             self.assembler.mark(body_label);
-            if let Some(exclusion_start) = generator_exclusion {
-                self.generator_region_exclusions
-                    .push((exclusion_start, body_label));
-            }
             self.set_depth(base_depth);
             let body_start = self.assembler.instruction_count();
             let nested_tail = self.compile_with_strict_owned_loads(
@@ -3343,6 +3320,66 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+        }
+        Ok(())
+    }
+
+    fn compile_loop_tail_condition(
+        &mut self,
+        expression: &Expr,
+        jump_on: bool,
+        success: Label,
+        restart: Label,
+    ) -> Result<(), CompileError> {
+        if let Expr::UnaryOp(unary) = expression
+            && unary.op == UnaryOp::Not
+        {
+            return self.compile_loop_tail_condition(&unary.operand, !jump_on, success, restart);
+        }
+        if let Expr::BoolOp(boolean) = expression {
+            let Some((last, leading)) = boolean.values.split_last() else {
+                return Err(CompileError::Internal(
+                    "boolean expression contains no values".to_string(),
+                ));
+            };
+            let short_circuit_value = boolean.op == BoolOp::Or;
+            if short_circuit_value == jump_on {
+                for value in leading {
+                    self.compile_jump_if(value, jump_on, success)?;
+                }
+            } else {
+                for value in leading {
+                    let next = self.assembler.label();
+                    self.compile_loop_tail_condition(value, !short_circuit_value, next, restart)?;
+                    self.assembler.mark(next);
+                }
+            }
+            return self.compile_loop_tail_condition(last, jump_on, success, restart);
+        }
+
+        let control_region = (early_condition_truthiness(expression).is_none()
+            && self.has_active_control_flow_region())
+        .then(|| (self.assembler.label(), self.assembler.label()));
+        let generator_exclusion = (control_region.is_none()
+            && self.generator_region_start.is_some())
+        .then(|| self.assembler.label());
+        self.compile_jump_if(expression, jump_on, success)?;
+        if let Some((control_start, _)) = control_region {
+            self.assembler
+                .mark_before_trailing_instructions(control_start, 2);
+        }
+        if let Some(exclusion_start) = generator_exclusion {
+            self.assembler
+                .mark_before_trailing_instructions(exclusion_start, 2);
+        }
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+        if let Some((control_start, control_end)) = control_region {
+            self.assembler.mark(control_end);
+            self.add_control_flow_region_exclusion(control_start, control_end);
+        }
+        if let Some(exclusion_start) = generator_exclusion {
+            self.generator_region_exclusions
+                .push((exclusion_start, success));
         }
         Ok(())
     }
