@@ -1298,7 +1298,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "value: int\n[x for x in values if True]\n[x for x in values if not None]\n[result for x in values if not predicate]\n[\n    result\n    for x in values\n    if True\n]\n[\n    result\n    for x in values\n    if x\n    if not None\n]\n[x for x in values if left and right]\n{x for x in values if lower < x < upper if accepted}\n(x for x in values if left and right if accepted)\n(x for x in values if left and right async for y in async_values if accepted)\n\ndef restored_then_subscript(values):\n    result = {}\n    result['key'] = [value for value in values]\n\ndef assignment_reuses_target():\n    tasks = [task for task in tasks]\n";
+        let source = "value: int\n[x for x in values if True]\n[x for x in values if not None]\n[result for x in values if not predicate]\n{target.attr: None for target.attr in values}\n[\n    result\n    for x in values\n    if True\n]\n[\n    result\n    for x in values\n    if x\n    if not None\n]\n[x for x in values if left and right]\n{x for x in values if lower < x < upper if accepted}\n(x for x in values if left and right if accepted)\n(x for x in values if left and right async for y in async_values if accepted)\n\ndef restored_then_subscript(values):\n    result = {}\n    result['key'] = [value for value in values]\n\ndef assignment_reuses_target():\n    tasks = [task for task in tasks]\n";
         let expected = Command::new(python)
             .args([
                 "-c",

@@ -10097,11 +10097,13 @@ impl Compiler {
             temporary_indices.push(index);
             self.emit(LOAD_FAST_AND_CLEAR, index, 1)?;
         }
-        self.emit(
-            SWAP,
-            to_u32(temporary_names.len() + 1, "comprehension local count")?,
-            0,
-        )?;
+        if !temporary_names.is_empty() {
+            self.emit(
+                SWAP,
+                to_u32(temporary_names.len() + 1, "comprehension local count")?,
+                0,
+            )?;
+        }
         self.active_temporaries
             .extend(active_temporary_names.iter().cloned());
 
@@ -10125,6 +10127,16 @@ impl Compiler {
             .expect("active comprehension has region exclusions");
         self.active_comprehension_cleanups.pop();
         self.assembler.mark(protected_end);
+
+        if temporary_names.is_empty() {
+            self.set_depth(base_depth + 1);
+            if discard_result {
+                self.assembler
+                    .set_location(self.source_location(generators.last().unwrap().iter.range()));
+                self.emit(POP_TOP, 0, -1)?;
+            }
+            return Ok(());
+        }
 
         let inline_cleanup = true;
         if inline_cleanup {
