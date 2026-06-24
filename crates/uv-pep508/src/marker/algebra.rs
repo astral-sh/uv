@@ -549,6 +549,116 @@ impl InternerGuard<'_> {
         self.create_node(node.var.clone(), children)
     }
 
+    /// Simplify a marker by assuming that another marker is true.
+    ///
+    /// The returned marker is equivalent to `value` wherever `assumption` is true. Its value
+    /// outside of `assumption` is unspecified, which lets us eliminate decisions that are only
+    /// needed to restate the assumption.
+    pub(crate) fn simplify_with_assumption(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.simplify_with_assumption_cached(value, assumption, &mut cache)
+    }
+
+    fn simplify_with_assumption_cached(
+        &mut self,
+        value: NodeId,
+        assumption: NodeId,
+        cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
+    ) -> NodeId {
+        if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
+            return value;
+        }
+        if assumption.is_false() {
+            return NodeId::FALSE;
+        }
+        if value == assumption {
+            return NodeId::TRUE;
+        }
+        if value == assumption.not() {
+            return NodeId::FALSE;
+        }
+        if let Some(&result) = cache.get(&(value, assumption)) {
+            return result;
+        }
+
+        let value_node = self.shared.node(value);
+        let assumption_node = self.shared.node(assumption);
+        let result = match value_node.var.cmp(&assumption_node.var) {
+            Ordering::Less => {
+                let children = value_node.children.map(value, |value| {
+                    self.simplify_with_assumption_cached(value, assumption, cache)
+                });
+                self.create_node(value_node.var.clone(), children)
+            }
+            Ordering::Greater => {
+                // The value does not depend on this variable. Use the first reachable result for
+                // the parts of the variable's range that are outside the assumption. Those parts
+                // are don't-cares, and filling them this way lets `create_node` eliminate the
+                // variable when every reachable branch simplifies to the same result.
+                let mut fallback = None;
+                assumption_node.children.map(assumption, |assumption| {
+                    if assumption.is_false() {
+                        NodeId::FALSE
+                    } else {
+                        let result = self.simplify_with_assumption_cached(value, assumption, cache);
+                        fallback.get_or_insert(result);
+                        result
+                    }
+                });
+                let Some(fallback) = fallback else {
+                    return NodeId::FALSE;
+                };
+                let children = assumption_node.children.map(assumption, |assumption| {
+                    if assumption.is_false() {
+                        fallback
+                    } else {
+                        self.simplify_with_assumption_cached(value, assumption, cache)
+                    }
+                });
+                self.create_node(assumption_node.var.clone(), children)
+            }
+            Ordering::Equal => {
+                // Split both trees into matching ranges. As above, use the first reachable result
+                // for ranges that the assumption excludes.
+                let mut fallback = None;
+                value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            NodeId::FALSE
+                        } else {
+                            let result =
+                                self.simplify_with_assumption_cached(value, assumption, cache);
+                            fallback.get_or_insert(result);
+                            result
+                        }
+                    },
+                );
+                let Some(fallback) = fallback else {
+                    return NodeId::FALSE;
+                };
+                let children = value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            fallback
+                        } else {
+                            self.simplify_with_assumption_cached(value, assumption, cache)
+                        }
+                    },
+                );
+                self.create_node(value_node.var.clone(), children)
+            }
+        };
+
+        cache.insert((value, assumption), result);
+        result
+    }
+
     /// Returns a new tree where the only nodes remaining are non-`extra`
     /// nodes.
     ///

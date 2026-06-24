@@ -2505,10 +2505,10 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "4.11.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "exceptiongroup", marker = "(python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.11' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.11' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
             { name = "idna" },
             { name = "sniffio" },
-            { name = "typing-extensions", marker = "(python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/78/7d432127c41b50bccba979505f272c16cbcadcc33645d5fa3a738110ae75/anyio-4.11.0.tar.gz", hash = "sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4", size = 219094, upload-time = "2025-09-23T09:19:12.58Z" }
         wheels = [
@@ -2521,8 +2521,8 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         source = { virtual = "." }
         dependencies = [
             { name = "anyio" },
-            { name = "tqdm", version = "1.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
-            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin' and extra != 'extra-3-bar-a') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-3-bar-a') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "tqdm", version = "1.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-bar-a'" },
+            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-bar-b' or extra != 'extra-3-bar-a'" },
         ]
 
         [package.optional-dependencies]
@@ -2547,7 +2547,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "(python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'darwin') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (platform_machine != 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
         wheels = [

@@ -1268,6 +1268,24 @@ impl MarkerTree {
         )
     }
 
+    /// Simplify this marker by assuming that `assumption` is true.
+    ///
+    /// The returned marker is equivalent to this marker wherever `assumption` is true, but may
+    /// have a different value outside of that context. Before evaluating the simplified marker,
+    /// callers should conjoin `assumption` to restore its standalone meaning.
+    ///
+    /// For example, simplifying
+    /// `sys_platform == 'linux' and python_version < '3.11'` under the assumption
+    /// `sys_platform == 'linux'` produces `python_version < '3.11'`.
+    #[must_use]
+    pub fn simplify_with_assumption(self, assumption: Self) -> Self {
+        Self(
+            INTERNER
+                .lock()
+                .simplify_with_assumption(self.0, assumption.0),
+        )
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided extras will be removed.
@@ -1946,6 +1964,56 @@ mod test {
                 .unwrap(),
             "python_full_version <= '3.12.1'"
         );
+    }
+
+    #[test]
+    fn simplify_with_assumption() {
+        let environment = m(
+            "(platform_machine == 'x86_64' and sys_platform == 'darwin') or \
+             (platform_machine == 'x86_64' and sys_platform == 'linux') or \
+             (platform_machine == 'AMD64' and sys_platform == 'win32')",
+        );
+        let marker = m(
+            "((platform_machine == 'x86_64' and sys_platform == 'darwin') or \
+             (platform_machine == 'x86_64' and sys_platform == 'linux') or \
+             (platform_machine == 'AMD64' and sys_platform == 'win32')) and \
+             python_version < '3.11'",
+        );
+
+        let simplified = marker.simplify_with_assumption(environment);
+        assert_eq!(simplified, m("python_version < '3.11'"));
+
+        let mut reconstructed = simplified;
+        reconstructed.and(environment);
+        assert_eq!(reconstructed, marker);
+        assert_eq!(
+            environment.simplify_with_assumption(environment),
+            MarkerTree::TRUE
+        );
+
+        for (marker, assumption) in [
+            ("python_version < '3.11'", "sys_platform == 'linux'"),
+            ("sys_platform == 'linux'", "python_version < '3.11'"),
+            (
+                "sys_platform == 'linux' or python_version < '3.11'",
+                "sys_platform == 'darwin' or python_version >= '3.10'",
+            ),
+            (
+                "extra == 'foo' and sys_platform == 'linux'",
+                "extra == 'foo' or sys_platform == 'darwin'",
+            ),
+            ("python_version < '3.11'", "python_version >= '3.12'"),
+        ] {
+            let marker = m(marker);
+            let assumption = m(assumption);
+            let simplified = marker.simplify_with_assumption(assumption);
+
+            let mut expected = marker;
+            expected.and(assumption);
+            let mut reconstructed = simplified;
+            reconstructed.and(assumption);
+            assert_eq!(reconstructed, expected);
+        }
     }
 
     #[test]
