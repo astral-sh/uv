@@ -975,6 +975,46 @@ except ValueError as error:
     }
 
     #[test]
+    fn matches_cpython_marshal_for_inlined_comprehension_cells() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = r#"module_result = [lambda: x for x in range(2)]
+
+def captured_targets():
+    lists = [lambda: x for x in range(2)]
+    sets = {lambda: x for x in range(2)}
+    dictionaries = {x: lambda: x for x in range(2)}
+    return lists, sets, dictionaries
+
+def unreachable_target():
+    if False:
+        return [lambda: item for item in range(3)]
+
+def nested_targets(xs, ys):
+    return [[lambda: x for x in ys] for x in xs]
+"#;
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'comprehension_cells.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "comprehension_cells.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_class_scope_super_resolution() {
         let Some(python) = python_314() else {
             return;

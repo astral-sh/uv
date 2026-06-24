@@ -324,6 +324,7 @@ struct FunctionPlan {
     references: HashSet<String>,
     annotation_references: HashSet<String>,
     cellvars: HashSet<String>,
+    inlined_comprehension_cellvars: HashSet<String>,
     freevars: BTreeSet<String>,
     annotation_freevars: BTreeSet<String>,
     children: Vec<Self>,
@@ -480,6 +481,8 @@ impl FunctionPlan {
                 .into_iter()
                 .filter(|name| local_names.contains(name)),
         );
+        let inlined_comprehension_cellvars =
+            inlined_comprehension_cell_names_in_suite(&definition.body);
         Self {
             key: function_key(definition),
             locals: locals.names,
@@ -488,6 +491,7 @@ impl FunctionPlan {
             references: reference_collector.references,
             annotation_references: annotation_collector.references,
             cellvars,
+            inlined_comprehension_cellvars,
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
             children,
@@ -575,6 +579,7 @@ pub(crate) struct Compiler {
     child_qualified_name_parent: Option<String>,
     class_scope_is_nested: bool,
     defer_async_comprehension_restore: bool,
+    reorder_async_comprehension_cleanup_throw: bool,
     pending_comprehension_restores: Vec<(Vec<u32>, SourceLocation)>,
     active_comprehension_cleanups: Vec<(Label, u32)>,
     active_comprehension_region_exclusions: Vec<Vec<(Label, Label)>>,
@@ -653,6 +658,7 @@ impl Compiler {
             child_qualified_name_parent: None,
             class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
+            reorder_async_comprehension_cleanup_throw: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
@@ -726,7 +732,11 @@ impl Compiler {
             .locals
             .iter()
             .enumerate()
-            .filter(|(index, name)| *index < parameter_count || !plan.cellvars.contains(*name))
+            .filter(|(index, name)| {
+                *index < parameter_count
+                    || !plan.cellvars.contains(*name)
+                    || plan.inlined_comprehension_cellvars.contains(*name)
+            })
             .map(|(_, name)| name.clone())
             .collect();
         let fast_local_count = locals.len();
@@ -734,7 +744,11 @@ impl Compiler {
             .locals
             .iter()
             .enumerate()
-            .filter(|(index, name)| *index >= parameter_count && plan.cellvars.contains(*name))
+            .filter(|(index, name)| {
+                *index >= parameter_count
+                    && plan.cellvars.contains(*name)
+                    && !plan.inlined_comprehension_cellvars.contains(*name)
+            })
             .map(|(_, name)| name.clone())
             .collect();
         cell_only_locals.sort();
@@ -783,6 +797,7 @@ impl Compiler {
             child_qualified_name_parent: None,
             class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
+            reorder_async_comprehension_cleanup_throw: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
@@ -899,6 +914,7 @@ impl Compiler {
             child_qualified_name_parent: None,
             class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
+            reorder_async_comprehension_cleanup_throw: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
@@ -965,7 +981,20 @@ impl Compiler {
             self.temporary_indices.insert(name.clone(), index);
             self.hidden_names.insert(name.clone());
         }
+        self.cell_names
+            .extend(inlined_comprehension_cell_names_in_suite(body));
         self.fast_local_count = self.locals.len();
+        self.assembler.set_location(SourceLocation::NONE);
+        let comprehension_cells = self
+            .locals
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| self.cell_names.contains(name.as_str()))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        for index in comprehension_cells {
+            self.emit(MAKE_CELL, to_u32(index, "module cell index")?, 0)?;
+        }
         if module_bindings.seen.contains("super") {
             // This set is propagated to every child compiler. An impossible
             // Python identifier keeps the module-shadowing fact alongside the
@@ -7213,6 +7242,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars,
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -7337,6 +7367,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars: type_parameter_dependency_names(type_params, &type_names),
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
             children: vec![child_plan],
@@ -7718,6 +7749,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars,
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8144,6 +8176,7 @@ impl Compiler {
             references: references.references,
             annotation_references: HashSet::new(),
             cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8292,6 +8325,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8402,6 +8436,7 @@ impl Compiler {
             references: references.references,
             annotation_references: HashSet::new(),
             cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8473,6 +8508,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -9983,6 +10019,7 @@ impl Compiler {
             references: analysis.references,
             annotation_references: HashSet::new(),
             cellvars: analysis.cellvars,
+            inlined_comprehension_cellvars: analysis.inlined_comprehension_cellvars,
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -10017,6 +10054,8 @@ impl Compiler {
                 } else {
                     0
                 }
+        } else if !closure_names.is_empty() || !self.active_comprehension_cleanups.is_empty() {
+            CO_NESTED
         } else {
             0
         }) | (self.flags & CO_FUTURE_MASK);
@@ -10086,6 +10125,7 @@ impl Compiler {
                 "comprehension has no generators".to_string(),
             ));
         }
+        let comprehension_cell_names = comprehension_cell_names(generators, key, value);
         let base_depth = self.depth;
         let comprehension_location = self.assembler.location();
         if generators[0].is_async {
@@ -10143,6 +10183,9 @@ impl Compiler {
             let index = self.ensure_temporary(name)?;
             temporary_indices.push(index);
             self.emit(LOAD_FAST_AND_CLEAR, index, 1)?;
+            if comprehension_cell_names.contains(name) && self.cell_names.contains(name) {
+                self.emit(MAKE_CELL, index, 0)?;
+            }
         }
         if !temporary_names.is_empty() {
             self.emit(
@@ -10167,7 +10210,15 @@ impl Compiler {
             (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned(),
         ));
         self.active_comprehension_region_exclusions.push(Vec::new());
-        self.compile_comprehension_generator(generators, 0, key, value, add_opcode)?;
+        let previous_reorder_cleanup = std::mem::replace(
+            &mut self.reorder_async_comprehension_cleanup_throw,
+            // CPython 3.14.0rc1's flow graph leaves the throw cleanup immediately before
+            // `END_SEND` for a discarded async comprehension whose target is captured.
+            discard_result && !comprehension_cell_names.is_empty(),
+        );
+        let result = self.compile_comprehension_generator(generators, 0, key, value, add_opcode);
+        self.reorder_async_comprehension_cleanup_throw = previous_reorder_cleanup;
+        result?;
         let region_exclusions = self
             .active_comprehension_region_exclusions
             .pop()
@@ -10350,6 +10401,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars: generator_cellvars,
+            inlined_comprehension_cellvars: HashSet::new(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -11018,6 +11070,7 @@ impl Compiler {
         add_opcode: Opcode,
     ) -> Result<(), CompileError> {
         let generator = &generators[index];
+        let reorder_cleanup = self.reorder_async_comprehension_cleanup_throw;
         let loop_depth = self.depth;
         let cleanup_location = self.assembler.location();
         let start = self.assembler.label();
@@ -11026,8 +11079,11 @@ impl Compiler {
         let yielded_end = self.assembler.label();
         let send = self.assembler.label();
         let send_end = self.assembler.label();
+        let protected_before_cleanup_end = self.assembler.label();
+        let protected_after_cleanup_start = self.assembler.label();
         let protected_end = self.assembler.label();
         let cleanup_throw = self.assembler.label();
+        let cleanup_throw_end = self.assembler.label();
         let async_cleanup = self.assembler.label();
 
         self.assembler.mark(start);
@@ -11042,6 +11098,15 @@ impl Compiler {
         self.assembler.mark(yielded_end);
         self.emit(RESUME, 3, 0)?;
         self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
+        if reorder_cleanup {
+            self.assembler.mark(protected_before_cleanup_end);
+            self.assembler.set_location(cleanup_location);
+            self.assembler.mark(cleanup_throw);
+            self.set_depth(loop_depth + 3);
+            self.emit(CLEANUP_THROW, 0, -1)?;
+            self.assembler.mark(cleanup_throw_end);
+            self.assembler.mark(protected_after_cleanup_start);
+        }
         self.assembler.mark(send_end);
         self.set_depth(loop_depth + 2);
         self.emit(END_SEND, 0, -1)?;
@@ -11098,13 +11163,13 @@ impl Compiler {
         }
         self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
         self.assembler.set_location(cleanup_location);
-
-        self.assembler.mark(cleanup_throw);
-        self.set_depth(loop_depth + 3);
-        self.emit(CLEANUP_THROW, 0, -1)?;
-        let cleanup_throw_end = self.assembler.label();
-        self.assembler.mark(cleanup_throw_end);
-        self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send_end, 0)?;
+        if !reorder_cleanup {
+            self.assembler.mark(cleanup_throw);
+            self.set_depth(loop_depth + 3);
+            self.emit(CLEANUP_THROW, 0, -1)?;
+            self.assembler.mark(cleanup_throw_end);
+            self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send_end, 0)?;
+        }
         self.assembler.add_exception_region(
             yielded,
             yielded_end,
@@ -11113,27 +11178,55 @@ impl Compiler {
             false,
         );
         self.assembler.mark(async_cleanup);
-        self.generator_region_exclusions
-            .push((cleanup_throw, async_cleanup));
-        for exclusions in &mut self.active_comprehension_region_exclusions {
-            exclusions.push((cleanup_throw_end, async_cleanup));
-        }
-        for exclusions in &mut self.active_with_region_exclusions {
-            exclusions.push((cleanup_throw_end, async_cleanup));
-        }
-        for exclusions in &mut self.active_exception_region_exclusions {
-            exclusions.push((cleanup_throw_end, async_cleanup));
-        }
         self.set_depth(loop_depth + 1);
         self.apply_stack_effect(-2)?;
-        self.assembler.emit_backward(END_ASYNC_FOR, send_end);
-        self.assembler.add_exception_region(
-            protected_start,
-            protected_end,
-            async_cleanup,
-            loop_depth.cast_unsigned(),
-            false,
+        self.assembler.emit_backward(
+            END_ASYNC_FOR,
+            if reorder_cleanup {
+                cleanup_throw
+            } else {
+                send_end
+            },
         );
+        if reorder_cleanup {
+            let async_cleanup_end = self.assembler.label();
+            self.assembler.mark(async_cleanup_end);
+            self.generator_region_exclusions
+                .push((cleanup_throw, async_cleanup_end));
+            self.assembler.add_exception_region(
+                protected_start,
+                protected_before_cleanup_end,
+                async_cleanup,
+                loop_depth.cast_unsigned(),
+                false,
+            );
+            self.assembler.add_exception_region(
+                protected_after_cleanup_start,
+                protected_end,
+                async_cleanup,
+                loop_depth.cast_unsigned(),
+                false,
+            );
+        } else {
+            self.generator_region_exclusions
+                .push((cleanup_throw, async_cleanup));
+            for exclusions in &mut self.active_comprehension_region_exclusions {
+                exclusions.push((cleanup_throw_end, async_cleanup));
+            }
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.push((cleanup_throw_end, async_cleanup));
+            }
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((cleanup_throw_end, async_cleanup));
+            }
+            self.assembler.add_exception_region(
+                protected_start,
+                protected_end,
+                async_cleanup,
+                loop_depth.cast_unsigned(),
+                false,
+            );
+        }
         self.assembler.add_exception_region(
             cleanup_throw,
             cleanup_throw_end,
@@ -12045,7 +12138,15 @@ impl Compiler {
     fn load_name(&mut self, name: &str) -> Result<(), CompileError> {
         if self.active_temporaries.contains(name) {
             let index = self.temporary_indices[name];
-            return self.emit(LOAD_FAST, index, 1);
+            return self.emit(
+                if self.cell_names.contains(name) {
+                    LOAD_DEREF
+                } else {
+                    LOAD_FAST
+                },
+                index,
+                1,
+            );
         }
         let annotation_classdict_index = self.annotation_classdict_index;
         match &self.scope {
@@ -12146,7 +12247,15 @@ impl Compiler {
     fn store_name(&mut self, name: &str) -> Result<(), CompileError> {
         if self.active_temporaries.contains(name) {
             let index = self.temporary_indices[name];
-            return self.emit(STORE_FAST, index, -1);
+            return self.emit(
+                if self.cell_names.contains(name) {
+                    STORE_DEREF
+                } else {
+                    STORE_FAST
+                },
+                index,
+                -1,
+            );
         }
         match &self.scope {
             Scope::Module => {
@@ -12207,7 +12316,15 @@ impl Compiler {
     fn delete_name(&mut self, name: &str) -> Result<(), CompileError> {
         if self.active_temporaries.contains(name) {
             let index = self.temporary_indices[name];
-            return self.emit(DELETE_FAST, index, 0);
+            return self.emit(
+                if self.cell_names.contains(name) {
+                    DELETE_DEREF
+                } else {
+                    DELETE_FAST
+                },
+                index,
+                0,
+            );
         }
         match &self.scope {
             Scope::Module => {
@@ -12267,9 +12384,16 @@ impl Compiler {
 
     fn closure_index(&self, name: &str) -> Result<u32, CompileError> {
         match &self.scope {
-            Scope::Module => Err(CompileError::Internal(format!(
-                "module cannot provide closure variable `{name}`"
-            ))),
+            Scope::Module => self
+                .temporary_indices
+                .get(name)
+                .copied()
+                .filter(|_| self.cell_names.contains(name))
+                .ok_or_else(|| {
+                    CompileError::Internal(format!(
+                        "module cannot provide closure variable `{name}`"
+                    ))
+                }),
             Scope::Class { .. } => self
                 .locals
                 .iter()
@@ -12298,7 +12422,7 @@ impl Compiler {
 
     fn can_provide_closure(&self, name: &str) -> bool {
         match &self.scope {
-            Scope::Module => false,
+            Scope::Module => self.cell_names.contains(name),
             Scope::Class { free_indices, .. } => {
                 self.cell_names.contains(name) || free_indices.contains_key(name)
             }
@@ -13464,6 +13588,13 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
             _ => None,
         };
         if let Some(generators) = generators {
+            if let Some(first) = generators.first() {
+                let mut names = Vec::new();
+                collect_nested_comprehension_target_names(&first.iter, &mut names);
+                for name in names {
+                    self.collector.insert_comprehension_target(name);
+                }
+            }
             for generator in generators {
                 let mut names = Vec::new();
                 collect_target_names(&generator.target, &mut names);
@@ -13570,6 +13701,7 @@ struct LambdaScopeAnalysis {
     locals: Vec<String>,
     references: HashSet<String>,
     cellvars: HashSet<String>,
+    inlined_comprehension_cellvars: HashSet<String>,
     required: BTreeSet<String>,
 }
 
@@ -13595,7 +13727,8 @@ fn analyze_lambda_scope(lambda: &ruff_python_ast::ExprLambda) -> LambdaScopeAnal
 
     let mut references = ReferenceCollector::default();
     references.visit_expr(&lambda.body);
-    let nested_requirements = nested_lambda_required_names_in_expression(&lambda.body);
+    let mut nested_requirements = nested_lambda_required_names_in_expression(&lambda.body);
+    nested_requirements.extend(nested_generator_required_names_in_expression(&lambda.body));
     let local_names = locals.names.iter().cloned().collect::<HashSet<_>>();
     let cellvars = nested_requirements
         .iter()
@@ -13613,6 +13746,9 @@ fn analyze_lambda_scope(lambda: &ruff_python_ast::ExprLambda) -> LambdaScopeAnal
         locals: locals.names,
         references: references.references,
         cellvars,
+        inlined_comprehension_cellvars: inlined_comprehension_cell_names_in_expression(
+            &lambda.body,
+        ),
         required,
     }
 }
@@ -13627,6 +13763,30 @@ fn nested_lambda_required_names_in_expression(expression: &Expr) -> BTreeSet<Str
         fn visit_expr(&mut self, expression: &'ast Expr) {
             if let Expr::Lambda(lambda) = expression {
                 self.required.extend(analyze_lambda_scope(lambda).required);
+                return;
+            }
+            walk_expr(self, expression);
+        }
+    }
+
+    let mut collector = Collector::default();
+    collector.visit_expr(expression);
+    collector.required
+}
+
+fn nested_generator_required_names_in_expression(expression: &Expr) -> BTreeSet<String> {
+    #[derive(Default)]
+    struct Collector {
+        required: BTreeSet<String>,
+    }
+
+    impl<'ast> Visitor<'ast> for Collector {
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            if let Expr::Generator(generator) = expression {
+                self.required.extend(generator_required_names(generator));
+                return;
+            }
+            if matches!(expression, Expr::Lambda(_)) {
                 return;
             }
             walk_expr(self, expression);
@@ -14073,6 +14233,111 @@ fn collect_nested_comprehension_target_names(expression: &Expr, names: &mut Vec<
     }
 
     Collector { names }.visit_expr(expression);
+}
+
+fn comprehension_cell_names(
+    generators: &[ruff_python_ast::Comprehension],
+    key: Option<&Expr>,
+    value: &Expr,
+) -> HashSet<String> {
+    fn extend_requirements(expression: &Expr, required: &mut BTreeSet<String>) {
+        required.extend(nested_lambda_required_names_in_expression(expression));
+        required.extend(nested_generator_required_names_in_expression(expression));
+    }
+
+    let mut targets = Vec::new();
+    let mut required = BTreeSet::new();
+    for (index, generator) in generators.iter().enumerate() {
+        collect_target_names(&generator.target, &mut targets);
+        if index > 0 {
+            collect_nested_comprehension_target_names(&generator.iter, &mut targets);
+            extend_requirements(&generator.iter, &mut required);
+        }
+        for condition in &generator.ifs {
+            collect_nested_comprehension_target_names(condition, &mut targets);
+            extend_requirements(condition, &mut required);
+        }
+    }
+    if let Some(key) = key {
+        collect_nested_comprehension_target_names(key, &mut targets);
+        extend_requirements(key, &mut required);
+    }
+    collect_nested_comprehension_target_names(value, &mut targets);
+    extend_requirements(value, &mut required);
+
+    let targets = targets.into_iter().collect::<HashSet<_>>();
+    required
+        .into_iter()
+        .filter(|name| targets.contains(name))
+        .collect()
+}
+
+fn inlined_comprehension_cell_names_in_expression(expression: &Expr) -> HashSet<String> {
+    #[derive(Default)]
+    struct Collector {
+        names: HashSet<String>,
+    }
+
+    impl<'ast> Visitor<'ast> for Collector {
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            match expression {
+                Expr::ListComp(comprehension) => self.names.extend(comprehension_cell_names(
+                    &comprehension.generators,
+                    None,
+                    &comprehension.elt,
+                )),
+                Expr::SetComp(comprehension) => self.names.extend(comprehension_cell_names(
+                    &comprehension.generators,
+                    None,
+                    &comprehension.elt,
+                )),
+                Expr::DictComp(comprehension) => self.names.extend(comprehension_cell_names(
+                    &comprehension.generators,
+                    comprehension.key.as_deref(),
+                    &comprehension.value,
+                )),
+                Expr::Lambda(_) | Expr::Generator(_) => return,
+                _ => {}
+            }
+            walk_expr(self, expression);
+        }
+    }
+
+    let mut collector = Collector::default();
+    collector.visit_expr(expression);
+    collector.names
+}
+
+fn inlined_comprehension_cell_names_in_suite(body: &[Stmt]) -> HashSet<String> {
+    #[derive(Default)]
+    struct Collector {
+        names: HashSet<String>,
+    }
+
+    impl<'ast> Visitor<'ast> for Collector {
+        fn visit_stmt(&mut self, statement: &'ast Stmt) {
+            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+                return;
+            }
+            walk_stmt(self, statement);
+        }
+
+        fn visit_expr(&mut self, expression: &'ast Expr) {
+            self.names
+                .extend(inlined_comprehension_cell_names_in_expression(expression));
+            if matches!(expression, Expr::Lambda(_) | Expr::Generator(_)) {
+                return;
+            }
+            // The expression helper recursively handles every inlined comprehension below this
+            // node, so walking again is unnecessary and would only repeat the same analysis.
+        }
+    }
+
+    let mut collector = Collector::default();
+    for statement in body {
+        collector.visit_stmt(statement);
+    }
+    collector.names
 }
 
 fn collect_named_expression_target_names(expression: &Expr, names: &mut Vec<String>) {
