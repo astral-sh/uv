@@ -109,19 +109,36 @@ impl Hint for Error {
             Self::Project(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
-                // TODO(konsti): astral-tokio-tar should use a proper error instead of
-                // encoding everything in strings
-                // NOTE(ww): We check for both messages below because they indicate
-                // different external extraction scenarios; the first is for any
-                // absolute path outside of the target directory, and the second
-                // is specifically for symlinks that point outside.
-                if err.to_string().contains("/bin/python")
-                    && std::error::Error::source(err).is_some_and(|err| {
-                        let err = err.to_string();
-                        err.ends_with("outside of the target directory")
-                            || err.ends_with("external symlinks are not allowed")
-                    })
-                {
+                let is_virtual_environment_python = |path: &Path| {
+                    path.parent().is_some_and(|parent| parent.ends_with("bin"))
+                        && path
+                            .file_name()
+                            .is_some_and(|name| name.to_string_lossy().starts_with("python"))
+                };
+                let involves_virtual_environment_python = match err {
+                    tar_codec::ExtractError::UnsafePath {
+                        context,
+                        value,
+                        reason,
+                        ..
+                    } => {
+                        *context == "symbolic-link target"
+                            && matches!(*reason, "is absolute" | "escapes the destination root")
+                            && is_virtual_environment_python(Path::new(value))
+                    }
+                    tar_codec::ExtractError::InvalidLink {
+                        path,
+                        target,
+                        reason,
+                        ..
+                    } => {
+                        *reason == "ambient target is not allowed"
+                            && (is_virtual_environment_python(path)
+                                || is_virtual_environment_python(Path::new(target)))
+                    }
+                    _ => false,
+                };
+                if involves_virtual_environment_python {
                     Hints::from(
                         "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
                     )

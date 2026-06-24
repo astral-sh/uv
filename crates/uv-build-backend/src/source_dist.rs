@@ -11,12 +11,14 @@ use futures_lite::future::block_on;
 use globset::{Glob, GlobSet};
 use rustc_hash::FxHashSet;
 use std::io;
-use std::io::{BufReader, Cursor, Read, Write};
+use std::io::{BufReader, Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tar_codec::{ArchiveBuilder as _, Builder, EntryMetadata, FilePayload, TarEncoder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
@@ -46,8 +48,15 @@ pub fn build_source_dist(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
+    let gzip = GzEncoder::new(temp_file.as_file(), Compression::default());
+    let mut gzip_writer = SyncWriter::new(gzip);
+    let writer = TarGzWriter::new(&mut gzip_writer, &source_dist_path);
+    // Closing the borrowed tar writer emits the tar terminator before we finish the gzip stream.
     write_source_dist(source_tree, writer, uv_version, show_warnings)?;
+    gzip_writer
+        .into_inner()
+        .finish()
+        .map_err(|err| Error::GzipWrite(source_dist_path.clone(), err))?;
     temp_file
         .persist(&source_dist_path)
         .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
@@ -412,9 +421,8 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 
     fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // `tokio::io::copy` flushes after each copied entry. Forwarding those flushes to the gzip
-        // encoder changes the deflate stream, even though the tar payload is identical. The
-        // encoder is finalized by `GzEncoder::finish` when the archive is closed.
+        // Per-entry flushes change the deflate stream, even though the tar payload is identical.
+        // The encoder is finalized by `GzEncoder::finish` after the tar archive is closed.
         Poll::Ready(Ok(()))
     }
 
@@ -423,16 +431,15 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 }
 
-struct TarGzWriter<W: Write + Unpin + Send> {
+struct TarGzWriter<'a, W: Write + Unpin> {
     path: PathBuf,
-    tar: tokio_tar::Builder<SyncWriter<GzEncoder<W>>>,
+    tar: Builder<TarEncoder<&'a mut SyncWriter<GzEncoder<W>>>>,
 }
 
-impl<W: Write + Unpin + Send> TarGzWriter<W> {
-    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
+impl<'a, W: Write + Unpin> TarGzWriter<'a, W> {
+    fn new(writer: &'a mut SyncWriter<GzEncoder<W>>, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let enc = GzEncoder::new(writer, Compression::default());
-        let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(enc));
+        let tar = TarEncoder::new(writer).builder();
         Self { path, tar }
     }
 }
@@ -463,82 +470,41 @@ fn normalize_toml10_datetimes(value: &mut toml::Value) {
     }
 }
 
-impl<W: Write + Unpin + Send> DirectoryWriter for TarGzWriter<W> {
+impl<W: Write + Unpin> DirectoryWriter for TarGzWriter<'_, W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        let mut header = Header::new_gnu();
-        // Work around bug in Python's std tar module
-        // https://github.com/python/cpython/issues/141707
-        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
-        header.set_entry_type(EntryType::Regular);
-        header.set_size(bytes.len() as u64);
-        // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
-        // unpacking.
-        header.set_mode(0o644);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(Cursor::new(bytes))),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        block_on(self.tar.add_file(path, bytes, EntryMetadata::default()))
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
-        let mut header = Header::new_gnu();
-        // Work around bug in Python's std tar module
-        // https://github.com/python/cpython/issues/141707
-        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
-        header.set_entry_type(EntryType::Regular);
         // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        let executable_bit = {
-            use std::os::unix::fs::PermissionsExt;
-            file.metadata()?.permissions().mode() & 0o111 != 0
-        };
+        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
         // Windows has no executable bit
         #[cfg(not(unix))]
         let executable_bit = false;
 
-        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
-        // filesystem permissions to the archive for reproducibility. Where applicable, the
-        // operating system filters the stored permission by the user's umask when unpacking.
-        if executable_bit {
-            header.set_mode(0o755);
-        } else {
-            header.set_mode(0o644);
-        }
-        header.set_size(metadata.len());
         let reader = BufReader::new(File::open(file)?);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(reader)),
-        )
+        let payload = FilePayload::new(metadata.len(), SyncReader::new(reader));
+        block_on(self.tar.add_file(
+            path,
+            payload,
+            EntryMetadata::default().executable(executable_bit),
+        ))
         .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        let mut header = Header::new_gnu();
-        // Directories are always executable, which means they can be listed.
-        header.set_mode(0o755);
-        header.set_entry_type(EntryType::Directory);
-        header.set_size(0);
-        block_on(
-            self.tar
-                .append_data(&mut header, directory, SyncReader::new(io::empty())),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
+        block_on(self.tar.add_directory(directory))
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
     fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
-        let path = self.path;
-        let writer =
-            block_on(self.tar.into_inner()).map_err(|err| Error::TarWrite(path.clone(), err))?;
-        writer
-            .into_inner()
-            .finish()
-            .map_err(|err| Error::TarWrite(path, err))?;
+        block_on(self.tar.finish()).map_err(|err| Error::TarWrite(self.path, err))?;
         Ok(())
     }
 }

@@ -36,7 +36,6 @@ uv-static = { workspace = true }
 uv-version = { workspace = true }
 
 anyhow = { workspace = true }
-astral-tokio-tar = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 async_zip = { workspace = true }
@@ -56,6 +55,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 similar = { workspace = true }
+tar-codec = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
