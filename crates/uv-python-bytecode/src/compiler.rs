@@ -6777,7 +6777,7 @@ impl Compiler {
             name.id.as_str(),
             &statement.value,
             statement.range,
-            !matches!(self.scope, Scope::Module),
+            self.child_function_is_nested(),
         )?;
         self.emit_build(BUILD_TUPLE, 3)?;
         self.emit(CALL_INTRINSIC_1, 11, 0)?;
@@ -6808,6 +6808,10 @@ impl Compiler {
                 .into_iter()
                 .filter(|name| type_names.contains(name)),
         );
+        let mut freevars = BTreeSet::new();
+        if matches!(self.scope, Scope::Class { .. }) {
+            freevars.insert("__classdict__".to_string());
+        }
         let plan = FunctionPlan {
             key: (0, 0),
             locals,
@@ -6816,7 +6820,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars,
-            freevars: BTreeSet::new(),
+            freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
@@ -6856,9 +6860,22 @@ impl Compiler {
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
 
+        let wrapper_closure_names: Vec<_> = wrapper
+            .locals
+            .iter()
+            .zip(&wrapper.local_kinds)
+            .filter(|(_, kind)| **kind & CO_FAST_FREE != 0)
+            .map(|(name, _)| name.clone())
+            .collect();
+        if !wrapper_closure_names.is_empty() {
+            self.emit_closure_tuple(&wrapper_closure_names)?;
+        }
         let code = self.add_constant(Constant::Code(Box::new(wrapper)))?;
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
+        if !wrapper_closure_names.is_empty() {
+            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+        }
         self.emit(PUSH_NULL, 0, 1)?;
         self.emit(CALL, 0, -1)?;
         self.store_name(name)
@@ -7413,9 +7430,10 @@ impl Compiler {
         ));
         let needs_class_closure =
             class_needs_class_closure(&definition.body, self.flags & CO_FUTURE_ANNOTATIONS != 0);
-        let needs_classdict = self.flags & CO_FUTURE_ANNOTATIONS == 0
-            && (contains_function_definition(&definition.body)
-                || has_simple_annotations(&definition.body));
+        let needs_classdict = contains_type_alias(&definition.body)
+            || self.flags & CO_FUTURE_ANNOTATIONS == 0
+                && (contains_function_definition(&definition.body)
+                    || has_simple_annotations(&definition.body));
         let class_scope_is_nested = self.child_function_is_nested();
         let mut child = Self::class(
             &self.filename,
@@ -7679,12 +7697,17 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let mut references = ReferenceCollector::default();
         references.visit_expr(expression);
-        let freevars: BTreeSet<_> = references
+        let mut freevars: BTreeSet<_> = references
             .references
             .iter()
             .filter(|name| self.type_parameter_names.contains(*name))
             .cloned()
             .collect();
+        let can_see_class_scope = matches!(self.scope, Scope::Class { .. })
+            || self.free_names.iter().any(|name| name == "__classdict__");
+        if can_see_class_scope {
+            freevars.insert("__classdict__".to_string());
+        }
         let globals = references
             .references
             .difference(&freevars.iter().cloned().collect())
@@ -7740,6 +7763,9 @@ impl Compiler {
             .imported_scope_names
             .clone_from(&self.imported_scope_names);
         child.child_qualified_name_parent = Some(child_qualified_name_parent);
+        if can_see_class_scope {
+            child.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
+        }
         child.emit_function_prologue()?;
         child
             .assembler
@@ -13261,6 +13287,41 @@ fn contains_function_definition(body: &[Stmt]) -> bool {
             .cases
             .iter()
             .any(|case| contains_function_definition(&case.body)),
+        _ => false,
+    })
+}
+
+fn contains_type_alias(body: &[Stmt]) -> bool {
+    body.iter().any(|statement| match statement {
+        Stmt::TypeAlias(_) => true,
+        Stmt::If(statement) => {
+            contains_type_alias(&statement.body)
+                || statement
+                    .elif_else_clauses
+                    .iter()
+                    .any(|clause| contains_type_alias(&clause.body))
+        }
+        Stmt::For(statement) => {
+            contains_type_alias(&statement.body) || contains_type_alias(&statement.orelse)
+        }
+        Stmt::While(statement) => {
+            contains_type_alias(&statement.body) || contains_type_alias(&statement.orelse)
+        }
+        Stmt::Try(statement) => {
+            contains_type_alias(&statement.body)
+                || statement
+                    .handlers
+                    .iter()
+                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
+                    .any(|handler| contains_type_alias(&handler.body))
+                || contains_type_alias(&statement.orelse)
+                || contains_type_alias(&statement.finalbody)
+        }
+        Stmt::With(statement) => contains_type_alias(&statement.body),
+        Stmt::Match(statement) => statement
+            .cases
+            .iter()
+            .any(|case| contains_type_alias(&case.body)),
         _ => false,
     })
 }
