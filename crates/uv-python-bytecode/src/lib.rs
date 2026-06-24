@@ -937,6 +937,50 @@ except ValueError as error:
     }
 
     #[test]
+    fn matches_cpython_marshal_for_class_scope_super_resolution() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = r#"class Outer:
+    def method(self):
+        class Inner:
+            super(Outer, self).method()
+
+            def nested(inner_self):
+                super(Outer, self).method()
+
+
+class Annotated:
+    def method(self):
+        __class__: object
+        super
+
+
+class Shadowed:
+    super = factory
+    value = super(Shadowed, instance).method()
+"#;
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'class_super.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "class_super.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_optimized_generator_calls() {
         let Some(python) = python_314() else {
             return;

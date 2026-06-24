@@ -212,6 +212,7 @@ enum Scope {
         globals: HashSet<String>,
         nonlocals: HashSet<String>,
         free_indices: HashMap<String, u32>,
+        bound_names: HashSet<String>,
     },
     Function {
         indices: HashMap<String, u32>,
@@ -428,6 +429,11 @@ impl FunctionPlan {
 
         let mut children = Vec::new();
         collect_nested_functions(&definition.body, &mut children, future_annotations);
+        if locals.annotation_only.contains("__class__")
+            && !reference_collector.explicit_dunder_class_reference
+        {
+            reference_collector.references.remove("__class__");
+        }
         let local_names: HashSet<_> = locals.names.iter().cloned().collect();
         let class_requirements = nested_class_required_names(&definition.body, future_annotations);
         let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
@@ -841,6 +847,7 @@ impl Compiler {
         globals: HashSet<String>,
         nonlocals: HashSet<String>,
         freevars: BTreeSet<String>,
+        bound_names: HashSet<String>,
         needs_class_closure: bool,
         has_methods: bool,
         future_flags: u32,
@@ -920,6 +927,7 @@ impl Compiler {
                 globals,
                 nonlocals,
                 free_indices,
+                bound_names,
             },
             function_plan: None,
             module_globals: HashSet::new(),
@@ -7776,8 +7784,9 @@ impl Compiler {
         }
         let is_generic = self.generic_target_qualified_name.is_some();
 
-        let mut globals = LocalCollector::default();
-        globals.collect_globals(&definition.body);
+        let mut class_bindings = LocalCollector::default();
+        class_bindings.collect_globals(&definition.body);
+        class_bindings.collect_suite(&definition.body);
         let mut freevars =
             class_required_names(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0)
                 .into_iter()
@@ -7826,9 +7835,10 @@ impl Compiler {
             definition.name.as_str(),
             qualified_name,
             first_line_number,
-            globals.globals,
-            globals.nonlocals,
+            class_bindings.globals,
+            class_bindings.nonlocals,
             freevars,
+            class_bindings.seen,
             needs_class_closure,
             needs_classdict,
             self.flags & CO_FUTURE_MASK,
@@ -9777,7 +9787,7 @@ impl Compiler {
                     && !indices.contains_key("super")
                     && !free_indices.contains_key("super")
             }
-            Scope::Class { .. } => false,
+            Scope::Class { bound_names, .. } => !bound_names.contains("super"),
         };
         if !globally_resolved {
             return Ok(false);
@@ -12129,6 +12139,7 @@ impl Compiler {
                 globals,
                 nonlocals,
                 free_indices,
+                ..
             } => {
                 if globals.contains(name) {
                     let index = self.name_index(name)?;
@@ -12189,6 +12200,7 @@ impl Compiler {
                 globals,
                 nonlocals,
                 free_indices,
+                ..
             } => {
                 if globals.contains(name) {
                     let index = self.name_index(name)?;
@@ -12839,12 +12851,17 @@ impl Compiler {
             collector.visit_stmt(statement);
         }
         for (name, force_name) in collector.names {
-            let is_fast_local = matches!(
+            let is_local_or_free = matches!(
                 &self.scope,
-                Scope::Function { indices, globals, .. }
-                    if indices.contains_key(&name) && !globals.contains(&name)
+                Scope::Function {
+                    indices,
+                    free_indices,
+                    globals,
+                    ..
+                } if indices.contains_key(&name) && !globals.contains(&name)
+                    || free_indices.contains_key(&name)
             ) || self.temporary_indices.contains_key(&name);
-            if force_name || !is_fast_local {
+            if force_name || !is_local_or_free {
                 self.name_index(&name)?;
             }
         }
@@ -12875,12 +12892,17 @@ impl Compiler {
         let mut collector = Collector::default();
         collector.visit_expr(expression);
         for (name, force_name) in collector.names {
-            let is_fast_local = matches!(
+            let is_local_or_free = matches!(
                 &self.scope,
-                Scope::Function { indices, globals, .. }
-                    if indices.contains_key(&name) && !globals.contains(&name)
+                Scope::Function {
+                    indices,
+                    free_indices,
+                    globals,
+                    ..
+                } if indices.contains_key(&name) && !globals.contains(&name)
+                    || free_indices.contains_key(&name)
             );
-            if force_name || !is_fast_local {
+            if force_name || !is_local_or_free {
                 self.name_index(&name)?;
             }
         }
@@ -13658,6 +13680,7 @@ fn class_required_names(definition: &StmtClassDef, future_annotations: bool) -> 
     for statement in &definition.body {
         references.visit_stmt(statement);
     }
+    let body_explicitly_references_dunder_class = references.explicit_dunder_class_reference;
     let mut required = references
         .references
         .into_iter()
@@ -13667,7 +13690,8 @@ fn class_required_names(definition: &StmtClassDef, future_annotations: bool) -> 
         })
         .collect::<BTreeSet<_>>();
     required.extend(locals.nonlocals.iter().cloned());
-    let body_requires_dunder_class = required.contains("__class__");
+    let body_requires_dunder_class =
+        body_explicitly_references_dunder_class && required.contains("__class__");
 
     let mut methods = Vec::new();
     collect_nested_functions(&definition.body, &mut methods, future_annotations);
