@@ -10661,6 +10661,69 @@ impl Compiler {
             return self.compile_comprehension_filter(last, element_location, accepted, restart);
         }
         if let Expr::Compare(comparison) = condition
+            && comparison.ops.len() > 1
+        {
+            let base_depth = self.depth;
+            let cleanup = self.assembler.label();
+            let residue = self.assembler.label();
+            let comparison_location = self.source_location(comparison.range);
+            self.compile_expression(&comparison.left)?;
+            for (operator, comparator) in comparison
+                .ops
+                .iter()
+                .zip(&comparison.comparators)
+                .take(comparison.ops.len() - 1)
+            {
+                self.compile_expression(comparator)?;
+                self.assembler.set_location(comparison_location);
+                self.emit(SWAP, 2, 0)?;
+                self.emit(COPY, 2, 1)?;
+                let (opcode, argument) = comparison_operator_boolean(*operator);
+                self.emit(opcode, argument, -1)?;
+                self.emit_jump_forward(POP_JUMP_IF_FALSE, cleanup, -1)?;
+                self.emit(NOT_TAKEN, 0, 0)?;
+            }
+
+            self.compile_expression(comparison.comparators.last().unwrap())?;
+            self.assembler.set_location(comparison_location);
+            let (opcode, argument) = comparison_operator_boolean(*comparison.ops.last().unwrap());
+            self.emit(opcode, argument, -1)?;
+            let terminal_exclusion_start = self.assembler.label();
+            self.assembler.mark(terminal_exclusion_start);
+            self.assembler.set_location(element_location);
+            self.emit_jump_forward(POP_JUMP_IF_TRUE, residue, -1)?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            let terminal_exclusion_end = self.assembler.label();
+            self.assembler.mark(terminal_exclusion_end);
+
+            self.assembler.mark(residue);
+            self.assembler.set_location(comparison_location);
+            self.emit_jump_forward(JUMP_FORWARD, accepted, 0)?;
+
+            self.assembler.mark(cleanup);
+            self.set_depth(base_depth + 1);
+            self.emit(POP_TOP, 0, -1)?;
+            let cleanup_exclusion_start = self.assembler.label();
+            self.assembler.mark(cleanup_exclusion_start);
+            self.assembler.set_location(element_location);
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            let cleanup_exclusion_end = self.assembler.label();
+            self.assembler.mark(cleanup_exclusion_end);
+            self.set_depth(base_depth);
+
+            for (start, end) in [
+                (terminal_exclusion_start, terminal_exclusion_end),
+                (cleanup_exclusion_start, cleanup_exclusion_end),
+            ] {
+                self.generator_region_exclusions.push((start, end));
+                for exclusions in &mut self.active_comprehension_region_exclusions {
+                    exclusions.push((start, end));
+                }
+            }
+            return Ok(());
+        }
+        if let Expr::Compare(comparison) = condition
             && comparison.ops.len() == 1
             && matches!(comparison.comparators[0], Expr::NoneLiteral(_))
             && matches!(comparison.ops[0], CmpOp::Is | CmpOp::IsNot)
