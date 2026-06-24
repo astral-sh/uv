@@ -227,6 +227,8 @@ struct LoopContext {
     break_label: Label,
     iterator_cleanup: IteratorCleanup,
     with_depth: usize,
+    finally_end_depth: usize,
+    exception_region_depth: usize,
     break_returns: bool,
     preserve_break_exit: bool,
 }
@@ -581,6 +583,7 @@ pub(crate) struct Compiler {
     // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
     // coroutine stop-iteration handler.
     active_normal_finally_bodies: usize,
+    active_finally_end_blocks: usize,
     active_finally_try_bodies: usize,
     active_pass_finally_locations: Vec<SourceLocation>,
     active_overriding_finally_returns: usize,
@@ -654,6 +657,7 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
@@ -782,6 +786,7 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
@@ -895,6 +900,7 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
+            active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
             active_overriding_finally_returns: 0,
@@ -1712,6 +1718,8 @@ impl Compiler {
             break_label: condition_false,
             iterator_cleanup: IteratorCleanup::None,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
@@ -1758,6 +1766,8 @@ impl Compiler {
             break_label: exits[0].1,
             iterator_cleanup: IteratorCleanup::None,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
@@ -2475,12 +2485,6 @@ impl Compiler {
             Stmt::For(statement) => self.compile_for(statement)?,
             Stmt::Break(_) => {
                 // Loop-control cleanup runs after CPython unwinds the active exception block.
-                let exclusion_start =
-                    (!self.active_exception_region_exclusions.is_empty()).then(|| {
-                        let start = self.assembler.label();
-                        self.assembler.mark(start);
-                        start
-                    });
                 let unreachable_depth = self.depth;
                 let context = self
                     .loops
@@ -2488,6 +2492,19 @@ impl Compiler {
                     .copied()
                     .ok_or_else(|| CompileError::Internal("break outside loop".to_string()))?;
                 self.emit(NOP, 0, 0)?;
+                let finally_end_unwind_start =
+                    self.emit_finally_end_unwind(context.finally_end_depth, false)?;
+                let exclusion_start = if self.active_exception_region_exclusions.len()
+                    == context.exception_region_depth
+                {
+                    None
+                } else if finally_end_unwind_start.is_some() {
+                    finally_end_unwind_start
+                } else {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
+                };
                 self.emit_loop_control_exception_unwind(self.loops.len())?;
                 let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 match context.iterator_cleanup {
@@ -2511,7 +2528,11 @@ impl Compiler {
                     let exclusion_end = self.assembler.label();
                     self.assembler.mark(exclusion_end);
                     if let Some(exclusion_start) = exclusion_start {
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                        for exclusions in self
+                            .active_exception_region_exclusions
+                            .iter_mut()
+                            .skip(context.exception_region_depth)
+                        {
                             exclusions.push((exclusion_start, exclusion_end));
                         }
                     }
@@ -2524,17 +2545,24 @@ impl Compiler {
             }
             Stmt::Continue(_) => {
                 // Loop-control cleanup runs after CPython unwinds the active exception block.
-                let exclusion_start =
-                    (!self.active_exception_region_exclusions.is_empty()).then(|| {
-                        let start = self.assembler.label();
-                        self.assembler.mark(start);
-                        start
-                    });
                 let context =
                     self.loops.last().copied().ok_or_else(|| {
                         CompileError::Internal("continue outside loop".to_string())
                     })?;
                 self.emit(NOP, 0, 0)?;
+                let finally_end_unwind_start =
+                    self.emit_finally_end_unwind(context.finally_end_depth, false)?;
+                let exclusion_start = if self.active_exception_region_exclusions.len()
+                    == context.exception_region_depth
+                {
+                    None
+                } else if finally_end_unwind_start.is_some() {
+                    finally_end_unwind_start
+                } else {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
+                };
                 self.emit_loop_control_exception_unwind(self.loops.len())?;
                 let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 self.emit_jump_backward(JUMP_BACKWARD, context.continue_label, 0)?;
@@ -2545,7 +2573,11 @@ impl Compiler {
                     let exclusion_end = self.assembler.label();
                     self.assembler.mark(exclusion_end);
                     if let Some(exclusion_start) = exclusion_start {
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                        for exclusions in self
+                            .active_exception_region_exclusions
+                            .iter_mut()
+                            .skip(context.exception_region_depth)
+                        {
                             exclusions.push((exclusion_start, exclusion_end));
                         }
                     }
@@ -2586,6 +2618,23 @@ impl Compiler {
                 } else if let Some(value) = &statement.value {
                     self.compile_expression(value)?;
                 }
+                let pass_finally_edge_start = unwinds_pass_finally
+                    .then(|| {
+                        let start = self.assembler.label();
+                        self.assembler
+                            .mark_before_trailing_converted_pop_block(start)
+                            .then_some(start)
+                    })
+                    .flatten();
+                let nested_finally_region_unwind_start = (self.active_finally_end_blocks > 0
+                    && self.active_exception_region_exclusions.len()
+                        > self.active_finally_end_blocks)
+                    .then(|| {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        (self.active_finally_end_blocks, start)
+                    });
+                let finally_end_unwind_start = self.emit_finally_end_unwind(0, preserve_tos)?;
                 let delay_exception_unwind_start = overriding_unwind_start.is_none()
                     && !self.active_exception_region_exclusions.is_empty()
                     && self.active_with_exits.is_empty()
@@ -2594,6 +2643,8 @@ impl Compiler {
                     && !self.active_exception_handlers.is_empty();
                 let mut exception_unwind_start = if overriding_unwind_start.is_some() {
                     overriding_unwind_start
+                } else if finally_end_unwind_start.is_some() {
+                    finally_end_unwind_start
                 } else if !self.active_exception_region_exclusions.is_empty()
                     && self.active_with_exits.is_empty()
                     && !unwinds_pass_finally
@@ -2706,8 +2757,13 @@ impl Compiler {
                 }
                 let with_unwind_starts = self.emit_active_with_unwind(0, preserve_tos)?;
                 let finally_unwind_start = if unwinds_pass_finally {
-                    let start = self.assembler.label();
-                    self.assembler.mark(start);
+                    let start = if let Some(start) = pass_finally_edge_start {
+                        start
+                    } else {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        start
+                    };
                     for location in self.active_pass_finally_locations.clone().into_iter().rev() {
                         self.assembler.set_location(location);
                         self.emit(NOP, 0, 0)?;
@@ -2773,7 +2829,14 @@ impl Compiler {
                     let exclusion_start = exception_unwind_start
                         .or(return_exclusion_start)
                         .expect("return exclusion has a start");
-                    for exclusions in &mut self.active_exception_region_exclusions {
+                    for (index, exclusions) in self
+                        .active_exception_region_exclusions
+                        .iter_mut()
+                        .enumerate()
+                    {
+                        let exclusion_start = nested_finally_region_unwind_start
+                            .filter(|(cutoff, _)| index >= *cutoff)
+                            .map_or(exclusion_start, |(_, start)| start);
                         exclusions.push((exclusion_start, return_exclusion_end));
                     }
                 }
@@ -3121,6 +3184,30 @@ impl Compiler {
         Ok(())
     }
 
+    fn emit_finally_end_unwind(
+        &mut self,
+        from_depth: usize,
+        preserve_tos: bool,
+    ) -> Result<Option<Label>, CompileError> {
+        let mut unwind_start = None;
+        for _ in from_depth..self.active_finally_end_blocks {
+            if preserve_tos {
+                self.emit(SWAP, 2, 0)?;
+            }
+            self.emit(POP_TOP, 0, -1)?;
+            if preserve_tos {
+                self.emit(SWAP, 2, 0)?;
+            }
+            if unwind_start.is_none() {
+                let start = self.assembler.label();
+                self.assembler.mark(start);
+                unwind_start = Some(start);
+            }
+            self.emit(POP_EXCEPT, 0, -1)?;
+        }
+        Ok(unwind_start)
+    }
+
     fn compile_loop_tail_while(
         &mut self,
         statement: &ruff_python_ast::StmtWhile,
@@ -3154,6 +3241,8 @@ impl Compiler {
             break_label: restart,
             iterator_cleanup: IteratorCleanup::None,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: false,
             preserve_break_exit: false,
         });
@@ -4476,6 +4565,8 @@ impl Compiler {
                 break_label: end,
                 iterator_cleanup: IteratorCleanup::None,
                 with_depth: self.active_with_exits.len(),
+                finally_end_depth: self.active_finally_end_blocks,
+                exception_region_depth: self.active_exception_region_exclusions.len(),
                 break_returns: false,
                 preserve_break_exit: self.preserve_finally_break_exit_loop_range
                     == Some(statement.range),
@@ -4520,6 +4611,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::None,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -4585,6 +4678,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::Sync,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -4675,6 +4770,8 @@ impl Compiler {
             break_label: end,
             iterator_cleanup: IteratorCleanup::Async,
             with_depth: self.active_with_exits.len(),
+            finally_end_depth: self.active_finally_end_blocks,
+            exception_region_depth: self.active_exception_region_exclusions.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -6210,7 +6307,10 @@ impl Compiler {
         {
             let condition_false = self.assembler.label();
             self.compile_jump_if(&final_if.test, false, condition_false)?;
-            self.compile_suite(&final_if.body)?;
+            self.active_finally_end_blocks += 1;
+            let body_result = self.compile_suite(&final_if.body);
+            self.active_finally_end_blocks -= 1;
+            body_result?;
             if !suite_terminates(&final_if.body) {
                 if let Some(location) = self.assembler.last_instruction_location() {
                     self.assembler.set_location(location);
@@ -6227,7 +6327,10 @@ impl Compiler {
                 self.assembler.set_location(location);
                 self.emit(NOP, 0, 0)?;
             } else {
-                self.compile_suite(&statement.finalbody)?;
+                self.active_finally_end_blocks += 1;
+                let finalbody_result = self.compile_suite(&statement.finalbody);
+                self.active_finally_end_blocks -= 1;
+                finalbody_result?;
             }
             if !suite_terminates(&statement.finalbody) {
                 if let Some(statement) = statement
@@ -6396,6 +6499,17 @@ impl Compiler {
             }
         }
 
+        let pass_finally_unwind_start =
+            (!self.active_pass_finally_locations.is_empty()).then(|| {
+                let start = self.assembler.label();
+                self.assembler.mark(start);
+                start
+            });
+        for location in self.active_pass_finally_locations.clone().into_iter().rev() {
+            self.assembler.set_location(location);
+            self.emit(NOP, 0, 0)?;
+        }
+
         if !preserve_value {
             if let Some(value) = &statement.value {
                 self.compile_expression(value)?;
@@ -6405,6 +6519,21 @@ impl Compiler {
             }
         }
         self.emit(RETURN_VALUE, 0, -1)?;
+        if let Some(pass_finally_unwind_start) = pass_finally_unwind_start {
+            let unwind_end = self.assembler.label();
+            self.assembler.mark(unwind_end);
+            let outer_region_count = self
+                .active_exception_region_exclusions
+                .len()
+                .saturating_sub(1);
+            for exclusions in self
+                .active_exception_region_exclusions
+                .iter_mut()
+                .take(outer_region_count)
+            {
+                exclusions.push((pass_finally_unwind_start, unwind_end));
+            }
+        }
         Ok(handler_end)
     }
 

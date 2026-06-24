@@ -1455,6 +1455,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_finally_end_control_flow() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def conditional_return(flag):\n    try:\n        pass\n    finally:\n        if flag:\n            return\n\ndef nested_return():\n    try:\n        try:\n            pass\n        finally:\n            return\n    finally:\n        pass\n\ndef nested_handler_return():\n    try:\n        pass\n    finally:\n        try:\n            return\n        except Exception:\n            pass\n\ndef break_from_finally():\n    while True:\n        try:\n            pass\n        finally:\n            break\n\ndef continue_from_finally():\n    while True:\n        try:\n            pass\n        finally:\n            continue\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'finally_end.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "finally_end.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_pass_branches_and_surrogates() {
         let Some(python) = python_314() else {
             return;
@@ -1934,15 +1960,37 @@ def overriding_return():
         events.append("override")
         return 2
 
+def break_from_finally():
+    for value in [1, 2]:
+        try:
+            events.append(("try", value))
+        finally:
+            events.append(("break", value))
+            break
+    return "broken"
+
+def continue_from_finally():
+    result = []
+    for value in [1, 2]:
+        try:
+            result.append(("try", value))
+            raise ValueError(value)
+        finally:
+            result.append(("continue", value))
+            continue
+    return result
+
 print(events)
 print(overriding_return(), events)
+print(break_from_finally(), events[-2:])
+print(continue_from_finally())
 "#;
         let Some(output) = execute(source) else {
             return;
         };
         assert_eq!(
             output,
-            "['normal', 'cleanup-1', 'handled', 'cleanup-2']\n2 ['normal', 'cleanup-1', 'handled', 'cleanup-2', 'value', 'override']\n"
+            "['normal', 'cleanup-1', 'handled', 'cleanup-2']\n2 ['normal', 'cleanup-1', 'handled', 'cleanup-2', 'value', 'override']\nbroken [('try', 1), ('break', 1)]\n[('try', 1), ('continue', 1), ('try', 2), ('continue', 2)]\n"
         );
     }
 

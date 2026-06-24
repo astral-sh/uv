@@ -202,6 +202,36 @@ impl Assembler {
         self.items.insert(index, Item::Label(label));
     }
 
+    pub(crate) fn mark_before_trailing_converted_pop_block(&mut self, label: Label) -> bool {
+        let mut instructions = self
+            .items
+            .iter()
+            .enumerate()
+            .rev()
+            .filter_map(|(index, item)| {
+                let Item::Instruction(instruction) = item else {
+                    return None;
+                };
+                Some((index, instruction))
+            });
+        let Some((_, _)) = instructions.next() else {
+            return false;
+        };
+        let Some((mut index, instruction)) = instructions.next() else {
+            return false;
+        };
+        if !instruction.converted_pop_block {
+            return false;
+        }
+        if let Some((previous_index, previous)) = instructions.next()
+            && previous.opcode.code == 27
+        {
+            index = previous_index;
+        }
+        self.items.insert(index, Item::Label(label));
+        true
+    }
+
     pub(crate) fn fusion_barrier(&mut self) {
         let label = self.label();
         self.mark(label);
