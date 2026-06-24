@@ -1397,7 +1397,7 @@ fn lock_sdist_url() -> Result<()> {
         name = "a"
         version = "1.0.0"
         source = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz" }
-        sdist = { hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097" }
+        sdist = { hash = "sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5" }
 
         [[package]]
         name = "project"
@@ -36883,7 +36883,7 @@ fn lock_android() -> Result<()> {
         name = "deltachat-rpc-server"
         version = "1.159.5"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:b923352b2b7253d068cdba7d1d23f36bc82a8dc7eb7f0e3860a1379324c62c32", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5.tar.gz", hash = "sha256:692864680c65a20745fd19ac0fd459cce7540087e99b39832490ac79d001ae8d", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:a09292118bd3cbe9133c410c8228399a65467f1bcacbfbd35ffa27a2c1e8b3c3", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:fcedd34dfec4397a5f516266e7d38237b01133e2fbfe29f08140d04cf8ea5b64", upload-time = "2024-03-24T00:00:00Z" },

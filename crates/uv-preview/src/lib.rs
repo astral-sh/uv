@@ -329,6 +329,8 @@ pub enum PreviewFeature {
     LockfileFormatCheck,
     /// Omit `package.metadata` from `uv.lock`.
     LockWithoutMetadata,
+    /// Uses the new `tar-codec` encoding/decoding backend, instead of `astral-tokio-tar`.
+    TarCodec,
 }
 
 impl Display for PreviewFeature {
@@ -519,6 +521,10 @@ mod tests {
                 assert_eq!(PreviewFeature::from_str(alias).unwrap(), feature);
             }
         }
+
+        let feature = PreviewFeature::from_str("tar-codec").unwrap();
+        assert_eq!(feature, PreviewFeature::TarCodec);
+        assert_eq!(feature.to_string(), "tar-codec");
     }
 
     #[test]
@@ -526,6 +532,9 @@ mod tests {
         // Test single feature
         let preview = Preview::from_str("python-install-default").unwrap();
         assert_eq!(preview.flags, PreviewFeature::PythonInstallDefault);
+
+        let preview = Preview::from_str("tar-codec").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::TarCodec));
 
         // Test multiple features
         let preview = Preview::from_str("json-output,pylock").unwrap();
@@ -563,6 +572,7 @@ mod tests {
         // Test enabled (all features)
         let preview = Preview::all();
         assert_eq!(preview.to_string(), "enabled");
+        assert!(preview.is_enabled(PreviewFeature::TarCodec));
 
         // Test single feature
         let preview = Preview::new(&[PreviewFeature::PythonInstallDefault]);
