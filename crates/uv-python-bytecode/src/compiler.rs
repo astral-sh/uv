@@ -244,6 +244,12 @@ struct ReturnFinallyContext {
     depth: u32,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct WithExitContext {
+    location: SourceLocation,
+    is_async: bool,
+}
+
 #[derive(Debug)]
 struct MatchContext {
     stores: Vec<String>,
@@ -563,7 +569,7 @@ pub(crate) struct Compiler {
     pending_comprehension_restores: Vec<(Vec<u32>, SourceLocation)>,
     active_comprehension_cleanups: Vec<(Label, u32)>,
     active_comprehension_region_exclusions: Vec<Vec<(Label, Label)>>,
-    active_with_exit_locations: Vec<SourceLocation>,
+    active_with_exits: Vec<WithExitContext>,
     active_with_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_terminal_withs: usize,
     // CPython retains the empty end block when an async for ends a protected suite.
@@ -639,7 +645,7 @@ impl Compiler {
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
-            active_with_exit_locations: Vec::new(),
+            active_with_exits: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
             emit_protected_async_for_end_nop: false,
@@ -767,7 +773,7 @@ impl Compiler {
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
-            active_with_exit_locations: Vec::new(),
+            active_with_exits: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
             emit_protected_async_for_end_nop: false,
@@ -880,7 +886,7 @@ impl Compiler {
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
             active_comprehension_region_exclusions: Vec::new(),
-            active_with_exit_locations: Vec::new(),
+            active_with_exits: Vec::new(),
             active_with_region_exclusions: Vec::new(),
             active_terminal_withs: 0,
             emit_protected_async_for_end_nop: false,
@@ -2560,14 +2566,14 @@ impl Compiler {
                 }
                 let delay_exception_unwind_start = overriding_unwind_start.is_none()
                     && !self.active_exception_region_exclusions.is_empty()
-                    && self.active_with_exit_locations.is_empty()
+                    && self.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                     && preserve_tos
                     && !self.active_exception_handlers.is_empty();
                 let mut exception_unwind_start = if overriding_unwind_start.is_some() {
                     overriding_unwind_start
                 } else if !self.active_exception_region_exclusions.is_empty()
-                    && self.active_with_exit_locations.is_empty()
+                    && self.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                     && !delay_exception_unwind_start
                 {
@@ -2579,7 +2585,7 @@ impl Compiler {
                 };
                 let loops = self.loops.clone();
                 let handlers = if !return_is_overridden
-                    && self.active_with_exit_locations.is_empty()
+                    && self.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                 {
                     self.active_exception_handlers.clone()
@@ -2676,15 +2682,13 @@ impl Compiler {
                         }
                     }
                 }
-                let with_unwind_start = if self.active_with_exit_locations.is_empty() {
-                    None
-                } else {
+                let mut with_unwind_starts = Vec::new();
+                for (index, context) in self.active_with_exits.clone().into_iter().enumerate().rev()
+                {
                     let start = self.assembler.label();
                     self.assembler.mark(start);
-                    Some(start)
-                };
-                for location in self.active_with_exit_locations.clone().into_iter().rev() {
-                    self.assembler.set_location(location);
+                    with_unwind_starts.push((index, start));
+                    self.assembler.set_location(context.location);
                     if preserve_tos {
                         self.emit(SWAP, 3, 0)?;
                         self.emit(SWAP, 2, 0)?;
@@ -2694,6 +2698,9 @@ impl Compiler {
                     self.emit(LOAD_CONST, none, 1)?;
                     self.emit(LOAD_CONST, none, 1)?;
                     self.emit(CALL, 3, -4)?;
+                    if context.is_async {
+                        self.compile_awaitable_on_stack(2)?;
+                    }
                     self.emit(POP_TOP, 0, -1)?;
                 }
                 let finally_unwind_start = if unwinds_pass_finally {
@@ -2710,7 +2717,7 @@ impl Compiler {
                 };
                 if !preserve_tos && !return_is_overridden {
                     if let Some(value) = &statement.value {
-                        if with_unwind_start.is_some() || finally_unwind_start.is_some() {
+                        if !with_unwind_starts.is_empty() || finally_unwind_start.is_some() {
                             let constant = fold_constant(value).ok_or_else(|| {
                                 CompileError::Internal(
                                     "literal return value did not fold to a constant".to_string(),
@@ -2768,13 +2775,11 @@ impl Compiler {
                         exclusions.push((exclusion_start, return_exclusion_end));
                     }
                 }
-                if with_unwind_start.is_some() || finally_unwind_start.is_some() {
+                if !with_unwind_starts.is_empty() || finally_unwind_start.is_some() {
                     let unwind_end = self.assembler.label();
                     self.assembler.mark(unwind_end);
-                    if let Some(unwind_start) = with_unwind_start {
-                        for exclusions in &mut self.active_with_region_exclusions {
-                            exclusions.push((unwind_start, unwind_end));
-                        }
+                    for (index, unwind_start) in with_unwind_starts {
+                        self.active_with_region_exclusions[index].push((unwind_start, unwind_end));
                     }
                     if let Some(unwind_start) = finally_unwind_start {
                         for exclusions in &mut self.active_exception_region_exclusions {
@@ -6373,8 +6378,10 @@ impl Compiler {
         } else {
             self.emit(POP_TOP, 0, -1)?;
         }
-        self.active_with_exit_locations
-            .push(self.source_location(item.context_expr.range()));
+        self.active_with_exits.push(WithExitContext {
+            location: self.source_location(item.context_expr.range()),
+            is_async: false,
+        });
         self.active_with_region_exclusions.push(Vec::new());
         self.active_terminal_withs += usize::from(terminal);
         let mut body_noop = None;
@@ -6427,7 +6434,7 @@ impl Compiler {
             .active_with_region_exclusions
             .pop()
             .expect("active with statement has region exclusions");
-        self.active_with_exit_locations.pop();
+        self.active_with_exits.pop();
         self.assembler.mark(protected_end);
         if let Some(range) = body_noop {
             let noop_start = self.assembler.label();
@@ -6585,6 +6592,10 @@ impl Compiler {
         } else {
             self.emit(POP_TOP, 0, -1)?;
         }
+        self.active_with_exits.push(WithExitContext {
+            location: self.source_location(item.context_expr.range()),
+            is_async: true,
+        });
         let body_start = self.assembler.instruction_count();
         if remaining.is_empty() {
             self.compile_suite(body)?;
@@ -6603,6 +6614,7 @@ impl Compiler {
             .active_with_region_exclusions
             .pop()
             .expect("active async with statement has region exclusions");
+        self.active_with_exits.pop();
         if remaining.is_empty()
             && matches!(body, [Stmt::Expr(expression)] if fold_constant(&expression.value).is_some())
         {

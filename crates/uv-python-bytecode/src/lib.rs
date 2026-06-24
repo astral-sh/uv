@@ -427,6 +427,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_async_with_returns() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "async def value(manager):\n    async with manager as result:\n        return result.value\n\nasync def constant(manager):\n    async with manager:\n        return 1\n\nasync def nested(outer, inner):\n    async with outer:\n        with inner:\n            return value\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'async_with_return.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "async_with_return.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_async_comprehension_cleanup_exits() {
         let Some(python) = python_314() else {
             return;
@@ -2007,6 +2033,10 @@ async def contexts():
         raise ValueError('suppressed')
     return events
 
+async def return_from_context():
+    async with AsyncManager() as value:
+        return value + 1
+
 async def comprehensions():
     generated = (number async for number in numbers())
     return (
@@ -2030,13 +2060,14 @@ print(
     asyncio.run(comprehensions()),
     asyncio.run(consume_awaited_generator()),
 )
+print(asyncio.run(return_from_context()), events[-2:])
 ";
         let Some(output) = execute(source) else {
             return;
         };
         assert_eq!(
             output,
-            "(42, 1, 2) [1, 2, 'done'] [1] ['enter', 42, 'exit', 'enter', 'ValueError'] ([4], {1, 2}, {1: 2, 2: 4}, [1, 2]) [42, 42]\n"
+            "(42, 1, 2) [1, 2, 'done'] [1] ['enter', 42, 'exit', 'enter', 'ValueError'] ([4], {1, 2}, {1: 2, 2: 4}, [1, 2]) [42, 42]\n43 ['enter', 'exit']\n"
         );
     }
 
