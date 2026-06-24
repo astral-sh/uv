@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Override,
+    PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -527,12 +527,39 @@ async fn do_lock(
         sources,
         client_builder.credentials_cache(),
     )?;
-    let overrides = target.lower(
-        overrides,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
+    let mut lowered_overrides = Vec::new();
+    for entry in overrides {
+        match entry {
+            Override::Requirement(requirement) => {
+                lowered_overrides.extend(
+                    target
+                        .lower(
+                            vec![requirement],
+                            index_locations,
+                            sources,
+                            client_builder.credentials_cache(),
+                        )?
+                        .into_iter()
+                        .map(Override::Requirement),
+                );
+            }
+            Override::Package(package) => {
+                lowered_overrides.push(Override::Package(PackageOverride {
+                    name: package.name,
+                    version: package.version,
+                    requires_dist: target
+                        .lower(
+                            package.requires_dist.into_vec(),
+                            index_locations,
+                            sources,
+                            client_builder.credentials_cache(),
+                        )?
+                        .into_boxed_slice(),
+                }));
+            }
+        }
+    }
+    let overrides = lowered_overrides;
     let constraints = target.lower(
         constraints,
         index_locations,
@@ -950,11 +977,8 @@ async fn do_lock(
                     .map(NameRequirementSpecification::from)
                     .chain(external)
                     .collect(),
-                overrides
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
+                Vec::new(),
+                overrides.clone(),
                 excludes.clone(),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
@@ -1045,7 +1069,7 @@ impl ValidatedLock {
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
-        overrides: &[Requirement],
+        overrides: &[Override<Requirement>],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,

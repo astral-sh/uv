@@ -21,7 +21,7 @@ use url::Url;
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
     BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
-    InstallTarget,
+    InstallTarget, Override, PackageOverride,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -1813,7 +1813,7 @@ impl Lock {
         required_members: &BTreeMap<PackageName, Editability>,
         requirements: &[Requirement],
         constraints: &[Requirement],
-        overrides: &[Requirement],
+        overrides: &[Override<Requirement>],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
@@ -1915,17 +1915,37 @@ impl Lock {
 
         // Validate that the lockfile was generated with the same overrides.
         {
+            let normalize = |entry: Override<Requirement>| -> Result<_, LockError> {
+                match entry {
+                    Override::Requirement(requirement) => Ok(Override::Requirement(
+                        normalize_requirement(requirement, root, &self.requires_python)?,
+                    )),
+                    Override::Package(package) => Ok(Override::Package(PackageOverride {
+                        name: package.name,
+                        version: package.version,
+                        requires_dist: package
+                            .requires_dist
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_boxed_slice(),
+                    })),
+                }
+            };
             let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(normalize)
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
+                .map(normalize)
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
@@ -2636,7 +2656,10 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile uses a different set of constraints.
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
-    MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    MismatchedOverrides(
+        BTreeSet<Override<Requirement>>,
+        BTreeSet<Override<Requirement>>,
+    ),
     /// The lockfile uses a different set of excludes.
     MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
     /// The lockfile uses a different set of build constraints.
@@ -2765,7 +2788,7 @@ pub struct ResolverManifest {
     constraints: BTreeSet<Requirement>,
     /// The overrides provided to the resolver.
     #[serde(default)]
-    overrides: BTreeSet<Requirement>,
+    overrides: BTreeSet<Override<Requirement>>,
     /// The excludes provided to the resolver.
     #[serde(default)]
     excludes: BTreeSet<PackageName>,
@@ -2784,7 +2807,7 @@ impl ResolverManifest {
         members: impl IntoIterator<Item = PackageName>,
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
-        overrides: impl IntoIterator<Item = Requirement>,
+        overrides: impl IntoIterator<Item = Override<Requirement>>,
         excludes: impl IntoIterator<Item = PackageName>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
@@ -2822,8 +2845,23 @@ impl ResolverManifest {
             overrides: self
                 .overrides
                 .into_iter()
-                .map(|requirement| requirement.relative_to(root))
-                .collect::<Result<BTreeSet<_>, _>>()?,
+                .map(|entry| match entry {
+                    Override::Requirement(requirement) => {
+                        Ok(Override::Requirement(requirement.relative_to(root)?))
+                    }
+                    Override::Package(package) => Ok(Override::Package(PackageOverride {
+                        name: package.name,
+                        version: package.version,
+                        requires_dist: package
+                            .requires_dist
+                            .into_vec()
+                            .into_iter()
+                            .map(|requirement| requirement.relative_to(root))
+                            .collect::<Result<Vec<_>, _>>()?
+                            .into_boxed_slice(),
+                    })),
+                })
+                .collect::<Result<BTreeSet<_>, io::Error>>()?,
             excludes: self.excludes,
             build_constraints: self
                 .build_constraints

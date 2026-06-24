@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -20,7 +20,6 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
-    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
@@ -83,7 +82,7 @@ pub(crate) async fn pip_install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    overrides_from_workspace: Vec<Requirement>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     editable: Option<EditableMode>,
@@ -143,6 +142,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        mut override_dependencies,
         excludes,
         pylock,
         source_trees,
@@ -165,6 +165,8 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
+    override_dependencies.extend(overrides_from_workspace);
+
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
@@ -181,16 +183,6 @@ pub(crate) async fn pip_install(
             constraints_from_workspace
                 .into_iter()
                 .map(NameRequirementSpecification::from),
-        )
-        .collect();
-
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
 
@@ -332,6 +324,7 @@ pub(crate) async fn pip_install(
             &requirements,
             &constraints,
             &overrides,
+            &override_dependencies,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -557,6 +550,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
+            override_dependencies,
             excludes,
             source_trees,
             project,

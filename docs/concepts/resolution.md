@@ -412,6 +412,24 @@ In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of o
 pip-compatible interface, the `--override` option can be used to pass files with the same format as
 constraints files.
 
+By default, an override applies to every requirement for the named dependency, including direct
+requirements. An override can instead be scoped to the dependencies of a particular package version
+by using an inline table:
+
+```toml
+[tool.uv]
+override-dependencies = [
+    "foo>1",
+    { name = "bar", version = "0.0.5", requires-dist = ["foo>2"] },
+]
+```
+
+In this example, `foo>1` is the global override, while `foo>2` replaces requirements for `foo`
+declared by `bar==0.0.5`. Other dependencies declared by `bar` are unchanged. The `version` field
+can be omitted to apply the scoped overrides to all versions of `bar`. A version-specific entry
+takes precedence over an all-versions entry, and a scoped override takes precedence over a global
+override for the same dependency.
+
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.

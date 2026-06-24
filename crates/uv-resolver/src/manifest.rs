@@ -133,7 +133,11 @@ impl Manifest {
                     .iter()
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
                                 requirement
@@ -225,7 +229,11 @@ impl Manifest {
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
