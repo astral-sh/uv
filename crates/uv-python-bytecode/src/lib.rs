@@ -590,8 +590,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source =
-            "try:\n    foo()\nexcept Exception:\n    pass\nelse:\n    pass\nfinally:\n    pass\n";
+        let source = "try:\n    foo()\nexcept Exception:\n    pass\nelse:\n    pass\nfinally:\n    pass\n\ntry:\n    pass\nexcept Exception:\n    pass\nraise (\n    Exception\n)\n";
         let expected = Command::new(python)
             .args([
                 "-c",

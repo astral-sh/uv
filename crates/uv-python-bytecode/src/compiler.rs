@@ -5325,6 +5325,10 @@ impl Compiler {
                 None
             };
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            if statement.orelse.is_empty() && body_noop_location.is_some() {
+                // Keep the pass line when direct exit duplication replaces this jump.
+                self.assembler.preserve_last_direct_inlined_jump_nop();
+            }
             if let Some(exit_exclusion_start) = exit_exclusion_start {
                 let exit_exclusion_end = self.assembler.label();
                 self.assembler.mark(exit_exclusion_end);
