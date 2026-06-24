@@ -343,7 +343,13 @@ impl FunctionPlan {
     }
 
     fn build(definition: &StmtFunctionDef, future_annotations: bool) -> Self {
-        let mut locals = LocalCollector::default();
+        let mut bindings = LocalCollector::default();
+        bindings.collect_globals(&definition.body);
+        bindings.collect_suite(&definition.body);
+        let mut locals = LocalCollector {
+            known_bindings: bindings.names.into_iter().collect(),
+            ..LocalCollector::default()
+        };
         locals.collect_globals(&definition.body);
         for parameter in definition
             .parameters
@@ -11962,6 +11968,7 @@ impl Compiler {
 struct LocalCollector {
     names: Vec<String>,
     seen: HashSet<String>,
+    known_bindings: HashSet<String>,
     comprehension_targets: Vec<String>,
     seen_comprehension_targets: HashSet<String>,
     annotation_only: HashSet<String>,
@@ -12151,6 +12158,12 @@ impl LocalCollector {
                     self.collect_suite(&statement.body);
                 }
                 Stmt::Match(statement) => {
+                    if let Expr::Name(name) = statement.subject.as_ref()
+                        && name.ctx == ExprContext::Load
+                        && self.known_bindings.contains(name.id.as_str())
+                    {
+                        self.insert(name.id.as_str());
+                    }
                     self.collect_expression(&statement.subject);
                     for case in &statement.cases {
                         self.collect_pattern(&case.pattern);
