@@ -13929,6 +13929,17 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                 (Constant::Int(left), Operator::Add, Constant::Int(right)) => {
                     left.checked_add(right).map(Constant::Int)
                 }
+                (
+                    left @ (Constant::Int(_)
+                    | Constant::BigInt {
+                        negative: false, ..
+                    }),
+                    Operator::Add,
+                    right @ (Constant::Int(_)
+                    | Constant::BigInt {
+                        negative: false, ..
+                    }),
+                ) => fold_positive_integer_add(&left, &right),
                 (Constant::Int(left), Operator::Sub, Constant::Int(right)) => {
                     if let Some(value) = left.checked_sub(right) {
                         Some(Constant::Int(value))
@@ -14138,6 +14149,24 @@ fn fold_positive_integer_bitwise(
             Operator::BitXor => left ^ right,
             _ => unreachable!(),
         });
+    }
+    Some(positive_integer_constant(digits))
+}
+
+fn fold_positive_integer_add(left: &Constant, right: &Constant) -> Option<Constant> {
+    let left = positive_integer_digits(left)?;
+    let right = positive_integer_digits(right)?;
+    let mut digits = Vec::with_capacity(left.len().max(right.len()) + 1);
+    let mut carry = 0_u32;
+    for index in 0..left.len().max(right.len()) {
+        let value = u32::from(left.get(index).copied().unwrap_or(0))
+            + u32::from(right.get(index).copied().unwrap_or(0))
+            + carry;
+        digits.push((value & 0x7fff) as u16);
+        carry = value >> 15;
+    }
+    if carry != 0 {
+        digits.push(carry as u16);
     }
     Some(positive_integer_constant(digits))
 }
