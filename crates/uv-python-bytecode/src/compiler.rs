@@ -6708,6 +6708,13 @@ impl Compiler {
             .expect("active with statement has region exclusions");
         self.active_with_exits.pop();
         self.assembler.mark(protected_end);
+        if !remaining.is_empty() && suite_terminates(body) {
+            // A nested manager can suppress the terminal body's exception. CPython keeps the
+            // nested item's line marker before running this outer manager's normal exit.
+            self.assembler
+                .set_location(self.source_location(remaining[0].context_expr.range()));
+            self.emit(NOP, 0, 0)?;
+        }
         if let Some(range) = body_noop {
             let noop_start = self.assembler.label();
             self.assembler.mark(noop_start);
@@ -6728,7 +6735,7 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(item.context_expr.range()));
         let none = self.add_constant(Constant::None)?;
-        if !suite_terminates(body) {
+        if !suite_terminates(body) || !remaining.is_empty() {
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(LOAD_CONST, none, 1)?;

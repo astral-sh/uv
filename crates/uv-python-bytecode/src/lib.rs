@@ -431,7 +431,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def normal():\n    with manager:\n        value = 0\n    value = 1\n\ndef terminal():\n    with manager:\n        value = 0\n        return 1\n    value = 1\n";
+        let source = "def normal():\n    with manager:\n        value = 0\n    value = 1\n\ndef terminal():\n    with manager:\n        value = 0\n        return 1\n    value = 1\n\ndef nested_suppression():\n    with first, \\\n        second:\n        raise Error\n    return result\n";
         let expected = Command::new(python)
             .args([
                 "-c",
@@ -2066,6 +2066,9 @@ with Manager(False) as value:
 with Manager(True):
     raise ValueError("suppressed")
 
+with Manager(False), Manager(True):
+    raise ValueError("suppressed by inner manager")
+
 for index in range(3):
     with Manager(False):
         events.append(index)
@@ -2087,7 +2090,7 @@ print(events)
         };
         assert_eq!(
             output,
-            "['enter', 42, 'exit', 'enter', 'exit', 'enter', 0, 'exit', 'enter', 1, 'exit', 'handled-0', 'handled-1']\n"
+            "['enter', 42, 'exit', 'enter', 'exit', 'enter', 'enter', 'exit', 'exit', 'enter', 0, 'exit', 'enter', 1, 'exit', 'handled-0', 'handled-1']\n"
         );
     }
 
