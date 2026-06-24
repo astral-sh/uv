@@ -558,6 +558,7 @@ pub(crate) struct Compiler {
     type_parameter_names: BTreeSet<String>,
     generic_target_qualified_name: Option<String>,
     child_qualified_name_parent: Option<String>,
+    class_scope_is_nested: bool,
     defer_async_comprehension_restore: bool,
     pending_comprehension_restores: Vec<(Vec<u32>, SourceLocation)>,
     active_comprehension_cleanups: Vec<(Label, u32)>,
@@ -633,6 +634,7 @@ impl Compiler {
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
+            class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
@@ -760,6 +762,7 @@ impl Compiler {
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
+            class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
@@ -872,6 +875,7 @@ impl Compiler {
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
+            class_scope_is_nested: false,
             defer_async_comprehension_restore: false,
             pending_comprehension_restores: Vec::new(),
             active_comprehension_cleanups: Vec::new(),
@@ -6817,7 +6821,7 @@ impl Compiler {
             children: Vec::new(),
         };
         let wrapper_name = format!("<generic parameters of {name}>");
-        let wrapper_flags = if matches!(self.scope, Scope::Function { .. }) {
+        let wrapper_flags = if self.child_function_is_nested() {
             CO_NESTED
         } else {
             0
@@ -6935,7 +6939,7 @@ impl Compiler {
         }
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
         let target_qualified_name = self.child_qualified_name(definition.name.as_str());
-        let wrapper_flags = if matches!(self.scope, Scope::Function { .. }) {
+        let wrapper_flags = if self.child_function_is_nested() {
             CO_NESTED
         } else {
             0
@@ -7101,9 +7105,7 @@ impl Compiler {
             CO_NESTED
         } else if matches!(self.scope, Scope::Class { .. }) {
             CO_METHOD
-                | if self.qualified_name.contains(".<locals>.")
-                    || self.free_names.iter().any(|name| name == ".type_params")
-                {
+                | if self.class_scope_is_nested {
                     CO_NESTED
                 } else {
                     0
@@ -7303,7 +7305,7 @@ impl Compiler {
         };
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
         let target_qualified_name = self.child_qualified_name(definition.name.as_str());
-        let wrapper_flags = if matches!(self.scope, Scope::Function { .. }) {
+        let wrapper_flags = if self.child_function_is_nested() {
             CO_NESTED
         } else {
             0
@@ -7370,6 +7372,7 @@ impl Compiler {
         for decorator in &definition.decorator_list {
             self.compile_expression(&decorator.expression)?;
         }
+        let is_generic = self.generic_target_qualified_name.is_some();
 
         let mut globals = LocalCollector::default();
         globals.collect_globals(&definition.body);
@@ -7392,7 +7395,7 @@ impl Compiler {
                     }
                 })
                 .collect::<BTreeSet<_>>();
-        if self.generic_target_qualified_name.is_some() {
+        if is_generic {
             freevars.insert(".type_params".to_string());
         }
         let closure_names = freevars.iter().cloned().collect::<Vec<_>>();
@@ -7413,6 +7416,7 @@ impl Compiler {
         let needs_classdict = self.flags & CO_FUTURE_ANNOTATIONS == 0
             && (contains_function_definition(&definition.body)
                 || has_simple_annotations(&definition.body));
+        let class_scope_is_nested = self.child_function_is_nested();
         let mut child = Self::class(
             &self.filename,
             Arc::clone(&self.source),
@@ -7426,6 +7430,7 @@ impl Compiler {
             needs_classdict,
             self.flags & CO_FUTURE_MASK,
         );
+        child.class_scope_is_nested = class_scope_is_nested;
         child
             .type_parameter_names
             .clone_from(&self.type_parameter_names);
@@ -7450,7 +7455,7 @@ impl Compiler {
         }
         let name = self.add_constant(Constant::String(definition.name.as_str().to_string()))?;
         self.emit(LOAD_CONST, name, 1)?;
-        if !self.type_parameter_names.is_empty() {
+        if is_generic {
             self.load_name(".type_params")?;
             self.emit(CALL_INTRINSIC_1, 10, 0)?;
             self.store_name(".generic_base")?;
@@ -7468,7 +7473,7 @@ impl Compiler {
             arguments.is_some_and(|arguments| arguments.args.iter().any(Expr::is_starred_expr));
         let argument_count = arguments.map_or(0, |arguments| {
             arguments.args.len() + arguments.keywords.len()
-        }) + usize::from(!self.type_parameter_names.is_empty());
+        }) + usize::from(is_generic);
         if has_unpacking {
             // Extended class calls include the body function and class name in their positional
             // tuple. CPython packs those together with every base before the first starred base.
@@ -7500,7 +7505,7 @@ impl Compiler {
                         self.emit(LIST_APPEND, 1, -1)?;
                     }
                 }
-                if !self.type_parameter_names.is_empty() {
+                if is_generic {
                     self.load_name(".generic_base")?;
                     self.emit(LIST_APPEND, 1, -1)?;
                 }
@@ -7511,11 +7516,11 @@ impl Compiler {
                         self.compile_expression(argument)?;
                     }
                 }
-                if !self.type_parameter_names.is_empty() {
+                if is_generic {
                     self.load_name(".generic_base")?;
                 }
-                let positional_count = arguments.map_or(0, |arguments| arguments.args.len())
-                    + usize::from(!self.type_parameter_names.is_empty());
+                let positional_count =
+                    arguments.map_or(0, |arguments| arguments.args.len()) + usize::from(is_generic);
                 self.emit_build(BUILD_TUPLE, positional_count + 2)?;
             }
             if let Some(arguments) = arguments.filter(|arguments| !arguments.keywords.is_empty()) {
@@ -7563,7 +7568,7 @@ impl Compiler {
                     self.compile_expression(argument)?;
                 }
             }
-            if !self.type_parameter_names.is_empty() {
+            if is_generic {
                 self.load_name(".generic_base")?;
             }
             if let Some(arguments) = arguments {
@@ -7843,11 +7848,7 @@ impl Compiler {
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
-        let parameter_flags = (if matches!(self.scope, Scope::Function { .. })
-            || matches!(self.scope, Scope::Class { .. })
-                && self.qualified_name.contains(".<locals>.")
-            || self.free_names.iter().any(|name| name == ".type_params")
-        {
+        let parameter_flags = (if self.child_function_is_nested() {
             CO_NESTED
         } else {
             0
@@ -7957,12 +7958,11 @@ impl Compiler {
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
-        let parameter_flags =
-            if self.qualified_name.contains(".<locals>.") || !self.free_names.is_empty() {
-                CO_NESTED
-            } else {
-                0
-            };
+        let parameter_flags = if self.child_function_is_nested() || !self.free_names.is_empty() {
+            CO_NESTED
+        } else {
+            0
+        };
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -9564,6 +9564,11 @@ impl Compiler {
             CO_NESTED
         } else if matches!(self.scope, Scope::Class { .. }) {
             CO_METHOD
+                | if self.class_scope_is_nested {
+                    CO_NESTED
+                } else {
+                    0
+                }
         } else {
             0
         }) | (self.flags & CO_FUTURE_MASK);
@@ -9886,8 +9891,12 @@ impl Compiler {
             CO_ASYNC_GENERATOR
         } else {
             CO_GENERATOR
-        } | if matches!(self.scope, Scope::Function { .. }) {
+        } | if self.child_function_is_nested() {
             CO_NESTED
+        } else {
+            0
+        } | if matches!(self.scope, Scope::Class { .. }) {
+            CO_METHOD
         } else {
             0
         } | (self.flags & CO_FUTURE_MASK);
@@ -11706,6 +11715,14 @@ impl Compiler {
             self.assembler.prevent_last_instruction_fusion();
         }
         Ok(())
+    }
+
+    fn child_function_is_nested(&self) -> bool {
+        match self.scope {
+            Scope::Function { .. } => true,
+            Scope::Class { .. } => self.class_scope_is_nested,
+            Scope::Module => false,
+        }
     }
 
     fn child_qualified_name(&self, name: &str) -> String {
