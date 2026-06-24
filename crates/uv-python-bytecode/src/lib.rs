@@ -327,7 +327,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "from __future__ import annotations\n\nclass Container:\n    Local = int\n    type Alias = Local\n    type Generic[T] = tuple[Local, T]\n";
+        let source = "from __future__ import annotations\n\nclass Container:\n    Local = int\n    type Alias = Local\n    type Generic[T] = tuple[Local, T]\n    type Factory[T] = lambda: (Local, T)\n";
         let expected = Command::new(python)
             .args([
                 "-c",

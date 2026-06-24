@@ -6808,6 +6808,11 @@ impl Compiler {
                 .into_iter()
                 .filter(|name| type_names.contains(name)),
         );
+        cellvars.extend(
+            nested_lambda_required_names_in_expression(value)
+                .into_iter()
+                .filter(|name| type_names.contains(name)),
+        );
         let mut freevars = BTreeSet::new();
         if matches!(self.scope, Scope::Class { .. }) {
             freevars.insert("__classdict__".to_string());
@@ -7703,6 +7708,11 @@ impl Compiler {
             .filter(|name| self.type_parameter_names.contains(*name))
             .cloned()
             .collect();
+        freevars.extend(
+            nested_lambda_required_names_in_expression(expression)
+                .into_iter()
+                .filter(|name| self.type_parameter_names.contains(name)),
+        );
         let can_see_class_scope = matches!(self.scope, Scope::Class { .. })
             || self.free_names.iter().any(|name| name == "__classdict__");
         if can_see_class_scope {
