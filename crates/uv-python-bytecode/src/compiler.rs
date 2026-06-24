@@ -10025,8 +10025,15 @@ impl Compiler {
         self.assembler.set_location(comprehension_location);
 
         let mut temporary_names = Vec::new();
-        for generator in generators {
+        for (index, generator) in generators.iter().enumerate() {
             collect_target_names(&generator.target, &mut temporary_names);
+            // The first iterable runs before entering the inlined comprehension scope.
+            if index > 0 {
+                collect_nested_comprehension_target_names(&generator.iter, &mut temporary_names);
+            }
+            for condition in &generator.ifs {
+                collect_nested_comprehension_target_names(condition, &mut temporary_names);
+            }
         }
         if let Some(key) = key {
             collect_nested_comprehension_target_names(key, &mut temporary_names);
@@ -12830,6 +12837,12 @@ struct LocalCollector {
 }
 
 impl LocalCollector {
+    fn insert_comprehension_target(&mut self, name: String) {
+        if self.seen_comprehension_targets.insert(name.clone()) {
+            self.comprehension_targets.push(name);
+        }
+    }
+
     fn insert(&mut self, name: &str) {
         self.annotation_only.remove(name);
         if self.globals.contains(name) || self.nonlocals.contains(name) {
@@ -13070,7 +13083,11 @@ impl LocalCollector {
     }
 
     fn collect_expression(&mut self, expression: &Expr) {
-        NamedExpressionCollector { collector: self }.visit_expr(expression);
+        NamedExpressionCollector {
+            collector: self,
+            in_inlined_comprehension: false,
+        }
+        .visit_expr(expression);
     }
 
     fn collect_pattern(&mut self, pattern: &Pattern) {
@@ -13126,11 +13143,18 @@ impl LocalCollector {
 
 struct NamedExpressionCollector<'a> {
     collector: &'a mut LocalCollector,
+    in_inlined_comprehension: bool,
 }
 
 impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
     fn visit_expr(&mut self, expression: &'ast Expr) {
         if matches!(expression, Expr::Lambda(_)) {
+            return;
+        }
+        if matches!(expression, Expr::Generator(_)) {
+            let previous = std::mem::replace(&mut self.in_inlined_comprehension, false);
+            walk_expr(self, expression);
+            self.in_inlined_comprehension = previous;
             return;
         }
         let generators = match expression {
@@ -13144,18 +13168,22 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
                 let mut names = Vec::new();
                 collect_target_names(&generator.target, &mut names);
                 for name in names {
-                    if self
-                        .collector
-                        .seen_comprehension_targets
-                        .insert(name.clone())
-                    {
-                        self.collector.comprehension_targets.push(name);
-                    }
+                    self.collector.insert_comprehension_target(name);
                 }
                 self.collector.collect_target(&generator.target);
             }
+            let previous = std::mem::replace(&mut self.in_inlined_comprehension, true);
+            walk_expr(self, expression);
+            self.in_inlined_comprehension = previous;
+            return;
         }
         if let Expr::Named(named) = expression {
+            if self.in_inlined_comprehension
+                && let Expr::Name(name) = named.target.as_ref()
+            {
+                self.collector
+                    .insert_comprehension_target(name.id.as_str().to_string());
+            }
             self.collector.collect_target(&named.target);
         }
         walk_expr(self, expression);
