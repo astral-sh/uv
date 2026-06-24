@@ -1491,11 +1491,17 @@ impl SimpleDetailMetadata {
 
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
-            else {
-                debug!("Skipping file for {package_name}: {}", file.filename);
-                continue;
-            };
+            let filename =
+                match DistFilename::try_from_filename_with_reason(&file.filename, package_name) {
+                    Ok(filename) => filename,
+                    Err(err) => {
+                        debug!(
+                            "Skipping file for {package_name}: {:?} ({err})",
+                            file.filename
+                        );
+                        continue;
+                    }
+                };
             let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
@@ -1551,11 +1557,17 @@ impl SimpleDetailMetadata {
                     continue;
                 }
             };
-            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
-            else {
-                debug!("Skipping file for {package_name}: {}", file.filename);
-                continue;
-            };
+            let filename =
+                match DistFilename::try_from_filename_with_reason(&file.filename, package_name) {
+                    Ok(filename) => filename,
+                    Err(err) => {
+                        debug!(
+                            "Skipping file for {package_name}: {:?} ({err})",
+                            file.filename
+                        );
+                        continue;
+                    }
+                };
             match version_map.entry(filename.version().clone()) {
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     entry.get_mut().push(filename, file);
