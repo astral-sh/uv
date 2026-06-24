@@ -5367,8 +5367,21 @@ impl Compiler {
             if !statement.orelse.is_empty()
                 && let Some(location) = location
             {
+                // If `try` and its pass body share a line, CPython retains the enclosing
+                // statement location on the synthetic body marker.
+                let location = self
+                    .assembler
+                    .last_instruction_location()
+                    .filter(|previous| previous.line == location.line)
+                    .unwrap_or(location);
                 self.assembler.set_location(location);
                 self.emit(NOP, 0, 0)?;
+                // The no-op body does not inherit an enclosing finally's exception owner.
+                if self.prevent_try_exit_inlining
+                    && self.active_exception_region_exclusions.len() > 1
+                {
+                    self.assembler.exclude_last_instruction_from_exception();
+                }
             }
             location
         };
@@ -5794,8 +5807,11 @@ impl Compiler {
                     self.emit_deferred_implicit_return()?;
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+                    // A pass-only finally keeps these extended handler exits in its protected
+                    // region; executable finally bodies use CPython's stale-owner exclusion.
                     if !handler_body_has_instructions
                         && !self.active_exception_region_exclusions.is_empty()
+                        && self.active_pass_finally_locations.is_empty()
                     {
                         self.assembler
                             .exclude_last_instruction_from_exception_if_extended();
@@ -5994,6 +6010,11 @@ impl Compiler {
                 let end = self.assembler.label();
                 self.assembler.mark(end);
                 handler_region_exclusions.push((start, end));
+                // The synthetic second-handler marker belongs to neither the group handler nor
+                // an enclosing finally region.
+                for exclusions in &mut self.active_exception_region_exclusions {
+                    exclusions.push((start, end));
+                }
             }
 
             if let Some(name) = &handler.name {
@@ -6137,7 +6158,16 @@ impl Compiler {
 
         self.assembler.mark(orelse);
         self.set_depth(base_depth);
+        let orelse_instruction_start = self.assembler.instruction_count();
         self.compile_suite(&statement.orelse)?;
+        // A protected try-star else suite retains its last pass marker.
+        if self.assembler.instruction_count() == orelse_instruction_start
+            && let Some(Stmt::Pass(statement)) = statement.orelse.last()
+        {
+            self.assembler
+                .set_location(self.source_location(statement.range));
+            self.emit(NOP, 0, 0)?;
+        }
         self.assembler.mark(end);
         self.set_depth(base_depth);
         if terminal {
@@ -6378,6 +6408,10 @@ impl Compiler {
                             .set_location(self.source_location(last.range()));
                     }
                     self.emit(NOP, 0, 0)?;
+                    // A no-op protected body does not acquire an enclosing try's handler.
+                    if self.active_exception_region_exclusions.len() > 1 {
+                        self.assembler.exclude_last_instruction_from_exception();
+                    }
                 }
                 Ok(has_instructions)
             } else {
