@@ -3706,8 +3706,18 @@ impl Compiler {
                 }
                 let body_previous_location = self.assembler.last_instruction_location();
                 let body_start = self.assembler.instruction_count();
-                self.compile_suite(&case.body)?;
-                if !suite_terminates(&case.body) {
+                let emitted_fallthrough = if terminal
+                    && matches!(case.body.last(), Some(Stmt::If(_)))
+                {
+                    let previous_fallthrough =
+                        std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                    self.compile_suite_inner(&case.body, true)?;
+                    std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+                } else {
+                    self.compile_suite(&case.body)?;
+                    false
+                };
+                if !suite_terminates(&case.body) && !emitted_fallthrough {
                     self.set_branch_end_location(&case.body, body_start);
                     if terminal {
                         self.emit_deferred_implicit_return()?;
@@ -3774,8 +3784,16 @@ impl Compiler {
                 failure_reaches_end = true;
             }
             let body_start = self.assembler.instruction_count();
-            self.compile_suite(&case.body)?;
-            if terminal && !suite_terminates(&case.body) {
+            let emitted_fallthrough = if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
+                let previous_fallthrough =
+                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                self.compile_suite_inner(&case.body, true)?;
+                std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+            } else {
+                self.compile_suite(&case.body)?;
+                false
+            };
+            if terminal && !suite_terminates(&case.body) && !emitted_fallthrough {
                 self.set_branch_end_location(&case.body, body_start);
                 self.emit_deferred_implicit_return()?;
                 failure_reaches_end = case.guard.is_some();
