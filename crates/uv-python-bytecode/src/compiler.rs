@@ -11358,6 +11358,7 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let mut effective = Vec::with_capacity(expression.values.len());
         let mut short_circuited = false;
+        let mut folded_prefix = false;
         for (index, value) in expression.values.iter().enumerate() {
             let is_last = index + 1 == expression.values.len();
             if short_circuited {
@@ -11375,6 +11376,7 @@ impl Compiler {
                     short_circuited = true;
                 } else {
                     self.record_folded_value(value)?;
+                    folded_prefix |= index == 0 && fold_constant(value).is_some();
                 }
                 continue;
             }
@@ -11387,6 +11389,11 @@ impl Compiler {
             ));
         };
         self.assembler.set_location(location);
+        if folded_prefix {
+            // CPython folds the leading constant load and its boolean jump, but retains the
+            // jump as a source-position NOP when the next operand starts on another line.
+            self.emit(NOP, 0, 0)?;
+        }
         let base_depth = self.depth;
         let end = self.assembler.label();
         let jump = match expression.op {
