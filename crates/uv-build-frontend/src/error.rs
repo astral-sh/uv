@@ -69,6 +69,8 @@ pub enum Error {
         "`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty."
     )]
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
+    #[error("`backend-path` entry `{0}` does not exist or is not a directory")]
+    InvalidBackendPath(String),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -105,6 +107,7 @@ impl IsBuildBackendError for Error {
             | Self::InvalidSourceDist(_)
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
+            | Self::InvalidBackendPath(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)

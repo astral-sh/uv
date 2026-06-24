@@ -1,8 +1,9 @@
 # Workspace metadata
 
-`uv workspace metadata` exports the information uv has about your workspace as JSON so other tools
-can use it. In particular, if you want access to the information in a `uv.lock`, you should prefer
-this command's output, as `uv.lock` is not a stable format we guarantee anything about.
+`uv workspace metadata` exports the information uv has about your workspace or PEP 723 script as
+JSON so other tools can use it. In particular, if you want access to the information in a `uv.lock`
+or script lockfile, you should prefer this command's output, as lockfiles are not a stable format we
+guarantee anything about. Pass `--script path/to/script.py` to request metadata for a script.
 
 The primary structure is the "resolution" field which contains the dependency graph with exact
 package versions that a `uv.lock` encodes.
@@ -14,13 +15,18 @@ for the node it refers to, and an optional `marker` that
 [specifies on what platforms the dependency is required](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#dependency-specifiers)
 (if there is no marker the dependency is always required).
 
-Nodes in the graph are uniquely identified by package `name`, `version`, `source`, and `kind`.
+Package-derived nodes in the graph are uniquely identified by package `name`, `version`, `source`,
+and `kind`. Script and workspace nodes are identified by their path. Workspace-root dependency group
+nodes are identified by their group name and the workspace path. All node ids should be treated as
+opaque.
 
-There are 3 kinds of node in the graph:
+There are 5 kinds of node in the graph:
 
+- `"script"` -- a PEP 723 script and its direct dependencies
+- `"workspace"` -- a workspace root and its workspace-exclusive dependency groups
 - `"package"` -- the package itself
 - `{ "extra": "extraname" }` -- an extra the package defines
-- `{ "group": "groupname" }` -- a dependency group the package defines
+- `{ "group": "groupname" }` -- a dependency group a package or workspace root defines
 
 (In the future we will add "build" nodes for the dependencies of
 [build environments](https://docs.astral.sh/uv/concepts/projects/config/#build-isolation).)
@@ -36,6 +42,9 @@ for `mypackage` (this node will always depend on `mypackage`). If you want to in
 If you want to install the dependency group `mypackage:mygroup` then find the node with
 `"kind": { "group": "mygroup" }` for `mypackage` (this node will _not_ depend on `mypackage`, as
 dependency groups are just lists of things you might want when working on the package itself).
+
+If the workspace root defines dependency groups but is not itself a package, its `"workspace"` node
+provides the corresponding group node ids through `dependency_groups`.
 
 ## Handling multiple versions of a package
 
@@ -63,15 +72,16 @@ the graph and get actual resolutions you will likely need to consult `conflicts`
 understand how to resolve `markers` for a specific platform.
 
 The best way to avoid mistakes when working with multiple versions of a package is to keep your
-queries into the dependency graph rooted in operations on workspace members, as those are the
-natural entry-points to the graph that uv wants to work on, and can give coherent responses for:
-"install `member1` and `member2[extra]`".
+queries into the dependency graph rooted in operations on the workspace root, workspace members, or
+the requested script. These are the natural entry-points to the graph and can give coherent
+responses for operations such as "install the workspace `dev` group", "install `member1` and
+`member2[extra]`", or "install this script's declared dependencies".
 
 Another way to put this is that when possible _you should avoid iterating over the `resolution`
 object to find a node_. Only access `resolution` like a map using ids that were provided by another
-part of the metadata. The only ids this initially gives you access to are the ones listed in the
-`members` array, which lists all the workspace members. From there you may find the ids of that
-package's dependencies, extras, and dependency groups and recursively discover other packages.
+part of the metadata. For a workspace, the workspace root is `workspace.id` and package entry points
+are listed in the `members` array. For a script, the initial id is `script.id`. From there you may
+recursively discover other packages by following dependency edges.
 
 So rather than trying to find a node for anyio in the dependency graph directly, you should decide
 what workspace member(s) you're interested in analyzing as if they were going to be installed. While
@@ -90,6 +100,15 @@ group_node = metadata.resolution[group.id]
 visit(metadata, [group_node])
 ```
 
+For a dependency group defined on the workspace root, look it up through the workspace node:
+
+```python
+workspace_node = metadata.resolution[metadata.workspace.id]
+group = find_by_name(workspace_node.dependency_groups, "dev")
+group_node = metadata.resolution[group.id]
+visit(metadata, [group_node])
+```
+
 If you wanted to analyze two particular workspace members installed together, it would look
 something like:
 
@@ -100,6 +119,13 @@ for member_name in ["package1", "package2"]:
   member_node = metadata.resolution[member.id]
   to_analyze.append(member_node)
 visit(metadata, to_analyze)
+```
+
+For a script, start from its resolution node in exactly the same way:
+
+```python
+script_node = metadata.resolution[metadata.script.id]
+visit(metadata, [script_node])
 ```
 
 Where `visit` is your favourite graph traversal algorithm like depth-first-search:
@@ -147,6 +173,21 @@ Here is a human-readable annotated example:
     // The absolute path to the environment root
     "root": "/workspace/.venv"
   },
+  // Information about the script target, only present with `--script`.
+  // Workspace metadata uses `workspace` and `members` below as graph entry-points instead.
+  "script": {
+    // The absolute path to the script
+    "path": "/workspace/script.py",
+    // The id of the script's node in the `resolution` map below
+    "id": "script+/workspace/script.py"
+  },
+  // Information about the workspace target, omitted when `--script` is used.
+  "workspace": {
+    // The absolute path to the workspace root
+    "path": "/workspace",
+    // The id of the workspace's node in the `resolution` map below
+    "id": "workspace+/workspace"
+  },
   // Any requirements on the python version this workspace has
   //
   // `marker` fields all have this as an implicit constraint that is omitted for cleanliness
@@ -193,8 +234,10 @@ Here is a human-readable annotated example:
   // Resolved information about packages and dependencies.
   //
   // Each entry in this map is a node in the dependency graph. There are currently
-  // 3 kinds of node in the dependency graph, although more are planned in the future.
+  // 5 kinds of node in the dependency graph, although more are planned in the future.
   //
+  // * Scripts  -- "kind": "script"
+  // * Workspaces -- "kind": "workspace"
   // * Packages -- "kind": "package"
   // * Extras   -- "kind": { "extra": "extraname" }
   // * Groups   -- "kind": { "group": "groupname" }
@@ -210,6 +253,42 @@ Here is a human-readable annotated example:
   // The ids used here are human-readable but should be handled as opaque (the nodes contain
   // the same information in a more convenient form).
   "resolution": {
+
+    // The script node is present when metadata was requested with `--script`. Its dependencies
+    // are the direct requirements declared by the script.
+    "script+/workspace/script.py": {
+      "kind": "script",
+      "path": "/workspace/script.py",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
+
+    // The workspace node owns metadata defined directly on the workspace root.
+    "workspace+/workspace": {
+      "kind": "workspace",
+      "path": "/workspace",
+      "dependencies": [],
+      "dependency_groups": [
+        {
+          "name": "dev",
+          "id": "workspace+/workspace:dev"
+        }
+      ]
+    },
+
+    // This node is a dependency group defined on the non-package workspace root.
+    "workspace+/workspace:dev": {
+      "kind": { "group": "dev" },
+      "path": "/workspace",
+      "dependencies": [
+        {
+          "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    },
 
     // This node is a workspace member
     "mypackage==0.1.0@editable+/workspace/packages/mypackage": {

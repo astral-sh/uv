@@ -715,6 +715,10 @@ This option is also supported in the `pyproject.toml`, e.g.:
 exclude-newer = "2006-12-02T02:07:43Z"
 ```
 
+To disable a global cutoff from a lower-priority configuration source, pass `--exclude-newer false`,
+set `UV_EXCLUDE_NEWER=false`, or set `exclude-newer = false` in a higher-priority configuration
+file.
+
 When specified in persistent configuration, local date times are not allowed.
 
 Values may also be specified for specific packages, e.g.,

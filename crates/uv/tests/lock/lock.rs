@@ -10383,6 +10383,119 @@ fn lock_no_workspace_source() -> Result<()> {
     Ok(())
 }
 
+/// Regression test for <https://github.com/astral-sh/uv/issues/19916>.
+///
+/// Lock a workspace with a member that also supports standalone installation via platform-specific
+/// path sources.
+#[test]
+fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["root/app", "root/lib"]
+
+        [tool.uv.sources]
+        lib = { workspace = true }
+        "#,
+    )?;
+
+    let root = context.temp_dir.child("root");
+    root.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+
+        [tool.uv.sources]
+        lib = { path = "lib" }
+        "#,
+    )?;
+
+    root.child("app").child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "app"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["lib"]
+
+        [tool.uv.sources]
+        lib = [
+            { path = "../lib", editable = true, marker = "sys_platform == 'darwin'" },
+            { path = "../lib", editable = true, marker = "sys_platform != 'darwin'" },
+        ]
+        "#,
+    )?;
+
+    root.child("lib").child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "lib"
+        version = "0.1.0"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "app",
+            "lib",
+        ]
+
+        [[package]]
+        name = "app"
+        version = "0.1.0"
+        source = { virtual = "root/app" }
+        dependencies = [
+            { name = "lib" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "lib", marker = "sys_platform != 'darwin'", editable = "root/lib" },
+            { name = "lib", marker = "sys_platform == 'darwin'", editable = "root/lib" },
+        ]
+
+        [[package]]
+        name = "lib"
+        version = "0.1.0"
+        source = { editable = "root/lib" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 /// Lock a workspace with a member that's a peer to the root.
 #[test]
 fn lock_peer_member() -> Result<()> {
@@ -26531,6 +26644,38 @@ fn lock_group_invalid_entry_table() -> Result<()> {
 }
 
 #[test]
+fn lock_group_include_with_extra_key() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = [{include-group = "bar", unknown = "value"}]
+        bar = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Project `project` has malformed dependency groups
+      Caused by: Group `foo` contains an unknown dependency object specifier: {"include-group": "bar", "unknown": "value"}
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn lock_group_invalid_entry_type() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -34764,6 +34909,152 @@ fn test_tilde_equals_python_version() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Test that a configured exclude-newer value can be disabled via the CLI.
+#[test]
+fn lock_exclude_newer_disable_cli() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        exclude-newer = "2022-04-04T12:00:00Z"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--exclude-newer")
+        .arg("false"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Test that a configured exclude-newer value can be disabled via the environment.
+#[test]
+fn lock_exclude_newer_disable_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        exclude-newer = "2022-04-04T12:00:00Z"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env(EnvVars::UV_EXCLUDE_NEWER, "false"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Test that exclude-newer can be disabled in configuration.
+#[test]
+fn lock_exclude_newer_disable_config() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        exclude-newer = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
 
     Ok(())
 }

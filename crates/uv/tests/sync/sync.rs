@@ -50,6 +50,70 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+/// With `relocatable-envs-default`, project environments are relocatable by default.
+#[test]
+fn sync_relocatable_envs_default() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let project_dir = context.temp_dir.child("project");
+    project_dir.create_dir_all()?;
+    project_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["black"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .current_dir(project_dir.path())
+        .arg("--preview-features")
+        .arg("relocatable-envs-default"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+    ");
+
+    project_dir
+        .child(".venv")
+        .child("pyvenv.cfg")
+        .assert(predicate::str::contains("relocatable = true"));
+
+    let relocated_dir = context.temp_dir.child("relocated");
+    fs_err::rename(project_dir.path(), relocated_dir.path())?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(relocated_dir.path())
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .arg("--no-sync")
+        .arg("black")
+        .arg("--version"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black, 24.3.0 (compiled: yes)
+    Python (CPython) 3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 /// Ensure that `uv sync` reuses remote wheels cached by `uv pip install`.
 #[test]
 fn sync_reuses_pip_install_wheel_cache() -> Result<()> {
@@ -1351,6 +1415,17 @@ fn sync_non_project_dev_dependencies() -> Result<()> {
      + requests==2.31.0
      + sniffio==1.3.1
      + urllib3==2.2.1
+    ");
+
+    // Selecting a member still includes the non-project root's default dependency group.
+    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 11 packages in [TIME]
+    Checked 10 packages in [TIME]
     ");
 
     Ok(())

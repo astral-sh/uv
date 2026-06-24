@@ -16,6 +16,17 @@ fn write_wheel(
     dist_info_prefix: &str,
     files: &[(&str, &str)],
 ) -> Result<()> {
+    write_wheel_with_metadata(path, name, "0.1.0", dist_info_prefix, "", files)
+}
+
+fn write_wheel_with_metadata(
+    path: &Path,
+    name: &str,
+    version: &str,
+    dist_info_prefix: &str,
+    additional_metadata: &str,
+    files: &[(&str, &str)],
+) -> Result<()> {
     let mut writer = ZipFileWriter::new(Vec::new());
     let mut record = Vec::new();
 
@@ -27,10 +38,15 @@ fn write_wheel(
 
     let metadata_path = format!("{dist_info_prefix}.dist-info/METADATA");
     let entry = ZipEntryBuilder::new(metadata_path.clone().into(), Compression::Stored);
-    block_on(writer.write_entry_whole(
-        entry,
-        format!("Metadata-Version: 2.1\nName: {name}\nVersion: 0.1.0\n").as_bytes(),
-    ))?;
+    block_on(
+        writer.write_entry_whole(
+            entry,
+            format!(
+                "Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n{additional_metadata}"
+            )
+            .as_bytes(),
+        ),
+    )?;
     record.push(format!("{metadata_path},,"));
 
     let wheel_path = format!("{dist_info_prefix}.dist-info/WHEEL");
@@ -70,6 +86,10 @@ fn workspace_metadata_simple() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/foo",
+      "workspace": {
+        "path": "[TEMP_DIR]/foo",
+        "id": "workspace+[TEMP_DIR]/foo"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -90,6 +110,11 @@ fn workspace_metadata_simple() {
           },
           "kind": "package",
           "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/foo": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/foo",
+          "dependencies": []
         }
       }
     }
@@ -100,6 +125,303 @@ fn workspace_metadata_simple() {
     Resolved 1 package in [TIME]
     "#
     );
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn workspace_metadata_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = ["iniconfig"]
+# ///
+
+import iniconfig
+"#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .workspace_metadata()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--sync"),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "environment": {
+        "root": "[CACHE_DIR]/environments-v2/script-[HASH]"
+      },
+      "script": {
+        "path": "[TEMP_DIR]/script.py",
+        "id": "script+[TEMP_DIR]/script.py"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "module_owners": {
+        "iniconfig": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig._parse": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig._version": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ],
+        "iniconfig.exceptions": [
+          {
+            "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+          }
+        ]
+      },
+      "resolution": {
+        "iniconfig==2.0.0@registry+https://pypi.org/simple": {
+          "name": "iniconfig",
+          "version": "2.0.0",
+          "source": {
+            "registry": {
+              "url": "https://pypi.org/simple"
+            }
+          },
+          "kind": "package",
+          "dependencies": [],
+          "sdist": {
+            "url": "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+            "hashes": {
+              "sha256": "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3"
+            },
+            "size": 4646,
+            "upload_time": "2023-01-07T11:08:11.254Z"
+          },
+          "wheels": [
+            {
+              "url": "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+              "hashes": {
+                "sha256": "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374"
+              },
+              "size": 5892,
+              "upload_time": "2023-01-07T11:08:09.864Z",
+              "filename": "iniconfig-2.0.0-py3-none-any.whl"
+            }
+          ]
+        },
+        "script+[TEMP_DIR]/script.py": {
+          "kind": "script",
+          "path": "[TEMP_DIR]/script.py",
+          "dependencies": [
+            {
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved 1 package in [TIME]
+    "#
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_no_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
+print("Hello, world!")
+"#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .workspace_metadata()
+            .arg("--script")
+            .arg(script.path()),
+        @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "schema": {
+        "version": "preview"
+      },
+      "workspace_root": "[TEMP_DIR]/",
+      "script": {
+        "path": "[TEMP_DIR]/script.py",
+        "id": "script+[TEMP_DIR]/script.py"
+      },
+      "requires_python": ">=3.12",
+      "conflicts": {
+        "sets": []
+      },
+      "resolution": {
+        "script+[TEMP_DIR]/script.py": {
+          "kind": "script",
+          "path": "[TEMP_DIR]/script.py",
+          "dependencies": []
+        }
+      }
+    }
+
+    ----- stderr -----
+    warning: The `uv workspace metadata` command is experimental and may change without warning. Pass `--preview-features workspace-metadata` to disable this warning.
+    Resolved in [TIME]
+    "#
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn workspace_metadata_script_dependency_edges() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context
+        .temp_dir
+        .child("metadata_edge_child-0.1.0-py3-none-any.whl");
+    write_wheel(
+        child.path(),
+        "metadata-edge-child",
+        "metadata_edge_child-0.1.0",
+        &[],
+    )?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let first = context
+        .temp_dir
+        .child("metadata_edge-1.0.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        first.path(),
+        "metadata-edge",
+        "1.0.0",
+        "metadata_edge-1.0.0",
+        &format!(
+            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
+        ),
+        &[],
+    )?;
+    let first_url = Url::from_file_path(first.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let second = context
+        .temp_dir
+        .child("metadata_edge-2.0.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        second.path(),
+        "metadata-edge",
+        "2.0.0",
+        "metadata_edge-2.0.0",
+        &format!(
+            "Provides-Extra: feature\nRequires-Dist: metadata-edge-child @ {child_url}; extra == 'feature'\n"
+        ),
+        &[],
+    )?;
+    let second_url = Url::from_file_path(second.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(&format!(
+        r#"# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#   "metadata-edge[feature] @ {first_url}; sys_platform == 'win32'",
+#   "metadata-edge[feature] @ {second_url}; sys_platform != 'win32'",
+# ]
+# ///
+"#
+    ))?;
+
+    let assert = context
+        .workspace_metadata()
+        .arg("--script")
+        .arg(script.path())
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    let resolution = metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let script_id = metadata["script"]["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("script ID was not a string"))?;
+    let script_node = resolution
+        .get(script_id)
+        .ok_or_else(|| anyhow::anyhow!("missing resolution node for {script_id}"))?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(serde_json::json!({
+            "script": metadata["script"],
+            "node": script_node,
+        }), @r#"
+        {
+          "node": {
+            "dependencies": [
+              {
+                "id": "metadata-edge[feature]==2.0.0@path+[TEMP_DIR]/metadata_edge-2.0.0-py3-none-any.whl",
+                "marker": "sys_platform != 'win32'"
+              },
+              {
+                "id": "metadata-edge[feature]==1.0.0@path+[TEMP_DIR]/metadata_edge-1.0.0-py3-none-any.whl",
+                "marker": "sys_platform == 'win32'"
+              }
+            ],
+            "kind": "script",
+            "path": "[TEMP_DIR]/script.py"
+          },
+          "script": {
+            "id": "script+[TEMP_DIR]/script.py",
+            "path": "[TEMP_DIR]/script.py"
+          }
+        }
+        "#);
+    });
+
+    for dependency in script_node["dependencies"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("script dependencies was not an array"))?
+    {
+        let id = dependency["id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("script dependency ID was not a string"))?;
+        anyhow::ensure!(
+            resolution.contains_key(id),
+            "missing resolution node for {id}"
+        );
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -164,6 +486,10 @@ dependencies = [
       "workspace_root": "[TEMP_DIR]/",
       "environment": {
         "root": "[VENV]/"
+      },
+      "workspace": {
+        "path": "[TEMP_DIR]/",
+        "id": "workspace+[TEMP_DIR]/"
       },
       "requires_python": ">=3.12",
       "conflicts": {
@@ -276,6 +602,11 @@ dependencies = [
               "filename": "typing_extensions-0.1.0-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/",
+          "dependencies": []
         }
       }
     }
@@ -468,6 +799,10 @@ fn workspace_metadata_root_workspace() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -594,6 +929,11 @@ fn workspace_metadata_root_workspace() -> Result<()> {
               "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -622,7 +962,13 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         &workspace,
     )?;
 
-    uv_snapshot!(context.filters(), context.workspace_metadata().current_dir(&workspace), @r#"
+    let mut filters = context.filters();
+    filters.push((
+        r"(?m)^WARN Ignoring non-directory workspace member: `[^\n]+`\n",
+        "",
+    ));
+
+    uv_snapshot!(filters, context.workspace_metadata().current_dir(&workspace), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -631,6 +977,10 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -824,6 +1174,11 @@ fn workspace_metadata_virtual_workspace() -> Result<()> {
               "filename": "sniffio-1.3.1-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -863,6 +1218,10 @@ fn workspace_metadata_from_member() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -989,6 +1348,11 @@ fn workspace_metadata_from_member() -> Result<()> {
               "id": "idna==3.6@registry+https://pypi.org/simple"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -1037,6 +1401,10 @@ fn workspace_metadata_multiple_members() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/pkg-a",
+      "workspace": {
+        "path": "[TEMP_DIR]/pkg-a",
+        "id": "workspace+[TEMP_DIR]/pkg-a"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1085,6 +1453,11 @@ fn workspace_metadata_multiple_members() {
           },
           "kind": "package",
           "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/pkg-a": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/pkg-a",
+          "dependencies": []
         }
       }
     }
@@ -1115,6 +1488,10 @@ fn workspace_metadata_single_project() {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/my-project",
+      "workspace": {
+        "path": "[TEMP_DIR]/my-project",
+        "id": "workspace+[TEMP_DIR]/my-project"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1134,6 +1511,11 @@ fn workspace_metadata_single_project() {
             "virtual": "[TEMP_DIR]/my-project/"
           },
           "kind": "package",
+          "dependencies": []
+        },
+        "workspace+[TEMP_DIR]/my-project": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/my-project",
           "dependencies": []
         }
       }
@@ -1170,6 +1552,10 @@ fn workspace_metadata_with_excluded() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1224,6 +1610,11 @@ fn workspace_metadata_with_excluded() -> Result<()> {
               "filename": "iniconfig-2.0.0-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }
@@ -1238,7 +1629,7 @@ fn workspace_metadata_with_excluded() -> Result<()> {
     Ok(())
 }
 
-/// Test metadata with excluded packages.
+/// Test metadata for dependency groups defined on a non-package workspace root.
 #[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_group_only() -> Result<()> {
@@ -1261,6 +1652,10 @@ fn workspace_metadata_group_only() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1295,6 +1690,28 @@ fn workspace_metadata_group_only() -> Result<()> {
               "filename": "iniconfig-2.0.0-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": [],
+          "dependency_groups": [
+            {
+              "name": "dev",
+              "id": "workspace+[TEMP_DIR]/workspace:dev"
+            }
+          ]
+        },
+        "workspace+[TEMP_DIR]/workspace:dev": {
+          "kind": {
+            "group": "dev"
+          },
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": [
+            {
+              "id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+            }
+          ]
         }
       }
     }
@@ -1306,6 +1723,42 @@ fn workspace_metadata_group_only() -> Result<()> {
     Resolved 1 package in [TIME]
     "#
     );
+
+    // With `--sync`, modules provided by the non-project root's dependency group should be
+    // attributed to their locked package.
+    let assert = context
+        .workspace_metadata()
+        .arg("--sync")
+        .current_dir(&workspace)
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let module_owners = serde_json::to_string_pretty(&metadata["module_owners"])?;
+
+    insta::assert_snapshot!(module_owners, @r#"
+    {
+      "iniconfig": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig._parse": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig._version": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ],
+      "iniconfig.exceptions": [
+        {
+          "package_id": "iniconfig==2.0.0@registry+https://pypi.org/simple"
+        }
+      ]
+    }
+    "#);
 
     Ok(())
 }
@@ -1350,6 +1803,10 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
         "version": "preview"
       },
       "workspace_root": "[TEMP_DIR]/workspace",
+      "workspace": {
+        "path": "[TEMP_DIR]/workspace",
+        "id": "workspace+[TEMP_DIR]/workspace"
+      },
       "requires_python": ">=3.12",
       "conflicts": {
         "sets": []
@@ -1546,6 +2003,11 @@ fn workspace_metadata_various_dependency_rainbow() -> Result<()> {
               "filename": "sniffio-1.3.1-py3-none-any.whl"
             }
           ]
+        },
+        "workspace+[TEMP_DIR]/workspace": {
+          "kind": "workspace",
+          "path": "[TEMP_DIR]/workspace",
+          "dependencies": []
         }
       }
     }

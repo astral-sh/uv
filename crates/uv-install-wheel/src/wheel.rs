@@ -1059,8 +1059,12 @@ pub(crate) fn parse_scripts(
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
     // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = fs::read_to_string(entry_points_path) else {
-        return Ok((Vec::new(), Vec::new()));
+    let ini = match fs::read_to_string(entry_points_path) {
+        Ok(ini) => ini,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     scripts_from_ini(extras, python_minor, ini)
@@ -1099,7 +1103,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
+    use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1108,7 +1112,7 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record, write_installer_metadata,
+        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
 
     #[test]
@@ -1184,6 +1188,25 @@ mod test {
         }
         WheelFile::parse(&wheel_with_version("1.0")).unwrap();
         WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
+    }
+
+    #[test]
+    fn invalid_utf8_entry_points() -> Result<()> {
+        let wheel = assert_fs::TempDir::new()?;
+        wheel
+            .child("example-1.0.0.dist-info/entry_points.txt")
+            .write_binary(&[0xff])?;
+
+        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
+
+        assert!(matches!(
+            error,
+            Error::Io(err) if err.kind() == ErrorKind::InvalidData
+        ));
+
+        Ok(())
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use tracing::warn;
+use uv_fs::find_git_repository_root;
 use walkdir::WalkDir;
 
 #[derive(Debug, thiserror::Error)]
@@ -111,11 +112,9 @@ struct GitRepository {
 impl GitRepository {
     /// Find the Git repository for a path, searching parent directories if necessary.
     fn find(path: &Path) -> Result<Self, GitInfoError> {
-        let dot_git_path = path
-            .ancestors()
-            .map(|ancestor| ancestor.join(".git"))
-            .find(|dot_git_path| dot_git_path.exists())
+        let repository_root = find_git_repository_root(path)
             .ok_or_else(|| GitInfoError::MissingGitDir(path.to_path_buf()))?;
+        let dot_git_path = repository_root.join(".git");
         let git_dir = read_git_dir(&dot_git_path)
             .ok_or_else(|| GitInfoError::MissingGitDir(path.to_path_buf()))?;
         let common_dir = read_common_dir(&git_dir)?;

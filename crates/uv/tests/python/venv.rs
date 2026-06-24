@@ -3,6 +3,8 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
+use uv_cache_key::cache_digest;
+use uv_fs::{LockedFile, LockedFileMode};
 use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
@@ -208,6 +210,56 @@ fn create_venv_project_environment() -> Result<()> {
     Activate with: source .venv/[BIN]/activate
     "
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn create_venv_project_environment_lock() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            "#,
+    )?;
+
+    // Simulate another project command holding the environment lock.
+    let install_path = dunce::canonicalize(context.temp_dir.path())?;
+    let lock_path = std::env::temp_dir().join(format!("uv-{}.lock", cache_digest(&install_path)));
+    let lock = LockedFile::acquire(
+        &lock_path,
+        LockedFileMode::Exclusive,
+        context.temp_dir.path().display(),
+    )
+    .await?;
+    let context = context.with_filtered_path(&lock_path, "PROJECT_ENVIRONMENT_LOCK");
+
+    // A pathless invocation from the project root uses the workspace-derived lock, including when
+    // `UV_PROJECT_ENVIRONMENT` changes the environment path. Lock errors warn and continue.
+    uv_snapshot!(context.filters(), context.venv()
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "foo")
+        .env(EnvVars::RUST_LOG, "warn")
+        .env(EnvVars::UV_LOCK_TIMEOUT, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: foo
+    WARN Failed to acquire project environment lock: Timeout ([TIME]) when waiting for lock on `[TEMP_DIR]/` at `[PROJECT_ENVIRONMENT_LOCK]/`, is another uv process running? You can set `UV_LOCK_TIMEOUT` to increase the timeout.
+    Activate with: source foo/[BIN]/activate
+    ");
+    drop(lock);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicates::path::is_dir());
 
     Ok(())
 }
@@ -1391,7 +1443,9 @@ fn verify_pyvenv_cfg_relocatable() {
 
     let activate_fish = scripts.child("activate.fish");
     activate_fish.assert(predicates::path::is_file());
-    activate_fish.assert(predicates::str::contains(r#"set -gx VIRTUAL_ENV ''"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"''"#));
+    activate_fish.assert(predicates::str::contains(
+        r"set -gx VIRTUAL_ENV ''(dirname -- (dirname -- (realpath -- (status -f))))''",
+    ));
     activate_fish.assert(predicates::str::contains(
         "if string match -qr 'CYGWIN|MSYS|MINGW' (uname); and command -s cygpath >/dev/null",
     ));
@@ -1610,7 +1664,7 @@ fn create_venv_apostrophe() {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: Testing's
-    Activate with: source Testing's/[BIN]/activate
+    Activate with: source 'Testing'\"'\"'s/[BIN]/activate'
     "
     );
 

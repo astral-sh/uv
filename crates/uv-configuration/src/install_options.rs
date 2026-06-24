@@ -87,10 +87,10 @@ impl InstallOptions {
         // If `--only-install-workspace` is set, only include the project and workspace members.
         if self.only_install_workspace {
             // Check if it's the project itself
-            if let Some(project_name) = project_name {
-                if package_name == project_name {
-                    return true;
-                }
+            if let Some(project_name) = project_name
+                && package_name == project_name
+            {
+                return true;
             }
 
             // Check if it's a workspace member
@@ -105,25 +105,22 @@ impl InstallOptions {
 
         // If `--only-install-project` is set, only include the project itself.
         if self.only_install_project {
-            if let Some(project_name) = project_name {
-                if package_name == project_name {
-                    return true;
-                }
+            if let Some(project_name) = project_name
+                && package_name == project_name
+            {
+                return true;
             }
             debug!("Omitting `{package_name}` from resolution due to `--only-install-project`");
             return false;
         }
 
         // If `--no-install-project` is set, remove the project itself.
-        if self.no_install_project {
-            if let Some(project_name) = project_name {
-                if package_name == project_name {
-                    debug!(
-                        "Omitting `{package_name}` from resolution due to `--no-install-project`"
-                    );
-                    return false;
-                }
-            }
+        if self.no_install_project
+            && let Some(project_name) = project_name
+            && package_name == project_name
+        {
+            debug!("Omitting `{package_name}` from resolution due to `--no-install-project`");
+            return false;
         }
 
         // If `--no-install-workspace` is set, remove the project and any workspace members.
@@ -131,15 +128,12 @@ impl InstallOptions {
             // In some cases, the project root might be omitted from the list of workspace members
             // encoded in the lockfile. (But we already checked this above if `--no-install-project`
             // is set.)
-            if !self.no_install_project {
-                if let Some(project_name) = project_name {
-                    if package_name == project_name {
-                        debug!(
-                            "Omitting `{package_name}` from resolution due to `--no-install-workspace`"
-                        );
-                        return false;
-                    }
-                }
+            if !self.no_install_project
+                && let Some(project_name) = project_name
+                && package_name == project_name
+            {
+                debug!("Omitting `{package_name}` from resolution due to `--no-install-workspace`");
+                return false;
             }
 
             if members.contains(package_name) {

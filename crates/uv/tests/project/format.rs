@@ -1,8 +1,12 @@
 use anyhow::Result;
+#[cfg(feature = "test-pypi")]
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
+#[cfg(feature = "test-pypi")]
+use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -37,6 +41,50 @@ fn format_project() -> Result<()> {
     // Check that the file was formatted
     let formatted_content = fs_err::read_to_string(&main_py)?;
     assert_snapshot!(formatted_content, @"x = 1");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn format_uses_ruff_from_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.root.child("tools");
+    let bin_dir = context.root.child("tool-bin");
+
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let main_py = context.temp_dir.child("main.py");
+    main_py.write_str("x    = 1")?;
+    let ruff = bin_dir.child(format!("ruff{}", std::env::consts::EXE_SUFFIX));
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .format()
+            .arg("--version")
+            .arg(">=999.0.0")
+            .arg("--show-version")
+            .env(EnvVars::RUFF, ruff.as_os_str()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    1 file reformatted
+
+    ----- stderr -----
+    warning: `uv format` is experimental and may change without warning. Pass `--preview-features format-command` to disable this warning.
+    ruff 0.3.4
+    "
+    );
+
+    assert_snapshot!(fs_err::read_to_string(&main_py)?, @"x = 1");
 
     Ok(())
 }

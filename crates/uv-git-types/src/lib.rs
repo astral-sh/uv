@@ -291,7 +291,7 @@ impl From<GitUrl> for DisplaySafeUrl {
 
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.url)
+        write!(f, "{}", self.url)
     }
 }
 

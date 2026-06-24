@@ -142,9 +142,9 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Add all authenticated sources to the cache.
-    fn cache_index_credentials(&mut self) {
+    fn cache_index_credentials(&mut self) -> Result<(), ClientBuildError> {
         for index in self.index_locations.known_indexes() {
-            if let Some(credentials) = index.credentials() {
+            if let Some(credentials) = index.credentials()? {
                 trace!(
                     "Read credentials for index {}",
                     index
@@ -161,10 +161,11 @@ impl<'a> RegistryClientBuilder<'a> {
                     .store_credentials(index.raw_url(), credentials);
             }
         }
+        Ok(())
     }
 
     pub fn build(mut self) -> Result<RegistryClient, ClientBuildError> {
-        self.cache_index_credentials();
+        self.cache_index_credentials()?;
         let index_urls = self.index_locations.index_urls();
 
         // Build a base client
@@ -194,8 +195,11 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(mut self, existing: &BaseClient) -> RegistryClient {
-        self.cache_index_credentials();
+    pub fn wrap_existing(
+        mut self,
+        existing: &BaseClient,
+    ) -> Result<RegistryClient, ClientBuildError> {
+        self.cache_index_credentials()?;
         let index_urls = self.index_locations.index_urls();
 
         // Wrap in any relevant middleware and handle connectivity.
@@ -210,7 +214,7 @@ impl<'a> RegistryClientBuilder<'a> {
         // Wrap in the cache middleware.
         let client = CachedClient::new(client);
 
-        RegistryClient {
+        Ok(RegistryClient {
             index_urls,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
@@ -220,7 +224,7 @@ impl<'a> RegistryClientBuilder<'a> {
             read_timeout,
             flat_indexes: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
-        }
+        })
     }
 }
 

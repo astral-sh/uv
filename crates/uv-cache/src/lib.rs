@@ -647,41 +647,44 @@ impl Cache {
                 Err(err) => return Err(err),
             }
 
-            for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
-                let entry = entry?;
-
-                // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
-                if !entry.file_type().is_dir() {
-                    continue;
-                }
-
-                if !entry.path().join("metadata.msgpack").exists() {
-                    continue;
-                }
-
-                // Remove everything except the built wheel archive and the metadata.
-                for entry in fs_err::read_dir(entry.path())? {
+            let source_distributions = self.bucket(CacheBucket::SourceDistributions);
+            if source_distributions.try_exists()? {
+                for entry in walkdir::WalkDir::new(source_distributions) {
                     let entry = entry?;
-                    let path = entry.path();
 
-                    // Retain the resolved metadata (`metadata.msgpack`).
-                    if path
-                        .file_name()
-                        .is_some_and(|file_name| file_name == "metadata.msgpack")
-                    {
+                    // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
+                    if !entry.file_type().is_dir() {
                         continue;
                     }
 
-                    // Retain any built wheel archives.
-                    if path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                    {
+                    if !entry.path().join("metadata.msgpack").exists() {
                         continue;
                     }
 
-                    debug!("Removing unzipped built wheel entry: {}", path.display());
-                    summary += rm_rf(path)?;
+                    // Remove everything except the built wheel archive and the metadata.
+                    for entry in fs_err::read_dir(entry.path())? {
+                        let entry = entry?;
+                        let path = entry.path();
+
+                        // Retain the resolved metadata (`metadata.msgpack`).
+                        if path
+                            .file_name()
+                            .is_some_and(|file_name| file_name == "metadata.msgpack")
+                        {
+                            continue;
+                        }
+
+                        // Retain any built wheel archives.
+                        if path
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                        {
+                            continue;
+                        }
+
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
                 }
             }
         }
@@ -1337,6 +1340,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Python,
             Self::Binaries,
             Self::Osv,
         ]

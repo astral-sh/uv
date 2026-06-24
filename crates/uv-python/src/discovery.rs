@@ -739,7 +739,16 @@ fn find_all_minor(
     }
 }
 
-/// Lazily iterate over all discoverable Python interpreters.
+/// How to query discovered Python executables.
+#[derive(Debug, Clone, Copy)]
+enum QueryStrategy {
+    /// Query each executable as it is requested by the consumer.
+    Sequential,
+    /// Query all executables concurrently before yielding results.
+    Parallel,
+}
+
+/// Iterate over all discoverable Python interpreters.
 ///
 /// Note interpreters may be excluded by the given [`EnvironmentPreference`], [`PythonPreference`],
 /// [`VersionRequest`], or [`PlatformRequest`].
@@ -755,22 +764,25 @@ fn python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
-) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
-    iter_python_installations_from_executables(
-        // Perform filtering on the discovered executables based on their source. This avoids
-        // unnecessary interpreter queries, which are generally expensive. We'll filter again
-        // with `PythonInstallation::satisfies_preferences` after querying.
-        python_executables(version, implementation, platform, environments, preference).filter_ok(
-            move |(source, path)| {
-                source_satisfies_environment_preference(*source, path, environments)
-            },
-        ),
-        cache,
+    strategy: QueryStrategy,
+) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
+    Box::new(
+        python_installations_from_executables(
+            // Perform filtering on the discovered executables based on their source. This avoids
+            // unnecessary interpreter queries, which are generally expensive. We'll filter again
+            // with `PythonInstallation::satisfies_preferences` after querying.
+            python_executables(version, implementation, platform, environments, preference)
+                .filter_ok(move |(source, path)| {
+                    source_satisfies_environment_preference(*source, path, environments)
+                }),
+            cache,
+            strategy,
+        )
+        .filter_ok(move |installation| {
+            installation.satisfies_preferences(version, environments, preference)
+        })
+        .map_ok(PythonInstallation::maybe_with_test_source),
     )
-    .filter_ok(move |installation| {
-        installation.satisfies_preferences(version, environments, preference)
-    })
-    .map_ok(PythonInstallation::maybe_with_test_source)
 }
 
 /// Query a single Python executable, returning a [`PythonInstallation`] on success.
@@ -795,71 +807,29 @@ fn python_installation_from_executable(
         .inspect_err(|err| debug!("{err}"))
 }
 
-/// Lazily convert Python executables into installations.
-fn iter_python_installations_from_executables<'a>(
+/// Convert Python executables into installations using the given query strategy.
+fn python_installations_from_executables<'a>(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
-) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
-    executables.map(move |result| match result {
-        Ok((source, path)) => python_installation_from_executable(source, path, cache),
-        Err(err) => Err(err),
-    })
-}
-
-/// Collect queried Python installations from executables, dropping non-critical discovery
-/// errors.
-///
-/// See [`iter_python_installations_from_executables`] for a lazy, sequential alternative.
-fn collect_python_installations_from_executables(
-    executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>>,
-    cache: &Cache,
-) -> Result<Vec<PythonInstallation>, Error> {
-    let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
-    let results: Vec<Result<PythonInstallation, Error>> = items
-        .into_par_iter()
-        .map(|result| match result {
+    strategy: QueryStrategy,
+) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
+    match strategy {
+        QueryStrategy::Sequential => Box::new(executables.map(move |result| match result {
             Ok((source, path)) => python_installation_from_executable(source, path, cache),
             Err(err) => Err(err),
-        })
-        .collect();
-
-    let mut installations = Vec::with_capacity(results.len());
-    for result in results {
-        match result {
-            Ok(installation) => installations.push(installation),
-            Err(err) if err.is_critical() => return Err(err),
-            Err(_) => {}
+        })),
+        QueryStrategy::Parallel => {
+            let items: Vec<Result<(PythonSource, PathBuf), Error>> = executables.collect();
+            let results: Vec<Result<PythonInstallation, Error>> = items
+                .into_par_iter()
+                .map(|result| match result {
+                    Ok((source, path)) => python_installation_from_executable(source, path, cache),
+                    Err(err) => Err(err),
+                })
+                .collect();
+            Box::new(results.into_iter())
         }
     }
-    Ok(installations)
-}
-
-/// Find all Python installations that satisfy the standard discovery filters, querying
-/// interpreters concurrently.
-fn find_all_matching_python_installations(
-    version: &VersionRequest,
-    implementation: Option<&ImplementationName>,
-    platform: PlatformRequest,
-    environments: EnvironmentPreference,
-    preference: PythonPreference,
-    cache: &Cache,
-) -> Result<Vec<PythonInstallation>, Error> {
-    let executables =
-        python_executables(version, implementation, platform, environments, preference).filter_ok(
-            move |(source, path)| {
-                source_satisfies_environment_preference(*source, path, environments)
-            },
-        );
-
-    let mut installations = collect_python_installations_from_executables(executables, cache)?;
-    installations.retain(|installation| {
-        installation.satisfies_preferences(version, environments, preference)
-    });
-    let installations = installations
-        .into_iter()
-        .map(PythonInstallation::maybe_with_test_source)
-        .collect();
-    Ok(installations)
 }
 
 /// Whether a [`Interpreter`] matches the [`EnvironmentPreference`].
@@ -1056,8 +1026,9 @@ fn python_executables_with_name(
 fn python_installations_with_name<'a>(
     name: &'a str,
     cache: &'a Cache,
-) -> impl Iterator<Item = Result<PythonInstallation, Error>> + 'a {
-    iter_python_installations_from_executables(python_executables_with_name(name), cache)
+    strategy: QueryStrategy,
+) -> Box<dyn Iterator<Item = Result<PythonInstallation, Error>> + 'a> {
+    python_installations_from_executables(python_executables_with_name(name), cache, strategy)
 }
 
 /// Iterate over all Python installations that satisfy the given request.
@@ -1066,6 +1037,24 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
+    find_python_installations_with_strategy(
+        request,
+        environments,
+        preference,
+        cache,
+        QueryStrategy::Sequential,
+    )
+}
+
+/// Iterate over all Python installations that satisfy the given request using the given query
+/// strategy.
+fn find_python_installations_with_strategy<'a>(
+    request: &'a PythonRequest,
+    environments: EnvironmentPreference,
+    preference: PythonPreference,
+    cache: &'a Cache,
+    strategy: QueryStrategy,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -1133,7 +1122,7 @@ pub fn find_python_installations<'a>(
             if preference.allows_source(PythonSource::SearchPath) {
                 debug!("Searching for Python interpreter with {request}");
                 Box::new(
-                    python_installations_with_name(name, cache)
+                    python_installations_with_name(name, cache, strategy)
                         .filter_ok(move |installation| {
                             environments.allows_installation(installation)
                         })
@@ -1156,6 +1145,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                strategy,
             )
             .map_ok(Ok)
         }),
@@ -1168,6 +1158,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                strategy,
             )
             .map_ok(Ok)
         }),
@@ -1184,6 +1175,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    strategy,
                 )
                 .map_ok(Ok)
             })
@@ -1197,6 +1189,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                strategy,
             )
             .filter_ok(|installation| implementation.matches_interpreter(&installation.interpreter))
             .map_ok(Ok)
@@ -1214,6 +1207,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    strategy,
                 )
                 .filter_ok(|installation| {
                     implementation.matches_interpreter(&installation.interpreter)
@@ -1222,10 +1216,10 @@ pub fn find_python_installations<'a>(
             })
         }
         PythonRequest::Key(request) => {
-            if let Some(version) = request.version() {
-                if let Err(err) = version.check_supported() {
-                    return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
-                }
+            if let Some(version) = request.version()
+                && let Err(err) = version.check_supported()
+            {
+                return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
             }
 
             Box::new({
@@ -1237,6 +1231,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    strategy,
                 )
                 .filter_ok(move |installation| {
                     request.satisfied_by_interpreter(&installation.interpreter)
@@ -1252,147 +1247,30 @@ pub fn find_python_installations<'a>(
 ///
 /// Unlike [`find_python_installations`], this eagerly collects matching installations instead of
 /// returning a lazy iterator. Non-critical discovery errors are dropped, while critical errors are
-/// propagated immediately.
+/// propagated in discovery order.
 pub fn find_all_python_installations(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
 ) -> Result<Vec<PythonInstallation>, Error> {
-    let sources = DiscoveryPreferences {
-        python_preference: preference,
-        environment_preference: environments,
-    }
-    .sources(request);
-
-    match request {
-        PythonRequest::File(path) => {
-            preference.check_allows_request_source(request, PythonSource::ProvidedPath)?;
-            debug!("Checking for Python interpreter at {request}");
-            match Interpreter::query(path, cache) {
-                Ok(interpreter) => Ok(vec![PythonInstallation {
-                    source: PythonSource::ProvidedPath,
-                    interpreter,
-                }]),
-                Err(err) => {
-                    let err = Error::Query(Box::new(err), path.clone(), PythonSource::ProvidedPath);
-                    if err.is_critical() {
-                        Err(err)
-                    } else {
-                        Ok(vec![])
-                    }
-                }
-            }
-        }
-        PythonRequest::Directory(path) => {
-            preference.check_allows_request_source(request, PythonSource::ProvidedPath)?;
-            debug!("Checking for Python interpreter in {request}");
-            match python_installation_from_directory(path, cache) {
-                Ok(installation) => Ok(vec![installation]),
-                Err(err) => {
-                    let err = Error::Query(Box::new(err), path.clone(), PythonSource::ProvidedPath);
-                    if err.is_critical() {
-                        Err(err)
-                    } else {
-                        Ok(vec![])
-                    }
-                }
-            }
-        }
-        PythonRequest::ExecutableName(name) => {
-            preference.check_allows_request_source(request, PythonSource::SearchPath)?;
-            debug!("Searching for Python interpreter with {request}");
-            let mut installations = collect_python_installations_from_executables(
-                python_executables_with_name(name),
-                cache,
-            )?;
-            installations.retain(|installation| environments.allows_installation(installation));
-            Ok(installations)
-        }
-        PythonRequest::Any => {
-            debug!("Searching for any Python interpreter in {sources}");
-            find_all_matching_python_installations(
-                &VersionRequest::Any,
-                None,
-                PlatformRequest::default(),
-                environments,
-                preference,
-                cache,
-            )
-        }
-        PythonRequest::Default => {
-            debug!("Searching for default Python interpreter in {sources}");
-            find_all_matching_python_installations(
-                &VersionRequest::Default,
-                None,
-                PlatformRequest::default(),
-                environments,
-                preference,
-                cache,
-            )
-        }
-        PythonRequest::Version(version) => {
-            if let Err(err) = version.check_supported() {
-                return Err(Error::InvalidVersionRequest(err));
-            }
-            debug!("Searching for {request} in {sources}");
-            find_all_matching_python_installations(
-                version,
-                None,
-                PlatformRequest::default(),
-                environments,
-                preference,
-                cache,
-            )
-        }
-        PythonRequest::Implementation(implementation) => {
-            debug!("Searching for a {request} interpreter in {sources}");
-            let mut installations = find_all_matching_python_installations(
-                &VersionRequest::Default,
-                Some(implementation),
-                PlatformRequest::default(),
-                environments,
-                preference,
-                cache,
-            )?;
-            installations.retain(|inst| implementation.matches_interpreter(&inst.interpreter));
-            Ok(installations)
-        }
-        PythonRequest::ImplementationVersion(implementation, version) => {
-            if let Err(err) = version.check_supported() {
-                return Err(Error::InvalidVersionRequest(err));
-            }
-            debug!("Searching for {request} in {sources}");
-            let mut installations = find_all_matching_python_installations(
-                version,
-                Some(implementation),
-                PlatformRequest::default(),
-                environments,
-                preference,
-                cache,
-            )?;
-            installations.retain(|inst| implementation.matches_interpreter(&inst.interpreter));
-            Ok(installations)
-        }
-        PythonRequest::Key(request) => {
-            if let Some(version) = request.version() {
-                if let Err(err) = version.check_supported() {
-                    return Err(Error::InvalidVersionRequest(err));
-                }
-            }
-            debug!("Searching for {request} in {sources}");
-            let mut installations = find_all_matching_python_installations(
-                request.version().unwrap_or(&VersionRequest::Default),
-                request.implementation(),
-                request.platform(),
-                environments,
-                preference,
-                cache,
-            )?;
-            installations.retain(|inst| request.satisfied_by_interpreter(&inst.interpreter));
-            Ok(installations)
+    let results = find_python_installations_with_strategy(
+        request,
+        environments,
+        preference,
+        cache,
+        QueryStrategy::Parallel,
+    );
+    let mut installations = Vec::new();
+    for result in results {
+        match result {
+            Ok(Ok(installation)) => installations.push(installation),
+            Ok(Err(_)) => {}
+            Err(err) if err.is_critical() => return Err(err),
+            Err(_) => {}
         }
     }
+    Ok(installations)
 }
 
 /// Find a Python installation that satisfies the given request.
@@ -1414,10 +1292,10 @@ pub(crate) fn find_python_installation(
         // Iterate until the first critical error or happy result
         if !result.as_ref().err().is_none_or(Error::is_critical) {
             // Track the first non-critical error
-            if first_error.is_none() {
-                if let Err(err) = result {
-                    first_error = Some(err);
-                }
+            if first_error.is_none()
+                && let Err(err) = result
+            {
+                first_error = Some(err);
             }
             continue;
         }
@@ -1962,8 +1840,9 @@ impl PythonRequest {
 
         // the prefix of e.g. `python312` and the empty prefix of bare versions, e.g. `312`
         let abstract_version_prefixes = ["python", ""];
-        let all_implementation_names =
-            ImplementationName::long_names().chain(ImplementationName::short_names());
+        let all_implementation_names = ImplementationName::iter_all().flat_map(|implementation| {
+            std::iter::once(implementation.long_name()).chain(implementation.short_name())
+        });
         // Abstract versions like `python@312`, `python312`, or `312`, plus implementations and
         // implementation versions like `pypy`, `pypy@312` or `pypy312`.
         if let Ok(Some(request)) = Self::parse_versions_and_implementations(
@@ -2054,7 +1933,7 @@ impl PythonRequest {
         }
         Self::parse_versions_and_implementations(
             abstract_version_prefixes.iter().copied(),
-            ImplementationName::long_names(),
+            ImplementationName::iter_all().map(ImplementationName::long_name),
             lowercase_value,
         )
     }
@@ -2070,7 +1949,7 @@ impl PythonRequest {
     fn parse_versions_and_implementations<'a>(
         // typically "python", possibly also "pythonw" or "" (for bare versions)
         abstract_version_prefixes: impl IntoIterator<Item = &'a str>,
-        // expected to be either long_names() or all names
+        // expected to be either long names or all names
         implementation_names: impl IntoIterator<Item = &'a str>,
         // the string to parse
         lowercase_value: &str,
@@ -2263,12 +2142,12 @@ impl PythonRequest {
             }
             Self::Implementation(implementation) => interpreter
                 .implementation_name()
-                .eq_ignore_ascii_case(implementation.into()),
+                .eq_ignore_ascii_case(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
                 version.matches_interpreter(interpreter)
                     && interpreter
                         .implementation_name()
-                        .eq_ignore_ascii_case(implementation.into())
+                        .eq_ignore_ascii_case(implementation.long_name())
             }
             Self::Key(request) => request.satisfied_by_interpreter(interpreter),
         }
@@ -2529,19 +2408,6 @@ impl PythonPreference {
             Self::OnlySystem => {
                 matches!(source, PythonSource::SearchPath | PythonSource::Registry)
             }
-        }
-    }
-
-    /// Check that this preference allows the given source, returning an error if not.
-    fn check_allows_request_source(
-        self,
-        request: &PythonRequest,
-        source: PythonSource,
-    ) -> Result<(), Error> {
-        if self.allows_source(source) {
-            Ok(())
-        } else {
-            Err(Error::SourceNotAllowed(request.clone(), source, self))
         }
     }
 
@@ -2845,12 +2711,11 @@ impl VersionRequest {
     /// If the specifiers consist of a single `==` constraint, the version is parsed as a
     /// concrete version request (e.g., `MajorMinorPatch`) rather than a range.
     pub fn from_specifiers(specifiers: VersionSpecifiers, variant: PythonVariant) -> Self {
-        if let [specifier] = specifiers.iter().as_slice() {
-            if specifier.operator() == &uv_pep440::Operator::Equal {
-                if let Ok(request) = Self::from_str(&specifier.version().to_string()) {
-                    return request;
-                }
-            }
+        if let [specifier] = specifiers.iter().as_slice()
+            && specifier.operator() == &uv_pep440::Operator::Equal
+            && let Ok(request) = Self::from_str(&specifier.version().to_string())
+        {
+            return request;
         }
         Self::Range(specifiers, variant)
     }
@@ -2954,12 +2819,12 @@ impl VersionRequest {
         }
 
         // Include free-threaded variants
-        if let Some(variant) = self.variant() {
-            if variant != PythonVariant::Default {
-                for i in 0..names.len() {
-                    let name = names[i].with_variant(variant);
-                    names.push(name);
-                }
+        if let Some(variant) = self.variant()
+            && variant != PythonVariant::Default
+        {
+            for i in 0..names.len() {
+                let name = names[i].with_variant(variant);
+                names.push(name);
             }
         }
 
@@ -3062,14 +2927,13 @@ impl VersionRequest {
             Self::Range(_, _) => (),
         }
 
-        if self.is_freethreaded() {
-            if let Self::MajorMinor(major, minor, _) = self.clone().without_patch() {
-                if (major, minor) < (3, 13) {
-                    return Err(format!(
-                        "Python <3.13 does not support free-threading but {self} was requested."
-                    ));
-                }
-            }
+        if self.is_freethreaded()
+            && let Self::MajorMinor(major, minor, _) = self.clone().without_patch()
+            && (major, minor) < (3, 13)
+        {
+            return Err(format!(
+                "Python <3.13 does not support free-threading but {self} was requested."
+            ));
         }
 
         Ok(())
@@ -3482,7 +3346,7 @@ impl FromStr for VersionRequest {
                 return Err(Error::InvalidVersionRequest(s.to_string()));
             }
 
-            let Some(mut start) = s.rfind(|c: char| c.is_numeric()) else {
+            let Some(mut start) = s.rfind(|c: char| c.is_ascii_digit()) else {
                 return Ok((s, PythonVariant::Default));
             };
 
@@ -3855,11 +3719,12 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, str::FromStr};
+    use std::{cell::Cell, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
+    use uv_cache::Cache;
     use uv_distribution_types::RequiresPython;
     use uv_pep440::{Prerelease, PrereleaseKind, Version, VersionSpecifiers};
 
@@ -3871,8 +3736,32 @@ mod tests {
     use uv_platform::{Arch, Libc, Os};
 
     use super::{
-        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonVariant,
+        DiscoveryPreferences, EnvironmentPreference, Error, PythonPreference, PythonSource,
+        PythonVariant, QueryStrategy, python_installations_from_executables,
     };
+
+    #[test]
+    fn sequential_query_strategy_does_not_prefetch_executables() -> anyhow::Result<()> {
+        let cache = Cache::temp()?;
+        let pulls = Cell::new(0);
+        let executables = (0..2).map(|_| {
+            pulls.set(pulls.get() + 1);
+            Err::<(PythonSource, PathBuf), _>(Error::SourceNotAllowed(
+                PythonRequest::Default,
+                PythonSource::SearchPath,
+                PythonPreference::OnlyManaged,
+            ))
+        });
+
+        let mut installations =
+            python_installations_from_executables(executables, &cache, QueryStrategy::Sequential);
+
+        assert_eq!(pulls.get(), 0);
+        assert!(installations.next().is_some_and(|result| result.is_err()));
+        assert_eq!(pulls.get(), 1);
+
+        Ok(())
+    }
 
     #[test]
     fn interpreter_request_from_str() {
@@ -4438,6 +4327,10 @@ mod tests {
         );
         assert!(matches!(
             VersionRequest::from_str("3.13tt"),
+            Err(Error::InvalidVersionRequest(_))
+        ));
+        assert!(matches!(
+            VersionRequest::from_str("3.12²t"),
             Err(Error::InvalidVersionRequest(_))
         ));
 

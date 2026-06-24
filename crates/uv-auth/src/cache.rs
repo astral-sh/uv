@@ -11,7 +11,7 @@ use url::Url;
 use uv_once_map::OnceMap;
 use uv_redacted::DisplaySafeUrl;
 
-use crate::credentials::{Authentication, Username};
+use crate::credentials::{Authentication, CredentialsFromUrlError, Username};
 use crate::{Credentials, Realm};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -62,13 +62,16 @@ impl CredentialsCache {
     /// Populate the global authentication store with credentials on a URL, if there are any.
     ///
     /// Returns `true` if the store was updated.
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
-        if let Some(credentials) = Credentials::from_url(url) {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
+        if let Some(credentials) = Credentials::from_url(url)? {
             trace!("Caching credentials for {url}");
             self.insert(url, Arc::new(Authentication::from(credentials)));
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 

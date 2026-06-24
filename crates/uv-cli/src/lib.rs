@@ -29,7 +29,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerValue, ForkStrategy, PrereleaseMode,
+    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackageEntry, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
@@ -75,6 +75,8 @@ pub enum AuditOutputFormat {
     Text,
     /// Display the result in JSON format.
     Json,
+    /// Display the result in SARIF format.
+    Sarif,
 }
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
@@ -3282,8 +3284,10 @@ pub struct VenvArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for a specific package to those that were uploaded prior to the
     /// given date.
@@ -5203,8 +5207,10 @@ pub struct FormatArgs {
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
     /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
     /// durations relative to "now" (e.g., `-1 week`).
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
     ///
@@ -5235,6 +5241,29 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Run checks for the specified PEP 723 Python script, rather than the current project.
+    ///
+    /// If provided, uv will use the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups",
+        conflicts_with = "no_project",
+        value_hint = ValueHint::FilePath,
+    )]
+    pub script: Option<PathBuf>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -5350,9 +5379,6 @@ pub struct CheckArgs {
     pub frozen: bool,
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
-    ///
-    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
-    /// be updated, since the environment will not be synced regardless).
     #[arg(long)]
     pub no_sync: bool,
 
@@ -5384,9 +5410,15 @@ pub struct CheckArgs {
     /// Accepts either a version (e.g., `0.0.1`) which will be treated as an exact pin,
     /// a version specifier (e.g., `>=0.0.1`), or `latest` to use the latest available version.
     ///
-    /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
+    /// By default, the exact version resolved in `uv.lock` will be used when `ty` is a project
+    /// dependency or a dependency in the project's `dev` group. Otherwise, a constrained version
+    /// range of ty will be used (e.g., `>=0.0,<0.1`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub ty_version: Option<String>,
+
+    /// Display the version of ty that will be used for type checking.
+    #[arg(long, hide = true)]
+    pub show_version: bool,
 
     /// Avoid discovering a project or workspace.
     ///
@@ -6084,8 +6116,10 @@ pub struct ToolListArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -6347,8 +6381,10 @@ pub struct ToolUpgradeArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7418,8 +7454,10 @@ pub struct InstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7665,8 +7703,10 @@ pub struct ResolverArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7910,13 +7950,15 @@ pub struct ResolverInstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(
         long,
         env = EnvVars::UV_EXCLUDE_NEWER,
         help_heading = "Resolver options",
         value_hint = ValueHint::Other,
     )]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -8045,8 +8087,10 @@ pub struct FetchArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 }
 
 #[derive(Args)]
@@ -8252,6 +8296,13 @@ pub enum WorkspaceCommand {
 }
 #[derive(Args)]
 pub struct MetadataArgs {
+    /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
+    ///
+    /// If provided, uv will resolve the dependencies based on the script's inline metadata table,
+    /// in adherence with PEP 723.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub script: Option<PathBuf>,
+
     /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is

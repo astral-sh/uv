@@ -488,7 +488,7 @@ pub(crate) fn create(
             }
             (true, "activate.bat") => r"%~dp0..".to_string(),
             (true, "activate.fish") => {
-                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
+                r"'(dirname -- (dirname -- (realpath -- (status -f))))'".to_string()
             }
             (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
             (false, "activate.nu") => {
@@ -528,7 +528,11 @@ pub(crate) fn create(
         ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
-            interpreter.markers().python_full_version().string.clone(),
+            if using_minor_version_link {
+                interpreter.python_minor_version().to_string()
+            } else {
+                interpreter.markers().python_full_version().string.clone()
+            },
         ),
         (
             "include-system-site-packages".to_string(),

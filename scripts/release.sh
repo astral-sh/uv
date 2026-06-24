@@ -11,7 +11,7 @@ echo "Updating metadata with rooster..."
 cd "$project_root"
 
 # Update the changelog
-uvx --python 3.12 rooster@0.1.1 release "$@"
+uv run --locked --python 3.12 --only-group release rooster release "$@"
 
 # Bump library crate versions
 uv run "$project_root/scripts/bump-workspace-crate-versions.py"

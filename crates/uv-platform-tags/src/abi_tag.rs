@@ -242,7 +242,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|digit| *digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
@@ -275,7 +275,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|digit| *digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidImplMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
@@ -366,12 +366,18 @@ impl FromStr for AbiTag {
                         tag: s.to_string(),
                     })?;
             let (impl_major, impl_minor) = parse_impl_version(impl_ver_str, "GraalPy", s)?;
-            let (py_ver_str, _) =
+            let (py_ver_str, suffix) =
                 rest.split_once('_')
                     .ok_or_else(|| ParseAbiTagError::InvalidFormat {
                         implementation: "GraalPy",
                         tag: s.to_string(),
                     })?;
+            if suffix != "native" {
+                return Err(ParseAbiTagError::InvalidFormat {
+                    implementation: "GraalPy",
+                    tag: s.to_string(),
+                });
+            }
             let (major, minor) = parse_python_version(py_ver_str, "GraalPy", s)?;
             Ok(Self::GraalPy {
                 python_version: (major, minor),
@@ -587,6 +593,20 @@ mod tests {
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310_graalpyXY".to_string()
+            })
+        );
+        assert_eq!(
+            AbiTag::from_str("graalpy240_310_wrong"),
+            Err(ParseAbiTagError::InvalidFormat {
+                implementation: "GraalPy",
+                tag: "graalpy240_310_wrong".to_string()
+            })
+        );
+        assert_eq!(
+            AbiTag::from_str("graalpy240_310_native_extra"),
+            Err(ParseAbiTagError::InvalidFormat {
+                implementation: "GraalPy",
+                tag: "graalpy240_310_native_extra".to_string()
             })
         );
     }

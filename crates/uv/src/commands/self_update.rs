@@ -552,10 +552,7 @@ async fn execute_official_installer(
     }
 
     let result = command.output().await;
-    let failed = result
-        .as_ref()
-        .map(|output| !output.status.success())
-        .unwrap_or(true);
+    let failed = !result.as_ref().is_ok_and(|output| output.status.success());
 
     if let Some((previous_path, old_path)) = to_restore.as_ref() {
         if failed {

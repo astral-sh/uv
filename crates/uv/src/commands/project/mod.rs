@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_audit::osv;
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::CredentialsCache;
+use uv_auth::{CredentialsCache, CredentialsFromUrlError};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -19,8 +19,8 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, IndexCredentialsError, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -28,7 +28,7 @@ use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
@@ -77,6 +77,7 @@ pub(crate) mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
+pub(crate) mod toolchain;
 pub(crate) mod tree;
 pub(crate) mod upgrade;
 pub(crate) mod version;
@@ -294,6 +295,12 @@ pub(crate) enum ProjectError {
 
     #[error(transparent)]
     ClientBuild(#[from] uv_client::ClientBuildError),
+
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
 
     #[error(transparent)]
     Python(#[from] uv_python::Error),
@@ -610,9 +617,7 @@ pub(crate) fn validate_project_requires_python(
         .flatten()
         .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
         .collect::<RequiresPythonSources>();
-    let workspace_non_trivial = workspace
-        .map(|workspace| workspace.packages().len() > 1)
-        .unwrap_or(false);
+    let workspace_non_trivial = workspace.is_some_and(|workspace| workspace.packages().len() > 1);
 
     match source {
         PythonRequestSource::UserRequest => {
@@ -863,7 +868,7 @@ impl ScriptInterpreter {
     }
 
     /// Consume the [`PythonInstallation`] and return the [`Interpreter`].
-    fn into_interpreter(self) -> Interpreter {
+    pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
             Self::Interpreter(interpreter) => interpreter,
             Self::Environment(venv) => venv.into_interpreter(),
@@ -1161,19 +1166,21 @@ impl ProjectInterpreter {
             Self::Environment(venv) => venv.into_interpreter(),
         }
     }
+}
 
-    /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
-        LockedFile::acquire(
-            std::env::temp_dir().join(format!(
-                "uv-{}.lock",
-                cache_digest(workspace.install_path())
-            )),
-            LockedFileMode::Exclusive,
-            workspace.install_path().simplified_display(),
-        )
-        .await
-    }
+/// Grab a file lock for the project environment to prevent concurrent writes across processes.
+pub(crate) async fn lock_project_environment(
+    workspace: &Workspace,
+) -> Result<LockedFile, LockedFileError> {
+    LockedFile::acquire(
+        std::env::temp_dir().join(format!(
+            "uv-{}.lock",
+            cache_digest(workspace.install_path())
+        )),
+        LockedFileMode::Exclusive,
+        workspace.install_path().simplified_display(),
+    )
+    .await
 }
 
 /// The source of a `Requires-Python` specifier.
@@ -1443,7 +1450,7 @@ impl ProjectEnvironment {
         printer: Printer,
     ) -> Result<Self, ProjectError> {
         // Lock the project environment to avoid synchronization issues.
-        let _lock = ProjectInterpreter::lock(workspace)
+        let _lock = lock_project_environment(workspace)
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -1545,7 +1552,7 @@ impl ProjectEnvironment {
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
-                        false,
+                        uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                         false,
                         upgradeable,
                     )?;
@@ -1585,7 +1592,7 @@ impl ProjectEnvironment {
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
-                    false,
+                    uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                     false,
                     upgradeable,
                 )?;
@@ -1603,7 +1610,7 @@ impl ProjectEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),
@@ -1638,7 +1645,7 @@ impl std::ops::Deref for ProjectEnvironment {
 
 /// The Python environment for a script.
 #[derive(Debug)]
-enum ScriptEnvironment {
+pub(crate) enum ScriptEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
@@ -1665,7 +1672,7 @@ enum ScriptEnvironment {
 
 impl ScriptEnvironment {
     /// Initialize a virtual environment for a PEP 723 script.
-    async fn get_or_init(
+    pub(crate) async fn get_or_init(
         script: Pep723ItemRef<'_>,
         python_request: Option<PythonRequest>,
         client_builder: &BaseClientBuilder<'_>,
@@ -1790,7 +1797,7 @@ impl ScriptEnvironment {
     ///
     /// Returns an error if the environment was created in `--dry-run` mode, as dropping the
     /// associated temporary directory could lead to errors downstream.
-    fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
+    pub(crate) fn into_environment(self) -> Result<PythonEnvironment, ProjectError> {
         match self {
             Self::Existing(environment) => Ok(environment),
             Self::Replaced(environment) => Ok(environment),

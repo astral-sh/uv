@@ -1,3 +1,4 @@
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
@@ -7,8 +8,8 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_test::uv_snapshot;
 
-fn write_audit_json_project(context: &uv_test::TestContext, index_url: &str) {
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+fn write_audit_output_project(project_dir: &impl PathChild, index_url: &str) {
+    let pyproject_toml = project_dir.child("pyproject.toml");
     pyproject_toml
         .write_str(&formatdoc! {r#"
         [project]
@@ -23,7 +24,7 @@ fn write_audit_json_project(context: &uv_test::TestContext, index_url: &str) {
     "#})
         .unwrap();
 
-    let lockfile = context.temp_dir.child("uv.lock");
+    let lockfile = project_dir.child("uv.lock");
     lockfile
         .write_str(&formatdoc! {r#"
         version = 2
@@ -107,7 +108,7 @@ async fn audit_no_vulnerabilities() {
 async fn audit_json_no_vulnerabilities() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_json_project(&context, &proxy.url("/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/simple"));
 
     let server = MockServer::start().await;
 
@@ -153,7 +154,7 @@ async fn audit_json_no_vulnerabilities() {
 async fn audit_json_preview_warning() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_json_project(&context, &proxy.url("/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/simple"));
 
     let server = MockServer::start().await;
 
@@ -2260,7 +2261,7 @@ async fn audit_vulnerability_and_project_status() {
 async fn audit_json_vulnerability_and_project_status() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
-    write_audit_json_project(&context, &proxy.url("/status/archived/simple"));
+    write_audit_output_project(&context.temp_dir, &proxy.url("/status/archived/simple"));
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -2345,4 +2346,282 @@ async fn audit_json_vulnerability_and_project_status() {
 
     ----- stderr -----
     "#);
+}
+
+/// SARIF output includes vulnerabilities and adverse project statuses in the
+/// same audit report.
+#[tokio::test]
+async fn audit_sarif_vulnerability_and_project_status() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((uv_version::version(), "[VERSION]"));
+    context.temp_dir.child(".git").create_dir_all()?;
+    let proxy = crate::pypi_proxy::start().await;
+    write_audit_output_project(&context.temp_dir, &proxy.url("/status/archived/simple"));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "OSV-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/OSV-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "OSV-2023-0001",
+            "aliases": ["PYSEC-2023-0001"],
+            "modified": "2026-01-01T00:00:00Z",
+            "published": "2025-12-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "details": "A longer description of the test vulnerability.",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }],
+            "references": [{
+                "type": "ADVISORY",
+                "url": "https://example.com/advisory/PYSEC-2023-0001"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--service-url")
+        .arg(server.uri()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    {
+      "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+      "runs": [
+        {
+          "invocations": [
+            {
+              "executionSuccessful": true
+            }
+          ],
+          "results": [
+            {
+              "kind": "fail",
+              "level": "error",
+              "locations": [
+                {
+                  "logicalLocations": [
+                    {
+                      "fullyQualifiedName": "iniconfig@2.0.0",
+                      "kind": "package",
+                      "name": "iniconfig"
+                    }
+                  ],
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": "uv.lock"
+                    },
+                    "region": {
+                      "startLine": 1
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "iniconfig 2.0.0 is vulnerable to PYSEC-2023-0001: A test vulnerability in iniconfig"
+              },
+              "partialFingerprints": {
+                "uv/vulnerability": "OSV-2023-0001:iniconfig:2.0.0"
+              },
+              "properties": {
+                "uv/aliases": [
+                  "PYSEC-2023-0001"
+                ],
+                "uv/displayId": "PYSEC-2023-0001",
+                "uv/fixVersions": [
+                  "2.1.0"
+                ],
+                "uv/id": "OSV-2023-0001",
+                "uv/modified": "2026-01-01T00:00:00Z",
+                "uv/package": "iniconfig",
+                "uv/published": "2025-12-01T00:00:00Z",
+                "uv/version": "2.0.0"
+              },
+              "ruleId": "OSV-2023-0001"
+            },
+            {
+              "kind": "fail",
+              "level": "warning",
+              "locations": [
+                {
+                  "logicalLocations": [
+                    {
+                      "fullyQualifiedName": "iniconfig",
+                      "kind": "package",
+                      "name": "iniconfig"
+                    }
+                  ],
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": "uv.lock"
+                    },
+                    "region": {
+                      "startLine": 1
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "iniconfig is archived"
+              },
+              "partialFingerprints": {
+                "uv/project-status": "iniconfig:archived"
+              },
+              "properties": {
+                "uv/package": "iniconfig",
+                "uv/status": "archived"
+              },
+              "ruleId": "uv/project-status/archived"
+            }
+          ],
+          "tool": {
+            "driver": {
+              "downloadUri": "https://github.com/astral-sh/uv",
+              "informationUri": "https://pypi.org/project/uv/",
+              "name": "uv",
+              "rules": [
+                {
+                  "help": {
+                    "text": "A longer description of the test vulnerability."
+                  },
+                  "helpUri": "https://example.com/advisory/PYSEC-2023-0001",
+                  "id": "OSV-2023-0001",
+                  "name": "PYSEC-2023-0001",
+                  "properties": {
+                    "tags": [
+                      "security",
+                      "vulnerability"
+                    ]
+                  }
+                },
+                {
+                  "help": {
+                    "text": "The project is archived and is no longer maintained."
+                  },
+                  "helpUri": "https://packaging.python.org/en/latest/specifications/project-status-markers/#archived",
+                  "id": "uv/project-status/archived",
+                  "name": "archived",
+                  "properties": {
+                    "tags": [
+                      "package",
+                      "project-status"
+                    ]
+                  }
+                }
+              ],
+              "semanticVersion": "[VERSION]",
+              "version": "[VERSION]"
+            }
+          }
+        }
+      ],
+      "version": "2.1.0"
+    }
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
+}
+
+/// SARIF artifact locations are relative to the repository root, whether the
+/// project is selected with `--project` or uv is invoked from the project directory.
+#[tokio::test]
+async fn audit_sarif_project_artifact_uri() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child(".git").create_dir_all()?;
+    let proxy = crate::pypi_proxy::start().await;
+    let project_dir = context.temp_dir.child("packages/project");
+    project_dir.create_dir_all()?;
+    write_audit_output_project(&project_dir, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [{"introduced": "0"}]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let assert = context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--project")
+        .arg(project_dir.path())
+        .arg("--service-url")
+        .arg(server.uri())
+        .assert()
+        .failure()
+        .code(1);
+    let project_report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    let assert = context
+        .audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--output-format")
+        .arg("sarif")
+        .arg("--frozen")
+        .arg("--service-url")
+        .arg(server.uri())
+        .current_dir(&project_dir)
+        .assert()
+        .failure()
+        .code(1);
+    let nested_report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+
+    let artifact_uris = [
+        project_report
+            .pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri"),
+        nested_report
+            .pointer("/runs/0/results/0/locations/0/physicalLocation/artifactLocation/uri"),
+    ];
+
+    insta::assert_json_snapshot!(artifact_uris, @r#"
+    [
+      "packages/project/uv.lock",
+      "packages/project/uv.lock"
+    ]
+    "#);
+
+    Ok(())
 }

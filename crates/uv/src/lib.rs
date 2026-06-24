@@ -39,7 +39,7 @@ use uv_fs::{CWD, Simplified, normalize_path};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_python::PythonRequest;
 use uv_requirements::{GroupsSpecification, RequirementsSource};
@@ -127,11 +127,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     let environment = EnvironmentOptions::new()?;
 
     // Resolve preview flags before config discovery for decisions that affect the discovery root.
-    let early_preview = Preview::from_args(
-        settings::resolve_preview(&cli.top_level.global_args, None, &environment),
-        cli.top_level.global_args.no_preview,
-        &cli.top_level.global_args.preview_features,
-    );
+    let early_preview = settings::resolve_preview(&cli.top_level.global_args, None, &environment);
 
     // Make the early preview flags globally available.
     uv_preview::set(early_preview)?;
@@ -366,6 +362,10 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             | ProjectCommand::Audit(uv_cli::AuditArgs {
                 script: Some(script),
                 ..
+            })
+            | ProjectCommand::Check(uv_cli::CheckArgs {
+                script: Some(script),
+                ..
             }) => match Pep723Script::read(script).await {
                 Ok(Some(script)) => Some(Pep723Item::Script(script)),
                 Ok(None) => {
@@ -385,6 +385,29 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 Err(err) => return Err(err.into()),
             },
             _ => None,
+        }
+    } else if let Commands::Workspace(WorkspaceNamespace {
+        command: WorkspaceCommand::Metadata(args),
+    }) = &*cli.command
+        && let Some(script) = args.script.as_ref()
+    {
+        match Pep723Script::read(script).await {
+            Ok(Some(script)) => Some(Pep723Item::Script(script)),
+            Ok(None) => {
+                bail!(
+                    "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(err) => return Err(err.into()),
         }
     } else if let Commands::Python(uv_cli::PythonNamespace {
         command:
@@ -504,11 +527,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .break_words(false)
                 .word_separator(textwrap::WordSeparator::AsciiSpace)
                 .word_splitter(textwrap::WordSplitter::NoHyphenation)
-                .wrap_lines(
-                    std::env::var(EnvVars::UV_NO_WRAP)
-                        .map(|_| false)
-                        .unwrap_or(true),
-                )
+                .wrap_lines(std::env::var(EnvVars::UV_NO_WRAP).is_err())
                 .build(),
         )
     }))?;
@@ -538,6 +557,42 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // This check happens after the first (fallible) workspace discovery, which we need to resolve
+    // the settings that go into the cache constructor, but the check happens before the first
+    // workspace discovery that's used beyond settings discovery.
+    let cache_dir = std::path::absolute(cache.root())?;
+    // PEP 517 hooks run from uv-managed source trees, including source distributions extracted
+    // into the cache, and can invoke uv recursively.
+    let project_is_in_build_dir =
+        std::env::var_os(EnvVars::UV_INTERNAL__BUILD_DIR).is_some_and(|build_dir| {
+            std::path::absolute(build_dir).is_ok_and(|build_dir| {
+                project_dir.starts_with(&build_dir)
+                    || fs_err::canonicalize(&*project_dir).is_ok_and(|project_dir| {
+                        fs_err::canonicalize(build_dir)
+                            .is_ok_and(|build_dir| project_dir.starts_with(build_dir))
+                    })
+            })
+        });
+    if !project_is_in_build_dir {
+        if project_dir.starts_with(&cache_dir) {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+        if let Ok(cache_dir) = fs_err::canonicalize(&cache_dir)
+            && let Ok(project_dir) = fs_err::canonicalize(&*project_dir)
+            && project_dir.starts_with(&cache_dir)
+        {
+            bail!(
+                "The project directory `{}` is inside the cache directory `{}`",
+                project_dir.user_display(),
+                cache_dir.user_display()
+            );
+        }
+    }
+
     let workspace_cache = WorkspaceCache::default();
 
     // Configure the global network settings.
@@ -1967,6 +2022,11 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                         .combine(Refresh::from(args.settings.upgrade.clone())),
                 );
 
+                let script = script.and_then(|script| match script {
+                    Pep723Item::Script(script) => Some(script),
+                    Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+                });
+
                 Box::pin(commands::metadata(
                     &project_dir,
                     args.lock_check,
@@ -1979,6 +2039,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     args.malware_settings,
                     args.settings,
                     client_builder.subcommand(vec!["workspace".to_owned(), "metadata".to_owned()]),
+                    script,
                     globals.python_preference,
                     globals.python_downloads,
                     globals.concurrency,
@@ -2715,7 +2776,7 @@ async fn run_project(
         }
         ProjectCommand::Format(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::FormatSettings::resolve(args, filesystem);
+            let args = settings::FormatSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
             // Initialize the cache.
@@ -2723,6 +2784,7 @@ async fn run_project(
 
             Box::pin(commands::format(
                 project_dir,
+                args.ruff_path,
                 args.check,
                 args.diff,
                 args.extra_args,
@@ -2754,8 +2816,14 @@ async fn run_project(
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let script = script.and_then(|script| match script {
+                Pep723Item::Script(script) => Some(script),
+                Pep723Item::Remote(..) | Pep723Item::Stdin(..) => None,
+            });
+
             Box::pin(commands::check(
                 project_dir,
+                args.ty_path,
                 args.lock_check,
                 args.frozen,
                 args.no_sync,
@@ -2766,6 +2834,8 @@ async fn run_project(
                 args.install_mirrors,
                 args.settings,
                 args.ty_version,
+                args.show_version,
+                script,
                 client_builder.subcommand(vec!["check".to_owned()]),
                 globals.python_preference,
                 globals.python_downloads,

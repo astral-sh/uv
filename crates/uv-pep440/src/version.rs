@@ -484,6 +484,23 @@ impl Version {
         self
     }
 
+    /// Return this version's release component at the given precision.
+    ///
+    /// Preserve the epoch, pad missing release segments with zeros, and discard every other
+    /// component. Return `None` for a precision of zero.
+    #[inline]
+    #[must_use]
+    pub fn only_release_at_precision(&self, precision: usize) -> Option<Self> {
+        let release = self
+            .release()
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(0))
+            .take(precision)
+            .collect::<Vec<_>>();
+        (!release.is_empty()).then(|| Self::new(release).with_epoch(self.epoch()))
+    }
+
     /// Push the given release number into this version. It will become the
     /// last number in the release component.
     #[inline]
@@ -724,11 +741,11 @@ impl Version {
                     });
                 } else {
                     // Either bump the matching kind or set to 1
-                    if let Some(prerelease) = &mut full.pre {
-                        if prerelease.kind == kind {
-                            prerelease.number += 1;
-                            return;
-                        }
+                    if let Some(prerelease) = &mut full.pre
+                        && prerelease.kind == kind
+                    {
+                        prerelease.number += 1;
+                        return;
                     }
                     full.pre = Some(Prerelease { kind, number: 1 });
                 }
@@ -4256,6 +4273,21 @@ mod tests {
         let v2: Version = "1.2".parse().unwrap();
         assert_eq!(&*v2.release(), &[1, 2]);
         assert_eq!(v2.to_string(), "1.2");
+    }
+
+    #[test]
+    fn only_release_at_precision_preserves_epoch_and_discards_suffixes() {
+        let version = "1!2.3rc1.post2.dev3+local"
+            .parse::<Version>()
+            .expect("valid version");
+        assert_eq!(
+            version
+                .only_release_at_precision(4)
+                .expect("non-zero precision")
+                .to_string(),
+            "1!2.3.0.0"
+        );
+        assert_eq!(version.only_release_at_precision(0), None);
     }
 
     #[test]

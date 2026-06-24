@@ -12,6 +12,7 @@ use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_preview::{Preview, PreviewFeature};
@@ -102,7 +103,11 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let groups = group_files_for_publishing(paths, no_attestations)?;
+    let mut groups = group_files_for_publishing(paths, no_attestations)?;
+    // Sort by filename first so the stable type sort preserves filename order within each type.
+    groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
+    // Sort by distribution type, with wheels before source distributions.
+    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {

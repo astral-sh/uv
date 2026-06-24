@@ -157,6 +157,47 @@ impl CachedEnvironment {
             .await?,
         );
 
+        Self::from_resolution(
+            &resolution,
+            build_constraints,
+            &interpreter,
+            settings,
+            client_builder,
+            state,
+            install,
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await
+    }
+
+    /// Get or create a [`CachedEnvironment`] from an existing [`Resolution`].
+    ///
+    /// Prefer [`Self::from_spec`] when starting from unresolved requirements; it selects the base
+    /// interpreter and resolves the requirements for that interpreter before delegating here.
+    ///
+    /// This method is intended for callers that already have a concrete [`Resolution`], and
+    /// performs environment reuse or creation and installation without invoking the resolver.
+    /// `interpreter` must be the base interpreter for which `resolution` was produced. In
+    /// particular, callers materializing a universal lock must derive its markers and tags from
+    /// the same interpreter.
+    pub(crate) async fn from_resolution(
+        resolution: &Resolution,
+        build_constraints: Constraints,
+        interpreter: &Interpreter,
+        settings: &ResolverInstallerSettings,
+        client_builder: &BaseClientBuilder<'_>,
+        state: &PlatformState,
+        install: Box<dyn InstallLogger>,
+        installer_metadata: bool,
+        concurrency: &Concurrency,
+        cache: &Cache,
+        printer: Printer,
+        preview: Preview,
+    ) -> Result<Self, ProjectError> {
         // Hash the resolution by hashing the generated lockfile.
         let resolution_hash = {
             let mut distributions = resolution
@@ -216,7 +257,7 @@ impl CachedEnvironment {
         let temp_dir = cache.venv_dir()?;
         let venv = uv_virtualenv::create_venv(
             temp_dir.path(),
-            interpreter,
+            interpreter.clone(),
             uv_virtualenv::Prompt::None,
             false,
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::TemporaryEnvironment),
@@ -227,7 +268,7 @@ impl CachedEnvironment {
 
         sync_environment(
             venv,
-            &resolution,
+            resolution,
             Modifications::Exact,
             build_constraints,
             settings.into(),
@@ -270,7 +311,7 @@ impl CachedEnvironment {
     ///
     /// When caching, always use the base interpreter, rather than that of the virtual
     /// environment.
-    fn base_interpreter(
+    pub(super) fn base_interpreter(
         interpreter: &Interpreter,
         cache: &Cache,
     ) -> Result<Interpreter, uv_python::Error> {

@@ -140,10 +140,10 @@ impl Conflicts {
         for (group, specifiers) in groups {
             if let Some(includer) = group_node_idxs.get(group) {
                 for specifier in specifiers {
-                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier {
-                        if let Some(included) = group_node_idxs.get(include_group) {
-                            graph.add_edge(*included, *includer, ());
-                        }
+                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier
+                        && let Some(included) = group_node_idxs.get(include_group)
+                    {
+                        graph.add_edge(*included, *includer, ());
                     }
                 }
             }
@@ -273,14 +273,13 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<ConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        let set = BTreeSet::from_iter(items);
+        match set.len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(Self {
-            set: BTreeSet::from_iter(items),
-        })
+        Ok(Self { set })
     }
 }
 
@@ -590,9 +589,7 @@ impl SchemaConflicts {
                     kind: item.kind.clone(),
                 });
             }
-            // OK because we guarantee that `SchemaConflictSet` is valid and
-            // there aren't any new errors that can occur here.
-            let set = ConflictSet::try_from(set).unwrap();
+            let set = ConflictSet::try_from(set)?;
             conflicting.push(set);
         }
         Ok(conflicting)
@@ -613,9 +610,11 @@ impl SchemaConflicts {
     /// If a conflict has an explicit package name (written by the end user),
     /// then that takes precedence over the given package name, which is only
     /// used when there is no explicit package name written.
-    pub fn to_conflicts_with_package_name(&self, package: &PackageName) -> Conflicts {
+    pub fn to_conflicts_with_package_name(
+        &self,
+        package: &PackageName,
+    ) -> Result<Conflicts, ConflictError> {
         self.to_conflicts_with_default_package(Some(package))
-            .expect("default package name should satisfy schema conflicts")
     }
 }
 
@@ -673,7 +672,7 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
     type Error = ConflictError;
 
     fn try_from(items: Vec<SchemaConflictItem>) -> Result<Self, ConflictError> {
-        match items.len() {
+        match items.iter().collect::<BTreeSet<_>>().len() {
             0 => return Err(ConflictError::ZeroItems),
             1 => return Err(ConflictError::OneItem),
             _ => {}

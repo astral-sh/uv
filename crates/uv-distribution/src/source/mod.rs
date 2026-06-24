@@ -712,6 +712,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.source_tree_build_system(
                     &dist.install_path,
                     Some(&dist.name),
+                    None,
                     client.unmanaged.credentials_cache(),
                 )
                 .await
@@ -761,6 +762,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 self.source_tree_build_system(
                     resource.install_path,
                     source.name(),
+                    None,
                     client.unmanaged.credentials_cache(),
                 )
                 .await
@@ -1715,6 +1717,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         self.source_tree_build_system(
             &source_tree,
             source.name(),
+            None,
             client.unmanaged.credentials_cache(),
         )
         .await
@@ -1810,6 +1813,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         self.source_tree_build_system(
             source_entry.path(),
             source.name(),
+            None,
             client.unmanaged.credentials_cache(),
         )
         .await
@@ -1886,6 +1890,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         self.source_tree_build_system(
             cache_shard.entry(SOURCE).path(),
             source.name(),
+            None,
             client.unmanaged.credentials_cache(),
         )
         .await
@@ -1896,6 +1901,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         &self,
         source_tree: &Path,
         package_name: Option<&PackageName>,
+        stop_discovery_at: Option<&Path>,
         credentials_cache: &CredentialsCache,
     ) -> Result<Option<StaticBuildSystem>, Error> {
         let pyproject_toml = source_tree.join("pyproject.toml");
@@ -1934,6 +1940,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.locations(),
             self.build_context.sources(),
             true,
+            stop_discovery_at,
             self.build_context.cache(),
             self.build_context.workspace_cache(),
             credentials_cache,
@@ -1980,6 +1987,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         self.source_tree_build_system(
             &source_tree,
             source.name(),
+            Some(fetch.path()),
             client.unmanaged.credentials_cache(),
         )
         .await
@@ -3722,6 +3730,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(hashes)
     }
 
+    /// For Git directories, we check them out into the cache, so we need to avoid workspace
+    /// discovery that goes outside the cache.
+    fn stop_discovery_at<'path>(
+        source: &BuildableSource<'_>,
+        source_root: &'path Path,
+    ) -> Option<&'path Path> {
+        if matches!(
+            source,
+            BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_))
+        ) {
+            Some(source_root)
+        } else {
+            None
+        }
+    }
+
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
@@ -3803,6 +3828,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 BuildKind::Wheel
             };
 
+            let install_path = if let Some(subdirectory) = subdirectory {
+                source_root.join(subdirectory)
+            } else {
+                source_root.to_path_buf()
+            };
+
+            let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
             let build_key = BuildKey {
                 base_python: base_python.into_boxed_path(),
                 source_root: source_root.to_path_buf().into_boxed_path(),
@@ -3813,7 +3846,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
             if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
-                debug!("Creating build environment for: {source}");
+                debug!("Reusing existing build environment for: {source}");
                 let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
                 // Store the build context.
@@ -3821,14 +3854,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 wheel
             } else {
-                debug!("Reusing existing build environment for: {source}");
+                debug!("Creating build environment for: {source}");
 
                 let builder = self
                     .build_context
                     .setup_build(
                         source_root,
                         subdirectory,
-                        source_root,
+                        &install_path,
+                        stop_discovery_at,
                         Some(&source.to_string()),
                         source.as_dist(),
                         &no_sources,
@@ -3947,13 +3981,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
+        let install_path = if let Some(subdirectory) = subdirectory {
+            source_root.join(subdirectory)
+        } else {
+            source_root.to_path_buf()
+        };
+
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
         // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                source_root,
+                &install_path,
+                stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
                 &no_sources,
@@ -4015,12 +4058,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         } else {
             BuildKind::Wheel
         };
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
 
         self.build_context
             .setup_build(
                 source_root,
                 subdirectory,
                 source_root,
+                stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
                 &no_sources,

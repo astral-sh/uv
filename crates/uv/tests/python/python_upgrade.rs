@@ -2,6 +2,7 @@ use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
 use assert_fs::prelude::PathChild;
+use insta::assert_snapshot;
 use uv_python::managed::platform_key_from_env;
 use uv_static::EnvVars;
 use uv_test::{LATEST_PYTHON_3_12, uv_snapshot};
@@ -839,6 +840,73 @@ fn python_upgrade_build_version() {
     ");
 }
 
+// A project environment should survive a transparent Python patch upgrade.
+#[test]
+fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_python_download_cache()
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_filtered_latest_python_versions()
+        .with_pyvenv_cfg_filters();
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.10"
+        "#,
+    )?;
+
+    context.python_install().arg("3.10.17").assert().success();
+    context
+        .sync()
+        .arg("--python")
+        .arg("3.10")
+        .assert()
+        .success();
+
+    // The minor-only `version_info` allows compatibility checks to accept a newer patch.
+    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(pyvenv_cfg, @r"
+        home = [PYTHON_HOME]
+        implementation = CPython
+        uv = [UV_VERSION]
+        version_info = 3.10
+        include-system-site-packages = false
+        prompt = project
+        ");
+    });
+
+    context.python_upgrade().arg("3.10").assert().success();
+
+    // The sync should not report removing or creating the environment.
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+
+    // The reused environment should run the upgraded Python patch.
+    uv_snapshot!(context.filters(), context.python_command().arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.10.[LATEST]
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
 // Regression test for <https://github.com/astral-sh/uv/issues/19100>.
 //
 // A virtual environment created by `uv sync` should pin to a patch version
@@ -852,7 +920,8 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs()
-        .with_filtered_latest_python_versions();
+        .with_filtered_latest_python_versions()
+        .with_pyvenv_cfg_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -897,6 +966,19 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
+
+    // An exact-patch environment must retain the patch in `version_info`.
+    let pyvenv_cfg = fs_err::read_to_string(context.venv.child("pyvenv.cfg"))?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(pyvenv_cfg, @r"
+        home = [PYTHON_HOME]
+        implementation = CPython
+        uv = [UV_VERSION]
+        version_info = 3.10.17
+        include-system-site-packages = false
+        prompt = project
+        ");
+    });
 
     // Install a newer patch version, which moves the mutable `cpython-3.10`
     // minor-version link to the newer release.

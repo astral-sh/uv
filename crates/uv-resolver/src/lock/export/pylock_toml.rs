@@ -45,6 +45,8 @@ use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
+    IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
         "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
     )]
@@ -192,6 +194,7 @@ where
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
+    #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,6 +209,20 @@ pub struct PylockToml {
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
+}
+
+fn deserialize_lock_version<'de, D>(deserializer: D) -> Result<Version, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = Version::deserialize(deserializer)?;
+    if version.release().first() != Some(&1) {
+        return Err(serde::de::Error::custom(format_args!(
+            "unsupported lock version (`{version}`, but only major version 1 is supported)"
+        )));
+    }
+
+    Ok(version)
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -1043,6 +1060,17 @@ impl<'lock> PylockToml {
             // Omit packages that aren't relevant to the current environment.
             if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
+            }
+
+            if let Some(requires_python) = package.requires_python.as_ref()
+                && !requires_python.contains(&markers.python_full_version().version)
+            {
+                return Err(PylockTomlErrorKind::IncompatibleRequiresPython(
+                    package.name.clone(),
+                    markers.python_full_version().version.clone(),
+                    requires_python.clone(),
+                )
+                .into());
             }
 
             match (

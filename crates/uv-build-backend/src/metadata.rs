@@ -23,6 +23,7 @@ use uv_pep508::{
 use uv_pypi_types::{
     Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl,
 };
+use uv_toml::deserialize_unique_map;
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -33,6 +34,19 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
 const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12"];
+
+fn deserialize_optional_dependencies<'de, D, V>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
+}
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -891,8 +905,7 @@ impl PyProjectToml {
         if !group
             .chars()
             .next()
-            .map(|c| c.is_alphanumeric() || c == '_')
-            .unwrap_or(false)
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
             || !group
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
@@ -984,6 +997,7 @@ struct Project {
     /// The dependencies of the project.
     dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
     /// Import names exclusively provided by the project.
     ///
@@ -1213,8 +1227,7 @@ impl BuildSystem {
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
+                    .is_some_and(|bounding_range| bounding_range.1 != Bound::Unbounded)
             }
         };
 
@@ -1806,6 +1819,24 @@ mod tests {
         Name: hello-world
         Version: 0.1.0
         ");
+    }
+
+    #[test]
+    fn reject_colliding_optional_dependency_names() {
+        let contents = extend_project(indoc! {r#"
+            [project.optional-dependencies]
+            foo-bar = ["anyio"]
+            foo_bar = ["iniconfig"]
+        "#});
+
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(err.to_string(), @r#"
+        TOML parse error at line 4, column 1
+          |
+        4 | [project.optional-dependencies]
+          | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        duplicate normalized extra name `foo-bar`
+        "#);
     }
 
     #[test]

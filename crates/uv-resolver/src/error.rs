@@ -1137,10 +1137,9 @@ fn merge_unavailable_versions(
     let (unchanged_cause, merged_versions, merged_is_cause2) =
         if let Some(merged_versions) = merge(&derived.cause2) {
             (derived.cause1.clone(), merged_versions, true)
-        } else if let Some(merged_versions) = merge(&derived.cause1) {
-            (derived.cause2.clone(), merged_versions, false)
         } else {
-            return None;
+            let merged_versions = merge(&derived.cause1)?;
+            (derived.cause2.clone(), merged_versions, false)
         };
 
     let merged_cause = Arc::new(DerivationTree::External(External::Custom(
@@ -1746,6 +1745,7 @@ mod tests {
             cause2: Arc::new(leaf),
         }));
 
-        assert_eq!(format!("{:?}", &*tree), format!("{tree:?}"));
+        let inner = &*tree;
+        assert_eq!(format!("{inner:?}"), format!("{tree:?}"));
     }
 }

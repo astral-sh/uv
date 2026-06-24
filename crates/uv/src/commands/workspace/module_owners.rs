@@ -4,7 +4,8 @@ use anyhow::Result;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions, Reinstall,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions, Reinstall,
 };
 use uv_distribution_types::{Dist, Name, ResolvedDist};
 use uv_fs::PortablePathBuf;
@@ -13,9 +14,9 @@ use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_preview::Preview;
 use uv_pypi_types::ModuleName;
 use uv_python::PythonEnvironment;
-use uv_resolver::{Installable, Lock, Metadata};
+use uv_resolver::{Installable, Metadata};
 use uv_settings::MalwareCheckSettings;
-use uv_workspace::{Workspace, WorkspaceCache};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultInstallLogger;
 use crate::commands::pip::operations::Modifications;
@@ -32,8 +33,7 @@ use crate::settings::{InstallerSettingsRef, ResolverSettings};
 /// without removing unrelated packages from an existing environment. Only distributions in the
 /// selected resolution are assigned package IDs, so those unrelated packages are not reported.
 pub(crate) async fn collect_module_owners(
-    workspace: &Workspace,
-    lock: &Lock,
+    target: InstallTarget<'_>,
     venv: &PythonEnvironment,
     settings: &ResolverSettings,
     client_builder: &BaseClientBuilder<'_>,
@@ -44,32 +44,10 @@ pub(crate) async fn collect_module_owners(
     preview: Preview,
     malware_settings: &MalwareCheckSettings,
 ) -> Result<BTreeMap<ModuleName, Vec<String>>> {
-    let target = InstallTarget::Workspace { workspace, lock };
-    let marker_env = resolution_markers(None, None, venv.interpreter());
-    let tags = resolution_tags(None, None, venv.interpreter())?;
-    let extras = ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default());
-    let groups = DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default());
-
-    let resolution = target.to_resolution(
-        &marker_env,
-        &tags,
-        &extras,
-        &groups,
-        &settings.build_options,
-        &InstallOptions::default(),
-    )?;
-    if resolution.is_empty() {
+    let (extras, groups) = target_selection(target);
+    let Some(package_ids) = selected_package_ids(target, venv, &extras, &groups, settings)? else {
         return Ok(BTreeMap::new());
-    }
-
-    let workspace_root = PortablePathBuf::from(workspace.install_path().as_path());
-    let mut package_ids = BTreeMap::<PackageName, String>::new();
-    for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
-        package_ids.insert(
-            dist.name().clone(),
-            Metadata::package_node_id(&workspace_root, dist)?,
-        );
-    }
+    };
 
     let reinstall = Reinstall::None;
     let installer_settings = InstallerSettingsRef {
@@ -114,6 +92,63 @@ pub(crate) async fn collect_module_owners(
     )
     .await?;
 
+    find_module_owners_in_environment(venv, &package_ids)
+}
+
+/// Map the modules in an existing environment to package IDs from the lockfile.
+pub(crate) fn find_module_owners(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    settings: &ResolverSettings,
+) -> Result<BTreeMap<ModuleName, Vec<String>>> {
+    let Some(package_ids) = selected_package_ids(target, venv, extras, groups, settings)? else {
+        return Ok(BTreeMap::new());
+    };
+
+    find_module_owners_in_environment(venv, &package_ids)
+}
+
+/// Select the package IDs that can own modules in the target resolution.
+fn selected_package_ids(
+    target: InstallTarget<'_>,
+    venv: &PythonEnvironment,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    settings: &ResolverSettings,
+) -> Result<Option<BTreeMap<PackageName, String>>> {
+    let marker_env = resolution_markers(None, None, venv.interpreter());
+    let tags = resolution_tags(None, None, venv.interpreter())?;
+
+    let resolution = target.to_resolution(
+        &marker_env,
+        &tags,
+        extras,
+        groups,
+        &settings.build_options,
+        &InstallOptions::default(),
+    )?;
+    if resolution.is_empty() {
+        return Ok(None);
+    }
+
+    let workspace_root = PortablePathBuf::from(target.install_path());
+    let mut package_ids = BTreeMap::<PackageName, String>::new();
+    for dist in resolution.distributions().filter(|dist| !is_virtual(dist)) {
+        package_ids.insert(
+            dist.name().clone(),
+            Metadata::package_node_id(&workspace_root, dist)?,
+        );
+    }
+    Ok(Some(package_ids))
+}
+
+/// Map modules in an existing environment to their selected package IDs.
+fn find_module_owners_in_environment(
+    venv: &PythonEnvironment,
+    package_ids: &BTreeMap<PackageName, String>,
+) -> Result<BTreeMap<ModuleName, Vec<String>>> {
     let mut owners = BTreeMap::<ModuleName, BTreeSet<String>>::new();
     for dist in SitePackages::from_environment(venv)?.iter() {
         let Some(package_id) = package_ids.get(dist.name()) else {
@@ -130,6 +165,27 @@ pub(crate) async fn collect_module_owners(
         .into_iter()
         .map(|(module, owners)| (module, owners.into_iter().collect()))
         .collect())
+}
+
+fn target_selection(
+    target: InstallTarget<'_>,
+) -> (
+    ExtrasSpecificationWithDefaults,
+    DependencyGroupsWithDefaults,
+) {
+    match target {
+        InstallTarget::Script { .. } => (
+            ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
+            DependencyGroups::default().with_defaults(DefaultGroups::default()),
+        ),
+        InstallTarget::Project { .. }
+        | InstallTarget::Projects { .. }
+        | InstallTarget::Workspace { .. }
+        | InstallTarget::NonProjectWorkspace { .. } => (
+            ExtrasSpecification::from_all_extras().with_defaults(DefaultExtras::default()),
+            DependencyGroups::from_all_groups().with_defaults(DefaultGroups::default()),
+        ),
+    }
 }
 
 fn is_virtual(dist: &ResolvedDist) -> bool {

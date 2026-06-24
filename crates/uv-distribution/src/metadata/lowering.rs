@@ -8,7 +8,8 @@ use thiserror::Error;
 use uv_auth::CredentialsCache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
+    RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
@@ -66,16 +67,16 @@ impl LoweredRequirement {
             sources
                 .iter()
                 .filter(|source| {
-                    if let Some(target) = source.extra() {
-                        if extra != Some(target) {
-                            return false;
-                        }
+                    if let Some(target) = source.extra()
+                        && extra != Some(target)
+                    {
+                        return false;
                     }
 
-                    if let Some(target) = source.group() {
-                        if group != Some(target) {
-                            return false;
-                        }
+                    if let Some(target) = source.group()
+                        && group != Some(target)
+                    {
+                        return false;
                     }
 
                     true
@@ -244,7 +245,7 @@ impl LoweredRequirement {
                                     hint,
                                 });
                             };
-                            if let Some(credentials) = index.credentials() {
+                            if let Some(credentials) = index.credentials()? {
                                 credentials_cache.store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {
@@ -484,7 +485,7 @@ impl LoweredRequirement {
                                     hint,
                                 });
                             };
-                            if let Some(credentials) = index.credentials() {
+                            if let Some(credentials) = index.credentials()? {
                                 credentials_cache.store_credentials(index.raw_url(), credentials);
                             }
                             let index = IndexMetadata {
@@ -595,6 +596,8 @@ pub enum LoweringError {
     WorkspaceMember,
     #[error(transparent)]
     InvalidUrl(#[from] DisplaySafeUrlError),
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
@@ -860,8 +863,7 @@ fn path_source(
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents, pyproject_path).ok())
                     // We don't require a build system for path dependencies
-                    .map(|pyproject_toml| pyproject_toml.is_package(false))
-                    .unwrap_or(true)
+                    .is_none_or(|pyproject_toml| pyproject_toml.is_package(false))
             });
 
             // If the project is not a package, treat it as a virtual dependency.

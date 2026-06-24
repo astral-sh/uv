@@ -52,13 +52,13 @@ use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerPackage, ForkStrategy,
-    PrereleaseMode, ResolutionMode,
+    AnnotationStyle, DependencyMode, ExcludeNewer, ExcludeNewerOverride, ExcludeNewerPackage,
+    ForkStrategy, PrereleaseMode, ResolutionMode,
 };
 use uv_settings::{
     Combine, EnvironmentOptions, FilesystemOptions, MalwareCheckSettings, Options, PipOptions,
-    PublishOptions, PythonInstallMirrors, ResolverInstallerOptions, ResolverInstallerSchema,
-    ResolverOptions,
+    PreviewFeaturesOption, PreviewOption, PublishOptions, PythonInstallMirrors,
+    ResolverInstallerOptions, ResolverInstallerSchema, ResolverOptions,
 };
 use uv_static::EnvVars;
 use uv_torch::{AmdGpuArchitecture, TorchMode};
@@ -129,11 +129,7 @@ impl GlobalSettings {
                     .unwrap_or_else(Concurrency::threads),
             ),
             show_settings: args.show_settings,
-            preview: Preview::from_args(
-                resolve_preview(args, workspace, environment),
-                args.no_preview,
-                &args.preview_features,
-            ),
+            preview: resolve_preview(args, workspace, environment),
             python_preference,
             python_downloads: flag(
                 args.allow_python_downloads,
@@ -228,22 +224,41 @@ pub(crate) fn resolve_preview(
     args: &GlobalArgs,
     workspace: Option<&FilesystemOptions>,
     environment: &EnvironmentOptions,
-) -> bool {
-    // CLI takes precedence
-    match flag(args.preview, args.no_preview, "preview") {
-        Some(value) => value,
-        None => {
-            // Check environment variable
-            if environment.preview.value == Some(true) {
-                true
-            } else {
-                // Fall back to workspace config
-                workspace
-                    .and_then(|workspace| workspace.globals.preview)
-                    .unwrap_or(false)
-            }
-        }
+) -> Preview {
+    // Explicit `--preview` and `--no-preview` flags take priority.
+    if let Some(enabled) = flag(args.preview, args.no_preview, "preview") {
+        return if enabled {
+            Preview::all()
+        } else {
+            Preview::default()
+        };
     }
+
+    // `UV_PREVIEW=true` enables all preview features.
+    if environment.preview.value == Some(true) {
+        return Preview::all();
+    }
+
+    let configured = workspace.and_then(|workspace| workspace.globals.preview.as_ref());
+
+    // Boolean enable-all configuration takes priority.
+    if matches!(
+        configured,
+        Some(
+            PreviewOption::Preview(true)
+                | PreviewOption::PreviewFeatures(PreviewFeaturesOption::Toggle(true))
+        )
+    ) {
+        return Preview::all();
+    }
+
+    // Explicit preview feature names take priority over configured feature names.
+    if !args.preview_features.is_empty() {
+        return Preview::from_feature_names(&args.preview_features);
+    }
+
+    // Fall back to workspace configuration.
+    configured.map(PreviewOption::resolve).unwrap_or_default()
 }
 
 /// The resolved network settings to use for any invocation of the CLI.
@@ -2078,6 +2093,8 @@ impl UpgradeSettings {
 /// The resolved settings to use for a `lock` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct MetadataSettings {
+    #[expect(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
@@ -2097,6 +2114,7 @@ impl MetadataSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let MetadataArgs {
+            script,
             locked,
             frozen,
             dry_run,
@@ -2122,6 +2140,7 @@ impl MetadataSettings {
         let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
+            script,
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             dry_run: DryRun::from_args(dry_run),
@@ -2637,7 +2656,7 @@ pub(crate) struct TreeSettings {
     pub(crate) invert: bool,
     pub(crate) outdated: bool,
     pub(crate) show_sizes: bool,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub(crate) script: Option<PathBuf>,
     pub(crate) python_version: Option<PythonVersion>,
     pub(crate) python_platform: Option<TargetTriple>,
@@ -2916,6 +2935,7 @@ impl ExportSettings {
 /// The resolved settings to use for a `format` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct FormatSettings {
+    pub(crate) ruff_path: Option<PathBuf>,
     pub(crate) check: bool,
     pub(crate) diff: bool,
     pub(crate) extra_args: Vec<String>,
@@ -2927,7 +2947,11 @@ pub(crate) struct FormatSettings {
 
 impl FormatSettings {
     /// Resolve the [`FormatSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: FormatArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(
+        args: FormatArgs,
+        _filesystem: Option<FilesystemOptions>,
+        environment: EnvironmentOptions,
+    ) -> Self {
         let FormatArgs {
             check,
             diff,
@@ -2939,11 +2963,14 @@ impl FormatSettings {
         } = args;
 
         Self {
+            ruff_path: environment.ruff_path,
             check,
             diff,
             extra_args,
             version,
-            exclude_newer: exclude_newer.map(|v| v.timestamp()),
+            exclude_newer: exclude_newer
+                .and_then(ExcludeNewerOverride::into_value)
+                .map(|value| value.timestamp()),
             no_project,
             show_version,
         }
@@ -2953,6 +2980,9 @@ impl FormatSettings {
 /// The resolved settings to use for a `check` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct CheckSettings {
+    pub(crate) ty_path: Option<PathBuf>,
+    #[expect(dead_code)]
+    pub(crate) script: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,
@@ -2964,6 +2994,7 @@ pub(crate) struct CheckSettings {
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
     pub(crate) ty_version: Option<String>,
+    pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) malware_settings: MalwareCheckSettings,
 }
@@ -2976,6 +3007,7 @@ impl CheckSettings {
         environment: EnvironmentOptions,
     ) -> Self {
         let CheckArgs {
+            script,
             extra,
             all_extras,
             no_extra,
@@ -2994,6 +3026,7 @@ impl CheckSettings {
             isolated,
             python,
             ty_version,
+            show_version,
             no_project,
             installer,
             build,
@@ -3027,6 +3060,8 @@ impl CheckSettings {
         let malware_settings = MalwareCheckSettings::from(&environment);
 
         Self {
+            ty_path: environment.ty_path,
+            script,
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
@@ -3059,6 +3094,7 @@ impl CheckSettings {
             refresh: Refresh::from(refresh),
             settings,
             ty_version,
+            show_version,
             no_project,
             malware_settings,
         }
@@ -4333,7 +4369,15 @@ impl From<ResolverOptions> for ResolverSettings {
             build_isolation: value.build_isolation.unwrap_or_default(),
             extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
             extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-            exclude_newer: value.exclude_newer,
+            exclude_newer: ExcludeNewer::from_args(
+                value.exclude_newer,
+                value
+                    .exclude_newer_package
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             link_mode: value.link_mode.unwrap_or_default(),
             torch_backend: value.torch_backend,
             cuda_driver_version: None,

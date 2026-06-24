@@ -209,25 +209,12 @@ impl<'lock> ExportableRequirements<'lock> {
 
             for requirement in root_requirements {
                 for dist in by_name.get(&requirement.name).into_iter().flatten() {
-                    // Determine whether this entry is "relevant" for the requirement, by intersecting
-                    // the markers.
-                    let marker = if dist.fork_markers.is_empty() {
-                        requirement.marker
-                    } else {
-                        let mut combined = MarkerTree::FALSE;
-                        for fork_marker in &dist.fork_markers {
-                            combined.or(fork_marker.pep508());
-                        }
-                        combined.and(requirement.marker);
-                        combined
-                    };
-
-                    if marker.is_false() {
+                    // Determine whether this entry is relevant for the requirement by
+                    // intersecting and simplifying the markers.
+                    let Some(marker) = target.lock().root_requirement_marker(requirement, dist)
+                    else {
                         continue;
-                    }
-
-                    // Simplify the marker.
-                    let marker = target.lock().simplify_environment(marker);
+                    };
 
                     // Add the dependency to the graph and get its index.
                     let dep_index = *inverse
