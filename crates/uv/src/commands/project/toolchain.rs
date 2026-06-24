@@ -39,19 +39,16 @@ pub(crate) fn find_locked_tool<'lock>(
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<LockedTool<'lock>>> {
     let marker_environment = interpreter.resolver_marker_environment();
-    let group_package = lock
-        .find_dependency_group_package(
+    let selection = lock
+        .dependency_selection(
             project.project_name(),
-            dependency_group,
             package_name,
             marker_environment.markers(),
         )
         .map_err(anyhow::Error::msg)?;
-    let production_package = if group_package.is_none()
-        && let Some(project_name) = project.project_name()
-    {
-        lock.find_dependency_package(project_name, package_name, marker_environment.markers())
-            .map_err(anyhow::Error::msg)?
+    let group_package = selection.group(dependency_group);
+    let production_package = if group_package.is_none() {
+        selection.production()
     } else {
         None
     };
@@ -60,14 +57,10 @@ pub(crate) fn find_locked_tool<'lock>(
     };
 
     let installed_by_production = groups.prod() && production_package == Some(package);
-    let installed_by_group = lock
-        .is_package_in_dependency_groups(
-            project.project_name(),
-            package,
-            marker_environment.markers(),
-            groups,
-        )
-        .map_err(anyhow::Error::msg)?;
+    // Require the exact package: `dev` may select ty 0.0.17 while an enabled conflicting group selects 0.0.16.
+    let installed_by_group = selection
+        .groups()
+        .any(|(group, selected)| groups.contains(group) && selected == package);
 
     Ok(Some(LockedTool {
         package,

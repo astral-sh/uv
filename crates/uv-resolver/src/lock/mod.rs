@@ -303,6 +303,34 @@ pub struct Lock {
     manifest: ResolverManifest,
 }
 
+/// Package selections from a [`Lock`] for a named direct dependency.
+///
+/// The dependency can come from a dependency group, the production packages, or both.
+#[derive(Debug)]
+pub struct DependencySelection<'lock> {
+    production: Option<&'lock Package>,
+    groups: BTreeMap<&'lock GroupName, &'lock Package>,
+}
+
+impl<'lock> DependencySelection<'lock> {
+    /// Returns the package selected by the production dependency.
+    pub fn production(&self) -> Option<&'lock Package> {
+        self.production
+    }
+
+    /// Returns the package selected by the given dependency group.
+    pub fn group(&self, group: &GroupName) -> Option<&'lock Package> {
+        self.groups.get(group).copied()
+    }
+
+    /// Returns the dependency groups and their package selections.
+    pub fn groups(&self) -> impl Iterator<Item = (&'lock GroupName, &'lock Package)> + '_ {
+        self.groups
+            .iter()
+            .map(|(group, package)| (*group, *package))
+    }
+}
+
 impl Lock {
     /// Initialize a [`Lock`] from a [`ResolverOutput`].
     pub fn from_resolution(
@@ -796,119 +824,79 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
-    /// Returns the package selected by a direct dependency in a dependency group.
+    /// Returns the environment-specific direct dependency selections for a lock target.
     ///
-    /// If `project_name` is provided, the dependency group attached to that package is used.
-    /// Otherwise, the dependency group attached directly to the lock manifest is used.
-    pub fn find_dependency_group_package(
-        &self,
+    /// If `project_name` is provided, dependencies attached to that package are used. Otherwise,
+    /// dependency groups attached directly to the lock manifest are used.
+    pub fn dependency_selection<'lock>(
+        &'lock self,
         project_name: Option<&PackageName>,
-        group: &GroupName,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
-        match project_name {
-            Some(project_name) => self.find_project_dependency_group_package(
-                project_name,
-                group,
-                dependency_name,
-                marker_environment,
-            ),
-            None => self.find_virtual_root_dependency_group_package(
-                group,
-                dependency_name,
-                marker_environment,
-            ),
-        }
-    }
-
-    /// Returns `true` if the package is selected by an enabled dependency group.
-    pub fn is_package_in_dependency_groups(
-        &self,
-        project_name: Option<&PackageName>,
-        package: &Package,
-        marker_environment: &MarkerEnvironment,
-        groups: &DependencyGroupsWithDefaults,
-    ) -> Result<bool, String> {
-        match project_name {
-            Some(project_name) => {
-                let Some(project) = self.find_by_name(project_name)? else {
-                    return Ok(false);
-                };
-                for group in project
-                    .resolved_dependency_groups()
-                    .keys()
-                    .filter(|group| groups.contains(group))
-                {
-                    if self.find_project_dependency_group_package(
-                        project_name,
-                        group,
-                        package.name(),
-                        marker_environment,
-                    )? == Some(package)
-                    {
-                        return Ok(true);
-                    }
+    ) -> Result<DependencySelection<'lock>, String> {
+        let (production, groups) = if let Some(project_name) = project_name {
+            let Some(project) = self.find_by_name(project_name)? else {
+                return Ok(DependencySelection {
+                    production: None,
+                    groups: BTreeMap::new(),
+                });
+            };
+            let production =
+                self.find_project_dependency_package(project, dependency_name, marker_environment)?;
+            let mut groups = BTreeMap::new();
+            for group in project.resolved_dependency_groups().keys() {
+                if let Some(package) = self.find_project_dependency_group_package(
+                    project,
+                    group,
+                    dependency_name,
+                    marker_environment,
+                )? {
+                    groups.insert(group, package);
                 }
             }
-            None => {
-                for group in self
-                    .manifest
-                    .dependency_groups
-                    .keys()
-                    .filter(|group| groups.contains(group))
-                {
-                    if self.find_virtual_root_dependency_group_package(
-                        group,
-                        package.name(),
-                        marker_environment,
-                    )? == Some(package)
-                    {
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-        Ok(false)
-    }
-
-    /// Returns the package selected by a dependency group on a virtual workspace root.
-    fn find_virtual_root_dependency_group_package(
-        &self,
-        group: &GroupName,
-        dependency_name: &PackageName,
-        marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
-        let Some(requirements) = self.manifest.dependency_groups.get(group) else {
-            return Ok(None);
+            (production, groups)
+        } else {
+            // Lock-manifest dependency groups only record requirements, not resolved package IDs.
+            // Select the environment-specific package once, then associate it with each group that
+            // has an applicable direct requirement.
+            let mut applicable_groups = self
+                .manifest
+                .dependency_groups
+                .iter()
+                .filter_map(|(group, requirements)| {
+                    requirements
+                        .iter()
+                        .any(|requirement| {
+                            &requirement.name == dependency_name
+                                && requirement.marker.evaluate(marker_environment, &[])
+                        })
+                        .then_some(group)
+                })
+                .peekable();
+            let groups = if applicable_groups.peek().is_some()
+                && let Some(package) = self.find_by_markers(dependency_name, marker_environment)?
+            {
+                applicable_groups.map(|group| (group, package)).collect()
+            } else {
+                BTreeMap::new()
+            };
+            (None, groups)
         };
-
-        // Confirm that the requested direct dependency applies to this environment before
-        // selecting a package with the same name from the universal lock. For example,
-        // `foo; python_version < '3.12'` must not select a locked `foo` on Python 3.12.
-        if !requirements.iter().any(|requirement| {
-            &requirement.name == dependency_name
-                && requirement.marker.evaluate(marker_environment, &[])
-        }) {
-            return Ok(None);
-        }
-        self.find_by_markers(dependency_name, marker_environment)
+        Ok(DependencySelection { production, groups })
     }
 
     /// Returns the package selected by a dependency group on a non-virtual project.
     fn find_project_dependency_group_package(
         &self,
-        project_name: &PackageName,
+        project: &Package,
         group: &GroupName,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
     ) -> Result<Option<&Package>, String> {
-        let Some(project) = self.find_by_name(project_name)? else {
-            return Ok(None);
-        };
         let Some(dependencies) = project.resolved_dependency_groups().get(group) else {
             return Ok(None);
         };
+        let project_name = project.name();
 
         let mut selected = None;
         for dependency in dependencies
@@ -944,15 +932,13 @@ impl Lock {
     }
 
     /// Returns the package selected by a production dependency on a non-virtual project.
-    pub fn find_dependency_package(
+    fn find_project_dependency_package(
         &self,
-        project_name: &PackageName,
+        project: &Package,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
     ) -> Result<Option<&Package>, String> {
-        let Some(project) = self.find_by_name(project_name)? else {
-            return Ok(None);
-        };
+        let project_name = project.name();
 
         let mut selected = None;
         for dependency in project
@@ -7218,6 +7204,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
 
     use super::*;
@@ -7229,6 +7216,117 @@ mod tests {
             let expr = format!("{}", anstream::adapter::strip_str(&expr));
             insta::assert_snapshot!(expr, @$snapshot);
         }};
+    }
+
+    fn marker_environment() -> MarkerEnvironment {
+        MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+            implementation_name: "cpython",
+            implementation_version: "3.12.0",
+            os_name: "posix",
+            platform_machine: "arm64",
+            platform_python_implementation: "CPython",
+            platform_release: "23.0.0",
+            platform_system: "Darwin",
+            platform_version: "test",
+            python_full_version: "3.12.0",
+            python_version: "3.12",
+            sys_platform: "darwin",
+        })
+        .expect("valid marker environment")
+    }
+
+    #[test]
+    fn dependency_selection_resolves_included_groups_to_same_package() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [{ name = "ty" }]
+
+[package.dependency-groups]
+dev = [{ name = "ty" }]
+typing = [{ name = "ty" }]
+
+[[package]]
+name = "ty"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .expect("valid lock");
+        let project_name = PackageName::from_str("project").expect("valid package name");
+        let dependency_name = PackageName::from_str("ty").expect("valid package name");
+        let dev = GroupName::from_str("dev").expect("valid group name");
+        let typing = GroupName::from_str("typing").expect("valid group name");
+        let marker_environment = marker_environment();
+
+        let selection = lock
+            .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
+            .expect("unique project package");
+        assert_eq!(
+            selection
+                .groups()
+                .map(|(group, _package)| group)
+                .collect::<Vec<_>>(),
+            [&dev, &typing]
+        );
+
+        let preferred = selection.group(&dev).expect("dev dependency");
+        let included = selection.group(&typing).expect("typing dependency");
+        let production = selection.production().expect("production dependency");
+
+        assert!(std::ptr::eq(preferred, included));
+        assert!(std::ptr::eq(preferred, production));
+    }
+
+    #[test]
+    fn dependency_selection_returns_any_selection_error() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "project"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "ty", version = "1.0.0", source = { registry = "https://example.com/simple" } },
+    { name = "ty", version = "2.0.0", source = { registry = "https://example.com/simple" } },
+]
+
+[package.dependency-groups]
+dev = [
+    { name = "ty", version = "1.0.0", source = { registry = "https://example.com/simple" } },
+]
+
+[[package]]
+name = "ty"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+
+[[package]]
+name = "ty"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .expect("valid lock");
+        let project_name = PackageName::from_str("project").expect("valid package name");
+        let dependency_name = PackageName::from_str("ty").expect("valid package name");
+        let marker_environment = marker_environment();
+
+        let error = lock
+            .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
+            .expect_err("ambiguous production selection");
+        insta::assert_snapshot!(error, @"found multiple packages matching production dependency `ty` for `project`");
     }
 
     #[test]
