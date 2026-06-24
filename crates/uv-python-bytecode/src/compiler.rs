@@ -571,6 +571,7 @@ pub(crate) struct Compiler {
     exclude_condition_not_taken_from_exception: bool,
     exclude_condition_not_taken_from_all_exception_regions: bool,
     exclude_loop_tail_not_taken_from_control_flow_regions: bool,
+    unwind_exception_handlers_for_implicit_return: bool,
     prevent_try_exit_inlining: bool,
     deferred_comprehension_cleanups: Vec<DeferredComprehensionCleanup>,
     scope: Scope,
@@ -641,6 +642,7 @@ impl Compiler {
             exclude_condition_not_taken_from_exception: false,
             exclude_condition_not_taken_from_all_exception_regions: false,
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
+            unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Module,
@@ -766,6 +768,7 @@ impl Compiler {
             exclude_condition_not_taken_from_exception: false,
             exclude_condition_not_taken_from_all_exception_regions: false,
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
+            unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Function {
@@ -876,6 +879,7 @@ impl Compiler {
             exclude_condition_not_taken_from_exception: false,
             exclude_condition_not_taken_from_all_exception_regions: false,
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
+            unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Class {
@@ -1608,8 +1612,42 @@ impl Compiler {
     }
 
     fn emit_deferred_implicit_return(&mut self) -> Result<(), CompileError> {
+        let initialized_locals = self
+            .unwind_exception_handlers_for_implicit_return
+            .then(|| self.initialized_locals.clone());
+        let exclusion_start = (self.unwind_exception_handlers_for_implicit_return
+            && !self.active_exception_region_exclusions.is_empty())
+        .then(|| {
+            let start = self.assembler.label();
+            self.assembler.mark(start);
+            start
+        });
+        if self.unwind_exception_handlers_for_implicit_return {
+            for handler in self.active_exception_handlers.clone().iter().rev() {
+                self.emit(POP_EXCEPT, 0, -1)?;
+                if let Some(name) = &handler.name {
+                    let none = self.add_constant(Constant::None)?;
+                    self.emit(LOAD_CONST, none, 1)?;
+                    self.store_name(name)?;
+                    self.delete_name(name)?;
+                }
+            }
+        }
         self.emit_deferred_constant_before_return(Constant::None)?;
-        self.emit(RETURN_VALUE, 0, -1)
+        self.emit(RETURN_VALUE, 0, -1)?;
+        if let Some(exclusion_start) = exclusion_start {
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            for exclusions in &mut self.active_exception_region_exclusions {
+                exclusions.push((exclusion_start, exclusion_end));
+            }
+        }
+        if let Some(initialized_locals) = initialized_locals {
+            // The cleanup edge returned, so its deletes do not affect subsequently emitted cold
+            // handler blocks.
+            self.initialized_locals = initialized_locals;
+        }
+        Ok(())
     }
 
     fn compile_terminal_while_break(
@@ -5117,6 +5155,12 @@ impl Compiler {
             } else {
                 None
             };
+            // CPython terminal-compiles a final nested try while the outer handler fblock is
+            // still active, so each implicit return carries the outer handler cleanup.
+            let terminal_handler_try = terminal
+                && terminal_handler_if.is_none()
+                && matches!(handler.body.last(), Some(Stmt::Try(_)));
+            let mut terminal_handler_try_return = false;
             let (terminal_handler_exclusions, mut handler_region_exclusions) =
                 if let Some((statement, name)) = terminal_handler_if {
                     (
@@ -5134,7 +5178,24 @@ impl Compiler {
                             name: handler.name.as_ref().map(ToString::to_string),
                             loop_depth: self.loops.len(),
                         });
-                    let result = self.compile_suite(&handler.body);
+                    let previous_unwind = std::mem::replace(
+                        &mut self.unwind_exception_handlers_for_implicit_return,
+                        terminal_handler_try,
+                    );
+                    let previous_fallthrough = terminal_handler_try
+                        .then(|| std::mem::replace(&mut self.emitted_fallthrough_return, false));
+                    let result = if terminal_handler_try {
+                        self.compile_suite_inner(&handler.body, true)
+                    } else {
+                        self.compile_suite(&handler.body)
+                    };
+                    self.unwind_exception_handlers_for_implicit_return = previous_unwind;
+                    if let Some(previous_fallthrough) = previous_fallthrough {
+                        terminal_handler_try_return = std::mem::replace(
+                            &mut self.emitted_fallthrough_return,
+                            previous_fallthrough,
+                        );
+                    }
                     self.active_exception_handlers.pop();
                     result?;
                     (
@@ -5181,7 +5242,7 @@ impl Compiler {
                 (base_depth + 1).cast_unsigned(),
                 true,
             );
-            if terminal_handler_exclusions.is_none() {
+            if terminal_handler_exclusions.is_none() && !terminal_handler_try_return {
                 if !handler_body_has_instructions && let Some(statement) = handler.body.last() {
                     self.assembler
                         .set_location(self.source_location(statement.range()));

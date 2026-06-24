@@ -487,7 +487,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def f():\n    value = source()\n    try:\n        raise ValueError\n    except ValueError:\n        return value\n";
+        let source = "def f():\n    value = source()\n    try:\n        raise ValueError\n    except ValueError:\n        return value\n\ndef nested():\n    try:\n        body()\n    except ValueError as error:\n        try:\n            pass\n        except TypeError:\n            raise error\n";
         let expected = Command::new(python)
             .args([
                 "-c",
