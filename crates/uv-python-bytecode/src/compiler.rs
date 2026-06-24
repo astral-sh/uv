@@ -8593,6 +8593,14 @@ impl Compiler {
     }
 
     fn compile_call(&mut self, call: &ruff_python_ast::ExprCall) -> Result<(), CompileError> {
+        if let Expr::Name(name) = call.func.as_ref()
+            && matches!(name.id.as_str(), "all" | "any" | "tuple")
+            && let [Expr::Generator(_)] = call.arguments.args.as_ref()
+            && call.arguments.keywords.is_empty()
+        {
+            return self.compile_optimized_generator_call(call, name.id.as_str());
+        }
+
         let has_starred = call.arguments.args.iter().any(Expr::is_starred_expr);
         let has_keyword_unpack = call
             .arguments
@@ -8754,6 +8762,94 @@ impl Compiler {
             }
         }
         self.emit(CALL_FUNCTION_EX, 0, -3)
+    }
+
+    fn compile_optimized_generator_call(
+        &mut self,
+        call: &ruff_python_ast::ExprCall,
+        callable: &str,
+    ) -> Result<(), CompileError> {
+        let (common_constant, initial_result, collect_tuple) = match callable {
+            "all" => (3, true, false),
+            "any" => (4, false, false),
+            "tuple" => (2, false, true),
+            _ => unreachable!("optimized generator call must use all, any, or tuple"),
+        };
+        let callable_location = self.source_location(call.func.range());
+        let base_depth = self.depth;
+        let fallback = self.assembler.label();
+        let end = self.assembler.label();
+
+        self.compile_expression(&call.func)?;
+        self.assembler.set_location(callable_location);
+        self.emit(COPY, 1, 1)?;
+        self.emit(LOAD_COMMON_CONSTANT, common_constant, 1)?;
+        self.emit(IS_OP, 0, -1)?;
+        self.emit_jump_forward(POP_JUMP_IF_FALSE, fallback, -1)?;
+        self.emit(NOT_TAKEN, 0, 0)?;
+        self.emit(POP_TOP, 0, -1)?;
+
+        if collect_tuple {
+            self.emit(BUILD_LIST, 0, 1)?;
+        }
+        self.compile_expression(&call.arguments.args[0])?;
+
+        let loop_start = self.assembler.label();
+        let exhausted = self.assembler.label();
+        let iterator_depth = self.depth;
+        self.assembler.mark(loop_start);
+        self.assembler.set_location(callable_location);
+        self.emit_jump_forward(FOR_ITER, exhausted, 1)?;
+        if collect_tuple {
+            self.emit(LIST_APPEND, 2, -1)?;
+            self.emit_jump_backward(JUMP_BACKWARD, loop_start, 0)?;
+        } else {
+            self.emit(TO_BOOL, 0, 0)?;
+            let matched = self.assembler.label();
+            self.emit_jump_forward(
+                if initial_result {
+                    POP_JUMP_IF_FALSE
+                } else {
+                    POP_JUMP_IF_TRUE
+                },
+                matched,
+                -1,
+            )?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_backward(JUMP_BACKWARD, loop_start, 0)?;
+            self.assembler.mark(matched);
+            self.emit(POP_ITER, 0, -1)?;
+            let result = self.add_constant(Constant::Bool(!initial_result))?;
+            self.emit(LOAD_CONST, result, 1)?;
+            self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+        }
+
+        self.assembler.mark(exhausted);
+        self.set_depth(iterator_depth + 1);
+        self.assembler.set_location(callable_location);
+        self.emit(END_FOR, 0, -1)?;
+        self.emit(POP_ITER, 0, -1)?;
+        self.assembler.set_location(callable_location);
+        if collect_tuple {
+            self.emit(CALL_INTRINSIC_1, 6, 0)?;
+        } else {
+            let result = self.add_constant(Constant::Bool(initial_result))?;
+            self.emit(LOAD_CONST, result, 1)?;
+        }
+        self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+
+        self.assembler.mark(fallback);
+        self.set_depth(base_depth + 1);
+        self.assembler.set_location(callable_location);
+        self.emit(PUSH_NULL, 0, 1)?;
+        self.compile_expression(&call.arguments.args[0])?;
+        self.assembler
+            .set_location(self.source_location(self.call_opcode_range(call)));
+        self.emit(CALL, 1, -2)?;
+
+        self.assembler.mark(end);
+        self.set_depth(base_depth + 1);
+        Ok(())
     }
 
     fn compile_keyword_map(

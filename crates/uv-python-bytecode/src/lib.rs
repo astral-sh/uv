@@ -719,6 +719,34 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_optimized_generator_calls() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "module_any = any(value for value in values)\nmodule_all = all(value for value in values)\nmodule_tuple = tuple(value for value in values)\n\n\ndef optimized(values):\n    return (\n        any(value for value in values),\n        all(value for value in values),\n        tuple(value for value in values),\n    )\n\n\ndef rebound(values, any):\n    return any(value for value in values)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'optimized_generator_calls.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "optimized_generator_calls.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_branch_result_ownership() {
         let Some(python) = python_314() else {
             return;
