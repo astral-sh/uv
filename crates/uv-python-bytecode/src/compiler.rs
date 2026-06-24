@@ -569,6 +569,8 @@ pub(crate) struct Compiler {
     preserve_finally_break_exit_loop_range: Option<ruff_text_size::TextRange>,
     exclude_terminal_if_not_taken: bool,
     exclude_condition_not_taken_from_exception: bool,
+    exclude_condition_not_taken_from_all_exception_regions: bool,
+    exclude_loop_tail_not_taken_from_control_flow_regions: bool,
     prevent_try_exit_inlining: bool,
     deferred_comprehension_cleanups: Vec<DeferredComprehensionCleanup>,
     scope: Scope,
@@ -637,6 +639,8 @@ impl Compiler {
             preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
+            exclude_condition_not_taken_from_all_exception_regions: false,
+            exclude_loop_tail_not_taken_from_control_flow_regions: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Module,
@@ -760,6 +764,8 @@ impl Compiler {
             preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
+            exclude_condition_not_taken_from_all_exception_regions: false,
+            exclude_loop_tail_not_taken_from_control_flow_regions: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Function {
@@ -868,6 +874,8 @@ impl Compiler {
             preserve_finally_break_exit_loop_range: None,
             exclude_terminal_if_not_taken: false,
             exclude_condition_not_taken_from_exception: false,
+            exclude_condition_not_taken_from_all_exception_regions: false,
+            exclude_loop_tail_not_taken_from_control_flow_regions: false,
             prevent_try_exit_inlining: false,
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Class {
@@ -2845,6 +2853,19 @@ impl Compiler {
                 self.compile_loop_tail_if(statement, restart)?;
                 Ok(true)
             }
+            Some((Stmt::While(statement), leading))
+                if statement.orelse.is_empty()
+                    && early_condition_truthiness(&statement.test).is_none()
+                    && !suite_contains_loop_break(&statement.body)
+                    && !matches!(
+                        statement.body.last(),
+                        Some(Stmt::Try(statement)) if try_requires_loop_tail_inlining(statement)
+                    ) =>
+            {
+                self.compile_suite(leading)?;
+                self.compile_loop_tail_while(statement, restart)?;
+                Ok(true)
+            }
             Some((Stmt::Assert(statement), leading))
                 if early_condition_truthiness(&statement.test).is_none() =>
             {
@@ -2857,6 +2878,74 @@ impl Compiler {
                 Ok(false)
             }
         }
+    }
+
+    fn add_control_flow_region_exclusion(&mut self, start: Label, end: Label) {
+        if self.generator_region_start.is_some() {
+            self.generator_region_exclusions.push((start, end));
+        }
+        for exclusions in &mut self.active_with_region_exclusions {
+            exclusions.push((start, end));
+        }
+        for exclusions in &mut self.active_exception_region_exclusions {
+            exclusions.push((start, end));
+        }
+    }
+
+    fn has_active_control_flow_region(&self) -> bool {
+        self.generator_region_start.is_some()
+            || !self.active_with_region_exclusions.is_empty()
+            || !self.active_exception_region_exclusions.is_empty()
+    }
+
+    fn compile_loop_tail_while(
+        &mut self,
+        statement: &ruff_python_ast::StmtWhile,
+        restart: Label,
+    ) -> Result<(), CompileError> {
+        let base_depth = self.depth;
+        let start = self.assembler.label();
+        let body_label = self.assembler.label();
+        let control_region = self
+            .has_active_control_flow_region()
+            .then(|| (self.assembler.label(), self.assembler.label()));
+
+        self.assembler.mark(start);
+        self.compile_jump_if(&statement.test, true, body_label)?;
+        if let Some((control_start, _)) = control_region {
+            self.assembler
+                .mark_before_trailing_instructions(control_start, 2);
+        }
+        self.assembler
+            .set_location(self.source_location(statement.test.range()));
+        self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+        if let Some((control_start, control_end)) = control_region {
+            self.assembler.mark(control_end);
+            self.add_control_flow_region_exclusion(control_start, control_end);
+        }
+
+        self.assembler.mark(body_label);
+        self.set_depth(base_depth);
+        self.loops.push(LoopContext {
+            continue_label: start,
+            break_label: restart,
+            iterator_cleanup: IteratorCleanup::None,
+            break_returns: false,
+            preserve_break_exit: false,
+        });
+        let body_start = self.assembler.instruction_count();
+        let previous_loop_tail_exclusion = std::mem::replace(
+            &mut self.exclude_loop_tail_not_taken_from_control_flow_regions,
+            control_region.is_some(),
+        );
+        let tail_result = self.compile_while_tail_suite(&statement.body, start);
+        self.exclude_loop_tail_not_taken_from_control_flow_regions = previous_loop_tail_exclusion;
+        let tail_jumps = tail_result?;
+        self.loops.pop();
+        if !tail_jumps && !suite_terminates(&statement.body) {
+            self.emit_while_backedge(&statement.body, body_start, start)?;
+        }
+        Ok(())
     }
 
     fn compile_while_tail_suite(
@@ -2961,13 +3050,26 @@ impl Compiler {
             }
             let body = statement.body.as_slice();
             let body_label = self.assembler.label();
-            let generator_exclusion = self.generator_region_start.map(|_| self.assembler.label());
+            let control_region = (early_condition_truthiness(&statement.test).is_none()
+                && self.has_active_control_flow_region())
+            .then(|| (self.assembler.label(), self.assembler.label()));
+            let generator_exclusion = (control_region.is_none()
+                && self.generator_region_start.is_some())
+            .then(|| self.assembler.label());
             self.compile_jump_if(&statement.test, true, body_label)?;
+            if let Some((control_start, _)) = control_region {
+                self.assembler
+                    .mark_before_trailing_instructions(control_start, 2);
+            }
             if let Some(exclusion_start) = generator_exclusion {
                 self.assembler
                     .mark_before_trailing_instructions(exclusion_start, 2);
             }
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            if let Some((control_start, control_end)) = control_region {
+                self.assembler.mark(control_end);
+                self.add_control_flow_region_exclusion(control_start, control_end);
+            }
             self.assembler.mark(body_label);
             if let Some(exclusion_start) = generator_exclusion {
                 self.generator_region_exclusions
@@ -3000,14 +3102,26 @@ impl Compiler {
             if !has_else && branch_index + 1 == branch_count {
                 let test = test.expect("last branch without else has a test");
                 let body_label = self.assembler.label();
-                let generator_exclusion =
-                    self.generator_region_start.map(|_| self.assembler.label());
+                let control_region = (early_condition_truthiness(test).is_none()
+                    && self.has_active_control_flow_region())
+                .then(|| (self.assembler.label(), self.assembler.label()));
+                let generator_exclusion = (control_region.is_none()
+                    && self.generator_region_start.is_some())
+                .then(|| self.assembler.label());
                 self.compile_jump_if(test, true, body_label)?;
+                if let Some((control_start, _)) = control_region {
+                    self.assembler
+                        .mark_before_trailing_instructions(control_start, 2);
+                }
                 if let Some(exclusion_start) = generator_exclusion {
                     self.assembler
                         .mark_before_trailing_instructions(exclusion_start, 2);
                 }
                 self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+                if let Some((control_start, control_end)) = control_region {
+                    self.assembler.mark(control_end);
+                    self.add_control_flow_region_exclusion(control_start, control_end);
+                }
                 self.assembler.mark(body_label);
                 if let Some(exclusion_start) = generator_exclusion {
                     self.generator_region_exclusions
@@ -3027,7 +3141,22 @@ impl Compiler {
             }
             let next = test.map(|_| self.assembler.label());
             if let (Some(test), Some(next)) = (test, next) {
-                self.compile_jump_if(test, false, next)?;
+                let exclude_from_control_flow_regions =
+                    !self.active_exception_region_exclusions.is_empty()
+                        || self.exclude_loop_tail_not_taken_from_control_flow_regions;
+                let previous_exception_exclusion = std::mem::replace(
+                    &mut self.exclude_condition_not_taken_from_exception,
+                    exclude_from_control_flow_regions,
+                );
+                let previous_all_exception_exclusions = std::mem::replace(
+                    &mut self.exclude_condition_not_taken_from_all_exception_regions,
+                    !self.active_exception_region_exclusions.is_empty(),
+                );
+                let condition_result = self.compile_jump_if(test, false, next);
+                self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
+                self.exclude_condition_not_taken_from_all_exception_regions =
+                    previous_all_exception_exclusions;
+                condition_result?;
             }
             let nested_tail = self.compile_with_strict_owned_loads(
                 test.is_some_and(|test| matches!(test, Expr::If(_))),
@@ -10802,10 +10931,16 @@ impl Compiler {
                 for exclusions in &mut self.active_with_region_exclusions {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
-                if exclude_from_exception
-                    && let Some(exclusions) = self.active_exception_region_exclusions.last_mut()
-                {
-                    exclusions.push((exclusion_start, exclusion_end));
+                if exclude_from_exception {
+                    if self.exclude_condition_not_taken_from_all_exception_regions {
+                        for exclusions in &mut self.active_exception_region_exclusions {
+                            exclusions.push((exclusion_start, exclusion_end));
+                        }
+                    } else if let Some(exclusions) =
+                        self.active_exception_region_exclusions.last_mut()
+                    {
+                        exclusions.push((exclusion_start, exclusion_end));
+                    }
                 }
                 return Ok(());
             }
@@ -10863,10 +10998,15 @@ impl Compiler {
             for exclusions in &mut self.active_with_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
-            if exclude_from_exception
-                && let Some(exclusions) = self.active_exception_region_exclusions.last_mut()
-            {
-                exclusions.push((exclusion_start, exclusion_end));
+            if exclude_from_exception {
+                if self.exclude_condition_not_taken_from_all_exception_regions {
+                    for exclusions in &mut self.active_exception_region_exclusions {
+                        exclusions.push((exclusion_start, exclusion_end));
+                    }
+                } else if let Some(exclusions) = self.active_exception_region_exclusions.last_mut()
+                {
+                    exclusions.push((exclusion_start, exclusion_end));
+                }
             }
             Ok(())
         } else {
