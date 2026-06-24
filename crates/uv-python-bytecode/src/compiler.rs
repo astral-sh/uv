@@ -6889,6 +6889,10 @@ impl Compiler {
             if !trailing_nop_is_covered
                 && self.assembler.instruction_count() == body_start
                 && let Some(statement) = body.last()
+                // A same-line `as` target store already carries the pass line event.
+                && body_previous_location.is_none_or(|previous| {
+                    previous.line != self.source_location(statement.range()).line
+                })
             {
                 body_noop = Some(statement.range());
             } else if terminal_if && let Some(Stmt::If(statement)) = body.last() {
