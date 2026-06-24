@@ -60,6 +60,8 @@ struct Instruction {
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
     normalized_exception_owner: Option<bool>,
+    // Exclude this instruction from all exception regions after CFG normalization.
+    exclude_exception: bool,
     // CPython's cold-block optimizer retains stale exception ownership for the short form of
     // certain synthetic handler-exit jumps, but not when the jump needs an `EXTENDED_ARG`.
     exclude_exception_if_extended: bool,
@@ -437,6 +439,17 @@ impl Assembler {
         }
     }
 
+    pub(crate) fn exclude_last_instruction_from_exception(&mut self) {
+        if let Some(Item::Instruction(instruction)) = self
+            .items
+            .iter_mut()
+            .rev()
+            .find(|item| matches!(item, Item::Instruction(_)))
+        {
+            instruction.exclude_exception = true;
+        }
+    }
+
     pub(crate) fn set_last_normalized_exception_owner(&mut self, has_owner: bool) {
         if let Some(Item::Instruction(instruction)) = self
             .items
@@ -653,6 +666,7 @@ impl Assembler {
             preserve_nop_after_jump_threading: false,
             converted_pop_block: false,
             normalized_exception_owner: None,
+            exclude_exception: false,
             exclude_exception_if_extended: false,
             borrow_unreachable_entry,
         }));
@@ -1457,6 +1471,7 @@ impl Assembler {
                         preserve_nop_after_jump_threading: false,
                         converted_pop_block: false,
                         normalized_exception_owner: None,
+                        exclude_exception: false,
                         exclude_exception_if_extended,
                         borrow_unreachable_entry: false,
                     }),
@@ -2006,6 +2021,7 @@ impl Assembler {
                         preserve_nop_after_jump_threading: false,
                         converted_pop_block: false,
                         normalized_exception_owner: None,
+                        exclude_exception: false,
                         exclude_exception_if_extended: false,
                         borrow_unreachable_entry: false,
                     }),
@@ -3376,6 +3392,7 @@ impl Assembler {
                 normalized_exception_owner: first
                     .normalized_exception_owner
                     .or(second.normalized_exception_owner),
+                exclude_exception: first.exclude_exception || second.exclude_exception,
                 exclude_exception_if_extended: first.exclude_exception_if_extended
                     || second.exclude_exception_if_extended,
                 borrow_unreachable_entry: first.borrow_unreachable_entry,
@@ -3423,10 +3440,12 @@ impl Assembler {
             .zip(&positions)
             .zip(extended_args)
             .filter_map(|((instruction, position), extended)| {
-                (instruction.exclude_exception_if_extended && *extended > 0).then_some((
-                    *position,
-                    *position + u32::from(*extended) + 1 + u32::from(instruction.opcode.caches),
-                ))
+                (instruction.exclude_exception
+                    || (instruction.exclude_exception_if_extended && *extended > 0))
+                    .then_some((
+                        *position,
+                        *position + u32::from(*extended) + 1 + u32::from(instruction.opcode.caches),
+                    ))
             })
             .collect::<Vec<_>>();
         let mut block_labels = self.preserved_block_boundaries.clone();

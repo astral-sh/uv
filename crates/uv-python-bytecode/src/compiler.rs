@@ -1622,7 +1622,10 @@ impl Compiler {
                 }
             }
             if let Stmt::Pass(statement) = statement
-                && self.active_exception_region_exclusions.is_empty()
+                // CPython retains pass markers in the exceptional copy of a multi-statement
+                // finally body, even though ordinary protected suites omit them.
+                && (self.active_exception_region_exclusions.is_empty()
+                    || self.active_finally_end_blocks > 0)
                 && (self.active_with_region_exclusions.is_empty() || body.len() > 1)
             {
                 self.assembler
@@ -6434,11 +6437,35 @@ impl Compiler {
         // copied onto another edge.
         self.assembler.set_location(SourceLocation::NONE);
         self.emit(NOP, 0, 0)?;
-        self.assembler.mark_last_as_converted_pop_block();
+        let noop_finally_body = statement.finalbody.iter().all(|statement| {
+            matches!(statement, Stmt::Pass(_))
+                || matches!(statement, Stmt::Expr(expression) if fold_constant(&expression.value).is_some())
+        });
+        // A handler-form try leaves its converted POP_BLOCK unlocated when the normal finally
+        // body has no executable instructions. Otherwise, predecessor propagation can retain it.
+        if statement.handlers.is_empty() || !noop_finally_body {
+            self.assembler.mark_last_as_converted_pop_block();
+        } else {
+            self.assembler.preserve_last_no_location();
+        }
         let previous_fallthrough = std::mem::replace(&mut self.emitted_fallthrough_return, false);
         if let Some(location) = pass_finally_location {
             self.assembler.set_location(location);
-            self.emit(NOP, 0, 0)?;
+            if self.active_exception_region_exclusions.is_empty() {
+                self.emit(NOP, 0, 0)?;
+            } else {
+                // The normal finally copy is outside an enclosing try's exception ownership.
+                // Mark both the pass and its exit because CFG optimization can keep either NOP.
+                let pass_start = self.assembler.label();
+                self.assembler.mark(pass_start);
+                self.emit(NOP, 0, 0)?;
+                self.assembler.exclude_last_instruction_from_exception();
+                let pass_end = self.assembler.label();
+                self.assembler.mark(pass_end);
+                for exclusions in &mut self.active_exception_region_exclusions {
+                    exclusions.push((pass_start, pass_end));
+                }
+            }
         } else {
             self.active_normal_finally_bodies += 1;
             let result = self.compile_suite_inner(&statement.finalbody, terminal);
@@ -6464,6 +6491,11 @@ impl Compiler {
                 self.assembler.set_location(location);
             }
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            if pass_finally_location.is_some()
+                && !self.active_exception_region_exclusions.is_empty()
+            {
+                self.assembler.exclude_last_instruction_from_exception();
+            }
         }
         if protected_has_instructions {
             self.add_exception_regions_with_exclusions(
