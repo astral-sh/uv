@@ -437,29 +437,6 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -9,21 +9,21 @@
-         ]
-
-         [options]
-         exclude-newer = "2024-03-25T00:00:00Z"
-
-         [[package]]
-         name = "importlib-metadata"
-         version = "7.1.0"
-         source = { registry = "https://pypi.org/simple" }
-         dependencies = [
-        -    { name = "zipp" },
-        +    { name = "zipp", marker = "python_full_version < '3.10'" },
-         ]
-         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120, upload-time = "2024-03-20T19:51:32.429Z" }
-         wheels = [
-             { url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409, upload-time = "2024-03-20T19:51:30.241Z" },
-         ]
-
-         [[package]]
-         name = "jax"
-         version = "0.4.17"
-         source = { registry = "https://pypi.org/simple" }
         @@ -150,28 +150,41 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713, upload-time = "2024-01-20T21:12:26.619Z" },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252, upload-time = "2024-01-20T21:12:33.197Z" },
@@ -575,33 +552,7 @@ fn jax_instability() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(diff, @r#"
-        --- old
-        +++ new
-        @@ -9,21 +9,21 @@
-         ]
-
-         [options]
-         exclude-newer = "2024-03-25T00:00:00Z"
-
-         [[package]]
-         name = "importlib-metadata"
-         version = "7.1.0"
-         source = { registry = "https://pypi.org/simple" }
-         dependencies = [
-        -    { name = "zipp" },
-        +    { name = "zipp", marker = "python_full_version < '3.10'" },
-         ]
-         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120, upload-time = "2024-03-20T19:51:32.429Z" }
-         wheels = [
-             { url = "https://files.pythonhosted.org/packages/2d/0a/679461c511447ffaf176567d5c496d1de27cbe34a87df6677d7171b2fbd4/importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570", size = 24409, upload-time = "2024-03-20T19:51:30.241Z" },
-         ]
-
-         [[package]]
-         name = "jax"
-         version = "0.4.17"
-         source = { registry = "https://pypi.org/simple" }
-        "#);
+        assert_snapshot!(diff, @"");
     });
 
     Ok(())
