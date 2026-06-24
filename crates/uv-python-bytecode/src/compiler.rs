@@ -12704,6 +12704,22 @@ impl Compiler {
                 walk_stmt(self, statement);
             }
 
+            fn visit_except_handler(
+                &mut self,
+                except_handler: &'ast ruff_python_ast::ExceptHandler,
+            ) {
+                let ruff_python_ast::ExceptHandler::ExceptHandler(handler) = except_handler;
+                if let Some(type_) = &handler.type_ {
+                    self.visit_expr(type_);
+                }
+                if let Some(name) = &handler.name {
+                    self.names.push((name.as_str().to_string(), false));
+                }
+                for statement in &handler.body {
+                    self.visit_stmt(statement);
+                }
+            }
+
             fn visit_expr(&mut self, expression: &'ast Expr) {
                 match expression {
                     Expr::Name(name) => self.names.push((name.id.as_str().to_string(), false)),
@@ -15779,6 +15795,7 @@ fn statement_terminates(statement: &Stmt) -> bool {
                     .last()
                     .is_some_and(|clause| clause.test.is_none())
         }
+        Stmt::Try(statement) => suite_terminates(&statement.finalbody),
         _ => false,
     }
 }

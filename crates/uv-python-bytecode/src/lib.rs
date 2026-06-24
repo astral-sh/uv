@@ -1408,6 +1408,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_a_terminal_finally_suite() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "\"\"\"doc\"\"\"\ntry:\n    raise ValueError\nfinally:\n    raise RuntimeError\nafter = 1\ntry:\n    action()\nexcept Error as captured:\n    consume(captured)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'terminal_finally.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.take().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "terminal_finally.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_annotation_thunk_edges() {
         let Some(python) = python_314() else {
             return;
