@@ -4290,7 +4290,7 @@ fn scoped_override_dependency_from_pyproject() -> Result<()> {
 
     [tool.uv]
     override-dependencies = [
-      { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] }
+      { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2", "typing-extensions==4.10.0"] }
     ]
     "#,
     )?;
@@ -4312,9 +4312,13 @@ fn scoped_override_dependency_from_pyproject() -> Result<()> {
         #   anyio
     sniffio==1.3.1
         # via anyio
+    typing-extensions==4.10.0
+        # via
+        #   --override (workspace)
+        #   anyio
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 4 packages in [TIME]
     ");
 
     pyproject_toml.write_str(
