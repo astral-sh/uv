@@ -3782,9 +3782,26 @@ impl Compiler {
                 }
                 let body_previous_location = self.assembler.last_instruction_location();
                 let body_start = self.assembler.instruction_count();
-                let emitted_fallthrough = if terminal
-                    && matches!(case.body.last(), Some(Stmt::If(_)))
+                let tail_if = if !terminal
+                    && let Some((Stmt::If(statement), leading)) = case.body.split_last()
+                    && statement.elif_else_clauses.is_empty()
+                    && early_condition_truthiness(&statement.test).is_none()
+                    && !suite_terminates(&statement.body)
                 {
+                    Some((statement, leading))
+                } else {
+                    None
+                };
+                let emitted_case_exit = if let Some((statement, leading)) = tail_if {
+                    self.compile_suite(leading)?;
+                    self.compile_match_case_tail_if(statement, end)?;
+                    true
+                } else {
+                    false
+                };
+                let emitted_fallthrough = if emitted_case_exit {
+                    false
+                } else if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
                     let previous_fallthrough =
                         std::mem::replace(&mut self.emitted_fallthrough_return, false);
                     self.compile_suite_inner(&case.body, true)?;
@@ -3793,7 +3810,7 @@ impl Compiler {
                     self.compile_suite(&case.body)?;
                     false
                 };
-                if !suite_terminates(&case.body) && !emitted_fallthrough {
+                if !emitted_case_exit && !suite_terminates(&case.body) && !emitted_fallthrough {
                     self.set_branch_end_location(&case.body, body_start);
                     if terminal {
                         self.emit_deferred_implicit_return()?;
@@ -3884,6 +3901,32 @@ impl Compiler {
             self.emit_deferred_implicit_return()?;
         }
         self.set_depth(base_depth);
+        Ok(())
+    }
+
+    fn compile_match_case_tail_if(
+        &mut self,
+        statement: &ruff_python_ast::StmtIf,
+        match_end: Label,
+    ) -> Result<(), CompileError> {
+        let base_depth = self.depth;
+        let false_exit = self.assembler.label();
+        self.compile_jump_if(&statement.test, false, false_exit)?;
+        self.mark_definitely_evaluated_locals(&statement.test);
+
+        let body_start = self.assembler.instruction_count();
+        self.compile_suite(&statement.body)?;
+        self.set_branch_end_location(&statement.body, body_start);
+        self.emit_jump_forward(JUMP_FORWARD, match_end, 0)?;
+
+        self.assembler.mark(false_exit);
+        self.set_depth(base_depth);
+        self.assembler
+            .set_location(self.source_location(statement.test.range()));
+        self.emit_jump_forward(JUMP_FORWARD, match_end, 0)?;
+        // CPython leaves the condition's false edge pointing at this case-exit block, even
+        // though the block itself immediately jumps to the match join.
+        self.assembler.prevent_last_jump_threading_target();
         Ok(())
     }
 
