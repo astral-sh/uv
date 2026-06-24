@@ -1169,7 +1169,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "()\nvalue: int\n\ndef outer():\n    from pathlib import Path\n\n    class Visitor:\n        def visit(self, value: Path) -> None:\n            pass\n";
+        let source = "from typing import Annotated, List, TypedDict\n\n()\nvalue: int\n\ndef marker():\n    pass\n\nclass Item(TypedDict):\n    nodes: List[TypedDict('Node', {'name': str})]\n\nclass Metadata:\n    value: Annotated[int, marker()]\n\ndef outer():\n    from pathlib import Path\n\n    class Visitor:\n        def visit(self, value: Path) -> None:\n            pass\n";
         let expected = Command::new(python)
             .args([
                 "-c",

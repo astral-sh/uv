@@ -9370,6 +9370,9 @@ impl Compiler {
     }
 
     fn compile_direct_global_callable(&mut self, expression: &Expr) -> Result<bool, CompileError> {
+        if self.annotation_classdict_index.is_some() {
+            return Ok(false);
+        }
         let Expr::Name(name) = expression else {
             return Ok(false);
         };
