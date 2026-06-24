@@ -1452,6 +1452,15 @@ impl Compiler {
                 match statement {
                     Stmt::While(statement)
                         if statement.orelse.is_empty()
+                            && !suite_contains_loop_break(&statement.body)
+                            && matches!(statement.test.as_ref(), Expr::BoolOp(boolean) if boolean.op == BoolOp::And && boolean.values.len() > 1) =>
+                    {
+                        self.compile_terminal_while_and(statement)?;
+                        self.emitted_fallthrough_return = true;
+                        continue;
+                    }
+                    Stmt::While(statement)
+                        if statement.orelse.is_empty()
                             && suite_contains_loop_break(&statement.body) =>
                     {
                         self.compile_terminal_while_break(statement)?;
@@ -1708,6 +1717,54 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(statement.test.range()));
         self.emit_implicit_return()?;
+        self.set_depth(base_depth);
+        Ok(())
+    }
+
+    fn compile_terminal_while_and(
+        &mut self,
+        statement: &ruff_python_ast::StmtWhile,
+    ) -> Result<(), CompileError> {
+        let Expr::BoolOp(condition) = statement.test.as_ref() else {
+            unreachable!("terminal while-and requires a boolean condition");
+        };
+        let base_depth = self.depth;
+        let start = self.assembler.label();
+        self.assembler.mark(start);
+        let exits = condition
+            .values
+            .iter()
+            .map(|value| {
+                let exit = self.assembler.label();
+                self.compile_jump_if(value, false, exit)?;
+                Ok((value, exit))
+            })
+            .collect::<Result<Vec<_>, CompileError>>()?;
+
+        self.loops.push(LoopContext {
+            continue_label: start,
+            break_label: exits[0].1,
+            iterator_cleanup: IteratorCleanup::None,
+            break_returns: true,
+            preserve_break_exit: false,
+        });
+        let body_start = self.assembler.instruction_count();
+        self.compile_suite(&statement.body)?;
+        self.loops.pop();
+        if !suite_terminates(&statement.body) {
+            self.emit_while_backedge(&statement.body, body_start, start)?;
+        }
+
+        for (value, exit) in exits.into_iter().rev() {
+            self.assembler.mark(exit);
+            self.set_depth(base_depth);
+            let range = match value {
+                Expr::UnaryOp(unary) if unary.op == UnaryOp::Not => unary.operand.range(),
+                _ => value.range(),
+            };
+            self.assembler.set_location(self.source_location(range));
+            self.emit_implicit_return()?;
+        }
         self.set_depth(base_depth);
         Ok(())
     }
@@ -8262,7 +8319,9 @@ impl Compiler {
         } else {
             self.record_folded_operands(expression)?;
         }
-        if matches!(expression, Expr::Tuple(_)) {
+        if matches!(expression, Expr::Tuple(_))
+            || matches!(expression, Expr::UnaryOp(unary) if unary.op == UnaryOp::Not)
+        {
             self.emit_folded_tuple_not_nops(expression)?;
             self.assembler
                 .set_location(self.source_location(expression.range()));
