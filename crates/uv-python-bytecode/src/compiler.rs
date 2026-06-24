@@ -6867,7 +6867,7 @@ impl Compiler {
         if let Some(type_params) = definition.type_params.as_deref() {
             return self.compile_generic_function_definition(definition, type_params);
         }
-        self.compile_plain_function_definition(definition)
+        self.compile_plain_function_definition(definition, None)
     }
 
     fn compile_generic_function_definition(
@@ -6877,6 +6877,18 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         for decorator in &definition.decorator_list {
             self.compile_expression(&decorator.expression)?;
+        }
+        let definition_location = self.definition_location(
+            definition.range,
+            definition.name.range(),
+            b"def",
+            definition.is_async,
+        );
+        let defaults = self.compile_function_defaults(definition, definition_location)?;
+        let default_argument_count = usize::from(defaults.0) + usize::from(defaults.1);
+        if default_argument_count == 2 {
+            self.assembler.set_location(definition_location);
+            self.emit(SWAP, 2, 0)?;
         }
         let mut inner_definition = definition.clone();
         inner_definition.decorator_list.clear();
@@ -6895,6 +6907,9 @@ impl Compiler {
         }
 
         let mut locals = vec![".defaults".to_string()];
+        if defaults.1 {
+            locals.push(".kwdefaults".to_string());
+        }
         locals.extend(
             type_params
                 .iter()
@@ -6939,7 +6954,10 @@ impl Compiler {
                     }),
             )),
             wrapper_plan,
-            0,
+            to_u32(
+                default_argument_count,
+                "generic function default argument count",
+            )?,
             0,
             0,
             wrapper_flags,
@@ -6952,7 +6970,20 @@ impl Compiler {
         wrapper.generic_target_qualified_name = Some(target_qualified_name);
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
-        wrapper.compile_plain_function_definition(&inner_definition)?;
+        wrapper.assembler.set_location(definition_location);
+        for index in 0..default_argument_count {
+            wrapper.emit(
+                LOAD_FAST,
+                to_u32(index, "generic function default argument index")?,
+                1,
+            )?;
+        }
+        if default_argument_count > 0 {
+            // CPython inserts closure loads after fusing the synthetic default
+            // argument loads, so the last default does not fuse with a cell.
+            wrapper.assembler.prevent_last_instruction_fusion();
+        }
+        wrapper.compile_plain_function_definition(&inner_definition, Some(defaults))?;
         wrapper.emit(SWAP, 2, 0)?;
         wrapper.emit(CALL_INTRINSIC_2, 4, -1)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
@@ -6968,12 +6999,6 @@ impl Compiler {
         if !wrapper_closure_names.is_empty() {
             self.emit_closure_tuple(&wrapper_closure_names)?;
         }
-        let definition_location = self.definition_location(
-            definition.range,
-            definition.name.range(),
-            b"def",
-            definition.is_async,
-        );
         self.assembler.set_location(definition_location);
         let code = self.add_constant(Constant::Code(Box::new(wrapper)))?;
         self.emit(LOAD_CONST, code, 1)?;
@@ -6981,8 +7006,27 @@ impl Compiler {
         if !wrapper_closure_names.is_empty() {
             self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
         }
-        self.emit(PUSH_NULL, 0, 1)?;
-        self.emit(CALL, 0, -1)?;
+        if default_argument_count == 0 {
+            self.emit(PUSH_NULL, 0, 1)?;
+            self.emit(CALL, 0, -1)?;
+        } else {
+            self.emit(
+                SWAP,
+                to_u32(
+                    default_argument_count + 1,
+                    "generic function wrapper call depth",
+                )?,
+                0,
+            )?;
+            self.emit(
+                CALL,
+                to_u32(
+                    default_argument_count - 1,
+                    "generic function wrapper call argument count",
+                )?,
+                -i32::try_from(default_argument_count).unwrap(),
+            )?;
+        }
         for decorator in definition.decorator_list.iter().rev() {
             self.assembler
                 .set_location(self.source_location(decorator.expression.range()));
@@ -6995,6 +7039,7 @@ impl Compiler {
     fn compile_plain_function_definition(
         &mut self,
         definition: &StmtFunctionDef,
+        preloaded_defaults: Option<(bool, bool)>,
     ) -> Result<(), CompileError> {
         let parameters = &definition.parameters;
         for decorator in &definition.decorator_list {
@@ -7007,53 +7052,12 @@ impl Compiler {
             definition.is_async,
         );
 
-        let positional_defaults: Vec<_> = parameters
-            .posonlyargs
-            .iter()
-            .chain(&parameters.args)
-            .filter_map(|parameter| parameter.default.as_deref())
-            .collect();
-        if !positional_defaults.is_empty() {
-            if let Some(defaults) = positional_defaults
-                .iter()
-                .map(|default| fold_constant(default))
-                .collect::<Option<Vec<_>>>()
-            {
-                for default in &positional_defaults {
-                    self.record_folded_value(default)?;
-                }
-                self.assembler.set_location(definition_location);
-                self.emit_deferred_constant(Constant::Tuple(defaults))?;
+        let (has_positional_defaults, has_keyword_defaults) =
+            if let Some(defaults) = preloaded_defaults {
+                defaults
             } else {
-                for default in &positional_defaults {
-                    self.compile_expression(default)?;
-                }
-                self.assembler.set_location(definition_location);
-                self.emit_build(BUILD_TUPLE, positional_defaults.len())?;
-            }
-        }
-
-        let keyword_defaults: Vec<_> = parameters
-            .kwonlyargs
-            .iter()
-            .filter_map(|parameter| {
-                parameter
-                    .default
-                    .as_deref()
-                    .map(|default| (parameter.name().as_str(), default))
-            })
-            .collect();
-        if !keyword_defaults.is_empty() {
-            for (name, default) in &keyword_defaults {
-                self.assembler.set_location(definition_location);
-                let name = self.add_constant(Constant::String(self.mangled_name(name)))?;
-                self.emit(LOAD_CONST, name, 1)?;
-                self.compile_expression(default)?;
-            }
-            let count = to_u32(keyword_defaults.len(), "keyword default count")?;
-            self.assembler.set_location(definition_location);
-            self.emit(BUILD_MAP, count, 1 - i32::try_from(count).unwrap() * 2)?;
-        }
+                self.compile_function_defaults(definition, definition_location)?
+            };
 
         let plan = if let Some(parent) = &self.function_plan {
             parent.child(definition).ok_or_else(|| {
@@ -7175,10 +7179,10 @@ impl Compiler {
         if function_has_annotations(definition) {
             self.emit(SET_FUNCTION_ATTRIBUTE, 16, -1)?;
         }
-        if !keyword_defaults.is_empty() {
+        if has_keyword_defaults {
             self.emit(SET_FUNCTION_ATTRIBUTE, 2, -1)?;
         }
-        if !positional_defaults.is_empty() {
+        if has_positional_defaults {
             self.emit(SET_FUNCTION_ATTRIBUTE, 1, -1)?;
         }
         for decorator in definition.decorator_list.iter().rev() {
@@ -7192,6 +7196,66 @@ impl Compiler {
         } else {
             self.store_name(definition.name.as_str())
         }
+    }
+
+    fn compile_function_defaults(
+        &mut self,
+        definition: &StmtFunctionDef,
+        definition_location: SourceLocation,
+    ) -> Result<(bool, bool), CompileError> {
+        let parameters = &definition.parameters;
+        let positional_defaults: Vec<_> = parameters
+            .posonlyargs
+            .iter()
+            .chain(&parameters.args)
+            .filter_map(|parameter| parameter.default.as_deref())
+            .collect();
+        if !positional_defaults.is_empty() {
+            if let Some(defaults) = positional_defaults
+                .iter()
+                .map(|default| fold_constant(default))
+                .collect::<Option<Vec<_>>>()
+            {
+                for default in &positional_defaults {
+                    self.record_folded_value(default)?;
+                }
+                self.assembler.set_location(definition_location);
+                self.emit_deferred_constant(Constant::Tuple(defaults))?;
+            } else {
+                for default in &positional_defaults {
+                    self.compile_expression(default)?;
+                }
+                self.assembler.set_location(definition_location);
+                self.emit_build(BUILD_TUPLE, positional_defaults.len())?;
+            }
+        }
+
+        let keyword_defaults: Vec<_> = parameters
+            .kwonlyargs
+            .iter()
+            .filter_map(|parameter| {
+                parameter
+                    .default
+                    .as_deref()
+                    .map(|default| (parameter.name().as_str(), default))
+            })
+            .collect();
+        if !keyword_defaults.is_empty() {
+            for (name, default) in &keyword_defaults {
+                self.assembler.set_location(definition_location);
+                let name = self.add_constant(Constant::String(self.mangled_name(name)))?;
+                self.emit(LOAD_CONST, name, 1)?;
+                self.compile_expression(default)?;
+            }
+            let count = to_u32(keyword_defaults.len(), "keyword default count")?;
+            self.assembler.set_location(definition_location);
+            self.emit(BUILD_MAP, count, 1 - i32::try_from(count).unwrap() * 2)?;
+        }
+
+        Ok((
+            !positional_defaults.is_empty(),
+            !keyword_defaults.is_empty(),
+        ))
     }
 
     fn compile_class_definition(&mut self, definition: &StmtClassDef) -> Result<(), CompileError> {

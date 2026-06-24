@@ -271,6 +271,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_generic_function_defaults() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def positional[T](value: T = T):\n    pass\n\ndef keyword[T](*, value: T = T):\n    pass\n\ndef both[T](value: T = T, *, other: T = T):\n    pass\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'generic_defaults.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "generic_defaults.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_string_slice_constants() {
         let Some(python) = python_314() else {
             return;
