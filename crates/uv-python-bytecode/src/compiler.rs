@@ -235,6 +235,14 @@ struct ExceptionHandlerContext {
     loop_depth: usize,
 }
 
+#[derive(Clone, Debug)]
+struct ReturnFinallyContext {
+    body: Vec<Stmt>,
+    loop_depth: usize,
+    handler: Label,
+    depth: u32,
+}
+
 #[derive(Debug)]
 struct MatchContext {
     stores: Vec<String>,
@@ -560,6 +568,7 @@ pub(crate) struct Compiler {
     emit_protected_async_for_end_nop: bool,
     active_exception_region_exclusions: Vec<Vec<(Label, Label)>>,
     active_exception_handlers: Vec<ExceptionHandlerContext>,
+    active_return_finally_contexts: Vec<ReturnFinallyContext>,
     // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
     // coroutine stop-iteration handler.
     active_normal_finally_bodies: usize,
@@ -633,6 +642,7 @@ impl Compiler {
             emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -759,6 +769,7 @@ impl Compiler {
             emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -870,6 +881,7 @@ impl Compiler {
             emit_protected_async_for_end_nop: false,
             active_exception_region_exclusions: Vec::new(),
             active_exception_handlers: Vec::new(),
+            active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -2533,7 +2545,28 @@ impl Compiler {
                         self.assembler.mark(start);
                         exception_unwind_start = Some(start);
                     }
+                    let protected_pop_except = (!preserve_tos
+                        && !return_is_overridden
+                        && !self.active_return_finally_contexts.is_empty())
+                    .then(|| {
+                        let start = self.assembler.label();
+                        self.assembler.mark(start);
+                        start
+                    });
                     self.emit(POP_EXCEPT, 0, -1)?;
+                    if let Some(start) = protected_pop_except {
+                        let end = self.assembler.label();
+                        self.assembler.mark(end);
+                        for context in &self.active_return_finally_contexts {
+                            self.assembler.add_exception_region(
+                                start,
+                                end,
+                                context.handler,
+                                context.depth,
+                                false,
+                            );
+                        }
+                    }
                     if let Some(name) = &handler.name {
                         let none = self.add_constant(Constant::None)?;
                         self.emit(LOAD_CONST, none, 1)?;
@@ -2541,6 +2574,32 @@ impl Compiler {
                         self.delete_name(name)?;
                     }
                     next_loop = handler.loop_depth;
+                }
+                let return_finally_contexts = if !preserve_tos && !return_is_overridden {
+                    std::mem::take(&mut self.active_return_finally_contexts)
+                } else {
+                    Vec::new()
+                };
+                for finally_context in return_finally_contexts.iter().rev() {
+                    for context in loops[finally_context.loop_depth..next_loop].iter().rev() {
+                        match context.iterator_cleanup {
+                            IteratorCleanup::None => {}
+                            IteratorCleanup::Sync | IteratorCleanup::Async => {
+                                self.emit(POP_TOP, 0, -1)?;
+                            }
+                        }
+                    }
+                    let initialized_locals = self.initialized_locals.clone();
+                    let result = self.compile_suite(&finally_context.body);
+                    self.initialized_locals = initialized_locals;
+                    result?;
+                    if let Some(location) = self.assembler.last_instruction_location() {
+                        self.assembler.set_location(location);
+                    }
+                    next_loop = finally_context.loop_depth;
+                }
+                if !return_finally_contexts.is_empty() {
+                    self.active_return_finally_contexts = return_finally_contexts;
                 }
                 for context in loops[..next_loop].iter().rev() {
                     match context.iterator_cleanup {
@@ -5801,6 +5860,19 @@ impl Compiler {
             } else {
                 previous_break_exit_loop_range
             };
+        let copy_finally_on_return = pass_finally_location.is_none()
+            && !suite_terminates(&statement.finalbody)
+            && self.active_exception_handlers.is_empty()
+            && self.active_return_finally_contexts.is_empty();
+        if copy_finally_on_return {
+            self.active_return_finally_contexts
+                .push(ReturnFinallyContext {
+                    body: statement.finalbody.to_vec(),
+                    loop_depth: self.loops.len(),
+                    handler: finally_handler,
+                    depth: base_depth.cast_unsigned(),
+                });
+        }
         self.active_finally_try_bodies += 1;
         let protected_result = (|| -> Result<bool, CompileError> {
             if statement.handlers.is_empty() {
@@ -5826,6 +5898,9 @@ impl Compiler {
             }
         })();
         self.active_finally_try_bodies -= 1;
+        if copy_finally_on_return {
+            self.active_return_finally_contexts.pop();
+        }
         self.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
         self.active_overriding_finally_returns = previous_overriding_finally_returns;
         let protected_has_instructions = protected_result?;

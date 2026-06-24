@@ -1299,6 +1299,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_a_return_through_finally() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def return_through_finally(items):\n    for item in items:\n        try:\n            pass\n        except Exception:\n            return\n        finally:\n            consume(item)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'example.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "example.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn executes_arithmetic_names_and_calls() {
         let Some(output) = execute("answer = 6 * 7\nprint(answer)\n") else {
             return;
