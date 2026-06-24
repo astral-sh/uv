@@ -2413,7 +2413,7 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "markupsafe", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'group-7-project-a' and extra == 'group-7-project-b') or (sys_platform != 'linux' and extra == 'group-7-project-a' and extra == 'group-7-project-b')" },
+            { name = "markupsafe" },
         ]
 
         [package.metadata]
@@ -2425,6 +2425,197 @@ fn groups_respect_supported_environments_when_filtering_wheels() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// When using `tool.uv.environments`, do not repeat the marker of the `tool.uv.environments`
+/// universe for all dependency edges, even when conflicts are involved.
+#[test]
+fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-09-28T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "bar"
+        version = "0.1.0"
+        requires-python = ">=3.10.0"
+        dependencies = [
+            "tqdm",
+            "anyio",
+        ]
+
+        [project.optional-dependencies]
+        a = ["tqdm<2"]
+        b = ["tqdm>=2"]
+
+        [tool.uv]
+        conflicts = [
+            [{ extra = "a" }, { extra = "b" }],
+        ]
+        environments = [
+            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+            "sys_platform == 'linux' and platform_machine == 'x86_64'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    // The `anyio` dependency is shared by every fork, so it carries no marker,
+    // while the forked `tqdm` dependencies keep theirs.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock,
+            @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.10.0"
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        supported-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        conflicts = [[
+            { package = "bar", extra = "a" },
+            { package = "bar", extra = "b" },
+        ]]
+
+        [options]
+        exclude-newer = "2025-09-28T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "4.11.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+            { name = "idna" },
+            { name = "sniffio" },
+            { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/78/7d432127c41b50bccba979505f272c16cbcadcc33645d5fa3a738110ae75/anyio-4.11.0.tar.gz", hash = "sha256:82a8d0b81e318cc5ce71a5f1f8b5c4e63619620b63141ef8c995fa0db95a57c4", size = 219094, upload-time = "2025-09-23T09:19:12.58Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/15/b3/9b1a8074496371342ec1e796a96f99c82c945a339cd81a8e73de28b4cf9e/anyio-4.11.0-py3-none-any.whl", hash = "sha256:0287e96f4d26d4149305414d4e3bc32f0dcd0862365a4bddea19d7a1ec38c4fc", size = 109097, upload-time = "2025-09-23T09:19:10.601Z" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+            { name = "tqdm", version = "1.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin' and extra == 'extra-3-bar-a') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-3-bar-a') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin' and extra != 'extra-3-bar-a') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-3-bar-a') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'darwin' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b') or (sys_platform == 'linux' and extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+        ]
+
+        [package.optional-dependencies]
+        a = [
+            { name = "tqdm", version = "1.0", source = { registry = "https://pypi.org/simple" } },
+        ]
+        b = [
+            { name = "tqdm", version = "4.67.1", source = { registry = "https://pypi.org/simple" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "anyio" },
+            { name = "tqdm" },
+            { name = "tqdm", marker = "extra == 'a'", specifier = "<2" },
+            { name = "tqdm", marker = "extra == 'b'", specifier = ">=2" },
+        ]
+        provides-extras = ["a", "b"]
+
+        [[package]]
+        name = "exceptiongroup"
+        version = "1.3.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/36/f4/c6e662dade71f56cd2f3735141b265c3c79293c109549c1e6933b0651ffc/exceptiongroup-1.3.0-py3-none-any.whl", hash = "sha256:4d111e6e0c13d0644cad6ddaa7ed0261a0b36971f6d23e7ec9b4b9097da78a10", size = 16674, upload-time = "2025-05-10T17:42:49.33Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.10"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f1/70/7703c29685631f5a7590aa73f1f1d3fa9a380e654b86af429e0934a32f7d/idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9", size = 190490, upload-time = "2024-09-15T18:07:39.745Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3", size = 70442, upload-time = "2024-09-15T18:07:37.964Z" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+
+        [[package]]
+        name = "tqdm"
+        version = "1.0"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/ba/50/e6c90ecbc3a736ca8af22a52b3e665d32797b9f0cf6a79b7f4bd95dc2153/tqdm-1.0.tar.gz", hash = "sha256:d4972cfd62cf50bf88f20749b536258a3f48b31515dea3ad5edd5fe52e742c6c", size = 1756, upload-time = "2013-10-26T20:06:45.223Z" }
+
+        [[package]]
+        name = "tqdm"
+        version = "4.67.1"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+            "platform_machine == 'x86_64' and sys_platform == 'linux'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.15.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/72/94/1a15dd82efb362ac84269196e94cf00f187f7ed21c242792a923cdb1c61f/typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466", size = 109391, upload-time = "2025-08-25T13:49:26.313Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548", size = 44614, upload-time = "2025-08-25T13:49:24.86Z" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
 
     Ok(())
 }
