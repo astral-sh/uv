@@ -6109,6 +6109,17 @@ impl Compiler {
         let handler_end = self.assembler.label();
         self.assembler.mark(handler_end);
         self.emit(POP_EXCEPT, 0, -1)?;
+        for context in self.loops.clone().iter().rev() {
+            match context.iterator_cleanup {
+                IteratorCleanup::None => {}
+                IteratorCleanup::Sync | IteratorCleanup::Async => {
+                    if preserve_value {
+                        self.emit(SWAP, 2, 0)?;
+                    }
+                    self.emit(POP_TOP, 0, -1)?;
+                }
+            }
+        }
 
         if !preserve_value {
             if let Some(value) = &statement.value {
