@@ -26,12 +26,6 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      - name: "Install Rustfmt"
-        run: |
-          rustup component add rustfmt
-          mkdir -p "$RUNNER_TEMP/rustfmt-bin"
-          ln -s "$(rustup which rustfmt)" "$RUNNER_TEMP/rustfmt-bin/rustfmt"
-          echo "$RUNNER_TEMP/rustfmt-bin" >> "$GITHUB_PATH"
       - name: "Setup srs"
         id: srs
         uses: ./.github/actions/setup-srs

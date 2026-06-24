@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="2026.06.18"
+version="2026.06.24"
 toolchain="srs-${version}"
 
 case "$(uname -s)-$(uname -m)" in
     Darwin-arm64)
         target="aarch64-apple-darwin"
-        checksum="396a766e963f42312af25cd09fb69ebd655db62e0a1bb1033897d3fb6217f6fe"
+        checksum="4ad4717e66bf27e6645e78905a39983d83b5436a81006a4c6a990c6a0704ac8d"
         ;;
     Linux-x86_64)
         target="x86_64-unknown-linux-gnu"
-        checksum="5233e51866ee8d5e0bec8fa3dd80198b1c7e49edc2ebcca32ec6bfe3db187736"
+        checksum="745c307f0081cfe2df27bfce1bad7004e50191e32625166fe488ecf15874989e"
         ;;
     *)
         echo "srs ${version} does not support $(uname -s)-$(uname -m)" >&2
@@ -49,14 +49,8 @@ rustc +"$toolchain" -Vv
 cargo +"$toolchain" -Vv
 cargo +"$toolchain" clippy -V
 
-cargo_wrapper="$(RUSTUP_TOOLCHAIN="$toolchain" rustup which cargo)"
-toolchain_bin="$(dirname "$cargo_wrapper")"
 {
-    echo "CARGO=${cargo_wrapper}"
     echo "CARGO_INCREMENTAL=0"
     echo "RUSTUP_TOOLCHAIN=${toolchain}"
     echo "SRS_CARGO_ARTIFACT_CACHE_MAX_SIZE=4GiB"
 } >> "$GITHUB_ENV"
-# Rustup injects the toolchain library tree into LD_LIBRARY_PATH on Linux,
-# which disables srs artifact-cache admission due to its nested shared objects.
-echo "$toolchain_bin" >> "$GITHUB_PATH"
