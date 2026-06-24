@@ -19,7 +19,7 @@ use uv_cli::{
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, PythonUpgradeArgs, RemoveArgs, RunArgs,
     SyncArgs, SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs,
-    ToolUninstallArgs, TreeArgs, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
+    ToolUninstallArgs, TreeArgs, TreeFormat, UpgradeArgs, VenvArgs, VersionArgs, VersionBumpSpec,
     VersionFormat,
 };
 use uv_cli::{
@@ -2649,6 +2649,7 @@ pub(crate) struct TreeSettings {
     pub(super) lock_check: LockCheck,
     pub(super) frozen: Option<FrozenSource>,
     pub(super) universal: bool,
+    pub(super) format: TreeFormat,
     pub(super) depth: u8,
     pub(super) prune: Vec<PackageName>,
     pub(super) package: Vec<PackageName>,
@@ -2675,6 +2676,7 @@ impl TreeSettings {
         let TreeArgs {
             tree,
             universal,
+            format,
             dev,
             only_dev,
             no_dev,
@@ -2732,6 +2734,7 @@ impl TreeSettings {
             lock_check: resolve_lock_check(locked),
             frozen: resolve_frozen(frozen),
             universal,
+            format,
             depth: tree.depth,
             prune: tree.prune,
             package: tree.package,

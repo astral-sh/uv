@@ -117,31 +117,68 @@ struct MetadataEnvironment {
 
 /// The script entry-point.
 #[derive(Debug, serde::Serialize)]
-struct MetadataScript {
+pub(crate) struct MetadataScript {
     /// Absolute path to the script.
     path: PortablePathBuf,
     /// Key for the script's node in the `resolution` graph.
     id: MetadataNodeIdFlat,
 }
 
+impl MetadataScript {
+    pub(in crate::lock) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
+        Self { path, id }
+    }
+}
+
 /// The workspace entry-point.
 #[derive(Debug, serde::Serialize)]
-struct MetadataWorkspace {
+pub(crate) struct MetadataWorkspace {
     /// Absolute path to the workspace root.
     path: PortablePathBuf,
     /// Key for the workspace's node in the `resolution` graph.
     id: MetadataNodeIdFlat,
 }
 
+impl MetadataWorkspace {
+    pub(in crate::lock) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
+        Self { path, id }
+    }
+}
+
 /// Info for looking up workspace members, most information is stored in the node behind `id`
 #[derive(Debug, serde::Serialize)]
-struct MetadataWorkspaceMember {
+pub(crate) struct MetadataWorkspaceMember {
     /// Package name
     name: PackageName,
     /// Absolute path to the member
     path: PortablePathBuf,
     /// Key for the package's node in the `resolve` graph
     id: MetadataNodeIdFlat,
+}
+
+impl MetadataWorkspaceMember {
+    /// Construct a workspace member from the local source recorded in the lockfile.
+    pub(crate) fn from_locked_package(
+        workspace_root: &PortablePathBuf,
+        package_id: &PackageId,
+    ) -> Option<Self> {
+        let path = match &package_id.source {
+            Source::Directory(path) | Source::Editable(path) | Source::Virtual(path) => path,
+            Source::Registry(_) | Source::Git(..) | Source::Direct(..) | Source::Path(_) => {
+                return None;
+            }
+        };
+        Some(Self {
+            name: package_id.name.clone(),
+            path: normalize_workspace_relative_path(workspace_root, path),
+            id: MetadataNodeId::from_package_id(
+                workspace_root,
+                package_id,
+                MetadataNodeKind::Package,
+            )
+            .to_flat(),
+        })
+    }
 }
 
 /// An installed distribution that provides an importable module.
@@ -153,15 +190,47 @@ struct MetadataModuleOwner {
 
 /// A node in the dependency graph.
 ///
-/// There are 5 kinds of nodes:
+/// There are 6 kinds of nodes:
 ///
-/// * scripts:  `script+/workspace/script.py`
-/// * packages: `mypackage==1.0.0@registry+https://pypi.org/simple`
-/// * extras:   `mypackage[myextra]==1.0.0@registry+https://pypi.org/simple`
-/// * groups:   `mypackage:mygroup==1.0.0@registry+https://pypi.org/simple`
-/// * build:    `mypackage(build)==1.0.0@registry+https://pypi.org/simple`
+/// * workspaces: `workspace+/workspace`
+/// * scripts:    `script+/workspace/script.py`
+/// * packages:   `mypackage==1.0.0@registry+https://pypi.org/simple`
+/// * extras:     `mypackage[myextra]==1.0.0@registry+https://pypi.org/simple`
+/// * groups:     `mypackage:mygroup==1.0.0@registry+https://pypi.org/simple`
+/// * build:      `mypackage(build)==1.0.0@registry+https://pypi.org/simple`
 ///
-/// -----------
+/// Workspace and script nodes are special cases that only ever exist in the root of the graph.
+///
+/// A workspace node is only ever used to hang `dependency-groups` off of, to represent the fact
+/// that workspaces can define groups that aren't otherwise associated with any package
+/// (in this way there's technically two kinds of group nodes, since this changes their id format).
+///
+/// A script node is basically just a package, but, it's a script so it's identified by path
+/// instead of name/version.
+///
+/// Build nodes are stubbed out, but never actually used yet, so they're under-defined.
+///
+///
+/// # What's an Edge?
+///
+/// Strictly speaking the only edges of the graph are the `dependencies` field of each node.
+/// These are the things that must be installed for the node's requirements to be satisfied
+/// (possibly qualified by a marker).
+///
+/// `optional-dependencies`, `dependency-groups` and `build-system` define things that *look*
+/// like edges but aren't really -- there is no dependency from `mypackage` to
+/// `mypackage[extra]` or `mypackage:group`. There *is* a dependency from `mypackage[extra]`
+/// to `mypackage`, and that is expressed by including `mypackage` in the `dependencies` of
+/// `mypackage[extra]`.
+///
+/// The `optional_dependencies` entry on a `mypackage` node is essentially just a listing
+/// that the `mypackage[extra]` node *exists*. In this way if `mypackage` is a workspace
+/// member then `mypackage`, `mypackage[extra]`, and `mypackage:group` are all equally "roots"
+/// of the dependency graph (and arguably `workspace` isn't a root at all even though
+/// `workspace:group` is).
+///
+///
+/// # Simple Example
 ///
 /// A package like this:
 ///
@@ -197,8 +266,12 @@ struct MetadataModuleOwner {
 /// Note that `mypackage[cli]` has a dependency edge on `mypackage` while `mypackage:dev` does not.
 /// This is because `mypackage[cli]` is fundamentally an augmentation of `mypackage` while `mypackage:dev`
 /// is just a list of packages that happens to be defined by `mypackage`'s pyproject.toml.
+///
+/// ---------
+///
+/// Workspace nodes and script nodes
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataNode {
+pub(crate) struct MetadataNode {
     /// A unique id for this node that will be used to refer to it
     #[serde(flatten)]
     id: MetadataNodeId,
@@ -210,6 +283,9 @@ struct MetadataNode {
     /// Groups
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     dependency_groups: Vec<MetadataGroup>,
+    /// The latest known version of this package, when requested by the caller.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    latest_version: Option<Version>,
     /// Info about building the package
     #[serde(skip_serializing_if = "Option::is_none", default)]
     build_system: Option<MetadataBuildSystem>,
@@ -222,19 +298,20 @@ struct MetadataNode {
 }
 
 impl MetadataNode {
-    fn new(id: MetadataNodeId) -> Self {
+    pub(in crate::lock) fn new(id: MetadataNodeId) -> Self {
         Self {
             id,
             dependencies: Vec::new(),
             dependency_groups: Vec::new(),
             optional_dependencies: Vec::new(),
+            latest_version: None,
             wheels: Vec::new(),
             build_system: None,
             sdist: None,
         }
     }
 
-    fn from_package_id(
+    pub(in crate::lock) fn from_package_id(
         workspace_root: &PortablePathBuf,
         id: &PackageId,
         kind: MetadataNodeKind,
@@ -243,19 +320,13 @@ impl MetadataNode {
     }
 
     fn from_script(path: PortablePathBuf, dependencies: Vec<MetadataDependency>) -> Self {
-        let mut node = Self::new(MetadataNodeId::Script(MetadataScriptNodeId {
-            kind: MetadataScriptNodeKind::Script,
-            path,
-        }));
+        let mut node = Self::new(MetadataNodeId::from_script(path));
         node.dependencies = dependencies;
         node
     }
 
     fn from_workspace(path: PortablePathBuf, dependency_groups: Vec<MetadataGroup>) -> Self {
-        let mut node = Self::new(MetadataNodeId::Workspace(MetadataWorkspaceNodeId {
-            kind: MetadataWorkspaceNodeKind::Workspace,
-            path,
-        }));
+        let mut node = Self::new(MetadataNodeId::from_workspace(path));
         node.dependency_groups = dependency_groups;
         node
     }
@@ -265,12 +336,7 @@ impl MetadataNode {
         group: GroupName,
         dependencies: Vec<MetadataDependency>,
     ) -> Self {
-        let mut node = Self::new(MetadataNodeId::WorkspaceGroup(
-            MetadataWorkspaceGroupNodeId {
-                kind: MetadataWorkspaceGroupNodeKind::Group(group),
-                path,
-            },
-        ));
+        let mut node = Self::new(MetadataNodeId::from_workspace_group(path, group));
         node.dependencies = dependencies;
         node
     }
@@ -308,6 +374,54 @@ impl MetadataNode {
                 marker: marker.clone(),
             });
         }
+    }
+
+    pub(in crate::lock) fn add_resolution_dependency(
+        &mut self,
+        id: MetadataNodeIdFlat,
+        marker: Option<MetadataMarker>,
+    ) {
+        self.dependencies.push(MetadataDependency { id, marker });
+    }
+
+    pub(in crate::lock) fn add_optional_dependency(
+        &mut self,
+        name: ExtraName,
+        id: MetadataNodeIdFlat,
+    ) {
+        self.optional_dependencies.push(MetadataExtra { name, id });
+    }
+
+    pub(in crate::lock) fn add_dependency_group(
+        &mut self,
+        name: GroupName,
+        id: MetadataNodeIdFlat,
+    ) {
+        self.dependency_groups.push(MetadataGroup { name, id });
+    }
+
+    pub(in crate::lock) fn set_latest_version(&mut self, version: Option<Version>) {
+        self.latest_version = version;
+    }
+
+    pub(in crate::lock) fn set_wheels_from_lock(
+        &mut self,
+        workspace_root: &PortablePathBuf,
+        wheels: &[Wheel],
+    ) {
+        self.wheels = wheels
+            .iter()
+            .map(|wheel| MetadataWheel::from_wheel(workspace_root, wheel))
+            .collect();
+    }
+
+    pub(in crate::lock) fn normalize_resolution(&mut self) {
+        self.dependencies.sort();
+        self.dependencies.dedup();
+        self.optional_dependencies.sort();
+        self.optional_dependencies.dedup();
+        self.dependency_groups.sort();
+        self.dependency_groups.dedup();
     }
 }
 
@@ -563,7 +677,7 @@ fn add_metadata_reachability<'lock>(
 /// The unique key for every node in the graph.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(untagged)]
-enum MetadataNodeId {
+pub(crate) enum MetadataNodeId {
     Package(MetadataPackageNodeId),
     Script(MetadataScriptNodeId),
     Workspace(MetadataWorkspaceNodeId),
@@ -574,7 +688,7 @@ enum MetadataNodeId {
 ///
 /// (It's not entirely clear to me that two nodes can differ only by `source` but it doesn't hurt.)
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataPackageNodeId {
+pub(crate) struct MetadataPackageNodeId {
     /// The name of the package
     name: PackageName,
     /// The version of the package, if any could be found (source trees may have no version)
@@ -588,7 +702,7 @@ struct MetadataPackageNodeId {
 
 /// The unique key for a script node.
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataScriptNodeId {
+pub(crate) struct MetadataScriptNodeId {
     kind: MetadataScriptNodeKind,
     /// Absolute path to the script.
     path: PortablePathBuf,
@@ -596,7 +710,7 @@ struct MetadataScriptNodeId {
 
 /// The unique key for a workspace node.
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataWorkspaceNodeId {
+pub(crate) struct MetadataWorkspaceNodeId {
     kind: MetadataWorkspaceNodeKind,
     /// Absolute path to the workspace root.
     path: PortablePathBuf,
@@ -604,7 +718,7 @@ struct MetadataWorkspaceNodeId {
 
 /// The unique key for a dependency group defined on the workspace root.
 #[derive(Debug, Clone, serde::Serialize)]
-struct MetadataWorkspaceGroupNodeId {
+pub(crate) struct MetadataWorkspaceGroupNodeId {
     kind: MetadataWorkspaceGroupNodeKind,
     /// Absolute path to the workspace root.
     path: PortablePathBuf,
@@ -616,7 +730,28 @@ struct MetadataWorkspaceGroupNodeId {
 type MetadataNodeIdFlat = String;
 
 impl MetadataNodeId {
-    fn from_package_id(
+    pub(crate) fn from_script(path: PortablePathBuf) -> Self {
+        Self::Script(MetadataScriptNodeId {
+            kind: MetadataScriptNodeKind::Script,
+            path,
+        })
+    }
+
+    pub(crate) fn from_workspace(path: PortablePathBuf) -> Self {
+        Self::Workspace(MetadataWorkspaceNodeId {
+            kind: MetadataWorkspaceNodeKind::Workspace,
+            path,
+        })
+    }
+
+    pub(crate) fn from_workspace_group(path: PortablePathBuf, group: GroupName) -> Self {
+        Self::WorkspaceGroup(MetadataWorkspaceGroupNodeId {
+            kind: MetadataWorkspaceGroupNodeKind::Group(group),
+            path,
+        })
+    }
+
+    pub(crate) fn from_package_id(
         workspace_root: &PortablePathBuf,
         id: &PackageId,
         kind: MetadataNodeKind,
@@ -640,7 +775,7 @@ impl MetadataNodeId {
         }
     }
 
-    fn to_flat(&self) -> MetadataNodeIdFlat {
+    pub(crate) fn to_flat(&self) -> MetadataNodeIdFlat {
         self.to_string()
     }
 }
@@ -666,7 +801,7 @@ impl Display for MetadataNodeId {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 struct MetadataDependency {
     id: MetadataNodeIdFlat,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -678,7 +813,7 @@ type MetadataMarker = String;
 /// The kind a node can have in the dependency graph
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
-enum MetadataNodeKind {
+pub(crate) enum MetadataNodeKind {
     /// The node is the package itself
     /// its edges are `project.dependencies`
     Package,
@@ -990,13 +1125,13 @@ impl MetadataZstdWheel {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 struct MetadataExtra {
     name: ExtraName,
     id: MetadataNodeIdFlat,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 struct MetadataGroup {
     name: GroupName,
     id: MetadataNodeIdFlat,
@@ -1232,11 +1367,7 @@ impl Metadata {
                 meta_package.sdist = Some(MetadataSourceDist::from_sdist(&workspace_root, sdist));
             }
 
-            for wheel in &lock_package.wheels {
-                meta_package
-                    .wheels
-                    .push(MetadataWheel::from_wheel(&workspace_root, wheel));
-            }
+            meta_package.set_wheels_from_lock(&workspace_root, &lock_package.wheels);
 
             resolve.insert(meta_package.id.to_flat(), meta_package);
         }
@@ -1249,7 +1380,7 @@ impl Metadata {
             );
             let id = node.id.to_flat();
             resolve.insert(id.clone(), node);
-            MetadataScript { path, id }
+            MetadataScript::new(path, id)
         });
 
         let workspace_metadata = workspace.map(|_| {
@@ -1271,10 +1402,7 @@ impl Metadata {
             let node = MetadataNode::from_workspace(workspace_root.clone(), dependency_groups);
             let id = node.id.to_flat();
             resolve.insert(id.clone(), node);
-            MetadataWorkspace {
-                path: workspace_root.clone(),
-                id,
-            }
+            MetadataWorkspace::new(workspace_root.clone(), id)
         });
         let conflicts = MetadataConflicts::from_conflicts(&members, &resolve, &lock.conflicts);
 
