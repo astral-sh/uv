@@ -527,39 +527,41 @@ async fn do_lock(
         sources,
         client_builder.credentials_cache(),
     )?;
-    let mut lowered_overrides = Vec::new();
-    for entry in overrides {
-        match entry {
-            Override::Requirement(requirement) => {
-                lowered_overrides.extend(
-                    target
-                        .lower(
-                            vec![requirement],
-                            index_locations,
-                            sources,
-                            client_builder.credentials_cache(),
-                        )?
-                        .into_iter()
-                        .map(Override::Requirement),
-                );
-            }
-            Override::Package(package) => {
-                lowered_overrides.push(Override::Package(PackageOverride {
-                    name: package.name,
-                    version: package.version,
-                    requires_dist: target
-                        .lower(
-                            package.requires_dist.into_vec(),
-                            index_locations,
-                            sources,
-                            client_builder.credentials_cache(),
-                        )?
-                        .into_boxed_slice(),
-                }));
+    let overrides = {
+        let mut lowered_overrides = Vec::new();
+        for entry in overrides {
+            match entry {
+                Override::Requirement(requirement) => {
+                    lowered_overrides.extend(
+                        target
+                            .lower(
+                                vec![requirement],
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_iter()
+                            .map(Override::Requirement),
+                    );
+                }
+                Override::Package(package) => {
+                    lowered_overrides.push(Override::Package(PackageOverride {
+                        name: package.name,
+                        version: package.version,
+                        requires_dist: target
+                            .lower(
+                                package.requires_dist.into_vec(),
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_boxed_slice(),
+                    }));
+                }
             }
         }
-    }
-    let overrides = lowered_overrides;
+        lowered_overrides
+    };
     let constraints = target.lower(
         constraints,
         index_locations,

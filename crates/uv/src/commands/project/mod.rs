@@ -2871,39 +2871,21 @@ pub(crate) fn script_specification(
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let override_entries = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.override_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned();
-    let mut overrides = Vec::new();
-    for entry in override_entries {
-        match entry {
-            Override::Requirement(requirement) => {
-                overrides.extend(
-                    LoweredRequirement::from_non_workspace_requirement(
-                        requirement,
-                        script_dir.as_ref(),
-                        script_sources,
-                        script_indexes,
-                        &settings.index_locations,
-                        credentials_cache,
-                    )
-                    .map_ok(LoweredRequirement::into_inner)
-                    .map_ok(Override::Requirement)
-                    .collect::<Result<Vec<_>, _>>()?,
-                );
-            }
-            Override::Package(package) => {
-                let requires_dist = package
-                    .requires_dist
-                    .into_vec()
-                    .into_iter()
-                    .flat_map(|requirement| {
+    let overrides = {
+        let override_entries = script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned();
+        let mut overrides = Vec::new();
+        for entry in override_entries {
+            match entry {
+                Override::Requirement(requirement) => {
+                    overrides.extend(
                         LoweredRequirement::from_non_workspace_requirement(
                             requirement,
                             script_dir.as_ref(),
@@ -2913,16 +2895,37 @@ pub(crate) fn script_specification(
                             credentials_cache,
                         )
                         .map_ok(LoweredRequirement::into_inner)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                overrides.push(Override::Package(PackageOverride {
-                    name: package.name,
-                    version: package.version,
-                    requires_dist: requires_dist.into_boxed_slice(),
-                }));
+                        .map_ok(Override::Requirement)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Override::Package(package) => {
+                    let requires_dist = package
+                        .requires_dist
+                        .into_vec()
+                        .into_iter()
+                        .flat_map(|requirement| {
+                            LoweredRequirement::from_non_workspace_requirement(
+                                requirement,
+                                script_dir.as_ref(),
+                                script_sources,
+                                script_indexes,
+                                &settings.index_locations,
+                                credentials_cache,
+                            )
+                            .map_ok(LoweredRequirement::into_inner)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    overrides.push(Override::Package(PackageOverride {
+                        name: package.name,
+                        version: package.version,
+                        requires_dist: requires_dist.into_boxed_slice(),
+                    }));
+                }
             }
         }
-    }
+        overrides
+    };
     let excludes = script
         .metadata()
         .tool
