@@ -79,6 +79,13 @@ impl<'lock> LockTarget<'lock> {
                 .collect(),
         }
     }
+    
+    pub(crate) fn exclude_dependencies_file(self) -> Option<std::path::PathBuf> {
+        match self {
+            Self::Workspace(workspace) => workspace.exclude_dependencies_file(),
+            Self::Script(_) => None,
+        }
+    }
 
     /// Returns the set of constraints for the [`LockTarget`].
     pub(crate) fn constraints(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
