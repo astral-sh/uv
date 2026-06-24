@@ -439,6 +439,8 @@ impl FunctionPlan {
         let class_requirements = nested_class_required_names(&definition.body, future_annotations);
         let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
         let generator_requirements = nested_generator_required_names_in_suite(&definition.body);
+        let annotation_scope_requirements =
+            nested_annotation_scope_required_names_in_suite(&definition.body);
         let nested_function_requirements = children
             .iter()
             .cloned()
@@ -451,6 +453,7 @@ impl FunctionPlan {
                 || class_requirements.contains(name)
                 || lambda_requirements.contains(name)
                 || generator_requirements.contains(name)
+                || annotation_scope_requirements.contains(name)
                 || nested_function_requirements.contains(name)
         });
         reference_collector
@@ -462,6 +465,9 @@ impl FunctionPlan {
         reference_collector
             .references
             .extend(generator_requirements.iter().cloned());
+        reference_collector
+            .references
+            .extend(annotation_scope_requirements.iter().cloned());
         let mut cellvars = generator_named_targets_in_suite(&definition.body)
             .into_iter()
             .filter(|name| local_names.contains(name))
@@ -478,6 +484,11 @@ impl FunctionPlan {
         );
         cellvars.extend(
             generator_requirements
+                .into_iter()
+                .filter(|name| local_names.contains(name)),
+        );
+        cellvars.extend(
+            annotation_scope_requirements
                 .into_iter()
                 .filter(|name| local_names.contains(name)),
         );
@@ -7354,21 +7365,15 @@ impl Compiler {
             .iter()
             .map(|parameter| parameter.name().as_str().to_string())
             .collect();
-        let mut cellvars = type_parameter_dependency_names(type_params, &type_names);
-        let mut value_references = ReferenceCollector::default();
-        value_references.visit_expr(value);
-        cellvars.extend(
-            value_references
-                .references
-                .into_iter()
-                .filter(|name| type_names.contains(name)),
-        );
-        cellvars.extend(
-            nested_lambda_required_names_in_expression(value)
-                .into_iter()
-                .filter(|name| type_names.contains(name)),
-        );
-        let mut freevars = BTreeSet::new();
+        let mut requirements = type_parameter_required_names(type_params);
+        requirements.extend(expression_required_names(value));
+        let cellvars = requirements.intersection(&type_names).cloned().collect();
+        let mut freevars: BTreeSet<_> = requirements
+            .iter()
+            .filter(|name| !type_names.contains(*name))
+            .filter(|name| self.can_provide_closure(name))
+            .cloned()
+            .collect();
         if matches!(self.scope, Scope::Class { .. }) {
             freevars.insert("__classdict__".to_string());
         }
@@ -7409,6 +7414,9 @@ impl Compiler {
             .clone_from(&self.imported_scope_names);
         wrapper.type_parameter_names = type_names;
         wrapper.generic_target_qualified_name = Some(self.child_qualified_name(name));
+        if matches!(self.scope, Scope::Class { .. }) {
+            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+        }
         wrapper.emit_function_prologue()?;
         wrapper
             .assembler
@@ -7497,14 +7505,18 @@ impl Compiler {
                 .iter()
                 .map(|parameter| parameter.name().as_str().to_string()),
         );
+        let type_parameter_requirements = type_parameter_required_names(type_params);
         let mut wrapper_plan = FunctionPlan {
             key: (0, 0),
             locals,
             globals: HashSet::new(),
             nonlocals: HashSet::new(),
-            references: HashSet::new(),
+            references: type_parameter_requirements.iter().cloned().collect(),
             annotation_references: HashSet::new(),
-            cellvars: type_parameter_dependency_names(type_params, &type_names),
+            cellvars: type_parameter_requirements
+                .intersection(&type_names)
+                .cloned()
+                .collect(),
             inlined_comprehension_cellvars: HashSet::new(),
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
@@ -7555,6 +7567,9 @@ impl Compiler {
             .clone_from(&self.imported_scope_names);
         wrapper.type_parameter_names = type_names;
         wrapper.generic_target_qualified_name = Some(target_qualified_name);
+        if matches!(self.scope, Scope::Class { .. }) {
+            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+        }
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
         wrapper.assembler.set_location(definition_location);
@@ -7872,13 +7887,39 @@ impl Compiler {
         locals.push(".type_params".to_string());
         let required_names =
             class_required_names(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0);
-        let mut cellvars: HashSet<_> = type_names.intersection(&required_names).cloned().collect();
+        let type_parameter_requirements = type_parameter_required_names(type_params);
+        let mut type_parameter_cell_requirements = type_parameter_requirements.clone();
+        let mut wrapper_requirements = type_parameter_requirements.clone();
+        if let Some(arguments) = definition.arguments.as_deref() {
+            for argument in &arguments.args {
+                wrapper_requirements.extend(expression_required_names(argument));
+                type_parameter_cell_requirements.extend(nested_expression_required_names(argument));
+            }
+            for keyword in &arguments.keywords {
+                wrapper_requirements.extend(expression_required_names(&keyword.value));
+                type_parameter_cell_requirements
+                    .extend(nested_expression_required_names(&keyword.value));
+            }
+        }
+        let mut cellvars: HashSet<_> = type_names
+            .intersection(&required_names)
+            .chain(type_names.intersection(&type_parameter_cell_requirements))
+            .cloned()
+            .collect();
         cellvars.insert(".type_params".to_string());
-        let freevars = required_names
+        let mut freevars: BTreeSet<_> = required_names
             .iter()
+            .chain(&wrapper_requirements)
+            .filter(|name| !type_names.contains(*name))
             .filter(|name| self.can_provide_closure(name))
             .cloned()
             .collect();
+        // A type-parameter scope nested directly in a class can resolve names through the
+        // class namespace. CPython provides that namespace through the synthetic
+        // `__classdict__` closure, even when no type-parameter expression uses a class name.
+        if matches!(self.scope, Scope::Class { .. }) {
+            freevars.insert("__classdict__".to_string());
+        }
         let plan = FunctionPlan {
             key: (0, 0),
             locals,
@@ -7894,6 +7935,10 @@ impl Compiler {
         };
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
         let target_qualified_name = self.child_qualified_name(definition.name.as_str());
+        let wrapper_child_qualified_name_parent = target_qualified_name
+            .rsplit_once('.')
+            .map_or("", |(parent, _)| parent)
+            .to_string();
         let wrapper_flags = if self.child_function_is_nested() {
             CO_NESTED
         } else {
@@ -7924,6 +7969,10 @@ impl Compiler {
             .clone_from(&self.imported_scope_names);
         wrapper.type_parameter_names = type_names;
         wrapper.generic_target_qualified_name = Some(target_qualified_name);
+        wrapper.child_qualified_name_parent = Some(wrapper_child_qualified_name_parent);
+        if matches!(self.scope, Scope::Class { .. }) {
+            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+        }
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
         wrapper.assembler.set_location(wrapper.definition_location(
@@ -8017,6 +8066,7 @@ impl Compiler {
         let needs_class_closure =
             class_needs_class_closure(&definition.body, self.flags & CO_FUTURE_ANNOTATIONS != 0);
         let needs_classdict = contains_type_alias(&definition.body)
+            || contains_generic_definition(&definition.body)
             || self.flags & CO_FUTURE_ANNOTATIONS == 0
                 && (contains_function_definition(&definition.body)
                     || has_simple_annotations(&definition.body));
@@ -8284,17 +8334,14 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let mut references = ReferenceCollector::default();
         references.visit_expr(expression);
-        let mut freevars: BTreeSet<_> = references
-            .references
+        let required_names = expression_required_names(expression);
+        let mut freevars: BTreeSet<_> = required_names
             .iter()
-            .filter(|name| self.type_parameter_names.contains(*name))
+            .filter(|name| {
+                self.type_parameter_names.contains(*name) || self.can_provide_closure(name)
+            })
             .cloned()
             .collect();
-        freevars.extend(
-            nested_lambda_required_names_in_expression(expression)
-                .into_iter()
-                .filter(|name| self.type_parameter_names.contains(name)),
-        );
         let can_see_class_scope = matches!(self.scope, Scope::Class { .. })
             || self.free_names.iter().any(|name| name == "__classdict__");
         if can_see_class_scope {
@@ -12332,7 +12379,14 @@ impl Compiler {
                 }
                 if let Some(index) = indices.get(name).copied() {
                     if cells.contains(name) {
-                        self.emit(LOAD_DEREF, index, 1)
+                        if let Some(classdict) = annotation_classdict_index
+                            && name != "__classdict__"
+                        {
+                            self.emit(LOAD_DEREF, classdict, 1)?;
+                            self.emit(LOAD_FROM_DICT_OR_DEREF, index, 0)
+                        } else {
+                            self.emit(LOAD_DEREF, index, 1)
+                        }
                     } else if self.initialized_locals.contains(name) {
                         self.emit(
                             if self.owned_load_locals.contains(name) {
@@ -13936,26 +13990,141 @@ fn nested_generator_required_names_in_expression(expression: &Expr) -> BTreeSet<
     collector.required
 }
 
-fn type_parameter_dependency_names(
-    type_params: &ruff_python_ast::TypeParams,
-    type_names: &BTreeSet<String>,
-) -> HashSet<String> {
+fn expression_required_names(expression: &Expr) -> BTreeSet<String> {
     let mut references = ReferenceCollector::default();
+    references.visit_expr(expression);
+    let mut required = references.references.into_iter().collect::<BTreeSet<_>>();
+    required.extend(nested_expression_required_names(expression));
+    required
+}
+
+fn nested_expression_required_names(expression: &Expr) -> BTreeSet<String> {
+    let mut required = nested_lambda_required_names_in_expression(expression);
+    required.extend(nested_generator_required_names_in_expression(expression));
+    required
+}
+
+fn type_parameter_required_names(type_params: &ruff_python_ast::TypeParams) -> BTreeSet<String> {
+    let mut required = BTreeSet::new();
     for parameter in type_params {
         if let TypeParam::TypeVar(parameter) = parameter
             && let Some(bound) = &parameter.bound
         {
-            references.visit_expr(bound);
+            required.extend(expression_required_names(bound));
         }
         if let Some(default) = parameter.default() {
-            references.visit_expr(default);
+            required.extend(expression_required_names(default));
         }
     }
-    references
-        .references
-        .into_iter()
-        .filter(|name| type_names.contains(name))
-        .collect()
+    required
+}
+
+fn nested_annotation_scope_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
+    let mut required = BTreeSet::new();
+    for statement in body {
+        match statement {
+            Stmt::FunctionDef(definition) => {
+                if let Some(type_params) = definition.type_params.as_deref() {
+                    let type_names: BTreeSet<_> = type_params
+                        .iter()
+                        .map(|parameter| parameter.name().as_str().to_string())
+                        .collect();
+                    required.extend(
+                        type_parameter_required_names(type_params)
+                            .difference(&type_names)
+                            .cloned(),
+                    );
+                }
+            }
+            Stmt::ClassDef(definition) => {
+                if let Some(type_params) = definition.type_params.as_deref() {
+                    let type_names: BTreeSet<_> = type_params
+                        .iter()
+                        .map(|parameter| parameter.name().as_str().to_string())
+                        .collect();
+                    let mut class_requirements = type_parameter_required_names(type_params);
+                    if let Some(arguments) = definition.arguments.as_deref() {
+                        for argument in &arguments.args {
+                            class_requirements.extend(expression_required_names(argument));
+                        }
+                        for keyword in &arguments.keywords {
+                            class_requirements.extend(expression_required_names(&keyword.value));
+                        }
+                    }
+                    required.extend(class_requirements.difference(&type_names).cloned());
+                }
+            }
+            Stmt::TypeAlias(statement) => {
+                let mut alias_requirements = expression_required_names(&statement.value);
+                if let Some(type_params) = statement.type_params.as_deref() {
+                    let type_names: BTreeSet<_> = type_params
+                        .iter()
+                        .map(|parameter| parameter.name().as_str().to_string())
+                        .collect();
+                    alias_requirements.extend(type_parameter_required_names(type_params));
+                    required.extend(alias_requirements.difference(&type_names).cloned());
+                } else {
+                    required.extend(alias_requirements);
+                }
+            }
+            Stmt::If(statement) => {
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.body,
+                ));
+                for clause in &statement.elif_else_clauses {
+                    required.extend(nested_annotation_scope_required_names_in_suite(
+                        &clause.body,
+                    ));
+                }
+            }
+            Stmt::For(statement) => {
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.body,
+                ));
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.orelse,
+                ));
+            }
+            Stmt::While(statement) => {
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.body,
+                ));
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.orelse,
+                ));
+            }
+            Stmt::Try(statement) => {
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.body,
+                ));
+                for handler in &statement.handlers {
+                    if let Some(handler) = handler.as_except_handler() {
+                        required.extend(nested_annotation_scope_required_names_in_suite(
+                            &handler.body,
+                        ));
+                    }
+                }
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.orelse,
+                ));
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.finalbody,
+                ));
+            }
+            Stmt::With(statement) => {
+                required.extend(nested_annotation_scope_required_names_in_suite(
+                    &statement.body,
+                ));
+            }
+            Stmt::Match(statement) => {
+                for case in &statement.cases {
+                    required.extend(nested_annotation_scope_required_names_in_suite(&case.body));
+                }
+            }
+            _ => {}
+        }
+    }
+    required
 }
 
 fn nested_lambda_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
@@ -14000,7 +14169,7 @@ fn class_required_names(definition: &StmtClassDef, future_annotations: bool) -> 
     for statement in &definition.body {
         references.visit_stmt(statement);
     }
-    let body_explicitly_references_dunder_class = references.explicit_dunder_class_reference;
+    let mut body_explicitly_references_dunder_class = references.explicit_dunder_class_reference;
     let mut required = references
         .references
         .into_iter()
@@ -14010,6 +14179,14 @@ fn class_required_names(definition: &StmtClassDef, future_annotations: bool) -> 
         })
         .collect::<BTreeSet<_>>();
     required.extend(locals.nonlocals.iter().cloned());
+    let annotation_scope_requirements =
+        nested_annotation_scope_required_names_in_suite(&definition.body);
+    body_explicitly_references_dunder_class |= annotation_scope_requirements.contains("__class__");
+    required.extend(
+        annotation_scope_requirements
+            .into_iter()
+            .filter(|name| !locals.seen.contains(name) && !locals.globals.contains(name)),
+    );
     let body_requires_dunder_class =
         body_explicitly_references_dunder_class && required.contains("__class__");
 
@@ -14174,7 +14351,20 @@ fn collect_nested_functions(
     for statement in body {
         match statement {
             Stmt::FunctionDef(definition) => {
-                functions.push(FunctionPlan::build(definition, future_annotations));
+                let mut plan = FunctionPlan::build(definition, future_annotations);
+                // This plan is used only to determine which names cross the surrounding scope.
+                // A generic function's type-parameter scope binds these names between the
+                // surrounding scope and the function body, so they cannot propagate outward.
+                if let Some(type_params) = definition.type_params.as_deref() {
+                    for parameter in type_params {
+                        let name = parameter.name().as_str();
+                        if !plan.locals.iter().any(|local| local == name) {
+                            plan.locals.push(name.to_string());
+                        }
+                        plan.annotation_references.remove(name);
+                    }
+                }
+                functions.push(plan);
             }
             Stmt::If(statement) => {
                 collect_nested_functions(&statement.body, functions, future_annotations);
@@ -14246,6 +14436,44 @@ fn contains_function_definition(body: &[Stmt]) -> bool {
             .cases
             .iter()
             .any(|case| contains_function_definition(&case.body)),
+        _ => false,
+    })
+}
+
+fn contains_generic_definition(body: &[Stmt]) -> bool {
+    body.iter().any(|statement| match statement {
+        Stmt::FunctionDef(definition) => definition.type_params.is_some(),
+        Stmt::ClassDef(definition) => definition.type_params.is_some(),
+        Stmt::If(statement) => {
+            contains_generic_definition(&statement.body)
+                || statement
+                    .elif_else_clauses
+                    .iter()
+                    .any(|clause| contains_generic_definition(&clause.body))
+        }
+        Stmt::For(statement) => {
+            contains_generic_definition(&statement.body)
+                || contains_generic_definition(&statement.orelse)
+        }
+        Stmt::While(statement) => {
+            contains_generic_definition(&statement.body)
+                || contains_generic_definition(&statement.orelse)
+        }
+        Stmt::Try(statement) => {
+            contains_generic_definition(&statement.body)
+                || statement
+                    .handlers
+                    .iter()
+                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
+                    .any(|handler| contains_generic_definition(&handler.body))
+                || contains_generic_definition(&statement.orelse)
+                || contains_generic_definition(&statement.finalbody)
+        }
+        Stmt::With(statement) => contains_generic_definition(&statement.body),
+        Stmt::Match(statement) => statement
+            .cases
+            .iter()
+            .any(|case| contains_generic_definition(&case.body)),
         _ => false,
     })
 }
