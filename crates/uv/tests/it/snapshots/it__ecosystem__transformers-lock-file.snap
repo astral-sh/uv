@@ -923,13 +923,13 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version < '3.10'" },
-    { name = "importlib-resources", marker = "python_full_version < '3.10'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
-    { name = "zipp", marker = "python_full_version < '3.10'" },
+    { name = "fsspec" },
+    { name = "importlib-resources" },
+    { name = "typing-extensions" },
+    { name = "zipp" },
 ]
 epy = [
-    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
@@ -948,13 +948,13 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version == '3.10.*'" },
-    { name = "importlib-resources", marker = "python_full_version == '3.10.*'" },
-    { name = "typing-extensions", marker = "python_full_version == '3.10.*'" },
-    { name = "zipp", marker = "python_full_version == '3.10.*'" },
+    { name = "fsspec" },
+    { name = "importlib-resources" },
+    { name = "typing-extensions" },
+    { name = "zipp" },
 ]
 epy = [
-    { name = "typing-extensions", marker = "python_full_version == '3.10.*'" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
@@ -979,13 +979,13 @@ wheels = [
 
 [package.optional-dependencies]
 epath = [
-    { name = "fsspec", marker = "python_full_version >= '3.11'" },
-    { name = "importlib-resources", marker = "python_full_version >= '3.11'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
-    { name = "zipp", marker = "python_full_version >= '3.11'" },
+    { name = "fsspec" },
+    { name = "importlib-resources" },
+    { name = "typing-extensions" },
+    { name = "zipp" },
 ]
 epy = [
-    { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
@@ -1397,8 +1397,8 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "google-auth", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "requests-oauthlib", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "google-auth" },
+    { name = "requests-oauthlib" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/30/21/b84fa7ef834d4b126faad13da6e582c8f888e196326b9d6aab1ae303df4f/google-auth-oauthlib-0.4.6.tar.gz", hash = "sha256:a90a072f6993f2c327067bf65270046384cda5a8ecb20b94ea9a687f1f233a7a", size = 19516, upload-time = "2021-09-01T09:54:17.701Z" }
 wheels = [
@@ -1416,8 +1416,8 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "google-auth", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "requests-oauthlib", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "google-auth" },
+    { name = "requests-oauthlib" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cc/0f/1772edb8d75ecf6280f1c7f51cbcebe274e8b17878b382f63738fd96cee5/google_auth_oauthlib-1.2.1.tar.gz", hash = "sha256:afd0cad092a2eaa53cd8e8298557d6de1034c6cb4a740500b5357b648af97263", size = 24970, upload-time = "2024-07-08T23:11:24.377Z" }
 wheels = [
@@ -1730,9 +1730,9 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "ml-dtypes", marker = "python_full_version < '3.10'" },
-    { name = "numpy", marker = "python_full_version < '3.10'" },
-    { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" } },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/18/ff7f2f6d6195853ed55c5b5d835f5c8c3c8b190c7221cb04a0cb81f5db10/jaxlib-0.4.30-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:c40856e28f300938c6824ab1a615166193d6997dec946578823f6d402ad454e5", size = 83542097, upload-time = "2024-06-18T14:47:34.758Z" },
@@ -1776,9 +1776,9 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "ml-dtypes", marker = "python_full_version >= '3.10'" },
-    { name = "numpy", marker = "python_full_version >= '3.10'" },
-    { name = "scipy", version = "1.14.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "scipy", version = "1.14.0", source = { registry = "https://pypi.org/simple" } },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/72/12c267f6775aac7e3ca6ed882c9816883cce44d73169d25d0e0b0f1f6972/jaxlib-0.4.31-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:48ea73cb78341bd4aabbb15e1a076ed61505ec80ab8eb4810e2d34758c400f80", size = 88767265, upload-time = "2024-07-30T00:25:58.644Z" },
@@ -1962,8 +1962,8 @@ name = "keras-preprocessing"
 version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "six", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "numpy" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/5e/f1/b44337faca48874333769a29398fe4666686733c8880aa160b9fd5dfe600/Keras_Preprocessing-1.1.2.tar.gz", hash = "sha256:add82567c50c8bc648c14195bf544a5ce7c1f76761536956c3d2978970179ef3", size = 163598, upload-time = "2020-05-14T03:53:48.526Z" }
 wheels = [
@@ -2649,7 +2649,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.1.0.70"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-cublas-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
@@ -2676,9 +2676,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.4.5.107"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-    { name = "nvidia-cusparse-cu12", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cusparse-cu12" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928, upload-time = "2023-04-19T15:51:25.781Z" },
@@ -2689,7 +2689,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.1.0.106"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278, upload-time = "2023-04-19T15:51:49.939Z" },
@@ -2781,10 +2781,10 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "onnx", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "packaging", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "numpy" },
+    { name = "onnx" },
+    { name = "packaging" },
+    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ec/44/54c6b7f1a28d919a15caf642113fb44651087d1bb0658f028c54b93df8e3/onnxconverter-common-1.13.0.tar.gz", hash = "sha256:03db8a6033a3d6590f22df3f64234079caa826375d1fcb0b37b8123c06bf598c", size = 73935, upload-time = "2022-11-03T12:11:37.783Z" }
 wheels = [
@@ -2809,10 +2809,10 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "onnx", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "packaging", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "numpy" },
+    { name = "onnx" },
+    { name = "packaging" },
+    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/10/d3/bfbfe48d79566348f68e254de68a7a37c5aaaeaac8d42b0cfdaf30d1608e/onnxconverter-common-1.14.0.tar.gz", hash = "sha256:6e431429bd15325c5b2c3eab61bed0d5634c23ed58f8823961be448d629d014a", size = 82146, upload-time = "2023-08-22T03:45:12.899Z" }
 wheels = [
@@ -4312,7 +4312,7 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version < '3.10'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ae/00/48c2f661e2816ccf2ecd77982f6605b2950afe60f60a52b4cbbc2504aa8f/scipy-1.13.1.tar.gz", hash = "sha256:095a87a0312b08dfd6a6155cbbd310a8c51800fc931b8c0b84003014b874ed3c", size = 57210720, upload-time = "2024-05-23T03:29:26.079Z" }
 wheels = [
@@ -4361,7 +4361,7 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "numpy", marker = "python_full_version >= '3.10'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4e/e5/0230da034a2e1b1feb32621d7cd57c59484091d6dccc9e6b855b0d309fc9/scipy-1.14.0.tar.gz", hash = "sha256:b5923f48cb840380f9854339176ef21763118a7300a88203ccd0bdd26e58527b", size = 58618870, upload-time = "2024-06-24T20:35:18.532Z" }
 wheels = [
@@ -4723,19 +4723,19 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "google-auth", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "google-auth-oauthlib", version = "0.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "grpcio", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "markdown", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "numpy", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "requests", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "setuptools", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorboard-data-server", version = "0.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorboard-plugin-wit", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "werkzeug", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "wheel", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "absl-py" },
+    { name = "google-auth" },
+    { name = "google-auth-oauthlib", version = "0.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "grpcio" },
+    { name = "markdown" },
+    { name = "numpy" },
+    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "requests" },
+    { name = "setuptools" },
+    { name = "tensorboard-data-server", version = "0.6.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorboard-plugin-wit" },
+    { name = "werkzeug" },
+    { name = "wheel" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/69/80/a3abccc4ea941c36741751206e40e619afe28652cf76f74cfa4c3e4248ba/tensorboard-2.9.0-py3-none-any.whl", hash = "sha256:bd78211076dca5efa27260afacfaa96cd05c7db12a6c09cc76a1d6b2987ca621", size = 5797045, upload-time = "2022-04-29T19:54:11.437Z" },
@@ -4752,18 +4752,18 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "google-auth", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "google-auth-oauthlib", version = "1.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "grpcio", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "markdown", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "numpy", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "requests", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "setuptools", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "six", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorboard-data-server", version = "0.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "werkzeug", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "absl-py" },
+    { name = "google-auth" },
+    { name = "google-auth-oauthlib", version = "1.2.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "grpcio" },
+    { name = "markdown" },
+    { name = "numpy" },
+    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "requests" },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard-data-server", version = "0.7.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "werkzeug" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/37/12/f6e9b9dcc310263cbd3948274e286538bd6800fd0c268850788f14a0c6d0/tensorboard-2.15.2-py3-none-any.whl", hash = "sha256:a6f6443728064d962caea6d34653e220e34ef8df764cb06a8212c17e1a8f0622", size = 5539713, upload-time = "2024-02-09T10:39:25.636Z" },
@@ -4849,28 +4849,28 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "astunparse", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "google-pasta", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "grpcio", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "h5py", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "keras-preprocessing", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "libclang", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "numpy", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "opt-einsum", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "packaging", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "setuptools", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "six", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-io-gcs-filesystem", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "termcolor", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "typing-extensions", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "wrapt", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "absl-py" },
+    { name = "astunparse" },
+    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" } },
+    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "google-pasta" },
+    { name = "grpcio" },
+    { name = "h5py" },
+    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "keras-preprocessing" },
+    { name = "libclang" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "packaging" },
+    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-io-gcs-filesystem" },
+    { name = "termcolor" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6f/e2/cfef98bd3e9836a5408ae8c1f03fdd756713fa3592949621f111d1e9b238/tensorflow-2.9.0-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:2125efb61952821b69446875ccccf8cdcc6c838c21224f70668b51965a0cdf91", size = 228471551, upload-time = "2022-05-16T20:27:06.092Z" },
@@ -4892,28 +4892,28 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "astunparse", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "flatbuffers", version = "24.3.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "gast", version = "0.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "google-pasta", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "grpcio", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "h5py", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "libclang", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "ml-dtypes", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "numpy", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "opt-einsum", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "packaging", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "setuptools", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "six", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorboard", version = "2.15.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorflow-estimator", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorflow-io-gcs-filesystem", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "termcolor", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "wrapt", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "absl-py" },
+    { name = "astunparse" },
+    { name = "flatbuffers", version = "24.3.25", source = { registry = "https://pypi.org/simple" } },
+    { name = "gast", version = "0.6.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "google-pasta" },
+    { name = "grpcio" },
+    { name = "h5py" },
+    { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "libclang" },
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "packaging" },
+    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard", version = "2.15.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-estimator", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-io-gcs-filesystem" },
+    { name = "termcolor" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9c/d3/904d5bf64305218ce19f81ff3b2cb872cf434a558443b4a9a5357924637a/tensorflow-2.15.1-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:91b51a507007d63a70b65be307d701088d15042a6399c0e2312b53072226e909", size = 236439313, upload-time = "2024-03-08T23:51:46.741Z" },
@@ -4951,28 +4951,28 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "astunparse", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "google-pasta", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "grpcio", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "h5py", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "keras-preprocessing", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "libclang", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "numpy", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "opt-einsum", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "packaging", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "setuptools", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "six", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-io-gcs-filesystem", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "termcolor", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "typing-extensions", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "wrapt", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
+    { name = "absl-py" },
+    { name = "astunparse" },
+    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" } },
+    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "google-pasta" },
+    { name = "grpcio" },
+    { name = "h5py" },
+    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "keras-preprocessing" },
+    { name = "libclang" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "packaging" },
+    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-io-gcs-filesystem" },
+    { name = "termcolor" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/00/bc6f834c1ced78847bd64d6f78d9238896e61af61194faa1903db4871199/tensorflow_cpu-2.9.0-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:422bc94fc974f9e9f3ffce0456b90b4305eba1e4a9019fc901e4358021dc872d", size = 228471603, upload-time = "2022-05-16T20:28:38.421Z" },
@@ -4994,28 +4994,28 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "absl-py", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "astunparse", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "flatbuffers", version = "24.3.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "gast", version = "0.6.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "google-pasta", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "grpcio", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "h5py", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "libclang", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "ml-dtypes", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "numpy", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "opt-einsum", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "packaging", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "setuptools", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "six", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorboard", version = "2.15.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorflow-estimator", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorflow-io-gcs-filesystem", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "termcolor", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "wrapt", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "absl-py" },
+    { name = "astunparse" },
+    { name = "flatbuffers", version = "24.3.25", source = { registry = "https://pypi.org/simple" } },
+    { name = "gast", version = "0.6.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "google-pasta" },
+    { name = "grpcio" },
+    { name = "h5py" },
+    { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "libclang" },
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "packaging" },
+    { name = "protobuf", version = "4.25.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard", version = "2.15.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-estimator", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-io-gcs-filesystem" },
+    { name = "termcolor" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/cc/dfb0195934918847611d0d1e0a2ad3f1f8a77876a9139b8976ebdd72854c/tensorflow_cpu-2.15.1-cp310-cp310-macosx_10_15_x86_64.whl", hash = "sha256:f211b011e812f827f5452b1d5f19865645c65df6e2a07d71118480c40887133e", size = 236439366, upload-time = "2024-03-08T23:52:27.182Z" },
@@ -5112,27 +5112,27 @@ resolution-markers = [
     "python_full_version == '3.10.*' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "absl-py", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "astunparse", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "google-pasta", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "grpcio", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "h5py", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "keras-preprocessing", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "libclang", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "opt-einsum", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "packaging", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "six", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "termcolor", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
-    { name = "wrapt", marker = "python_full_version >= '3.10' and python_full_version < '3.13' and sys_platform == 'darwin'" },
+    { name = "absl-py" },
+    { name = "astunparse" },
+    { name = "flatbuffers", version = "1.12", source = { registry = "https://pypi.org/simple" } },
+    { name = "gast", version = "0.4.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "google-pasta" },
+    { name = "grpcio" },
+    { name = "h5py" },
+    { name = "keras", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "keras-preprocessing" },
+    { name = "libclang" },
+    { name = "numpy" },
+    { name = "opt-einsum" },
+    { name = "packaging" },
+    { name = "protobuf", version = "3.20.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "tensorflow-estimator", version = "2.9.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "termcolor" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/65/4a2a079530c541badf7654d7a282c4890193953f010d3c4f2e259cf26410/tensorflow_macos-2.9.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:744533ba0ccf6edb9176b6b9694a10b77e241da3441643a322cc47ba78060653", size = 200561985, upload-time = "2022-05-23T17:31:32.42Z" },
@@ -5171,9 +5171,9 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "tensorflow", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13' and platform_machine != 'arm64') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-hub", marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-macos", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10' and python_full_version < '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "tensorflow", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'arm64' or sys_platform != 'darwin'" },
+    { name = "tensorflow-hub" },
+    { name = "tensorflow-macos", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/59/58/eb6d165f22d2fd7396f92c8f955a5c2b5fd0ece539b455938ba052d3d945/tensorflow_text-2.9.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:7ed7ec7110ac1dd169bb0bce55993af80ea7d9f236ab379c175eb643e5a178d9", size = 4353659, upload-time = "2022-05-18T00:30:18.906Z" },
@@ -5195,9 +5195,9 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.10' and platform_machine != 'arm64') or (python_full_version >= '3.13' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and sys_platform != 'darwin')" },
-    { name = "tensorflow-hub", marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
-    { name = "tensorflow-macos", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.10' and platform_machine == 'arm64' and sys_platform == 'darwin') or (python_full_version >= '3.13' and platform_machine == 'arm64' and sys_platform == 'darwin')" },
+    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'arm64' or sys_platform != 'darwin'" },
+    { name = "tensorflow-hub" },
+    { name = "tensorflow-macos", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/0f/d260a5cc7d86d25eb67bb919f957106b76af4a039f064526290d9cf5d93e/tensorflow_text-2.15.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:db09ada839eb92aa23afc6c4e37257e6665d64ae048cfdce6374b5aa33f8f006", size = 6441513, upload-time = "2023-11-15T18:52:31.924Z" },
@@ -5291,7 +5291,7 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "tensorflow", version = "2.15.1", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/03/a3/72e49c210fe545159c98842f110f024195f8efefc2e310f8eac77e3d599e/tf_keras-2.15.1.tar.gz", hash = "sha256:40ab605cecc7759c657cb2bccd9efaacd6fc2369a6c1eba8053890afeac46886", size = 1251021, upload-time = "2024-03-08T18:37:50.084Z" }
 wheels = [
@@ -6225,7 +6225,7 @@ name = "triton"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", marker = "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+    { name = "filelock" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/45/27/14cc3101409b9b4b9241d2ba7deaa93535a217a211c86c4cc7151fb12181/triton-3.0.0-1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e1efef76935b2febc365bfadf74bcb65a6f959a9872e5bddf44cc9e0adce1e1a", size = 209376304, upload-time = "2024-07-19T20:56:41.483Z" },

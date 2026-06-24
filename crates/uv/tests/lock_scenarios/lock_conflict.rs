@@ -2547,7 +2547,7 @@ fn extra_conflict_environments_omit_redundant_markers() -> Result<()> {
         version = "1.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-3-bar-a' and extra == 'extra-3-bar-b')" },
+            { name = "typing-extensions" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749, upload-time = "2025-05-10T17:42:51.123Z" }
         wheels = [
@@ -3248,10 +3248,10 @@ fn multiple_sources_index_disjoint_extras_with_extra() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu118'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu124'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
         ]
 
         [package.metadata]
@@ -3422,8 +3422,8 @@ fn multiple_sources_index_disjoint_extras_with_marker() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin' or extra == 'extra-7-project-cu124'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin' or extra == 'extra-7-project-cu124'" },
         ]
         cu124 = [
             { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -4105,7 +4105,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo' or extra != 'extra-7-project-bar'" },
             { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-bar'" },
             { name = "sniffio" },
         ]
@@ -4246,7 +4246,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-foo'" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-foo' or extra != 'group-7-project-bar'" },
             { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar'" },
             { name = "sniffio" },
         ]
@@ -4393,7 +4393,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar' or extra != 'extra-7-project-foo'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
@@ -5355,10 +5355,10 @@ fn jinja_no_conflict_markers1() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu118'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, extra = ["i18n"] },
         ]
         cu124 = [
-            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"], marker = "extra == 'extra-7-project-cu124'" },
+            { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, extra = ["i18n"] },
         ]
 
         [package.metadata]
@@ -5522,8 +5522,8 @@ fn jinja_no_conflict_markers2() -> Result<()> {
 
         [package.optional-dependencies]
         cu118 = [
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
-            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cu118' and extra == 'extra-7-project-cu124')" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "sys_platform == 'darwin' or extra == 'extra-7-project-cu124'" },
+            { name = "jinja2", version = "3.1.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin' or extra == 'extra-7-project-cu124'" },
         ]
         cu124 = [
             { name = "jinja2", version = "3.1.3", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -5941,65 +5941,65 @@ fn extra_inferences() -> Result<()> {
         version = "2.5.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "alembic", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-ftp", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-http", version = "4.7.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-imap", version = "3.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-sqlite", version = "3.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "argcomplete", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "attrs", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "blinker", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "cattrs", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "colorlog", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "configupdater", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "connexion", extra = ["flask", "swagger-ui"], marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "cron-descriptor", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "croniter", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "cryptography", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "deprecated", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "dill", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-appbuilder", version = "4.1.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-caching", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-login", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-session", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-wtf", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "graphviz", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "gunicorn", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "httpx", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "itsdangerous", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "jinja2", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "jsonschema", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "lazy-object-proxy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "linkify-it-py", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "lockfile", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "markdown", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "markdown-it-py", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "markupsafe", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "marshmallow-oneofschema", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "mdit-py-plugins", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "packaging", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pathspec", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pendulum", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pluggy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "psutil", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pygments", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pyjwt", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "python-daemon", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "python-dateutil", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "python-nvd3", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "python-slugify", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "rich", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "setproctitle", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "sqlalchemy-jsonfield", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "tabulate", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "tenacity", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "termcolor", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "typing-extensions", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "unicodecsv", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "werkzeug", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "alembic" },
+            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow-providers-ftp", version = "3.6.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow-providers-http", version = "4.7.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow-providers-imap", version = "3.4.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow-providers-sqlite", version = "3.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "argcomplete" },
+            { name = "attrs" },
+            { name = "blinker" },
+            { name = "cattrs" },
+            { name = "colorlog" },
+            { name = "configupdater" },
+            { name = "connexion", extra = ["flask", "swagger-ui"] },
+            { name = "cron-descriptor" },
+            { name = "croniter" },
+            { name = "cryptography" },
+            { name = "deprecated" },
+            { name = "dill" },
+            { name = "flask" },
+            { name = "flask-appbuilder", version = "4.1.4", source = { registry = "https://pypi.org/simple" } },
+            { name = "flask-caching" },
+            { name = "flask-login" },
+            { name = "flask-session" },
+            { name = "flask-wtf" },
+            { name = "graphviz" },
+            { name = "gunicorn" },
+            { name = "httpx" },
+            { name = "itsdangerous" },
+            { name = "jinja2" },
+            { name = "jsonschema" },
+            { name = "lazy-object-proxy" },
+            { name = "linkify-it-py" },
+            { name = "lockfile" },
+            { name = "markdown" },
+            { name = "markdown-it-py" },
+            { name = "markupsafe" },
+            { name = "marshmallow-oneofschema" },
+            { name = "mdit-py-plugins" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "pendulum" },
+            { name = "pluggy" },
+            { name = "psutil" },
+            { name = "pygments" },
+            { name = "pyjwt" },
+            { name = "python-daemon" },
+            { name = "python-dateutil" },
+            { name = "python-nvd3" },
+            { name = "python-slugify" },
+            { name = "rich" },
+            { name = "setproctitle" },
+            { name = "sqlalchemy" },
+            { name = "sqlalchemy-jsonfield" },
+            { name = "tabulate" },
+            { name = "tenacity" },
+            { name = "termcolor" },
+            { name = "typing-extensions" },
+            { name = "unicodecsv" },
+            { name = "werkzeug" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/7d/fef0976adf269614870aa0aea79782601040f2b46267bbf03cf5314f2a67/apache-airflow-2.5.0.tar.gz", hash = "sha256:cd6c6c2d7dc2a0af9d509442d2ea4aaa150d55a8d950769f1635c497c396a3c9", size = 6080151, upload-time = "2022-12-02T16:22:21.073Z" }
         wheels = [
@@ -6024,7 +6024,7 @@ fn extra_inferences() -> Result<()> {
             { name = "cattrs" },
             { name = "colorlog" },
             { name = "configupdater" },
-            { name = "connexion", extra = ["flask"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
+            { name = "connexion", extra = ["flask"] },
             { name = "cron-descriptor" },
             { name = "croniter" },
             { name = "cryptography" },
@@ -6085,8 +6085,8 @@ fn extra_inferences() -> Result<()> {
         version = "1.8.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "sqlparse", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sqlparse" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/97/4c/7360977c53952ed7b5ab4e13f1c433c6bbf00ab13e3221dc72e57ef668b5/apache_airflow_providers_common_sql-1.8.1.tar.gz", hash = "sha256:1cd2fdfc7ce7a8a7475943672bdf1cdf424a0a355e47d0a2fb56046fec473050", size = 29503, upload-time = "2023-11-29T07:15:59.133Z" }
         wheels = [
@@ -6112,7 +6112,7 @@ fn extra_inferences() -> Result<()> {
         version = "3.6.1"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/5f/db/8ba81e6f25b726ee3bc971bcd20c344d8ce0a4dea3d0524096115daf92e5/apache-airflow-providers-ftp-3.6.1.tar.gz", hash = "sha256:a3c8659d1455f6e8a0a3f6a960b15cb6d69e7572f8826037a4002c397d26ac12", size = 16778, upload-time = "2023-11-12T18:49:11.561Z" }
         wheels = [
@@ -6136,11 +6136,11 @@ fn extra_inferences() -> Result<()> {
         version = "4.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "aiohttp", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "asgiref", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "requests", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "requests-toolbelt", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "aiohttp" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "asgiref" },
+            { name = "requests" },
+            { name = "requests-toolbelt" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3d/e7/b6ed57dedf075d8bb9dc82382b364a5055083f2758df3f0e5f25c4ae3085/apache-airflow-providers-http-4.7.0.tar.gz", hash = "sha256:ec2fbaeb997ebbc597e086f5cb6e7c92d7955854a1b54f4fc6549b7efb9b7daa", size = 20792, upload-time = "2023-11-14T16:58:16.119Z" }
         wheels = [
@@ -6168,7 +6168,7 @@ fn extra_inferences() -> Result<()> {
         version = "3.4.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f6/d1/524c13c4c98040d2139305530a0c4acb773dc37bb578c41ec135ca438bae/apache-airflow-providers-imap-3.4.0.tar.gz", hash = "sha256:347f78efa0e1353f90be78244fad0136d7c0cb1af25b9a3ba296d4e31fb53f6c", size = 15806, upload-time = "2023-10-17T07:46:59.647Z" }
         wheels = [
@@ -6192,8 +6192,8 @@ fn extra_inferences() -> Result<()> {
         version = "3.5.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apache-airflow", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "apache-airflow-providers-common-sql", version = "1.8.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/62/4a/ba727087ef486e16e028ba169c198007a1dcbde569179bfbec6b57602054/apache-airflow-providers-sqlite-3.5.0.tar.gz", hash = "sha256:6f47c25d7fb026fa8b8b4dc8edfee1491998255048255625716fceaae2c67024", size = 12946, upload-time = "2023-10-17T07:47:35.68Z" }
         wheels = [
@@ -6224,7 +6224,7 @@ fn extra_inferences() -> Result<()> {
 
         [package.optional-dependencies]
         yaml = [
-            { name = "pyyaml", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "pyyaml" },
         ]
 
         [[package]]
@@ -6431,7 +6431,7 @@ fn extra_inferences() -> Result<()> {
             { name = "flask", extra = ["async"] },
         ]
         swagger-ui = [
-            { name = "swagger-ui-bundle", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "swagger-ui-bundle" },
         ]
 
         [[package]]
@@ -6567,26 +6567,26 @@ fn extra_inferences() -> Result<()> {
         version = "4.1.4"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apispec", version = "3.3.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "click", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "colorama", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "email-validator", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-babel", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-jwt-extended", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-login", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "flask-wtf", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "jsonschema", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "marshmallow", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "marshmallow-enum", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "marshmallow-sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "prison", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "pyjwt", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "python-dateutil", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "sqlalchemy", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "sqlalchemy-utils", marker = "extra == 'extra-3-pkg-x1'" },
-            { name = "wtforms", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "apispec", version = "3.3.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
+            { name = "click" },
+            { name = "colorama" },
+            { name = "email-validator" },
+            { name = "flask" },
+            { name = "flask-babel" },
+            { name = "flask-jwt-extended" },
+            { name = "flask-login" },
+            { name = "flask-sqlalchemy" },
+            { name = "flask-wtf" },
+            { name = "jsonschema" },
+            { name = "marshmallow" },
+            { name = "marshmallow-enum" },
+            { name = "marshmallow-sqlalchemy" },
+            { name = "prison" },
+            { name = "pyjwt" },
+            { name = "python-dateutil" },
+            { name = "sqlalchemy" },
+            { name = "sqlalchemy-utils" },
+            { name = "wtforms" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/95/53/f7a191ba8a42cb4f2dd2248658c5adc16ddea5f4b4e1d832c2fb3a51cd18/Flask-AppBuilder-4.1.4.tar.gz", hash = "sha256:601f71348152886ac801835101a6e4427cebf23f82865d9c2d5964ace8a1bfec", size = 7030368, upload-time = "2022-09-05T12:26:46.915Z" }
         wheels = [
@@ -6598,7 +6598,7 @@ fn extra_inferences() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"], marker = "extra == 'extra-3-pkg-x2' or extra != 'extra-3-pkg-x1'" },
+            { name = "apispec", version = "5.2.2", source = { registry = "https://pypi.org/simple" }, extra = ["yaml"] },
             { name = "click" },
             { name = "colorama" },
             { name = "email-validator" },
@@ -7611,7 +7611,7 @@ fn extra_inferences() -> Result<()> {
         version = "1.1.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "jinja2", marker = "extra == 'extra-3-pkg-x1'" },
+            { name = "jinja2" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/01/e6/d8ae21087a42627c2a04a738c947825b78c26b18595704b94bd3227197a2/swagger_ui_bundle-1.1.0.tar.gz", hash = "sha256:20673c3431c8733d5d1615ecf79d9acf30cff75202acaf21a7d9c7f489714529", size = 2599741, upload-time = "2023-11-01T19:58:17.397Z" }
         wheels = [
@@ -7930,12 +7930,12 @@ fn deduplicate_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         x1 = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'extra-3-pkg-x1') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra == 'extra-3-pkg-x1') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra == 'extra-3-pkg-x2'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux' or extra == 'extra-3-pkg-x2'" },
         ]
         x2 = [
-            { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'linux' and extra == 'extra-3-pkg-x2') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
-            { name = "markupsafe", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'linux' and extra == 'extra-3-pkg-x2') or (extra == 'extra-3-pkg-x1' and extra == 'extra-3-pkg-x2')" },
+            { name = "markupsafe", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux' or extra == 'extra-3-pkg-x1'" },
+            { name = "markupsafe", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux' or extra == 'extra-3-pkg-x1'" },
         ]
 
         [package.metadata]
@@ -13894,9 +13894,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (platform_machine != 'aarch64' and extra == 'extra-14-ads-mega-model-cu118') or (platform_python_implementation != 'CPython' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118')" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
@@ -14115,7 +14115,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "8.9.2.26"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cublas-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ff/74/a2e2be7fb83aaedec84f391f082cf765dfb635e7caa9b49065f73e4835d8/nvidia_cudnn_cu12-8.9.2.26-py3-none-manylinux1_x86_64.whl", hash = "sha256:5ccb288774fdfb07a7e7025ffec286971c06d8d7b4fb162525334616d7629ff9", size = 731725872, upload-time = "2023-06-01T19:24:57.328Z" },
@@ -14144,9 +14144,9 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "11.4.5.107"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cusparse-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cublas-cu12" },
+            { name = "nvidia-cusparse-cu12" },
+            { name = "nvidia-nvjitlink-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928, upload-time = "2023-04-19T15:51:25.781Z" },
@@ -14158,7 +14158,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "12.1.0.106"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-nvjitlink-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278, upload-time = "2023-04-19T15:51:49.939Z" },
@@ -14369,24 +14369,24 @@ fn overlapping_resolution_markers() -> Result<()> {
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (platform_machine != 'x86_64' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-14-ads-mega-model-cu118') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "sympy" },
+            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/33/b3/1fcc3bccfddadfd6845dcbfe26eb4b099f1dfea5aa0e5cfb92b3c98dba5b/torch-2.2.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:bc889d311a855dd2dfd164daf8cc903a6b7273a747189cebafdd89106e4ad585", size = 755526581, upload-time = "2024-03-27T21:06:46.5Z" },
@@ -14422,7 +14422,7 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "2.2.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "filelock", marker = "(sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cu118') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "filelock" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/95/05/ed974ce87fe8c8843855daa2136b3409ee1c126707ab54a8b72815c08b49/triton-2.2.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2294514340cfe4e8f4f9e5c66c702744c4a117d25e618bd08469d0bfed1e2e5", size = 167900779, upload-time = "2024-01-10T03:11:56.576Z" },
@@ -14782,8 +14782,8 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform == 'darwin' or extra == 'extra-10-test-torch-cu124'" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin' or extra == 'extra-10-test-torch-cu124'" },
         ]
         cu124 = [
             { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -14805,13 +14805,13 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             "sys_platform == 'darwin'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "fsspec", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "jinja2", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "networkx", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "setuptools", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "sympy", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "typing-extensions", marker = "(sys_platform == 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "setuptools" },
+            { name = "sympy" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp312-none-macosx_11_0_arm64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
@@ -14825,13 +14825,13 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             "sys_platform != 'darwin'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "fsspec", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "jinja2", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "networkx", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "setuptools", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "sympy", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "typing-extensions", marker = "(sys_platform != 'darwin' and extra == 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "setuptools" },
+            { name = "sympy" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
@@ -14848,22 +14848,22 @@ fn conditional_sources_keep_default_platform_specific_transitive_dependencies() 
             { name = "fsspec" },
             { name = "jinja2" },
             { name = "networkx" },
-            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-cusparselt-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
-            { name = "setuptools", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
-            { name = "sympy", marker = "extra == 'extra-10-test-torch-cu124' or extra != 'extra-10-test-torch-cpu'" },
-            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-10-test-torch-cpu') or (extra == 'extra-10-test-torch-cpu' and extra == 'extra-10-test-torch-cu124')" },
+            { name = "nvidia-cublas-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cuda-cupti-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cuda-nvrtc-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cuda-runtime-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cudnn-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cufft-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-curand-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cusolver-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cusparse-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-cusparselt-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-nccl-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "nvidia-nvtx-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
+            { name = "setuptools" },
+            { name = "sympy" },
+            { name = "triton", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine != 'x86_64' and extra == 'extra-10-test-torch-cpu') or (sys_platform != 'linux' and extra == 'extra-10-test-torch-cpu')" },
             { name = "typing-extensions" },
         ]
         wheels = [
@@ -15254,8 +15254,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
-            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform == 'darwin' or extra == 'extra-27-resolution-markers-for-days-cu124'" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin' or extra == 'extra-27-resolution-markers-for-days-cu124'" },
         ]
         cu124 = [
             { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -15669,8 +15669,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
-            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-27-resolution-markers-for-days-cpu') or (extra == 'extra-27-resolution-markers-for-days-cpu' and extra == 'extra-27-resolution-markers-for-days-cu124')" },
+            { name = "torch", version = "2.6.0", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform == 'darwin' or extra == 'extra-27-resolution-markers-for-days-cu124'" },
+            { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin' or extra == 'extra-27-resolution-markers-for-days-cu124'" },
         ]
         cu124 = [
             { name = "torch", version = "2.6.0+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" } },
@@ -15894,8 +15894,8 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
             { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" } },
         ]
         b = [
-            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
-            { name = "python-dateutil", version = "2.8.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'inapplicable' and extra == 'extra-5-debug-b') or (extra == 'extra-5-debug-a' and extra == 'extra-5-debug-b')" },
+            { name = "python-dateutil", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'inapplicable' or extra == 'extra-5-debug-a'" },
+            { name = "python-dateutil", version = "2.8.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'inapplicable' or extra == 'extra-5-debug-a'" },
         ]
 
         [package.metadata]
@@ -15915,7 +15915,7 @@ fn do_not_simplify_if_not_all_conflict_extras_satisfy_the_marker_by_themselves()
             "extra == 'extra-5-debug-a' and extra != 'extra-5-debug-b'",
         ]
         dependencies = [
-            { name = "six", marker = "(platform_machine == 'inapplicable' and extra == 'extra-5-debug-b') or extra == 'extra-5-debug-a'" },
+            { name = "six" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ad/99/5b2e99737edeb28c71bcbec5b5dda19d0d9ef3ca3e92e3e925e7c0bb364c/python-dateutil-2.8.0.tar.gz", hash = "sha256:c89805f6f4d64db21ed966fda138f8a5ed7a4fdbc1a8ee329ce1b74e3c74da9e", size = 327134, upload-time = "2019-02-05T14:12:37.493Z" }
         wheels = [
@@ -16283,7 +16283,7 @@ fn project_level_conflict_with_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "pkg-a" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
@@ -16476,20 +16476,20 @@ fn project_level_conflict_with_extras_and_cross_dependency() -> Result<()> {
         version = "0.1.0"
         source = { editable = "pkg-a" }
         dependencies = [
-            { name = "pkg-b", extra = ["safe"], marker = "extra == 'project-5-pkg-a'" },
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+            { name = "pkg-b", extra = ["safe"] },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.optional-dependencies]
         all = [
-            { name = "idna", marker = "extra == 'project-5-pkg-a'" },
-            { name = "sniffio", marker = "extra == 'project-5-pkg-a'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         bar = [
-            { name = "sniffio", marker = "extra == 'project-5-pkg-a'" },
+            { name = "sniffio" },
         ]
         foo = [
-            { name = "idna", marker = "extra == 'project-5-pkg-a'" },
+            { name = "idna" },
         ]
 
         [package.metadata]
@@ -16685,7 +16685,7 @@ fn project_level_conflict_with_group() -> Result<()> {
         version = "0.1.0"
         source = { editable = "pkg-a" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-5-pkg-a'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.dev-dependencies]
