@@ -10292,11 +10292,15 @@ impl Compiler {
         // CPython only inserts `.<locals>` for function, async-function, and lambda parents.
         child.child_qualified_name_parent = Some(child.qualified_name.clone());
         child.emit_function_prologue()?;
-        child
-            .assembler
-            .set_location(child.source_location(generator_range));
+        let generator_location = child.source_location(generator_range);
+        child.assembler.set_location(generator_location);
         child.emit(LOAD_FAST_OWNED, 0, 1)?;
-        child.compile_generator_expression_loop(&generator.generators, 0, &generator.elt)?;
+        child.compile_generator_expression_loop(
+            &generator.generators,
+            0,
+            &generator.elt,
+            generator_location,
+        )?;
         let child = child.finish()?;
 
         self.assembler
@@ -10336,10 +10340,16 @@ impl Compiler {
         generators: &[ruff_python_ast::Comprehension],
         index: usize,
         element: &Expr,
+        generator_location: SourceLocation,
     ) -> Result<(), CompileError> {
         let generator = &generators[index];
         if generator.is_async {
-            return self.compile_async_generator_expression_loop(generators, index, element);
+            return self.compile_async_generator_expression_loop(
+                generators,
+                index,
+                element,
+                generator_location,
+            );
         }
         let loop_depth = self.depth;
         let start = self.assembler.label();
@@ -10371,7 +10381,12 @@ impl Compiler {
                 0,
                 0,
             )?;
-            self.compile_generator_expression_loop(generators, index + 1, element)?;
+            self.compile_generator_expression_loop(
+                generators,
+                index + 1,
+                element,
+                generator_location,
+            )?;
             self.assembler
                 .set_location(self.source_location(element.range()));
         } else {
@@ -10400,10 +10415,11 @@ impl Compiler {
         generators: &[ruff_python_ast::Comprehension],
         index: usize,
         element: &Expr,
+        generator_location: SourceLocation,
     ) -> Result<(), CompileError> {
         let generator = &generators[index];
         let loop_depth = self.depth;
-        let cleanup_location = self.assembler.location();
+        let cleanup_location = generator_location;
         let start = self.assembler.label();
         let protected_start = self.assembler.label();
         let yielded = self.assembler.label();
@@ -10414,6 +10430,7 @@ impl Compiler {
         let cleanup_throw = self.assembler.label();
         let async_cleanup = self.assembler.label();
 
+        self.assembler.set_location(generator_location);
         self.assembler.mark(start);
         self.assembler.mark(protected_start);
         self.emit(GET_ANEXT, 0, 1)?;
@@ -10454,7 +10471,12 @@ impl Compiler {
                 0,
                 0,
             )?;
-            self.compile_generator_expression_loop(generators, index + 1, element)?;
+            self.compile_generator_expression_loop(
+                generators,
+                index + 1,
+                element,
+                generator_location,
+            )?;
             self.assembler
                 .set_location(self.source_location(element.range()));
         } else {
@@ -10516,6 +10538,21 @@ impl Compiler {
             self.record_folded_value(condition)?;
             return Ok(());
         }
+        if let Expr::BoolOp(boolean) = condition
+            && boolean.op == BoolOp::And
+        {
+            let Some((last, leading)) = boolean.values.split_last() else {
+                return Err(CompileError::Internal(
+                    "boolean expression contains no values".to_string(),
+                ));
+            };
+            for value in leading {
+                let next = self.assembler.label();
+                self.compile_generator_filter(value, element, next, restart)?;
+                self.assembler.mark(next);
+            }
+            return self.compile_generator_filter(last, element, accepted, restart);
+        }
         if let Expr::Compare(comparison) = condition
             && comparison.ops.len() == 1
             && matches!(comparison.comparators[0], Expr::NoneLiteral(_))
@@ -10572,6 +10609,21 @@ impl Compiler {
         if early_condition_truthiness(condition) == Some(true) {
             self.record_folded_value(condition)?;
             return Ok(());
+        }
+        if let Expr::BoolOp(boolean) = condition
+            && boolean.op == BoolOp::And
+        {
+            let Some((last, leading)) = boolean.values.split_last() else {
+                return Err(CompileError::Internal(
+                    "boolean expression contains no values".to_string(),
+                ));
+            };
+            for value in leading {
+                let next = self.assembler.label();
+                self.compile_comprehension_filter(value, element_location, next, restart)?;
+                self.assembler.mark(next);
+            }
+            return self.compile_comprehension_filter(last, element_location, accepted, restart);
         }
         if let Expr::Compare(comparison) = condition
             && comparison.ops.len() == 1
