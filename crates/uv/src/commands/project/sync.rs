@@ -1025,7 +1025,7 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(
+pub(super) fn store_credentials_from_target(
     target: InstallTarget<'_>,
     client_builder: &BaseClientBuilder,
 ) -> Result<()> {
