@@ -171,6 +171,7 @@ pub(crate) enum Constant {
         imag: f64,
     },
     String(String),
+    SurrogateString(Vec<u8>),
     Bytes(Vec<u8>),
     Tuple(Vec<Self>),
     FrozenSet(Vec<Self>),
@@ -2846,6 +2847,7 @@ impl Compiler {
                 self.compile_with_strict_owned_loads(matches!(test, Expr::If(_)), |compiler| {
                     compiler.compile_suite(body)
                 })?;
+                let pass_only_body = matches!(body, [Stmt::Pass(_)]);
                 if self.assembler.instruction_count() == body_start
                     && let Some(statement) = body.last()
                 {
@@ -2881,6 +2883,8 @@ impl Compiler {
                         self.assembler.preserve_last_inlined_jump_nop();
                     } else if nested_if_body_falls_through {
                         self.assembler.preserve_last_no_location();
+                    } else if pass_only_body {
+                        self.assembler.preserve_last_direct_inlined_jump_nop();
                     } else if matches!(body.last(), Some(Stmt::If(_))) {
                         // CPython emits this jump in the nested if's empty join block. When
                         // small-exit inlining replaces it with a NOP, no preceding instruction
@@ -8026,8 +8030,7 @@ impl Compiler {
                 }
             }
             Expr::StringLiteral(string) => {
-                let index =
-                    self.add_constant(Constant::String(string.value.to_str().to_string()))?;
+                let index = self.add_constant(self.string_literal_constant(string))?;
                 self.emit(LOAD_CONST, index, 1)?;
             }
             Expr::BytesLiteral(bytes) => {
@@ -11731,6 +11734,26 @@ impl Compiler {
         &self.source[start..end]
     }
 
+    fn string_literal_constant(&self, string: &ruff_python_ast::ExprStringLiteral) -> Constant {
+        let mut bytes = Vec::new();
+        let mut has_surrogates = false;
+        for part in &string.value {
+            if let Some(part_bytes) =
+                explicit_surrogate_string(part.as_str(), self.source_text(part.range))
+            {
+                bytes.extend(part_bytes);
+                has_surrogates = true;
+            } else {
+                bytes.extend_from_slice(part.as_str().as_bytes());
+            }
+        }
+        if has_surrogates {
+            Constant::SurrogateString(bytes)
+        } else {
+            Constant::String(string.value.to_str().to_string())
+        }
+    }
+
     fn generator_expression_range(
         &self,
         range: ruff_text_size::TextRange,
@@ -13349,6 +13372,96 @@ fn function_key(definition: &StmtFunctionDef) -> (u32, u32) {
     )
 }
 
+fn explicit_surrogate_string(value: &str, source: &str) -> Option<Vec<u8>> {
+    let source = source.as_bytes();
+    // Ruff stores invalid Unicode escapes as replacement characters. Retain their source order
+    // relative to real replacement characters so the marshal layer can restore surrogate-pass
+    // UTF-8 without changing a neighboring U+FFFD.
+    let replacement_character = [0xef, 0xbf, 0xbd];
+    let mut replacements = Vec::new();
+    let mut index = 0;
+    while index < source.len() {
+        if source[index..].starts_with(&replacement_character) {
+            replacements.push(None);
+            index += replacement_character.len();
+            continue;
+        }
+        if source[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+        let preceding_backslashes = source[..index]
+            .iter()
+            .rev()
+            .take_while(|byte| **byte == b'\\')
+            .count();
+        if preceding_backslashes % 2 == 1 {
+            index += 1;
+            continue;
+        }
+        let (digit_count, escape_len) = match source.get(index + 1) {
+            Some(b'u') => (4, 6),
+            Some(b'U') => (8, 10),
+            _ => {
+                index += 1;
+                continue;
+            }
+        };
+        let Some(end) = index
+            .checked_add(escape_len)
+            .filter(|end| *end <= source.len())
+        else {
+            index += 1;
+            continue;
+        };
+        let Some(codepoint) = std::str::from_utf8(&source[index + 2..index + 2 + digit_count])
+            .ok()
+            .and_then(|digits| u32::from_str_radix(digits, 16).ok())
+        else {
+            index += 1;
+            continue;
+        };
+        if (0xd800..=0xdfff).contains(&codepoint) {
+            replacements.push(Some(codepoint as u16));
+        } else if codepoint == 0xfffd {
+            replacements.push(None);
+        }
+        index = end;
+    }
+    if !replacements.iter().any(Option::is_some) {
+        return None;
+    }
+
+    let mut bytes = value.as_bytes().to_vec();
+    let mut search_start = 0;
+    let mut replaced = false;
+    for surrogate in replacements {
+        let Some(offset) = bytes[search_start..]
+            .windows(replacement_character.len())
+            .position(|window| window == replacement_character)
+            .map(|offset| search_start + offset)
+        else {
+            continue;
+        };
+        let Some(surrogate) = surrogate else {
+            search_start = offset + replacement_character.len();
+            continue;
+        };
+        let surrogate_bytes = [
+            0xe0 | (surrogate >> 12) as u8,
+            0x80 | ((surrogate >> 6) & 0x3f) as u8,
+            0x80 | (surrogate & 0x3f) as u8,
+        ];
+        bytes.splice(
+            offset..offset + replacement_character.len(),
+            surrogate_bytes,
+        );
+        search_start = offset + surrogate_bytes.len();
+        replaced = true;
+    }
+    replaced.then_some(bytes)
+}
+
 fn constants_equal(left: &Constant, right: &Constant) -> bool {
     match (left, right) {
         (Constant::None, Constant::None) | (Constant::Ellipsis, Constant::Ellipsis) => true,
@@ -13380,6 +13493,7 @@ fn constants_equal(left: &Constant, right: &Constant) -> bool {
                 && left_imag.to_bits() == right_imag.to_bits()
         }
         (Constant::String(left), Constant::String(right)) => left == right,
+        (Constant::SurrogateString(left), Constant::SurrogateString(right)) => left == right,
         (Constant::Bytes(left), Constant::Bytes(right)) => left == right,
         (Constant::Tuple(left), Constant::Tuple(right)) => {
             left.len() == right.len()
@@ -14788,6 +14902,7 @@ fn constant_truthiness(constant: &Constant) -> Option<bool> {
         Constant::Float(value) => Some(*value != 0.0),
         Constant::Complex { real, imag } => Some(*real != 0.0 || *imag != 0.0),
         Constant::String(value) => Some(!value.is_empty()),
+        Constant::SurrogateString(value) => Some(!value.is_empty()),
         Constant::Bytes(value) => Some(!value.is_empty()),
         Constant::Tuple(value) | Constant::FrozenSet(value) => Some(!value.is_empty()),
     }

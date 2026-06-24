@@ -36,6 +36,7 @@ enum ObjectKey {
     Float(u64),
     Complex(u64, u64),
     String(String),
+    SurrogateString(Vec<u8>),
     Bytes(Vec<u8>),
     ConstantTuple(Vec<Self>),
     FrozenSet(Vec<Self>),
@@ -145,6 +146,9 @@ impl ObjectGraph {
                     self.interned_strings.insert(value.clone());
                 }
                 self.record(ObjectKey::String(value.clone()));
+            }
+            Constant::SurrogateString(value) => {
+                self.record(ObjectKey::SurrogateString(value.clone()));
             }
             Constant::Bytes(value) => {
                 self.record(ObjectKey::Bytes(value.clone()));
@@ -319,6 +323,22 @@ impl Writer<'_> {
         self.output.extend_from_slice(bytes);
     }
 
+    fn surrogate_string_with_force(&mut self, value: &[u8], force_reference: bool) {
+        let Some(flag) =
+            self.begin_object(ObjectKey::SurrogateString(value.to_vec()), force_reference)
+        else {
+            return;
+        };
+        self.byte(TYPE_UNICODE | flag);
+        self.long(
+            value
+                .len()
+                .try_into()
+                .expect("marshal string exceeds 4 GiB"),
+        );
+        self.output.extend_from_slice(value);
+    }
+
     fn tuple_header(&mut self, key: ObjectKey, length: usize, force_reference: bool) -> bool {
         let Some(flag) = self.begin_object(key, force_reference) else {
             return false;
@@ -396,6 +416,9 @@ impl Writer<'_> {
                 self.output.extend_from_slice(&imag.to_le_bytes());
             }
             Constant::String(value) => self.string_with_force(value, force_reference),
+            Constant::SurrogateString(value) => {
+                self.surrogate_string_with_force(value, force_reference);
+            }
             Constant::Bytes(value) => self.bytes(value, force_reference),
             Constant::Tuple(values) => {
                 let key = constants_tuple_key(values);
@@ -522,6 +545,16 @@ impl Writer<'_> {
                 }
                 self.output.extend_from_slice(bytes);
             }
+            Constant::SurrogateString(value) => {
+                self.byte(TYPE_UNICODE | flag);
+                self.long(
+                    value
+                        .len()
+                        .try_into()
+                        .expect("marshal string exceeds 4 GiB"),
+                );
+                self.output.extend_from_slice(value);
+            }
             Constant::Bytes(value) => {
                 self.byte(TYPE_BYTES | flag);
                 self.long(value.len().try_into().expect("marshal value exceeds 4 GiB"));
@@ -638,6 +671,7 @@ fn slice_member_uses_identity(value: &Constant) -> bool {
         Constant::SignedInt(value) => !(-5..=256).contains(value),
         Constant::BigInt { .. } | Constant::Float(_) | Constant::Complex { .. } => true,
         Constant::String(value) => !is_cached_character(value),
+        Constant::SurrogateString(_) => true,
         Constant::Bytes(value) => value.len() > 1,
         Constant::None
         | Constant::Bool(_)
@@ -660,6 +694,7 @@ fn constant_key(value: &Constant) -> ObjectKey {
         Constant::Float(value) => ObjectKey::Float(value.to_bits()),
         Constant::Complex { real, imag } => ObjectKey::Complex(real.to_bits(), imag.to_bits()),
         Constant::String(value) => ObjectKey::String(value.clone()),
+        Constant::SurrogateString(value) => ObjectKey::SurrogateString(value.clone()),
         Constant::Bytes(value) => ObjectKey::Bytes(value.clone()),
         Constant::Tuple(values) => constants_tuple_key(values),
         Constant::FrozenSet(values) => {
@@ -775,6 +810,15 @@ fn constant_sort_key(value: &Constant) -> Vec<u8> {
                     );
                 }
                 output.extend_from_slice(bytes);
+            }
+            Constant::SurrogateString(value) => {
+                output.push(TYPE_UNICODE | flag);
+                output.extend_from_slice(
+                    &u32::try_from(value.len())
+                        .expect("sort-key string length fits in u32")
+                        .to_le_bytes(),
+                );
+                output.extend_from_slice(value);
             }
             Constant::Bytes(value) => {
                 output.push(TYPE_BYTES | flag);
