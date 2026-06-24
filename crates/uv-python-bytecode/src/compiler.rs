@@ -1626,8 +1626,7 @@ impl Compiler {
             for handler in self.active_exception_handlers.clone().iter().rev() {
                 self.emit(POP_EXCEPT, 0, -1)?;
                 if let Some(name) = &handler.name {
-                    let none = self.add_constant(Constant::None)?;
-                    self.emit(LOAD_CONST, none, 1)?;
+                    self.emit_deferred_constant_before_return(Constant::None)?;
                     self.store_name(name)?;
                     self.delete_name(name)?;
                 }
