@@ -11456,8 +11456,22 @@ impl Compiler {
             return range;
         }
         let mut start = usize::from(range.start());
-        while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-            start -= 1;
+        loop {
+            while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+                start -= 1;
+            }
+            let line_start = bytes[..start]
+                .iter()
+                .rposition(|byte| *byte == b'\n')
+                .map_or(0, |position| position + 1);
+            let comment_line = bytes[line_start..start]
+                .iter()
+                .find(|byte| !byte.is_ascii_whitespace())
+                == Some(&b'#');
+            if !comment_line {
+                break;
+            }
+            start = line_start;
         }
         if start > 0 && bytes[start - 1] == b'(' {
             start -= 1;
@@ -11466,8 +11480,16 @@ impl Compiler {
         }
 
         let mut end = usize::from(range.end());
-        while end < bytes.len() && bytes[end].is_ascii_whitespace() {
-            end += 1;
+        loop {
+            while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+                end += 1;
+            }
+            if bytes.get(end) != Some(&b'#') {
+                break;
+            }
+            while end < bytes.len() && !matches!(bytes[end], b'\n' | b'\r') {
+                end += 1;
+            }
         }
         if end < bytes.len() && bytes[end] == b')' {
             end += 1;

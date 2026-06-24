@@ -1065,7 +1065,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def nested(groups):\n    return (sum(item for item in group) for group in groups)\n\ndef lambda_inside(values):\n    return ((lambda: value) for value in values)\n";
+        let source = "def nested(groups):\n    return (sum(item for item in group) for group in groups)\n\ndef lambda_inside(values):\n    return ((lambda: value) for value in values)\n\nresult = consume(\n    # leading\n    item for item in values\n    # trailing\n)\n";
         let expected = Command::new(python)
             .args([
                 "-c",
