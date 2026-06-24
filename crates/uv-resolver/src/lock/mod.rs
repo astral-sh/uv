@@ -389,7 +389,16 @@ impl Lock {
                     continue;
                 };
                 let marker = *edge.weight();
-                package.add_dependency(&requires_python, dependency_dist, marker, root)?;
+                let dependency_marker = resolution
+                    .dependency_marker(edge.source(), edge.target())
+                    .unwrap_or_else(|| marker.combined());
+                package.add_dependency(
+                    &requires_python,
+                    dependency_dist,
+                    marker,
+                    dependency_marker,
+                    root,
+                )?;
             }
 
             let id = package.id.clone();
@@ -422,11 +431,15 @@ impl Lock {
                         continue;
                     };
                     let marker = *edge.weight();
+                    let dependency_marker = resolution
+                        .dependency_marker(edge.source(), edge.target())
+                        .unwrap_or_else(|| marker.combined());
                     package.add_optional_dependency(
                         &requires_python,
                         extra.clone(),
                         dependency_dist,
                         marker,
+                        dependency_marker,
                         root,
                     )?;
                 }
@@ -447,11 +460,15 @@ impl Lock {
                         continue;
                     };
                     let marker = *edge.weight();
+                    let dependency_marker = resolution
+                        .dependency_marker(edge.source(), edge.target())
+                        .unwrap_or_else(|| marker.combined());
                     package.add_group_dependency(
                         &requires_python,
                         group.clone(),
                         dependency_dist,
                         marker,
+                        dependency_marker,
                         root,
                     )?;
                 }
@@ -1127,6 +1144,25 @@ impl Lock {
             }
         }
 
+        let fork_markers_union = if self.fork_markers().is_empty() {
+            self.requires_python.to_marker_tree()
+        } else {
+            let mut fork_markers_union = MarkerTree::FALSE;
+            for fork_marker in self.fork_markers() {
+                fork_markers_union.or(fork_marker.pep508());
+            }
+            fork_markers_union
+        };
+        // The simplified marker space covered by this resolution, including the constraint that
+        // conflicting extras and groups cannot be active at the same time.
+        let environment = UniversalMarker::new(
+            fork_markers_union,
+            ConflictMarker::from_conflicts(&self.conflicts),
+        );
+        let simplified_environment =
+            SimplifiedMarkerTree::new(&self.requires_python, environment.combined())
+                .as_simplified_marker_tree();
+
         if !self.supported_environments.is_empty() {
             let supported_environments = each_element_on_its_line_array(
                 self.supported_environments
@@ -1439,7 +1475,11 @@ impl Lock {
 
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
-            packages.push(dist.to_toml(&self.requires_python, &dist_count_by_name)?);
+            packages.push(dist.to_toml(
+                &self.requires_python,
+                simplified_environment,
+                &dist_count_by_name,
+            )?);
         }
 
         doc.insert("package", Item::ArrayOfTables(packages));
@@ -2865,10 +2905,16 @@ impl Package {
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
         marker: UniversalMarker,
+        dependency_marker: MarkerTree,
         root: &Path,
     ) -> Result<(), LockError> {
-        let new_dep =
-            Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
+        let new_dep = Dependency::from_annotated_dist(
+            requires_python,
+            annotated_dist,
+            marker,
+            dependency_marker,
+            root,
+        )?;
         for existing_dep in &mut self.dependencies {
             if existing_dep.package_id == new_dep.package_id
                 // It's important that we do a comparison on
@@ -2911,9 +2957,16 @@ impl Package {
         extra: ExtraName,
         annotated_dist: &AnnotatedDist,
         marker: UniversalMarker,
+        dependency_marker: MarkerTree,
         root: &Path,
     ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
+        let dep = Dependency::from_annotated_dist(
+            requires_python,
+            annotated_dist,
+            marker,
+            dependency_marker,
+            root,
+        )?;
         let optional_deps = self.optional_dependencies.entry(extra).or_default();
         for existing_dep in &mut *optional_deps {
             if existing_dep.package_id == dep.package_id
@@ -2937,9 +2990,16 @@ impl Package {
         group: GroupName,
         annotated_dist: &AnnotatedDist,
         marker: UniversalMarker,
+        dependency_marker: MarkerTree,
         root: &Path,
     ) -> Result<(), LockError> {
-        let dep = Dependency::from_annotated_dist(requires_python, annotated_dist, marker, root)?;
+        let dep = Dependency::from_annotated_dist(
+            requires_python,
+            annotated_dist,
+            marker,
+            dependency_marker,
+            root,
+        )?;
         let deps = self.dependency_groups.entry(group).or_default();
         for existing_dep in &mut *deps {
             if existing_dep.package_id == dep.package_id
@@ -3451,6 +3511,7 @@ impl Package {
     fn to_toml(
         &self,
         requires_python: &RequiresPython,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
@@ -3468,7 +3529,7 @@ impl Package {
 
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
-                dep.to_toml(requires_python, dist_count_by_name)
+                dep.to_toml(simplified_environment, dist_count_by_name)
                     .into_inline_table()
             }));
             table.insert("dependencies", value(deps));
@@ -3478,7 +3539,7 @@ impl Package {
             let mut optional_deps = Table::new();
             for (extra, deps) in &self.optional_dependencies {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(requires_python, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -3494,7 +3555,7 @@ impl Package {
             let mut dependency_groups = Table::new();
             for (extra, deps) in &self.dependency_groups {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(requires_python, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -5478,6 +5539,10 @@ pub struct Dependency {
     /// `requires-python` applies to the entire lock file, it's
     /// acceptable to do comparisons on the simplified form.
     simplified_marker: SimplifiedMarkerTree,
+    /// The marker from the dependency edge, without any markers from the fork in which it was
+    /// resolved. When it is equivalent to `simplified_marker` within the resolution environment,
+    /// this is the smaller marker that is persisted in the lockfile.
+    simplified_dependency_marker: SimplifiedMarkerTree,
     /// The "complexified" marker is a universal marker whose PEP 508
     /// marker can stand on its own independent of `requires-python`.
     /// It can be safely used for any kind of marker algebra.
@@ -5490,14 +5555,18 @@ impl Dependency {
         package_id: PackageId,
         extra: BTreeSet<ExtraName>,
         complexified_marker: UniversalMarker,
+        dependency_marker: MarkerTree,
     ) -> Self {
         let simplified_marker =
             SimplifiedMarkerTree::new(requires_python, complexified_marker.combined());
+        let simplified_dependency_marker =
+            SimplifiedMarkerTree::new(requires_python, dependency_marker);
         let complexified_marker = simplified_marker.into_marker(requires_python);
         Self {
             package_id,
             extra,
             simplified_marker,
+            simplified_dependency_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
         }
     }
@@ -5506,6 +5575,7 @@ impl Dependency {
         requires_python: &RequiresPython,
         annotated_dist: &AnnotatedDist,
         complexified_marker: UniversalMarker,
+        dependency_marker: MarkerTree,
         root: &Path,
     ) -> Result<Self, LockError> {
         let package_id = PackageId::from_annotated_dist(annotated_dist, root)?;
@@ -5515,13 +5585,14 @@ impl Dependency {
             package_id,
             extra,
             complexified_marker,
+            dependency_marker,
         ))
     }
 
     /// Returns the TOML representation of this dependency.
     fn to_toml(
         &self,
-        _requires_python: &RequiresPython,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Table {
         let mut table = Table::new();
@@ -5535,8 +5606,34 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        if let Some(marker) = self.simplified_marker.try_to_string() {
-            table.insert("marker", value(marker));
+        let simplified_marker = self.simplified_marker.as_simplified_marker_tree();
+
+        // Avoid writing edge markers that are always fulfilled.
+        if !simplified_marker
+            .negate()
+            .is_disjoint(simplified_environment)
+        {
+            let simplified_dependency_marker = self
+                .simplified_dependency_marker
+                .as_simplified_marker_tree();
+            let marker = if simplified_dependency_marker == simplified_marker {
+                self.simplified_dependency_marker.try_to_string()
+            } else {
+                // The dependency marker can replace the full marker when they are equivalent
+                // within the valid fork and conflict marker space.
+                let mut marker_environment = simplified_marker;
+                marker_environment.and(simplified_environment);
+                let mut dependency_marker_environment = simplified_dependency_marker;
+                dependency_marker_environment.and(simplified_environment);
+                if marker_environment == dependency_marker_environment {
+                    self.simplified_dependency_marker.try_to_string()
+                } else {
+                    self.simplified_marker.try_to_string()
+                }
+            };
+            if let Some(marker) = marker {
+                table.insert("marker", value(marker));
+            }
         }
 
         table
@@ -5598,6 +5695,7 @@ impl DependencyWire {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker: self.marker,
+            simplified_dependency_marker: self.marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
         })
     }

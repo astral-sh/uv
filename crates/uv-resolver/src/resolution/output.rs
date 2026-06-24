@@ -41,6 +41,8 @@ use crate::{
 pub struct ResolverOutput {
     /// The underlying graph.
     pub(crate) graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
+    /// The markers from package metadata, without the fork markers propagated onto graph edges.
+    dependency_markers: Option<FxHashMap<ResolutionGraphEdgeId, MarkerTree>>,
     /// The range of supported Python versions.
     pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
@@ -56,6 +58,44 @@ pub struct ResolverOutput {
     pub(crate) overrides: Overrides,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+enum ResolutionGraphNodeId {
+    Root,
+    Dist {
+        distribution_id: DistributionId,
+        extra: Option<ExtraName>,
+        group: Option<GroupName>,
+    },
+}
+
+impl From<&ResolutionGraphNode> for ResolutionGraphNodeId {
+    fn from(node: &ResolutionGraphNode) -> Self {
+        match node {
+            ResolutionGraphNode::Root => Self::Root,
+            ResolutionGraphNode::Dist(dist) => Self::Dist {
+                distribution_id: dist.dist.distribution_id(),
+                extra: dist.extra.clone(),
+                group: dist.group.clone(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+struct ResolutionGraphEdgeId {
+    from: ResolutionGraphNodeId,
+    to: ResolutionGraphNodeId,
+}
+
+impl ResolutionGraphEdgeId {
+    fn new(from: &ResolutionGraphNode, to: &ResolutionGraphNode) -> Self {
+        Self {
+            from: from.into(),
+            to: to.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +178,8 @@ impl ResolverOutput {
         let size_guess = resolutions[0].nodes.len();
         let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
             Graph::with_capacity(size_guess, size_guess);
+        let mut dependency_markers =
+            (!options.artifact_environments.is_empty()).then(FxHashMap::default);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
         let mut diagnostics = Vec::new();
@@ -179,7 +221,14 @@ impl ResolverOutput {
                     continue;
                 }
 
-                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker);
+                Self::add_edge(
+                    &mut graph,
+                    &mut dependency_markers,
+                    &mut inverse,
+                    root_index,
+                    edge,
+                    marker,
+                );
             }
         }
 
@@ -230,6 +279,7 @@ impl ResolverOutput {
 
         let output = Self {
             graph,
+            dependency_markers,
             requires_python,
             diagnostics,
             requirements: requirements.to_vec(),
@@ -280,8 +330,19 @@ impl ResolverOutput {
         Ok(output)
     }
 
+    pub(crate) fn dependency_marker(&self, from: NodeIndex, to: NodeIndex) -> Option<MarkerTree> {
+        self.dependency_markers
+            .as_ref()?
+            .get(&ResolutionGraphEdgeId::new(
+                &self.graph[from],
+                &self.graph[to],
+            ))
+            .copied()
+    }
+
     fn add_edge(
         graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
+        dependency_markers: &mut Option<FxHashMap<ResolutionGraphEdgeId, MarkerTree>>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
@@ -311,6 +372,16 @@ impl ResolverOutput {
             edge_marker.and(marker);
             edge_marker
         };
+
+        if let Some(dependency_markers) = dependency_markers {
+            dependency_markers
+                .entry(ResolutionGraphEdgeId::new(
+                    &graph[from_index],
+                    &graph[to_index],
+                ))
+                .and_modify(|marker| marker.or(edge.marker))
+                .or_insert(edge.marker);
+        }
 
         if let Some(weight) = graph
             .find_edge(from_index, to_index)
