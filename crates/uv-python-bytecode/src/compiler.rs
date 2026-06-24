@@ -10667,6 +10667,28 @@ impl Compiler {
             }
             return self.compile_comprehension_filter(last, element_location, accepted, restart);
         }
+        if let Expr::UnaryOp(unary) = condition
+            && unary.op == UnaryOp::Not
+        {
+            self.compile_expression(&unary.operand)?;
+            self.assembler
+                .set_location(self.source_location(unary.operand.range()));
+            self.emit(TO_BOOL, 0, 0)?;
+            let exclusion_start = self.assembler.label();
+            self.assembler.mark(exclusion_start);
+            self.assembler.set_location(element_location);
+            self.emit_jump_forward(POP_JUMP_IF_FALSE, accepted, -1)?;
+            self.emit(NOT_TAKEN, 0, 0)?;
+            self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+            let exclusion_end = self.assembler.label();
+            self.assembler.mark(exclusion_end);
+            self.generator_region_exclusions
+                .push((exclusion_start, exclusion_end));
+            for exclusions in &mut self.active_comprehension_region_exclusions {
+                exclusions.push((exclusion_start, exclusion_end));
+            }
+            return Ok(());
+        }
         if let Expr::Compare(comparison) = condition
             && comparison.ops.len() > 1
         {
