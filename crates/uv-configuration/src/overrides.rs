@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap};
+use serde::de::IntoDeserializer;
 
 use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
@@ -34,18 +35,42 @@ pub struct PackageOverride<T> {
 }
 
 /// An override, either global or scoped to a specific package version.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
-#[serde(
-    untagged,
-    bound(
-        serialize = "T: serde::Serialize",
-        deserialize = "T: serde::Deserialize<'de>"
-    )
-)]
+#[serde(untagged, bound(serialize = "T: serde::Serialize"))]
 pub enum Override<T> {
     Package(PackageOverride<T>),
     Requirement(T),
+}
+
+// A derived `#[serde(untagged)]` implementation collapses detailed requirement parse errors into
+// "data did not match any variant", so use a type-directed visitor for string requirements.
+impl<'de, T> serde::Deserialize<'de> for Override<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum MapOverride<T> {
+            Package(PackageOverride<T>),
+            Requirement(T),
+        }
+
+        serde_untagged::UntaggedEnumVisitor::new()
+            .string(|string| T::deserialize(string.into_deserializer()).map(Self::Requirement))
+            .map(|map| {
+                map.deserialize::<MapOverride<T>>()
+                    .map(|entry| match entry {
+                        MapOverride::Package(package) => Self::Package(package),
+                        MapOverride::Requirement(requirement) => Self::Requirement(requirement),
+                    })
+            })
+            .deserialize(deserializer)
+    }
 }
 
 /// A set of overrides for a set of requirements.
