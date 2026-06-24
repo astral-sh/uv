@@ -1802,6 +1802,49 @@ class Shadowed:
     }
 
     #[test]
+    fn matches_cpython_marshal_for_annotations_in_compound_suites() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = r#"with manager:
+    in_with: WithAnnotation = 1
+
+try:
+    in_try: TryAnnotation = 2
+except Error:
+    in_except: ExceptAnnotation = 3
+else:
+    in_else: ElseAnnotation = 4
+finally:
+    in_finally: FinallyAnnotation = 5
+
+match subject:
+    case 1:
+        in_match: MatchAnnotation = 6
+"#;
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'compound_annotations.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "compound_annotations.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_unreachable_deferred_annotations() {
         let Some(python) = python_314() else {
             return;

@@ -15569,6 +15569,27 @@ fn collect_simple_annotations<'a>(
                 collect_simple_annotations(&statement.body, annotations);
                 collect_simple_annotations(&statement.orelse, annotations);
             }
+            Stmt::Try(statement) => {
+                collect_simple_annotations(&statement.body, annotations);
+                collect_simple_annotations(&statement.orelse, annotations);
+                for handler in &statement.handlers {
+                    if let Some(handler) = handler.as_except_handler() {
+                        collect_simple_annotations(&handler.body, annotations);
+                    }
+                }
+                collect_simple_annotations(&statement.finalbody, annotations);
+                // Try/finally lowers the final body once for the normal path and once for the
+                // exceptional path. CPython records deferred annotations during both copies.
+                collect_simple_annotations(&statement.finalbody, annotations);
+            }
+            Stmt::With(statement) => {
+                collect_simple_annotations(&statement.body, annotations);
+            }
+            Stmt::Match(statement) => {
+                for case in &statement.cases {
+                    collect_simple_annotations(&case.body, annotations);
+                }
+            }
             _ => {}
         }
     }
