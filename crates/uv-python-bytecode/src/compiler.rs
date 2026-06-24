@@ -9344,7 +9344,13 @@ impl Compiler {
                 )?;
             }
             if discard_result {
-                for (position, index) in temporary_indices.iter().enumerate() {
+                let final_index = temporary_indices.last();
+                let restore_indices = temporary_indices
+                    [..temporary_indices.len().saturating_sub(1)]
+                    .iter()
+                    .rev()
+                    .chain(final_index);
+                for (position, index) in restore_indices.enumerate() {
                     if position > 0 {
                         self.assembler.fusion_barrier();
                     }
