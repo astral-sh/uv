@@ -1574,11 +1574,20 @@ impl Compiler {
             }
             if let Stmt::Pass(statement) = statement
                 && self.active_exception_region_exclusions.is_empty()
-                && self.active_with_region_exclusions.is_empty()
+                && (self.active_with_region_exclusions.is_empty() || body.len() > 1)
             {
                 self.assembler
                     .set_location(self.source_location(statement.range));
+                let noop_start = self.assembler.label();
+                self.assembler.mark(noop_start);
                 self.emit(NOP, 0, 0)?;
+                let noop_end = self.assembler.label();
+                self.assembler.mark(noop_end);
+                if is_final {
+                    for exclusions in &mut self.active_with_region_exclusions {
+                        exclusions.push((noop_start, noop_end));
+                    }
+                }
             } else if let Stmt::Expr(expression) = statement
                 && fold_constant(&expression.value).is_some()
             {
@@ -4708,7 +4717,24 @@ impl Compiler {
         for name in &newly_initialized_targets {
             self.initialized_locals.remove(name);
         }
+        let orelse_start = self.assembler.instruction_count();
         self.compile_suite(&statement.orelse)?;
+        if self.assembler.instruction_count() == orelse_start
+            && let [Stmt::Pass(statement)] = statement.orelse.as_slice()
+            && self.active_exception_region_exclusions.is_empty()
+            && !self.active_with_region_exclusions.is_empty()
+        {
+            let noop_start = self.assembler.label();
+            self.assembler.mark(noop_start);
+            self.assembler
+                .set_location(self.source_location(statement.range));
+            self.emit(NOP, 0, 0)?;
+            let noop_end = self.assembler.label();
+            self.assembler.mark(noop_end);
+            for exclusions in &mut self.active_with_region_exclusions {
+                exclusions.push((noop_start, noop_end));
+            }
+        }
         if has_break {
             self.assembler.mark(end);
         }
@@ -6614,7 +6640,10 @@ impl Compiler {
                 self.exclude_terminal_if_not_taken = true;
                 self.compile_statement(last)?;
                 self.exclude_terminal_if_not_taken = false;
-            } else {
+            } else if !matches!(body, [Stmt::Pass(_)]) {
+                // Keep direct pass-only bodies on the with compiler's fallback path. CPython
+                // retains that NOP inside the protected range, unlike a terminal pass in a
+                // nested suite such as a loop `else`.
                 self.compile_suite(body)?;
             }
             let trailing_nop_is_covered = body_previous_location.is_some_and(|previous| {
@@ -6804,7 +6833,9 @@ impl Compiler {
         });
         let body_start = self.assembler.instruction_count();
         if remaining.is_empty() {
-            self.compile_suite(body)?;
+            if !matches!(body, [Stmt::Pass(_)]) {
+                self.compile_suite(body)?;
+            }
         } else {
             self.compile_async_with_items(remaining, body, false)?;
         }
@@ -11151,7 +11182,12 @@ impl Compiler {
                     .set_location(self.source_location(expression.test.range()));
                 self.emit(NOP, 0, 0)?;
             }
-            return self.compile_expression(selected);
+            self.compile_expression(selected)?;
+            // CPython leaves the eliminated branch as an empty CFG block before the join.
+            // Stack-depth analysis crosses that block, but borrowed-load analysis does not,
+            // so loads emitted after the folded conditional remain owned.
+            self.assembler.prevent_next_borrow_reachability();
+            return Ok(());
         }
         let base_depth = self.depth;
         let else_label = self.assembler.label();

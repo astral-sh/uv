@@ -62,6 +62,10 @@ struct Instruction {
     // CPython's cold-block optimizer retains stale exception ownership for the short form of
     // certain synthetic handler-exit jumps, but not when the jump needs an `EXTENDED_ARG`.
     exclude_exception_if_extended: bool,
+    // CPython's borrowed-load traversal stops at some optimized-away empty CFG blocks. This
+    // marks the first instruction after such a block without exposing a synthetic label to the
+    // other assembler passes.
+    borrow_unreachable_entry: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,6 +84,7 @@ pub(crate) struct Assembler {
     borrow_unreachable_blocks: HashSet<Label>,
     load_fast_borrowing_enabled: bool,
     strict_owned_loads: bool,
+    next_instruction_borrow_unreachable: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -128,6 +133,7 @@ impl Default for Assembler {
             borrow_unreachable_blocks: HashSet::new(),
             load_fast_borrowing_enabled: true,
             strict_owned_loads: false,
+            next_instruction_borrow_unreachable: false,
         }
     }
 }
@@ -188,6 +194,10 @@ impl Assembler {
     /// Keeps CPython's block-local borrowed-load optimizer from visiting this block.
     pub(crate) fn prevent_borrow_reachability(&mut self, label: Label) {
         self.borrow_unreachable_blocks.insert(label);
+    }
+
+    pub(crate) fn prevent_next_borrow_reachability(&mut self) {
+        self.next_instruction_borrow_unreachable = true;
     }
 
     pub(crate) fn mark_before_trailing_instructions(&mut self, label: Label, count: usize) {
@@ -560,6 +570,8 @@ impl Assembler {
         if force_owned_load {
             opcode = Opcode::new(84, 0);
         }
+        let borrow_unreachable_entry =
+            std::mem::take(&mut self.next_instruction_borrow_unreachable);
         self.items.push(Item::Instruction(Instruction {
             opcode,
             operand,
@@ -579,6 +591,7 @@ impl Assembler {
             converted_pop_block: false,
             normalized_exception_owner: None,
             exclude_exception_if_extended: false,
+            borrow_unreachable_entry,
         }));
     }
 
@@ -1377,6 +1390,7 @@ impl Assembler {
                         converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended,
+                        borrow_unreachable_entry: false,
                     }),
                 ],
             );
@@ -1845,6 +1859,7 @@ impl Assembler {
                         converted_pop_block: false,
                         normalized_exception_owner: None,
                         exclude_exception_if_extended: false,
+                        borrow_unreachable_entry: false,
                     }),
                 );
             }
@@ -2785,7 +2800,8 @@ impl Assembler {
         let mut blocks = Vec::<Vec<usize>>::new();
         let mut block = Vec::new();
         for (index, item) in self.items.iter().enumerate() {
-            if matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
+            if (matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
+                || matches!(item, Item::Instruction(instruction) if instruction.borrow_unreachable_entry))
                 && !block.is_empty()
             {
                 blocks.push(std::mem::take(&mut block));
@@ -2824,11 +2840,19 @@ impl Assembler {
                 Item::Label(_) => {}
             }
         }
-        let borrow_unreachable_blocks = self
+        let mut borrow_unreachable_blocks = self
             .borrow_unreachable_blocks
             .iter()
             .filter_map(|label| label_blocks.get(label).copied())
             .collect::<HashSet<_>>();
+        borrow_unreachable_blocks.extend(self.items.iter().enumerate().filter_map(
+            |(index, item)| match item {
+                Item::Instruction(instruction) if instruction.borrow_unreachable_entry => {
+                    item_blocks[index]
+                }
+                Item::Instruction(_) | Item::Label(_) => None,
+            },
+        ));
         let mut reachable = vec![false; blocks.len()];
         let mut pending = (!blocks.is_empty())
             .then_some(0)
@@ -3125,7 +3149,10 @@ impl Assembler {
                 index += 1;
                 continue;
             };
-            if first.prevent_fusion_with_next || second.prevent_fusion_with_previous {
+            if first.prevent_fusion_with_next
+                || second.prevent_fusion_with_previous
+                || second.borrow_unreachable_entry
+            {
                 fused.push(self.items[index]);
                 index += 1;
                 continue;
@@ -3183,6 +3210,7 @@ impl Assembler {
                     .or(second.normalized_exception_owner),
                 exclude_exception_if_extended: first.exclude_exception_if_extended
                     || second.exclude_exception_if_extended,
+                borrow_unreachable_entry: first.borrow_unreachable_entry,
             }));
             index += 2;
         }
