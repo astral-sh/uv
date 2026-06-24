@@ -571,6 +571,7 @@ impl Assembler {
             removed_max_depth = Some(removed_max_depth.map_or(depth, |current| current.max(depth)));
         }
         self.remove_redundant_forward_jumps();
+        self.optimize_redundant_store_fast();
         self.optimize_swap_runs();
         self.apply_static_swaps();
         self.duplicate_exit_blocks();
@@ -657,6 +658,34 @@ impl Assembler {
         Err(CompileError::Internal(
             "jump layout did not converge".to_string(),
         ))
+    }
+
+    /// Replaces an overwritten local store with a stack pop.
+    ///
+    /// CPython applies this peephole before superinstruction fusion when two
+    /// adjacent stores target the same local on the same traced line.
+    fn optimize_redundant_store_fast(&mut self) {
+        const POP_TOP: u8 = 31;
+        const STORE_FAST: u8 = 112;
+
+        for index in 0..self.items.len().saturating_sub(1) {
+            let [Item::Instruction(first), Item::Instruction(second)] =
+                &mut self.items[index..index + 2]
+            else {
+                continue;
+            };
+            if first.opcode.code == STORE_FAST
+                && second.opcode.code == STORE_FAST
+                && matches!(
+                    (first.operand, second.operand),
+                    (Operand::Value(first), Operand::Value(second)) if first == second
+                )
+                && first.location.line == second.location.line
+            {
+                first.opcode = Opcode::new(POP_TOP, 0);
+                first.operand = Operand::Value(0);
+            }
+        }
     }
 
     fn remove_unreachable_instructions(&mut self) -> Option<u32> {
@@ -3689,5 +3718,13 @@ mod tests {
         let mut assembler = Assembler::default();
         assembler.emit(Opcode::new(82, 0), 0x1234);
         assert_eq!(assembler.finish().unwrap(), [69, 0x12, 82, 0x34]);
+    }
+
+    #[test]
+    fn removes_an_overwritten_local_store() {
+        let mut assembler = Assembler::default();
+        assembler.emit(Opcode::new(112, 0), 1);
+        assembler.emit(Opcode::new(112, 0), 1);
+        assert_eq!(assembler.finish().unwrap(), [31, 0, 112, 1]);
     }
 }
