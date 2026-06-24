@@ -7313,7 +7313,7 @@ impl Compiler {
         let mut child_plan =
             FunctionPlan::build(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0);
         for name in child_plan.resolve() {
-            if type_names.contains(&name) {
+            if type_names.contains(&name) || self.can_provide_closure(&name) {
                 child_plan.freevars.insert(name);
             } else {
                 child_plan.mark_global(&name);
@@ -7342,9 +7342,13 @@ impl Compiler {
             children: vec![child_plan],
         };
         for name in wrapper_plan.resolve() {
-            wrapper_plan.mark_global(&name);
+            if self.can_provide_closure(&name) {
+                wrapper_plan.freevars.insert(name);
+            } else {
+                wrapper_plan.mark_global(&name);
+            }
         }
-        if matches!(self.scope, Scope::Class { .. }) && function_has_annotations(definition) {
+        if matches!(self.scope, Scope::Class { .. }) {
             wrapper_plan.freevars.insert("__classdict__".to_string());
         }
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
@@ -7701,6 +7705,11 @@ impl Compiler {
             class_required_names(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0);
         let mut cellvars: HashSet<_> = type_names.intersection(&required_names).cloned().collect();
         cellvars.insert(".type_params".to_string());
+        let freevars = required_names
+            .iter()
+            .filter(|name| self.can_provide_closure(name))
+            .cloned()
+            .collect();
         let plan = FunctionPlan {
             key: (0, 0),
             locals,
@@ -7709,7 +7718,7 @@ impl Compiler {
             references: HashSet::new(),
             annotation_references: HashSet::new(),
             cellvars,
-            freevars: BTreeSet::new(),
+            freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
@@ -7757,13 +7766,26 @@ impl Compiler {
         wrapper.compile_plain_class_definition(&inner_definition)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
+        let wrapper_closure_names: Vec<_> = wrapper
+            .locals
+            .iter()
+            .zip(&wrapper.local_kinds)
+            .filter(|(_, kind)| **kind & CO_FAST_FREE != 0)
+            .map(|(name, _)| name.clone())
+            .collect();
 
         let definition_location =
             self.definition_location(definition.range, definition.name.range(), b"class", false);
         self.assembler.set_location(definition_location);
+        if !wrapper_closure_names.is_empty() {
+            self.emit_closure_tuple(&wrapper_closure_names)?;
+        }
         let code = self.add_constant(Constant::Code(Box::new(wrapper)))?;
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
+        if !wrapper_closure_names.is_empty() {
+            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+        }
         self.emit(PUSH_NULL, 0, 1)?;
         self.emit(CALL, 0, -1)?;
         for decorator in definition.decorator_list.iter().rev() {

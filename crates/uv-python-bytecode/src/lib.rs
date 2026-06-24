@@ -349,6 +349,44 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_generic_wrapper_closures() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = r#"def outer():
+    value = int
+
+    class Nested[T]:
+        item: value
+
+    return Nested
+
+
+class Generic[T]:
+    def method[U](self):
+        return T, U
+"#;
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'generic_closures.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "generic_closures.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_class_type_aliases() {
         let Some(python) = python_314() else {
             return;
