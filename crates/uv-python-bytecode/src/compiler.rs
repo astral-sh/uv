@@ -2603,8 +2603,7 @@ impl Compiler {
                         self.assembler.mark(start);
                         exception_unwind_start = Some(start);
                     }
-                    let protected_pop_except = (!preserve_tos
-                        && !return_is_overridden
+                    let protected_pop_except = (!return_is_overridden
                         && !self.active_return_finally_contexts.is_empty())
                     .then(|| {
                         let start = self.assembler.label();
@@ -2633,7 +2632,7 @@ impl Compiler {
                     }
                     next_loop = handler.loop_depth;
                 }
-                let return_finally_contexts = if !preserve_tos && !return_is_overridden {
+                let return_finally_contexts = if !return_is_overridden {
                     std::mem::take(&mut self.active_return_finally_contexts)
                 } else {
                     Vec::new()
@@ -2643,6 +2642,9 @@ impl Compiler {
                         match context.iterator_cleanup {
                             IteratorCleanup::None => {}
                             IteratorCleanup::Sync | IteratorCleanup::Async => {
+                                if preserve_tos {
+                                    self.emit(SWAP, 2, 0)?;
+                                }
                                 self.emit(POP_TOP, 0, -1)?;
                             }
                         }
@@ -4955,6 +4957,13 @@ impl Compiler {
             None
         } else {
             let body_instruction_count = self.assembler.instruction_count();
+            if statement.body.len() > 1
+                && let Some(Stmt::Pass(pass)) = statement.body.first()
+            {
+                self.assembler
+                    .set_location(self.source_location(pass.range));
+                self.emit(NOP, 0, 0)?;
+            }
             if exclude_terminal_body_not_taken
                 && let Some((last @ Stmt::If(_), leading)) = statement.body.split_last()
             {
@@ -5938,6 +5947,13 @@ impl Compiler {
         let protected_result = (|| -> Result<bool, CompileError> {
             if statement.handlers.is_empty() {
                 let instruction_count = self.assembler.instruction_count();
+                if statement.body.len() > 1
+                    && let Some(Stmt::Pass(pass)) = statement.body.first()
+                {
+                    self.assembler
+                        .set_location(self.source_location(pass.range));
+                    self.emit(NOP, 0, 0)?;
+                }
                 self.compile_suite(&statement.body)?;
                 let has_instructions = self.assembler.instruction_count() > instruction_count;
                 if !has_instructions {

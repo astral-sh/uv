@@ -1303,7 +1303,7 @@ mod tests {
         let Some(python) = python_314() else {
             return;
         };
-        let source = "def return_through_finally(items):\n    for item in items:\n        try:\n            pass\n        except Exception:\n            return\n        finally:\n            consume(item)\n";
+        let source = "def return_through_finally(items):\n    for item in items:\n        try:\n            pass\n        except Exception:\n            return\n        finally:\n            consume(item)\n\ndef preserve_return_value():\n    try:\n        pass\n        return produce()\n    finally:\n        consume()\n\ndef preserve_try_pass():\n    try:\n        pass\n        return produce()\n    except Exception:\n        recover()\n";
         let expected = Command::new(python)
             .args([
                 "-c",
