@@ -520,6 +520,11 @@ impl Assembler {
         const LOAD_CONST: u8 = 82;
         const LOAD_COMMON_CONSTANT: u8 = 81;
         const LOAD_SMALL_INT: u8 = 94;
+        const JUMP_FORWARD: u8 = 77;
+        const RETURN_VALUE: u8 = 35;
+
+        let is_constant_load =
+            |opcode| matches!(opcode, LOAD_CONST | LOAD_COMMON_CONSTANT | LOAD_SMALL_INT);
 
         for index in 0..self.items.len().saturating_sub(1) {
             let [Item::Instruction(load), Item::Instruction(pop)] =
@@ -527,17 +532,60 @@ impl Assembler {
             else {
                 continue;
             };
-            if !matches!(
-                load.opcode.code,
-                LOAD_CONST | LOAD_COMMON_CONSTANT | LOAD_SMALL_INT
-            ) || pop.opcode.code != POP_TOP
-            {
+            if !is_constant_load(load.opcode.code) || pop.opcode.code != POP_TOP {
                 continue;
             }
             load.opcode = Opcode::new(NOP, 0);
             load.operand = Operand::Value(0);
             pop.opcode = Opcode::new(NOP, 0);
             pop.operand = Operand::Value(0);
+        }
+
+        let mut label_positions = HashMap::new();
+        for (index, item) in self.items.iter().enumerate() {
+            if let Item::Label(label) = item {
+                label_positions.insert(*label, index);
+            }
+        }
+        let mut replacements = Vec::new();
+        for index in 0..self.items.len().saturating_sub(1) {
+            let [Item::Instruction(load), Item::Instruction(jump)] = self.items[index..index + 2]
+            else {
+                continue;
+            };
+            let Operand::Forward(target) = jump.operand else {
+                continue;
+            };
+            if !is_constant_load(load.opcode.code) || jump.opcode.code != JUMP_FORWARD {
+                continue;
+            }
+            let Some(target_position) = label_positions.get(&target).copied() else {
+                continue;
+            };
+            let target = self.items[target_position + 1..]
+                .iter()
+                .filter_map(|item| {
+                    if let Item::Instruction(instruction) = item {
+                        Some(*instruction)
+                    } else {
+                        None
+                    }
+                })
+                .take(3)
+                .collect::<Vec<_>>();
+            let [pop, return_load, return_value] = target.as_slice() else {
+                continue;
+            };
+            if pop.opcode.code == POP_TOP
+                && is_constant_load(return_load.opcode.code)
+                && return_value.opcode.code == RETURN_VALUE
+            {
+                replacements.push((index, *return_load, *return_value));
+            }
+        }
+        for (index, return_load, return_value) in replacements {
+            self.items[index] = Item::Instruction(return_load);
+            self.items[index + 1] = Item::Instruction(return_value);
         }
     }
 
