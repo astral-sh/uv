@@ -453,6 +453,32 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_loop_control_unwinding() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "def sync_context(manager, items):\n    for item in items:\n        with manager:\n            if item > 0:\n                continue\n            break\n\ndef exception_handler(items):\n    for item in items:\n        try:\n            consume(item)\n        except Exception:\n            handle(item)\n            continue\n        use(item)\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'loop_control_unwind.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "loop_control_unwind.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_async_comprehension_cleanup_exits() {
         let Some(python) = python_314() else {
             return;
@@ -1940,12 +1966,29 @@ with Manager(False) as value:
 with Manager(True):
     raise ValueError("suppressed")
 
+for index in range(3):
+    with Manager(False):
+        events.append(index)
+        if index == 0:
+            continue
+        break
+
+for index in range(2):
+    try:
+        raise ValueError(index)
+    except ValueError:
+        events.append(f"handled-{index}")
+        continue
+
 print(events)
 "#;
         let Some(output) = execute(source) else {
             return;
         };
-        assert_eq!(output, "['enter', 42, 'exit', 'enter', 'exit']\n");
+        assert_eq!(
+            output,
+            "['enter', 42, 'exit', 'enter', 'exit', 'enter', 0, 'exit', 'enter', 1, 'exit', 'handled-0', 'handled-1']\n"
+        );
     }
 
     #[test]
@@ -2037,6 +2080,16 @@ async def return_from_context():
     async with AsyncManager() as value:
         return value + 1
 
+async def loop_contexts():
+    values = []
+    for index in range(3):
+        async with AsyncManager() as value:
+            values.append(value)
+            if index == 0:
+                continue
+            break
+    return values
+
 async def comprehensions():
     generated = (number async for number in numbers())
     return (
@@ -2060,14 +2113,19 @@ print(
     asyncio.run(comprehensions()),
     asyncio.run(consume_awaited_generator()),
 )
-print(asyncio.run(return_from_context()), events[-2:])
+print(
+    asyncio.run(return_from_context()),
+    events[-2:],
+    asyncio.run(loop_contexts()),
+    events[-4:],
+)
 ";
         let Some(output) = execute(source) else {
             return;
         };
         assert_eq!(
             output,
-            "(42, 1, 2) [1, 2, 'done'] [1] ['enter', 42, 'exit', 'enter', 'ValueError'] ([4], {1, 2}, {1: 2, 2: 4}, [1, 2]) [42, 42]\n43 ['enter', 'exit']\n"
+            "(42, 1, 2) [1, 2, 'done'] [1] ['enter', 42, 'exit', 'enter', 'ValueError'] ([4], {1, 2}, {1: 2, 2: 4}, [1, 2]) [42, 42]\n43 ['enter', 'exit'] [42, 42] ['enter', 'exit', 'enter', 'exit']\n"
         );
     }
 

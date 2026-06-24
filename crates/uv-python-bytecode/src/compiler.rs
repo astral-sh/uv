@@ -226,6 +226,7 @@ struct LoopContext {
     continue_label: Label,
     break_label: Label,
     iterator_cleanup: IteratorCleanup,
+    with_depth: usize,
     break_returns: bool,
     preserve_break_exit: bool,
 }
@@ -1710,6 +1711,7 @@ impl Compiler {
             continue_label: start,
             break_label: condition_false,
             iterator_cleanup: IteratorCleanup::None,
+            with_depth: self.active_with_exits.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
@@ -1755,6 +1757,7 @@ impl Compiler {
             continue_label: start,
             break_label: exits[0].1,
             iterator_cleanup: IteratorCleanup::None,
+            with_depth: self.active_with_exits.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
@@ -2484,6 +2487,9 @@ impl Compiler {
                     .last()
                     .copied()
                     .ok_or_else(|| CompileError::Internal("break outside loop".to_string()))?;
+                self.emit(NOP, 0, 0)?;
+                self.emit_loop_control_exception_unwind(self.loops.len())?;
+                let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 match context.iterator_cleanup {
                     IteratorCleanup::None => {}
                     IteratorCleanup::Sync => self.emit(POP_TOP, 0, -1)?,
@@ -2501,11 +2507,17 @@ impl Compiler {
                         self.assembler.preserve_last_inlined_jump_nop();
                     }
                 }
-                if let Some(exclusion_start) = exclusion_start {
+                if exclusion_start.is_some() || !with_unwind_starts.is_empty() {
                     let exclusion_end = self.assembler.label();
                     self.assembler.mark(exclusion_end);
-                    for exclusions in &mut self.active_exception_region_exclusions {
-                        exclusions.push((exclusion_start, exclusion_end));
+                    if let Some(exclusion_start) = exclusion_start {
+                        for exclusions in &mut self.active_exception_region_exclusions {
+                            exclusions.push((exclusion_start, exclusion_end));
+                        }
+                    }
+                    for (index, unwind_start) in with_unwind_starts {
+                        self.active_with_region_exclusions[index]
+                            .push((unwind_start, exclusion_end));
                     }
                 }
                 self.set_depth(unreachable_depth);
@@ -2522,17 +2534,27 @@ impl Compiler {
                     self.loops.last().copied().ok_or_else(|| {
                         CompileError::Internal("continue outside loop".to_string())
                     })?;
+                self.emit(NOP, 0, 0)?;
+                self.emit_loop_control_exception_unwind(self.loops.len())?;
+                let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 self.emit_jump_backward(JUMP_BACKWARD, context.continue_label, 0)?;
                 // CPython emits a temporary NOP before loop control, so an incoming jump sees
                 // the NOP instead of threading through this backward jump.
                 self.assembler.prevent_last_jump_threading_target();
-                if let Some(exclusion_start) = exclusion_start {
+                if exclusion_start.is_some() || !with_unwind_starts.is_empty() {
                     let exclusion_end = self.assembler.label();
                     self.assembler.mark(exclusion_end);
-                    for exclusions in &mut self.active_exception_region_exclusions {
-                        exclusions.push((exclusion_start, exclusion_end));
+                    if let Some(exclusion_start) = exclusion_start {
+                        for exclusions in &mut self.active_exception_region_exclusions {
+                            exclusions.push((exclusion_start, exclusion_end));
+                        }
+                    }
+                    for (index, unwind_start) in with_unwind_starts {
+                        self.active_with_region_exclusions[index]
+                            .push((unwind_start, exclusion_end));
                     }
                 }
+                self.set_depth(starting_depth);
             }
             Stmt::Return(statement) => {
                 if !matches!(self.scope, Scope::Function { .. }) {
@@ -2682,27 +2704,7 @@ impl Compiler {
                         }
                     }
                 }
-                let mut with_unwind_starts = Vec::new();
-                for (index, context) in self.active_with_exits.clone().into_iter().enumerate().rev()
-                {
-                    let start = self.assembler.label();
-                    self.assembler.mark(start);
-                    with_unwind_starts.push((index, start));
-                    self.assembler.set_location(context.location);
-                    if preserve_tos {
-                        self.emit(SWAP, 3, 0)?;
-                        self.emit(SWAP, 2, 0)?;
-                    }
-                    let none = self.add_constant(Constant::None)?;
-                    self.emit(LOAD_CONST, none, 1)?;
-                    self.emit(LOAD_CONST, none, 1)?;
-                    self.emit(LOAD_CONST, none, 1)?;
-                    self.emit(CALL, 3, -4)?;
-                    if context.is_async {
-                        self.compile_awaitable_on_stack(2)?;
-                    }
-                    self.emit(POP_TOP, 0, -1)?;
-                }
+                let with_unwind_starts = self.emit_active_with_unwind(0, preserve_tos)?;
                 let finally_unwind_start = if unwinds_pass_finally {
                     let start = self.assembler.label();
                     self.assembler.mark(start);
@@ -3066,6 +3068,59 @@ impl Compiler {
             || !self.active_exception_region_exclusions.is_empty()
     }
 
+    fn emit_active_with_unwind(
+        &mut self,
+        from_depth: usize,
+        preserve_tos: bool,
+    ) -> Result<Vec<(usize, Label)>, CompileError> {
+        let contexts = self.active_with_exits[from_depth..].to_vec();
+        let mut unwind_starts = Vec::with_capacity(contexts.len());
+        for (offset, context) in contexts.into_iter().enumerate().rev() {
+            let index = from_depth + offset;
+            let start = self.assembler.label();
+            self.assembler.mark(start);
+            unwind_starts.push((index, start));
+            self.assembler.set_location(context.location);
+            if preserve_tos {
+                self.emit(SWAP, 3, 0)?;
+                self.emit(SWAP, 2, 0)?;
+            }
+            let none = self.add_constant(Constant::None)?;
+            self.emit(LOAD_CONST, none, 1)?;
+            self.emit(LOAD_CONST, none, 1)?;
+            self.emit(LOAD_CONST, none, 1)?;
+            self.emit(CALL, 3, -4)?;
+            if context.is_async {
+                self.compile_awaitable_on_stack(2)?;
+            }
+            self.emit(POP_TOP, 0, -1)?;
+        }
+        Ok(unwind_starts)
+    }
+
+    fn emit_loop_control_exception_unwind(
+        &mut self,
+        loop_depth: usize,
+    ) -> Result<(), CompileError> {
+        let handlers = self
+            .active_exception_handlers
+            .iter()
+            .rev()
+            .take_while(|handler| handler.loop_depth >= loop_depth)
+            .cloned()
+            .collect::<Vec<_>>();
+        for handler in handlers {
+            self.emit(POP_EXCEPT, 0, -1)?;
+            if let Some(name) = &handler.name {
+                let none = self.add_constant(Constant::None)?;
+                self.emit(LOAD_CONST, none, 1)?;
+                self.store_name(name)?;
+                self.delete_name(name)?;
+            }
+        }
+        Ok(())
+    }
+
     fn compile_loop_tail_while(
         &mut self,
         statement: &ruff_python_ast::StmtWhile,
@@ -3098,6 +3153,7 @@ impl Compiler {
             continue_label: start,
             break_label: restart,
             iterator_cleanup: IteratorCleanup::None,
+            with_depth: self.active_with_exits.len(),
             break_returns: false,
             preserve_break_exit: false,
         });
@@ -4419,6 +4475,7 @@ impl Compiler {
                 continue_label: start,
                 break_label: end,
                 iterator_cleanup: IteratorCleanup::None,
+                with_depth: self.active_with_exits.len(),
                 break_returns: false,
                 preserve_break_exit: self.preserve_finally_break_exit_loop_range
                     == Some(statement.range),
@@ -4462,6 +4519,7 @@ impl Compiler {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::None,
+            with_depth: self.active_with_exits.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -4526,6 +4584,7 @@ impl Compiler {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::Sync,
+            with_depth: self.active_with_exits.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -4615,6 +4674,7 @@ impl Compiler {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::Async,
+            with_depth: self.active_with_exits.len(),
             break_returns: false,
             preserve_break_exit: self.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
@@ -5358,11 +5418,18 @@ impl Compiler {
                     );
                     let previous_fallthrough = terminal_handler_try
                         .then(|| std::mem::replace(&mut self.emitted_fallthrough_return, false));
-                    let result = if terminal_handler_try {
-                        self.compile_suite_inner(&handler.body, true)
-                    } else {
-                        self.compile_suite(&handler.body)
-                    };
+                    let strict_owned_loads = matches!(
+                        handler.body.last(),
+                        Some(Stmt::Break(_) | Stmt::Continue(_))
+                    );
+                    let result =
+                        self.compile_with_strict_owned_loads(strict_owned_loads, |compiler| {
+                            if terminal_handler_try {
+                                compiler.compile_suite_inner(&handler.body, true)
+                            } else {
+                                compiler.compile_suite(&handler.body)
+                            }
+                        });
                     self.unwind_exception_handlers_for_implicit_return = previous_unwind;
                     if let Some(previous_fallthrough) = previous_fallthrough {
                         terminal_handler_try_return = std::mem::replace(
@@ -5493,6 +5560,16 @@ impl Compiler {
         self.emit(POP_EXCEPT, 0, -1)?;
         self.emit(RERAISE, 1, -3)?;
 
+        if statement.handlers.iter().all(|handler| {
+            handler.as_except_handler().is_some_and(|handler| {
+                matches!(
+                    handler.body.last(),
+                    Some(Stmt::Break(_) | Stmt::Continue(_))
+                )
+            })
+        }) {
+            self.assembler.prevent_borrow_reachability(end);
+        }
         self.assembler.mark(end);
         self.set_depth(base_depth);
         Ok(())
