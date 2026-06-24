@@ -874,6 +874,34 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_short_circuit_comprehension_filters() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = "z = [a for a in range(5) if a or b or c or d and e]\n";
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'comprehension_filter.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "comprehension_filter.py")
+                .unwrap()
+                .marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_optimized_generator_calls() {
         let Some(python) = python_314() else {
             return;

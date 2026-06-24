@@ -10679,6 +10679,19 @@ impl Compiler {
             }
             return self.compile_comprehension_filter(last, element_location, accepted, restart);
         }
+        if let Expr::BoolOp(boolean) = condition
+            && boolean.op == BoolOp::Or
+        {
+            let Some((last, leading)) = boolean.values.split_last() else {
+                return Err(CompileError::Internal(
+                    "boolean expression contains no values".to_string(),
+                ));
+            };
+            for value in leading {
+                self.compile_jump_if(value, true, accepted)?;
+            }
+            return self.compile_comprehension_filter(last, element_location, accepted, restart);
+        }
         if let Expr::UnaryOp(unary) = condition
             && unary.op == UnaryOp::Not
         {
