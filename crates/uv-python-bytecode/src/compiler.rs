@@ -14275,7 +14275,7 @@ fn optimized_percent_format(expression: &ExprBinOp) -> Option<Vec<PercentFormatP
     if expression.op != Operator::Mod {
         return None;
     }
-    let Constant::String(format) = fold_constant(&expression.left)? else {
+    let Expr::StringLiteral(format) = expression.left.as_ref() else {
         return None;
     };
     let Expr::Tuple(arguments) = expression.right.as_ref() else {
@@ -14289,7 +14289,7 @@ fn optimized_percent_format(expression: &ExprBinOp) -> Option<Vec<PercentFormatP
         return None;
     }
 
-    let format = format.chars().collect::<Vec<_>>();
+    let format = format.value.chars().collect::<Vec<_>>();
     let mut position = 0;
     let mut argument_index = 0;
     let mut parts = Vec::with_capacity(arguments.elts.len() * 2 + 1);
