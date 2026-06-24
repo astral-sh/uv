@@ -5449,6 +5449,15 @@ impl Compiler {
                 None
             };
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+            // A pass-only nested try leaves an ownerless exit NOP unless the enclosing region
+            // is the synthetic protected body of try/finally.
+            if body_noop_location.is_some()
+                && statement.orelse.is_empty()
+                && !self.active_exception_region_exclusions.is_empty()
+                && self.active_finally_try_bodies == 0
+            {
+                self.assembler.exclude_last_instruction_from_exception();
+            }
             if body_ends_with_break_loop {
                 // CPython's `POP_BLOCK` initially prevents the loop break from threading
                 // through this normal try exit. Once `POP_BLOCK` disappears, the exit jump
@@ -5793,6 +5802,12 @@ impl Compiler {
                 if !handler_body_has_instructions && let Some(statement) = handler.body.last() {
                     self.assembler
                         .set_location(self.source_location(statement.range()));
+                // CPython leaves named cleanup after a nested try unlocated so every incoming
+                // edge can inline its own copy with the predecessor's line.
+                } else if handler.name.is_some()
+                    && matches!(handler.body.last(), Some(Stmt::Try(_)))
+                {
+                    self.assembler.set_location(SourceLocation::NONE);
                 } else if let Some(location) = self.assembler.last_instruction_location() {
                     self.assembler.set_location(location);
                 }
@@ -5807,6 +5822,11 @@ impl Compiler {
                     self.emit_deferred_implicit_return()?;
                 } else {
                     self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
+                    if handler.name.is_some() && matches!(handler.body.last(), Some(Stmt::Try(_))) {
+                        // The cleanup is larger than a small exit, but is still eligible because
+                        // it has no line number and cannot fall through.
+                        self.assembler.prepare_last_no_location_block_for_inlining();
+                    }
                     // A pass-only finally keeps these extended handler exits in its protected
                     // region; executable finally bodies use CPython's stale-owner exclusion.
                     if !handler_body_has_instructions
@@ -6325,6 +6345,11 @@ impl Compiler {
             // Removing the inner try's normal exit leaves an empty CPython CFG block before the
             // normal finally body. Its borrow traversal stops at that empty block.
             self.assembler.prevent_borrow_reachability(protected_end);
+            if matches!(statement.finalbody.first(), Some(Stmt::Try(_))) {
+                // Keep handler exits targeting the nested finally body instead of the removed
+                // normal-exit NOP that precedes it.
+                self.assembler.preserve_block_boundary(protected_end);
+            }
         }
 
         let statement_nop_start = self.assembler.label();

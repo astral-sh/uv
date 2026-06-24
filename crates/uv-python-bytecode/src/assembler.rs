@@ -2036,7 +2036,7 @@ impl Assembler {
                     instruction.location = source_location;
                 }
             }
-            if inline_small_exit {
+            if inline_small_exit || inline_no_location_block {
                 let excluded_regions = region_memberships
                     .iter()
                     .enumerate()
