@@ -1738,6 +1738,11 @@ impl Assembler {
             })
             .collect::<Vec<_>>();
 
+        let exception_split_labels = self
+            .exception_regions
+            .iter()
+            .flat_map(|region| [region.start, region.end])
+            .collect::<HashSet<_>>();
         let mut predecessors = vec![0_usize; blocks.len()];
         predecessors[0] = 1;
         for (index, block) in blocks.iter().enumerate() {
@@ -1773,6 +1778,7 @@ impl Assembler {
         let mut target_copies = vec![Vec::<Vec<Item>>::new(); blocks.len()];
         let mut copied_region_exclusions =
             vec![Vec::<(Label, Label)>::new(); self.exception_regions.len()];
+        let mut copied_exception_regions = Vec::new();
         let mut drop_block = vec![false; blocks.len()];
         let mut remaining_predecessors = predecessors.clone();
         let mut sources = (0..blocks.len()).collect::<Vec<_>>();
@@ -1786,25 +1792,51 @@ impl Assembler {
                 continue;
             };
             let source_has_fallthrough = block_has_fallthrough(&blocks[source]);
-            let target_pre_fusion_size = blocks[target]
+            let mut target_chain_end = target;
+            while target_chain_end + 1 < blocks.len()
+                && block_has_fallthrough(&blocks[target_chain_end])
+                && predecessors[target_chain_end + 1] == 1
+                && blocks[target_chain_end + 1].iter().any(|item| {
+                    matches!(item, Item::Label(label) if exception_split_labels.contains(label))
+                })
+            {
+                target_chain_end += 1;
+            }
+            let target_blocks = &blocks[target..=target_chain_end];
+            let target_pre_fusion_size = target_blocks
                 .iter()
-                .filter_map(|item| {
-                    let Item::Instruction(instruction) = item else {
-                        return None;
-                    };
-                    let fused_push_null = instruction.opcode.code == 92
-                        && matches!(instruction.operand, Operand::Value(argument) if argument & 1 != 0);
-                    Some(1 + usize::from(fused_push_null))
+                .flatten()
+                .map(|item| match item {
+                    Item::Instruction(instruction) => {
+                        let fused_push_null = instruction.opcode.code == 92
+                            && matches!(instruction.operand, Operand::Value(argument) if argument & 1 != 0);
+                        1 + usize::from(fused_push_null)
+                    }
+                    Item::Label(label) => usize::from(
+                        target_chain_end > target && exception_split_labels.contains(label),
+                    ),
                 })
                 .sum::<usize>();
-            let target_is_small_exit = target_pre_fusion_size <= 4
-                && blocks[target].iter().rev().find_map(|item| {
+            let target_terminal_opcode = target_blocks
+                .iter()
+                .rev()
+                .flat_map(|block| block.iter().rev())
+                .find_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(matches!(instruction.opcode.code, 35 | 104 | 105))
+                        Some(instruction.opcode.code)
                     } else {
                         None
                     }
-                }) == Some(true);
+                });
+            let target_is_small_exit = target_pre_fusion_size <= 4
+                && target_terminal_opcode.is_some_and(|opcode| {
+                    matches!(opcode, 35 | 104 | 105)
+                        // An exception-boundary split before a raise represents CPython's
+                        // `SETUP_FINALLY` inside one basic block. Return paths can also contain
+                        // optimized-away `POP_BLOCK` instructions that are not recoverable from
+                        // the final region labels, so keep their existing block boundary.
+                        && (target_chain_end == target || opcode == 104)
+                });
             let source_allows_small_exit_inlining = blocks[source]
                 .iter()
                 .rev()
@@ -1816,10 +1848,10 @@ impl Assembler {
                     }
                 })
                 .unwrap_or(false);
-            let target_contains_end_send = blocks[target].iter().any(|item| {
+            let target_contains_end_send = target_blocks.iter().flatten().any(|item| {
                 matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 10)
             });
-            let target_has_no_location = blocks[target].iter().all(|item| {
+            let target_has_no_location = target_blocks.iter().flatten().all(|item| {
                 !matches!(item, Item::Instruction(instruction) if instruction.location.line >= 0)
             });
             let target_allows_no_location_block_inlining = blocks[target]
@@ -1876,7 +1908,10 @@ impl Assembler {
                     }
                 })
                 .unwrap_or(SourceLocation::NONE);
-            let mut copied = blocks[target].clone();
+            let mut copied = target_blocks
+                .iter()
+                .flat_map(|block| block.iter().copied())
+                .collect::<Vec<_>>();
             let preserve_inlined_jump_nop = if inline_small_exit && source_location.line >= 0 {
                 blocks[source]
                     .iter()
@@ -1903,19 +1938,48 @@ impl Assembler {
             };
             let copied_label = self.label();
             let mut replaced_entry_label = false;
+            let mut copied_labels = HashMap::new();
             for item in &mut copied {
                 if let Item::Label(label) = item {
+                    let original = *label;
                     if !replaced_entry_label {
                         *label = copied_label;
                         replaced_entry_label = true;
                     } else {
                         *label = self.label();
                     }
+                    copied_labels.insert(original, *label);
                 }
             }
             if !replaced_entry_label {
                 copied.insert(0, Item::Label(copied_label));
             }
+            let trailing_region_ends = self
+                .exception_regions
+                .iter()
+                .filter(|region| {
+                    copied_labels.contains_key(&region.start)
+                        && !copied_labels.contains_key(&region.end)
+                })
+                .map(|region| region.end)
+                .collect::<Vec<_>>();
+            for original in trailing_region_ends {
+                let copied_end = self.label();
+                copied.push(Item::Label(copied_end));
+                copied_labels.insert(original, copied_end);
+            }
+            copied_exception_regions.extend(self.exception_regions.iter().filter_map(|region| {
+                Some(ExceptionRegion {
+                    start: *copied_labels.get(&region.start)?,
+                    end: *copied_labels.get(&region.end)?,
+                    target: copied_labels
+                        .get(&region.target)
+                        .copied()
+                        .unwrap_or(region.target),
+                    depth: region.depth,
+                    preserve_lasti: region.preserve_lasti,
+                })
+            }));
             if preserve_inlined_jump_nop {
                 let position = copied
                     .iter()
@@ -2055,6 +2119,7 @@ impl Assembler {
                 });
             }
         }
+        self.exception_regions.extend(copied_exception_regions);
 
         for target in 0..blocks.len() {
             if exception_handler_blocks[target] {

@@ -427,6 +427,41 @@ mod tests {
     }
 
     #[test]
+    fn matches_cpython_marshal_for_try_exits_across_exception_boundaries() {
+        let Some(python) = python_314() else {
+            return;
+        };
+        let source = r#"try:
+    1 / 0
+except ZeroDivisionError:
+    pass
+
+try:
+    raise ValueError
+except ValueError as error:
+    print(error)
+"#;
+        let expected = Command::new(python)
+            .args([
+                "-c",
+                "import marshal, sys; code = compile(sys.stdin.read(), 'try_exit.py', 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                child.stdin.as_mut().unwrap().write_all(source.as_bytes())?;
+                child.wait_with_output()
+            })
+            .unwrap();
+        assert!(expected.status.success());
+        assert_eq!(
+            compile(source, "try_exit.py").unwrap().marshal(),
+            expected.stdout
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_small_with_exits() {
         let Some(python) = python_314() else {
             return;
