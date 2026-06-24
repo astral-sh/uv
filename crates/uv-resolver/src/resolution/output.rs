@@ -606,7 +606,7 @@ impl ResolverOutput {
     /// universal resolution.
     pub fn match_runtime_extra_build_requires_by_fork(
         &self,
-        extra_build_requires: ExtraBuildRequires,
+        extra_build_requires: &ExtraBuildRequires,
     ) -> Result<Vec<(Option<UniversalMarker>, ExtraBuildRequires)>, ExtraBuildRequiresError> {
         let mut all_sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
             BTreeMap::new();

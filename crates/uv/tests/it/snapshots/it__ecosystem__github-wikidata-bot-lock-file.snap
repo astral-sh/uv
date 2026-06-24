@@ -5,13 +5,19 @@ expression: lock
 version = 2
 revision = 3
 requires-python = ">=3.12"
-resolution-markers = [
-    "python_full_version >= '3.13'",
-    "python_full_version < '3.13'",
-]
 
 [options]
 exclude-newer = "2024-08-08T00:00:00Z"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { marker = "python_full_version >= '3.13'" }
+
+[[resolution]]
+id = "runtime:1"
+kind = "runtime"
+target = { marker = "python_full_version < '3.13'" }
 
 [[package]]
 name = "annotated-types"

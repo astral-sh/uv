@@ -5,15 +5,29 @@ expression: lock
 version = 2
 revision = 3
 requires-python = ">=3.9.0"
-resolution-markers = [
-    "python_full_version >= '3.12'",
-    "python_full_version == '3.11.*'",
-    "python_full_version == '3.10.*'",
-    "python_full_version < '3.10'",
-]
 
 [options]
 exclude-newer = "2024-03-25T00:00:00Z"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { marker = "python_full_version >= '3.12'" }
+
+[[resolution]]
+id = "runtime:1"
+kind = "runtime"
+target = { marker = "python_full_version == '3.11.*'" }
+
+[[resolution]]
+id = "runtime:2"
+kind = "runtime"
+target = { marker = "python_full_version == '3.10.*'" }
+
+[[resolution]]
+id = "runtime:3"
+kind = "runtime"
+target = { marker = "python_full_version < '3.10'" }
 
 [[package]]
 name = "importlib-metadata"

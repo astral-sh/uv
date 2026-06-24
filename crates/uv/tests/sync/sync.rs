@@ -11710,7 +11710,7 @@ fn lock_git_metadata_archive_dependency() -> Result<()> {
         {
             assert_snapshot!(
                 lock, @r#"
-            version = 1
+            version = 2
             revision = 3
             requires-python = ">=3.13"
 

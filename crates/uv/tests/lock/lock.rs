@@ -33945,14 +33945,24 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
         version = 2
         revision = 3
         requires-python = "==3.13.0"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
-            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" }
 
         [[package]]
         name = "numpy"
@@ -34021,14 +34031,24 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
         version = 2
         revision = 3
         requires-python = "==3.13.2"
-        resolution-markers = [
-            "sys_platform == 'darwin'",
-            "platform_machine == 'aarch64' and sys_platform == 'linux'",
-            "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
-        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[resolution]]
+        id = "runtime:0"
+        kind = "runtime"
+        target = { marker = "sys_platform == 'darwin'" }
+
+        [[resolution]]
+        id = "runtime:1"
+        kind = "runtime"
+        target = { marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" }
+
+        [[resolution]]
+        id = "runtime:2"
+        kind = "runtime"
+        target = { marker = "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" }
 
         [[package]]
         name = "numpy"

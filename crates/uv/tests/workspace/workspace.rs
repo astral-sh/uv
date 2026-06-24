@@ -2269,7 +2269,7 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

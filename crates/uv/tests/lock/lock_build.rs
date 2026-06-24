@@ -1,3 +1,4 @@
+use std::fmt::Write;
 #[cfg(feature = "test-git")]
 use std::process::Command;
 
@@ -57,7 +58,7 @@ fn write_wheel_with_requires(
     let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
     let mut metadata = format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n");
     for requirement in requires_dist {
-        metadata.push_str(&format!("Requires-Dist: {requirement}\n"));
+        writeln!(metadata, "Requires-Dist: {requirement}")?;
     }
     block_on(zip.write_entry_whole(entry, metadata.as_bytes()))?;
     let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
@@ -1459,10 +1460,10 @@ fn lock_build_dependencies_runtime_preferences_exclude_build_only_packages() -> 
         "#,
     )?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1590,10 +1591,10 @@ async fn lock_build_dependencies_runtime_consumers_exclude_build_only_packages()
         "#,
     )?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -1733,10 +1734,10 @@ fn lock_build_dependencies_add_lower_bound_excludes_build_only_packages() -> Res
         "#,
     )?;
     dep_dir.child("build_backend.py").write_str(
-        r#"
+        r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     )?;
 
     context.temp_dir.child("pyproject.toml").write_str(
@@ -3484,10 +3485,10 @@ fn lock_build_dependencies_no_binary_invalidate_hook_requirements() -> Result<()
     let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
     block_on(zip.write_entry_whole(
         entry,
-        br#"
+        br"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
     ))?;
     fs_err::write(source_dist.path(), block_on(zip.close())?)?;
 
@@ -4688,7 +4689,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "#);
     });
     let builder = package_section(&lock, "builder");
-    assert!(builder.contains(r#"dependencies = ["#), "{builder}");
+    assert!(builder.contains(r"dependencies = ["), "{builder}");
     assert!(builder.contains(r#"{ name = "leaf" }"#), "{builder}");
     assert!(!builder.contains("contexts"), "{builder}");
     assert!(!lock.contains("build-dependency-packages"), "{lock}");
@@ -4756,10 +4757,10 @@ fn lock_build_dependencies_build_resolution_target_reachability() -> Result<()> 
             "#
         ))?;
         dep_dir.child("build_backend.py").write_str(
-            r#"
+            r"
 def get_requires_for_build_wheel(config_settings=None):
     return []
-"#,
+",
         )?;
     }
 
@@ -6730,6 +6731,28 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
 
         [[resolution]]
+        id = "build:hatchling:wheel:bootstrap:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "bootstrap"
+        name = "hatchling"
+
+        [[resolution]]
+        id = "build:hatchling:wheel:build:[BUILD-ID]"
+        kind = "build"
+        operation = "wheel"
+        mode = "isolated"
+        stage = "build"
+        name = "hatchling"
+        roots = [
+            { name = "packaging", version = "24.0" },
+            { name = "pathspec", version = "0.12.1" },
+            { name = "pluggy", version = "1.4.0" },
+            { name = "trove-classifiers", version = "2024.3.3" },
+        ]
+
+        [[resolution]]
         id = "build:iniconfig:wheel:bootstrap:[BUILD-ID]"
         kind = "build"
         operation = "wheel"
@@ -6844,6 +6867,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         name = "setuptools-scm"
         roots = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
 
         [[resolution]]
@@ -6999,6 +7023,12 @@ fn lock_build_dependencies_fork() -> Result<()> {
             { name = "pluggy" },
             { name = "trove-classifiers" },
         ]
+        build-dependencies = [
+            { name = "packaging", version = "24.0" },
+            { name = "pathspec", version = "0.12.1" },
+            { name = "pluggy", version = "1.4.0" },
+            { name = "trove-classifiers", version = "2024.3.3" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/4f/2a/c34d71531d1e1c9a5029bb73eb3816285befd0fffd7c63ffa0544253dca8/hatchling-1.22.4.tar.gz", hash = "sha256:8a2dcec96d7fb848382ef5848e5ac43fdae641f35a08a3fab5116bd495f3416e", size = 62758, upload-time = "2024-03-24T02:00:59.122Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/49/63/2d56d6356f9f8b906aa68335cbf5b1b54c69873a2e271eda2ddba319c1ae/hatchling-1.22.4-py3-none-any.whl", hash = "sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc", size = 82032, upload-time = "2024-03-24T02:00:57.534Z" },
@@ -7100,6 +7130,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
         ]
         build-dependencies = [
             { name = "setuptools", version = "69.2.0" },
+            { name = "wheel", version = "0.43.0" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/eb/b1/0248705f10f6de5eefe7ff93e399f7192257b23df4d431d2f5680bb2778f/setuptools-scm-8.0.4.tar.gz", hash = "sha256:b5f43ff6800669595193fd09891564ee9d1d7dcb196cab4b2506d53a2e1c95c7", size = 74280, upload-time = "2023-10-02T15:14:32.996Z" }
         wheels = [

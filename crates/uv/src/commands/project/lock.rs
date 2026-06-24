@@ -21,8 +21,8 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, Dist, ExtraBuildRequires, HashGeneration, Index, IndexLocations,
-    Name, NameRequirementSpecification, Requirement, RequiresPython, ResolvedDist, SourceDist,
-    UnresolvedRequirementSpecification,
+    Name, NameRequirementSpecification, PackageConfigSettings, Requirement, RequiresPython,
+    ResolvedDist, SourceDist, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -830,7 +830,7 @@ async fn do_lock(
         )),
     };
     let has_build_settings = !config_setting.is_empty()
-        || *config_settings_package != Default::default()
+        || *config_settings_package != PackageConfigSettings::default()
         || !extra_build_variables.is_empty()
         || !no_build_packages.is_empty();
     let source_settings = match sources {
@@ -1248,9 +1248,7 @@ async fn do_lock(
 
                     if !match_runtime_packages.is_empty() {
                         let matched_extra_build_requires = resolution
-                            .match_runtime_extra_build_requires_by_fork(
-                                extra_build_requires.clone(),
-                            )?;
+                            .match_runtime_extra_build_requires_by_fork(&extra_build_requires)?;
                         let no_excluded_packages = BTreeSet::new();
                         for (runtime_marker, matched_extra_build_requires) in
                             matched_extra_build_requires
@@ -1429,8 +1427,8 @@ async fn resolve_all_possible_builds(
         solve_marker: Option<MarkerTree>,
         context_marker: Option<MarkerTree>,
     ) -> Vec<BuildResolutionRequest> {
-        if solve_marker.is_some_and(|marker| marker.is_false())
-            || context_marker.is_some_and(|marker| marker.is_false())
+        if solve_marker.is_some_and(MarkerTree::is_false)
+            || context_marker.is_some_and(MarkerTree::is_false)
         {
             return Vec::new();
         }

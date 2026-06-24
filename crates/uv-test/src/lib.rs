@@ -114,8 +114,8 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     ),
     // Build resolution identities include host-specific executor context.
     (
-        r#"build:([A-Za-z0-9_.-]+):wheel:([A-Za-z0-9_.-]+):[a-f0-9]{16}"#,
-        r#"build:$1:wheel:$2:[BUILD-ID]"#,
+        r"build:([A-Za-z0-9_.-]+):wheel:([A-Za-z0-9_.-]+):[a-f0-9]{16}",
+        r"build:$1:wheel:$2:[BUILD-ID]",
     ),
     (
         r#"executor = \{ marker = "[^"]*", python = "[^"]*" \}"#,

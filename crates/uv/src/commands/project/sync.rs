@@ -840,7 +840,7 @@ pub(crate) async fn do_sync(
         let map = target.lock().all_build_resolutions(
             &resolution,
             target.install_path(),
-            &build_tags,
+            build_tags,
             build_options,
             &marker_env,
             venv.interpreter().markers(),

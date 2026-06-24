@@ -359,6 +359,7 @@ impl BuildResolutionGraphKey {
     }
 
     /// Return a copy of the key with a new stage and context.
+    #[must_use]
     pub fn with_stage(mut self, context: String, stage: BuildResolutionStage) -> Self {
         self.context = Some(context);
         self.stage = Some(stage);
@@ -591,11 +592,8 @@ impl BuildResolutions {
             .lock()
             .unwrap()
             .iter()
-            .filter_map(|(key, graph)| {
-                key.context
-                    .is_none()
-                    .then(|| (key.package.clone(), graph.clone()))
-            })
+            .filter(|(key, _)| key.context.is_none())
+            .map(|(key, graph)| (key.package.clone(), graph.clone()))
             .collect()
     }
 

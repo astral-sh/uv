@@ -16945,7 +16945,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         kind = "runtime"
         target = { any-of = [
             { all-of = [
-            { marker = "sys_platform == 'darwin'" },
+            { marker = "sys_platform != 'darwin'" },
             { active = { package = "resolution-markers-for-days", extra = "cpu" } },
             { inactive = { package = "resolution-markers-for-days", extra = "cu124" } },
         ] },
@@ -16956,8 +16956,7 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         kind = "runtime"
         target = { any-of = [
             { all-of = [
-            { marker = "sys_platform != 'darwin'" },
-            { active = { package = "resolution-markers-for-days", extra = "cpu" } },
+            { inactive = { package = "resolution-markers-for-days", extra = "cpu" } },
             { inactive = { package = "resolution-markers-for-days", extra = "cu124" } },
         ] },
         ] }
@@ -16967,7 +16966,8 @@ fn avoids_exponential_lock_file_growth() -> Result<()> {
         kind = "runtime"
         target = { any-of = [
             { all-of = [
-            { inactive = { package = "resolution-markers-for-days", extra = "cpu" } },
+            { marker = "sys_platform == 'darwin'" },
+            { active = { package = "resolution-markers-for-days", extra = "cpu" } },
             { inactive = { package = "resolution-markers-for-days", extra = "cu124" } },
         ] },
         ] }

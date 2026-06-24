@@ -3019,24 +3019,24 @@ fn requirements_txt_script() -> Result<()> {
         [[resolution]]
         id = "runtime:0"
         kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
+        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
 
         [[resolution]]
         id = "runtime:1"
         kind = "runtime"
-        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
+        target = { marker = "sys_platform == 'win32'" }
 
         [[resolution]]
         id = "runtime:2"
         kind = "runtime"
-        target = { marker = "sys_platform == 'win32'" }
+        target = { marker = "sys_platform == 'linux'" }
 
         [[package]]
         name = "anyio"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
         selectors = [
-            { target = "runtime:2" },
+            { target = "runtime:1" },
         ]
         dependencies = [
             { name = "idna", marker = "sys_platform == 'win32'" },
@@ -3052,7 +3052,7 @@ fn requirements_txt_script() -> Result<()> {
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
         selectors = [
-            { target = "runtime:0" },
+            { target = "runtime:2" },
         ]
         dependencies = [
             { name = "idna", marker = "sys_platform == 'linux'" },

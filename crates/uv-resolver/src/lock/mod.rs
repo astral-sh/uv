@@ -2083,10 +2083,7 @@ impl Lock {
                         .collect_vec();
                     if !dependencies.is_empty() {
                         dependencies
-                    } else if global_dependencies
-                        .iter()
-                        .all(|dependency| dependency.is_runtime_edge())
-                    {
+                    } else if global_dependencies.iter().all(Dependency::is_runtime_edge) {
                         global_dependencies
                             .iter()
                             .filter(|dependency| dependency.is_runtime_edge())
@@ -2188,7 +2185,7 @@ impl Lock {
         };
         let runtime_package_ids: FxHashSet<PackageId> = resolution
             .distributions()
-            .filter_map(|resolved_dist| package_for_resolved_dist(resolved_dist))
+            .filter_map(&package_for_resolved_dist)
             .map(|package| package.id.unscoped())
             .collect();
         let selected_builds: Vec<(PackageId, BuildPackageKey)> = resolution
@@ -3460,7 +3457,7 @@ impl Lock {
     fn satisfies_build_system<'lock>(
         &self,
         current_requires: Option<BTreeSet<Requirement>>,
-        current_build_system: Option<PackageBuildSystem>,
+        current_build_system: Option<&PackageBuildSystem>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -3487,7 +3484,7 @@ impl Lock {
             .transpose()?;
 
         if current_build_requires != stored_build_requires
-            || current_build_system != package.metadata.build_system
+            || current_build_system != package.metadata.build_system.as_ref()
         {
             return Ok(SatisfiesResult::MismatchedBuildSystem(
                 &package.id.name,
@@ -3910,7 +3907,7 @@ impl Lock {
                 {
                     match self.satisfies_build_system(
                         build_requires,
-                        current_build_system,
+                        current_build_system.as_ref(),
                         package,
                         root,
                     ) {
@@ -5274,7 +5271,7 @@ impl TargetSelector {
     ) -> Option<Self> {
         let mut selector = Self::from_conflict_marker(marker.conflict())?;
         let pep508 = SimplifiedMarkerTree::new(requires_python, marker.pep508());
-        if pep508.clone().try_to_string().is_some() {
+        if pep508.try_to_string().is_some() {
             selector.marker = Some(pep508);
         }
         if selector
@@ -5295,11 +5292,11 @@ impl TargetSelector {
         let selector = Self {
             marker: None,
             active: active
-                .into_iter()
+                .iter()
                 .map(ResolutionActivation::from_conflict_item)
                 .collect(),
             inactive: inactive
-                .into_iter()
+                .iter()
                 .map(ResolutionActivation::from_conflict_item)
                 .collect(),
             any_of: None,
@@ -5317,7 +5314,7 @@ impl TargetSelector {
             .into_iter()
             .map(|clause| {
                 let all_of = clause
-                    .into_iter()
+                    .iter()
                     .map(TargetSelectorTerm::from_marker_expression)
                     .collect::<Vec<_>>();
                 TargetSelectorClause { all_of }
@@ -5351,11 +5348,7 @@ impl TargetSelector {
             ));
         }
 
-        let pep508 = self
-            .marker
-            .clone()
-            .unwrap_or_default()
-            .into_marker(requires_python);
+        let pep508 = self.marker.unwrap_or_default().into_marker(requires_python);
         let mut conflict_marker = ConflictMarker::TRUE;
         for item in &self.inactive {
             conflict_marker = conflict_marker.and(
@@ -5467,11 +5460,7 @@ impl TargetSelector {
             return table;
         }
 
-        if let Some(marker) = self
-            .marker
-            .clone()
-            .and_then(SimplifiedMarkerTree::try_to_string)
-        {
+        if let Some(marker) = self.marker.and_then(SimplifiedMarkerTree::try_to_string) {
             table.insert("marker", Value::from(marker));
         }
         if !self.active.is_empty() {
@@ -5553,8 +5542,8 @@ struct TargetSelectorTerm {
 }
 
 impl TargetSelectorTerm {
-    fn from_marker_expression(expression: MarkerExpression) -> Self {
-        match &expression {
+    fn from_marker_expression(expression: &MarkerExpression) -> Self {
+        match expression {
             MarkerExpression::Extra { name, operator } => {
                 let Some(extra) = name.as_extra() else {
                     return Self {
@@ -5570,7 +5559,7 @@ impl TargetSelectorTerm {
                         inactive: None,
                     };
                 };
-                let activation = ResolutionActivation::from_conflict_item(item);
+                let activation = ResolutionActivation::from_conflict_item(&item);
                 match operator {
                     ExtraOperator::Equal => Self {
                         marker: None,
@@ -5665,7 +5654,7 @@ struct ResolutionActivation {
 }
 
 impl ResolutionActivation {
-    fn from_conflict_item(item: ConflictItem) -> Self {
+    fn from_conflict_item(item: &ConflictItem) -> Self {
         let package = item.package().clone();
         match item.kind() {
             ConflictKind::Project => Self {
@@ -5784,7 +5773,7 @@ impl DependencySelectorWire {
         } else if !contexts.is_empty() {
             table.insert(
                 "resolutions",
-                Value::from(Array::from_iter(contexts.iter().cloned())),
+                Value::from(contexts.iter().cloned().collect::<Array>()),
             );
         }
         if let Some(target) = target {
@@ -6781,7 +6770,7 @@ impl Package {
                 if !build_system.backend_path.is_empty() {
                     build_system_table.insert(
                         "backend-path",
-                        Value::from(Array::from_iter(build_system.backend_path.iter().cloned())),
+                        Value::from(build_system.backend_path.iter().cloned().collect::<Array>()),
                     );
                 }
                 metadata_table.insert("build-system", value(build_system_table));
@@ -9130,7 +9119,7 @@ impl Dependency {
             if !self.contexts.is_empty() {
                 table.insert(
                     "contexts",
-                    value(Array::from_iter(self.contexts.iter().cloned())),
+                    value(self.contexts.iter().cloned().collect::<Array>()),
                 );
             }
         }
@@ -9148,7 +9137,7 @@ impl Dependency {
             let pep508_marker =
                 SimplifiedMarkerTree::new(requires_python, self.complexified_marker.pep508());
             let recombined = UniversalMarker::new(
-                pep508_marker.clone().into_marker(requires_python),
+                pep508_marker.into_marker(requires_python),
                 target.conflict_marker("dependency selector").ok()?,
             );
             if recombined == self.complexified_marker {
@@ -11218,7 +11207,7 @@ name = "a"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "b", selector = { resoluton = "build:a:wheel" } },
+    { name = "b", selector = { unknown = "build:a:wheel" } },
 ]
 sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
 "#;
@@ -11228,9 +11217,9 @@ sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd8
             @r#"
 TOML parse error at line 10, column 32
    |
-10 |     { name = "b", selector = { resoluton = "build:a:wheel" } },
-   |                                ^^^^^^^^^
-unknown field `resoluton`, expected one of `resolution`, `resolutions`, `target`
+10 |     { name = "b", selector = { unknown = "build:a:wheel" } },
+   |                                ^^^^^^^
+unknown field `unknown`, expected one of `resolution`, `resolutions`, `target`
 "#
         );
     }
@@ -11450,16 +11439,12 @@ sdist = { url = "https://example.com/c-2.tar.gz", hash = "sha256:37dd54208da7e1c
 "#;
         let lock = toml::from_str::<Lock>(data).unwrap();
         let members = build_resolution_members(&lock, &lock.resolutions);
-        let context_one_versions = members
-            .get("build:a:wheel:one")
-            .unwrap()
+        let context_one_versions = members["build:a:wheel:one"]
             .iter()
             .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
             .map(|package_id| package_id.version.as_ref().unwrap().to_string())
             .collect::<BTreeSet<_>>();
-        let context_two_versions = members
-            .get("build:a:wheel:two")
-            .unwrap()
+        let context_two_versions = members["build:a:wheel:two"]
             .iter()
             .filter(|package_id| package_id.name == PackageName::from_str("c").unwrap())
             .map(|package_id| package_id.version.as_ref().unwrap().to_string())
@@ -11545,9 +11530,7 @@ dependencies = [
         assert!(project.dependencies[0].package_id.resolution_id.is_none());
 
         let members = build_resolution_members(&lock, &lock.resolutions);
-        let helper_versions = members
-            .get("build:a:wheel")
-            .unwrap()
+        let helper_versions = members["build:a:wheel"]
             .iter()
             .filter(|package_id| package_id.name == helper_name)
             .map(|package_id| package_id.version.as_ref().unwrap().to_string())
@@ -11776,9 +11759,7 @@ sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd8
 "#;
         let lock = toml::from_str::<Lock>(data).unwrap();
         let members = build_resolution_members(&lock, &lock.resolutions);
-        let member_names = members
-            .get("build:a:wheel")
-            .unwrap()
+        let member_names = members["build:a:wheel"]
             .iter()
             .map(|package_id| package_id.name.to_string())
             .collect::<BTreeSet<_>>();
