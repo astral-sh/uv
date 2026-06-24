@@ -13243,6 +13243,7 @@ impl LocalCollector {
         NamedExpressionCollector {
             collector: self,
             in_inlined_comprehension: false,
+            collect_known_loads: true,
         }
         .visit_expr(expression);
     }
@@ -13301,6 +13302,7 @@ impl LocalCollector {
 struct NamedExpressionCollector<'a> {
     collector: &'a mut LocalCollector,
     in_inlined_comprehension: bool,
+    collect_known_loads: bool,
 }
 
 impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
@@ -13310,9 +13312,18 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
         }
         if matches!(expression, Expr::Generator(_)) {
             let previous = std::mem::replace(&mut self.in_inlined_comprehension, false);
+            let previous_loads = std::mem::replace(&mut self.collect_known_loads, false);
             walk_expr(self, expression);
+            self.collect_known_loads = previous_loads;
             self.in_inlined_comprehension = previous;
             return;
+        }
+        if self.collect_known_loads
+            && let Expr::Name(name) = expression
+            && name.ctx == ExprContext::Load
+            && self.collector.known_bindings.contains(name.id.as_str())
+        {
+            self.collector.insert(name.id.as_str());
         }
         let generators = match expression {
             Expr::ListComp(comprehension) => Some(comprehension.generators.as_slice()),

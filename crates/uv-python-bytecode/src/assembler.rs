@@ -2632,6 +2632,7 @@ impl Assembler {
             unsafe_at_entry[0][local] = true;
         }
         let mut needs_check = HashSet::new();
+        let mut checked_loads_needing_check = HashSet::new();
         let mut pending = (0..blocks.len()).collect::<Vec<_>>();
         let mut queued = vec![true; blocks.len()];
 
@@ -2674,7 +2675,13 @@ impl Assembler {
                 }
                 match instruction.opcode.code {
                     DELETE_FAST | LOAD_FAST_AND_CLEAR => unsafe_locals[local] = true,
-                    STORE_FAST | LOAD_FAST_CHECK => unsafe_locals[local] = false,
+                    STORE_FAST => unsafe_locals[local] = false,
+                    LOAD_FAST_CHECK => {
+                        if unsafe_locals[local] {
+                            checked_loads_needing_check.insert(*index);
+                        }
+                        unsafe_locals[local] = false;
+                    }
                     LOAD_FAST => {
                         if unsafe_locals[local] {
                             needs_check.insert(*index);
@@ -2699,6 +2706,16 @@ impl Assembler {
             }
         }
 
+        for (index, item) in self.items.iter_mut().enumerate() {
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            if instruction.opcode.code == LOAD_FAST_CHECK
+                && !checked_loads_needing_check.contains(&index)
+            {
+                instruction.opcode = Opcode::new(LOAD_FAST, 0);
+            }
+        }
         for index in needs_check {
             let Item::Instruction(instruction) = &mut self.items[index] else {
                 unreachable!();
