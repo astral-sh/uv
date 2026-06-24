@@ -2769,6 +2769,7 @@ pub(crate) async fn update_environment(
             &constraints,
             &overrides,
             &override_dependencies,
+            &excludes,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -3210,8 +3211,9 @@ pub(crate) fn script_specification(
         .collect::<Vec<_>>();
 
     let mut specification =
-        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), excludes);
+        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), Vec::new());
     specification.override_dependencies = overrides;
+    specification.excludes = excludes;
     Ok(Some(specification))
 }
 

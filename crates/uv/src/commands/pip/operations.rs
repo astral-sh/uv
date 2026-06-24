@@ -13,7 +13,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
+    BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, ExcludeDependency, Excludes,
     ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -101,7 +101,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
     lowered_overrides: Vec<Override<Requirement>>,
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeDependency>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
@@ -314,7 +314,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .collect(),
     )
     .map_err(anyhow::Error::from)?;
-    let excludes = excludes.into_iter().collect::<Excludes>();
+    let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.

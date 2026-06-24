@@ -178,10 +178,10 @@
       }
     },
     "exclude-dependencies": {
-      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
+      "description": "Dependencies to exclude when resolving the project's dependencies.\n\nExcludes are used to prevent a package from being selected during resolution,\nregardless of whether it's requested by any other package. When a package is excluded,\nit will be omitted from the dependency list entirely.\n\nIncluding a package as an exclusion will prevent it from being installed, even if\nit's requested by transitive dependencies. This can be useful for removing optional\ndependencies or working around packages with broken dependencies.\n\nExclusions can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be excluded by `name` and, optionally, `version`. If `version` is\nomitted, the exclusions apply to all versions of that package. A version-specific entry\ntakes precedence over an all-versions entry.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/ExcludeDependency"
       }
     },
     "exclude-newer": {
@@ -853,6 +853,17 @@
       "type": "string",
       "format": "uri"
     },
+    "ExcludeDependency": {
+      "description": "An exclusion, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageExclusion"
+        },
+        {
+          "$ref": "#/definitions/PackageName"
+        }
+      ]
+    },
     "ExcludeNewerOverride": {
       "oneOf": [
         {
@@ -1181,6 +1192,38 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
+    },
+    "PackageExclusion": {
+      "description": "A set of exclusions that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageExclusionTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageExclusionTarget": {
+      "description": "The package and optional version selected by a [`PackageExclusion`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",

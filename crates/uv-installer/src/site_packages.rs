@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Override, Overrides};
+use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
@@ -324,6 +324,7 @@ impl SitePackages {
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
         override_dependencies: &[Override<Requirement>],
+        exclude_dependencies: &[ExcludeDependency],
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -424,11 +425,13 @@ impl SitePackages {
                 )
                 .collect(),
         )?;
+        let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
 
         self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
             &overrides,
+            &excludes,
             installation,
             markers,
             tags,
@@ -445,6 +448,7 @@ impl SitePackages {
         requirements: impl ExactSizeIterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'a Requirement>,
         overrides: &'a Overrides,
+        excludes: &'a Excludes,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -466,7 +470,10 @@ impl SitePackages {
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in overrides.apply(requirements) {
+        for requirement in overrides
+            .apply(requirements)
+            .filter(|requirement| !excludes.contains(&requirement.name))
+        {
             if requirement.evaluate_markers(Some(markers), &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
@@ -547,8 +554,11 @@ impl SitePackages {
                         .cloned()
                         .map(Requirement::from)
                         .collect::<Vec<_>>();
-                    for dependency in
-                        overrides.apply_for(name, distribution.version(), &dependencies)
+                    for dependency in overrides
+                        .apply_for(name, distribution.version(), &dependencies)
+                        .filter(|dependency| {
+                            !excludes.contains_for(name, distribution.version(), &dependency.name)
+                        })
                     {
                         if dependency.evaluate_markers(Some(markers), &requirement.extras) {
                             let dependency = dependency.into_owned();

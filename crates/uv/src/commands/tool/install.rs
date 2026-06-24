@@ -516,6 +516,7 @@ pub(crate) async fn install(
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
+                && excludes == tool_receipt.excludes()
                 && build_constraints == tool_receipt.build_constraints()
             {
                 let ResolverInstallerSettings {
@@ -552,6 +553,7 @@ pub(crate) async fn install(
 
                 // Check if the installed packages meet the requirements.
                 let site_packages = SitePackages::from_environment(environment.environment())?;
+                let exclusions = uv_configuration::Excludes::from_entries(excludes.iter().cloned());
                 // TODO(charlie): This fast path only validates the explicit requested
                 // requirements. It can miss editable-mode drift for implicit workspace members.
                 if matches!(
@@ -559,6 +561,7 @@ pub(crate) async fn install(
                         requirements.iter(),
                         constraints.iter().chain(latest.iter()),
                         &uv_configuration::Overrides::from_requirements(overrides.clone()),
+                        &exclusions,
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,

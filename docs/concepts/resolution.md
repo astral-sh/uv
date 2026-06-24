@@ -443,6 +443,45 @@ If multiple overrides are provided for the same package, they must be differenti
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
 
+## Dependency exclusions
+
+Dependency exclusions remove packages from the dependency graph. By default, an exclusion applies to
+every requirement for the named dependency, including direct requirements:
+
+```toml
+[tool.uv]
+exclude-dependencies = ["foo"]
+```
+
+An exclusion can instead be scoped to the dependencies of a particular package version:
+
+```toml
+[tool.uv]
+exclude-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["foo"] },
+]
+```
+
+In this example, requirements for `foo` declared by `bar==0.0.5` are removed, while requirements for
+`foo` from other packages are unchanged. The `version` field in `package` can be omitted to apply
+the scoped exclusions to all versions of `bar`. A version-specific entry takes precedence over an
+all-versions entry.
+
+Scoped exclusions can be combined with scoped overrides to replace one dependency with another:
+
+```toml
+[tool.uv]
+override-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["pytorch-lightning"] },
+]
+exclude-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["lightning"] },
+]
+```
+
+If the same dependency is both overridden and excluded in a matching scope, the exclusion takes
+precedence.
+
 ## Dependency metadata
 
 During resolution, uv needs to resolve the metadata for each package it encounters, in order to

@@ -34,10 +34,10 @@ use uv_cli::{
 use uv_client::Connectivity;
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, DependencyGroups, DryRun, EditableMode, EnvFile,
-    ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode, IndexStrategy,
-    InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override, PackageOverride,
-    PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion, TargetTriple,
-    TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
+    ExcludeDependency, ExportFormat, ExtrasSpecification, GitLfsSetting, HashCheckingMode,
+    IndexStrategy, InstallOptions, KeyringProviderType, NoBinary, NoBuild, NoSources, Override,
+    PackageOverride, PipCompileFormat, ProjectBuildBackend, ProxyUrl, Reinstall, RequiredVersion,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade, VersionControlSystem,
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, IndexUrl,
@@ -3266,7 +3266,7 @@ pub(crate) struct PipCompileSettings {
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<PackageName>,
+    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) required_environments: SupportedEnvironments,
@@ -3582,7 +3582,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Override<Requirement>>,
-    pub(crate) excludes_from_workspace: Vec<PackageName>,
+    pub(crate) excludes_from_workspace: Vec<ExcludeDependency>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,

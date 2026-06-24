@@ -14,7 +14,7 @@ use rustc_hash::{FxHashSet, FxHasher};
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_configuration::DependencyGroupsWithDefaults;
+use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency};
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified, normalize_path};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -825,7 +825,7 @@ impl Workspace {
     }
 
     /// Returns the set of dependency exclusions for the workspace.
-    pub fn exclude_dependencies(&self) -> Vec<PackageName> {
+    pub fn exclude_dependencies(&self) -> Vec<ExcludeDependency> {
         let Some(excludes) = self
             .pyproject_toml
             .tool
