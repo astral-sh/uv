@@ -122,46 +122,53 @@ impl PubGrubPriorities {
             // There is only a single root package despite the value. The priorities on root don't
             // matter for the resolution output, since the Pythons don't have dependencies
             // themselves and are only used when the package is incompatible.
-            PubGrubPackageInner::Root(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(0)),
+            PubGrubPackageInner::Root(_) => {
+                return (PubGrubPriority::Root, PubGrubTiebreaker::from(0));
+            }
             PubGrubPackageInner::Python(PubGrubPython::Installed) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(1))
+                return (PubGrubPriority::Root, PubGrubTiebreaker::from(1));
             }
             PubGrubPackageInner::Python(PubGrubPython::Target) => {
-                (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
+                return (PubGrubPriority::Root, PubGrubTiebreaker::from(2));
             }
-            PubGrubPackageInner::System(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(3)),
-            PubGrubPackageInner::Marker { name, .. }
-            | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Group { name, .. }
-            | PubGrubPackageInner::Package { name, .. } => {
-                // To ensure deterministic resolution, each (virtual) package needs to be registered
-                // on discovery (as dependency of another package), before we query it for
-                // prioritization.
-                let package_priority = match self.package_priority.get(name) {
-                    Some(priority) => *priority,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Package not known: `{name}` from `{package}`")
-                        } else {
-                            PubGrubPriority::Unspecified(Reverse(usize::MAX))
-                        }
-                    }
-                };
-
-                let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
-                    Some(tiebreaker) => *tiebreaker,
-                    None => {
-                        if cfg!(debug_assertions) {
-                            panic!("Package not registered in prioritization: `{package:?}`")
-                        } else {
-                            PubGrubTiebreaker(Reverse(u32::MAX))
-                        }
-                    }
-                };
-
-                (package_priority, package_tiebreaker)
+            PubGrubPackageInner::System(_) => {
+                return (PubGrubPriority::Root, PubGrubTiebreaker::from(3));
             }
+            PubGrubPackageInner::Prerelease { .. }
+            | PubGrubPackageInner::Marker { .. }
+            | PubGrubPackageInner::Extra { .. }
+            | PubGrubPackageInner::Group { .. }
+            | PubGrubPackageInner::Package { .. } => {}
         }
+
+        let name = package
+            .name_no_root()
+            .expect("non-root package should have a name");
+        // To ensure deterministic resolution, each (virtual) package needs to be registered on
+        // discovery (as dependency of another package), before we query it for prioritization.
+        let package_priority = match self.package_priority.get(name) {
+            Some(priority) => *priority,
+            None => {
+                if cfg!(debug_assertions) {
+                    panic!("Package not known: `{name}` from `{package}`")
+                } else {
+                    PubGrubPriority::Unspecified(Reverse(usize::MAX))
+                }
+            }
+        };
+
+        let package_tiebreaker = match self.virtual_package_tiebreaker.get(package) {
+            Some(tiebreaker) => *tiebreaker,
+            None => {
+                if cfg!(debug_assertions) {
+                    panic!("Package not registered in prioritization: `{package:?}`")
+                } else {
+                    PubGrubTiebreaker(Reverse(u32::MAX))
+                }
+            }
+        };
+
+        (package_priority, package_tiebreaker)
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
