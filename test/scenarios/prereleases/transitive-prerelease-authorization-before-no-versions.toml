@@ -1,0 +1,28 @@
+name = "transitive-prerelease-authorization-before-no-versions"
+description = "A transitive pre-release authorization is discovered before an ordinary requirement is rejected for having no stable candidates."
+
+[root]
+requires = ["a", "b"]
+
+[expected]
+satisfiable = true
+explanation = "The explicit pre-release requirement introduced through `d` authorizes `c==2.0.0a1`, regardless of dependency resolution order."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "2.0.0a1"
+d = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c>1"]
+
+[packages.b.versions."1.0.0"]
+requires = ["d"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]
+
+[packages.d.versions."1.0.0"]
+requires = ["c>=2.0.0a1"]

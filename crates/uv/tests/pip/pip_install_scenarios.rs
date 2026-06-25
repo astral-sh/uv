@@ -3230,6 +3230,65 @@ fn transitive_prerelease_authorization_backtracks() {
     context.assert_installed("d", "1.0.0");
 }
 
+/// A transitive pre-release authorization is discovered before an ordinary requirement is rejected for having no stable candidates.
+///
+/// ```text
+/// transitive-prerelease-authorization-before-no-versions
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c>1
+/// │           └── satisfied by c-2.0.0a1
+/// ├── b
+/// │   └── b-1.0.0
+/// │       └── requires d
+/// │           └── satisfied by d-1.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   └── c-2.0.0a1
+/// └── d
+///     └── d-1.0.0
+///         └── requires c>=2.0.0a1
+///             └── satisfied by c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_authorization_before_no_versions() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-authorization-before-no-versions.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("b")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0a1
+     + d==1.0.0
+    ");
+
+    // The explicit pre-release requirement introduced through `d` authorizes `c==2.0.0a1`, regardless of dependency resolution order.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("d", "1.0.0");
+}
+
 /// An active transitive dependency with a pre-release specifier authorizes newer matching pre-releases.
 ///
 /// ```text

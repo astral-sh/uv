@@ -210,6 +210,8 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
 
 #[derive(Debug, Clone)]
 pub(crate) enum ResolverVersion {
+    /// A pre-release candidate exists, but requires authorization from another package.
+    DeferredPrerelease,
     /// A version that is not usable for some reason
     Unavailable(Version, UnavailableVersion),
     /// A usable version

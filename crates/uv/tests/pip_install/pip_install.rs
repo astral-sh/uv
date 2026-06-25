@@ -4507,6 +4507,41 @@ fn explicit_prerelease_allows_transitive_marker() {
     context.assert_installed("c", "2.0.0b1");
 }
 
+/// `--prerelease=explicit` should discover transitive authorization before rejecting an ordinary
+/// requirement with no matching stable candidates.
+#[test]
+fn explicit_prerelease_authorization_is_order_independent() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-authorization-before-no-versions.toml",
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit")
+        .arg("a")
+        .arg("b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0a1
+     + d==1.0.0
+    ");
+
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("d", "1.0.0");
+}
+
 /// `--prerelease=disallow` should continue to reject explicitly requested transitive
 /// pre-releases.
 #[test]

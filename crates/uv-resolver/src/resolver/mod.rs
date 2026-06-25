@@ -419,6 +419,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
                             )
                         else {
+                            if let Some(deferred) = state.take_deferred_prerelease() {
+                                state.initial_id = Some(deferred);
+                                continue;
+                            }
+
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
                                 state.prefetcher.log_tried_versions();
@@ -472,6 +477,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .join(", ")
                         );
 
+                        state.remove_deferred_prerelease(highest_priority_pkg);
                         highest_priority_pkg
                     };
 
@@ -531,6 +537,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         request_sink,
                     )?;
 
+                    let decision = match decision {
+                        Some(ResolverVersion::DeferredPrerelease)
+                            if state.has_undecided_package() =>
+                        {
+                            state.defer_prerelease(next_id);
+                            continue;
+                        }
+                        Some(ResolverVersion::DeferredPrerelease) => None,
+                        decision => decision,
+                    };
+
                     // Pick the next compatible version.
                     let Some(version) = decision else {
                         debug!("No compatible version found for: {next_package}");
@@ -565,6 +582,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     };
 
                     let version = match version {
+                        ResolverVersion::DeferredPrerelease => {
+                            state.defer_prerelease(next_id);
+                            continue;
+                        }
                         ResolverVersion::Unforked(version) => version,
                         ResolverVersion::Forked(forks) => {
                             forked_states.extend(self.version_forks_to_fork_states(state, forks));
@@ -1325,6 +1346,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             env,
             self.tags.as_ref(),
         ) else {
+            // Under `--prerelease=explicit`, an explicit requirement in another unresolved branch
+            // may authorize a pre-release candidate. Defer the no-versions incompatibility until
+            // those packages have been expanded, so resolution order cannot hide the opt-in.
+            if !explicit_prerelease
+                && self
+                    .selector
+                    .select(
+                        name,
+                        range,
+                        version_maps,
+                        preferences,
+                        &self.installed_packages,
+                        &self.exclusions,
+                        index,
+                        true,
+                        env,
+                        self.tags.as_ref(),
+                    )
+                    .is_some()
+            {
+                return Ok(Some(ResolverVersion::DeferredPrerelease));
+            }
+
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
         };
@@ -2991,6 +3035,9 @@ pub(crate) struct ForkState {
     prefetcher: BatchPrefetcher,
     /// Pre-release proxy packages discovered for each package name.
     prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
+    /// Packages whose no-versions incompatibility is deferred while unresolved dependencies may
+    /// still introduce a pre-release proxy.
+    deferred_prereleases: VecDeque<Id<PubGrubPackage>>,
 }
 
 impl ForkState {
@@ -3015,7 +3062,54 @@ impl ForkState {
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
             prerelease_proxies: FxHashMap::default(),
+            deferred_prereleases: VecDeque::default(),
         }
+    }
+
+    /// Returns `true` if PubGrub has another package ready for a decision.
+    fn has_undecided_package(&self) -> bool {
+        self.pubgrub
+            .partial_solution
+            .undecided_packages()
+            .next()
+            .is_some()
+    }
+
+    /// Defer a package while other dependencies may still introduce its pre-release proxy.
+    fn defer_prerelease(&mut self, package: Id<PubGrubPackage>) {
+        if !self.deferred_prereleases.contains(&package) {
+            self.deferred_prereleases.push_back(package);
+        }
+    }
+
+    /// Remove a package from the deferred queue when PubGrub selects it again.
+    fn remove_deferred_prerelease(&mut self, package: Id<PubGrubPackage>) {
+        self.deferred_prereleases
+            .retain(|deferred| *deferred != package);
+    }
+
+    /// Return the next still-relevant deferred package after all other packages are exhausted.
+    fn take_deferred_prerelease(&mut self) -> Option<Id<PubGrubPackage>> {
+        while let Some(package) = self.deferred_prereleases.pop_front() {
+            if !matches!(
+                self.pubgrub
+                    .partial_solution
+                    .term_intersection_for_package(package),
+                Some(Term::Positive(_))
+            ) {
+                continue;
+            }
+            if self
+                .pubgrub
+                .partial_solution
+                .extract_solution()
+                .any(|(decided, _)| decided == package)
+            {
+                continue;
+            }
+            return Some(package);
+        }
+        None
     }
 
     /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
