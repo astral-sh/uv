@@ -752,7 +752,15 @@ impl PubGrubReportFormatter<'_> {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                            self.prerelease_hint(
+                                name,
+                                set,
+                                selector,
+                                env,
+                                matches!(&**package, PubGrubPackageInner::Prerelease { .. }),
+                                options,
+                                output_hints,
+                            );
                         }
 
                         // Check for no versions due to no `--find-links` flat index.
@@ -810,7 +818,15 @@ impl PubGrubReportFormatter<'_> {
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
-                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                            self.prerelease_hint(
+                                name,
+                                set,
+                                selector,
+                                env,
+                                matches!(&**package, PubGrubPackageInner::Prerelease { .. }),
+                                options,
+                                output_hints,
+                            );
                         }
 
                         // Check for no versions due to no `--find-links` flat index.
@@ -1286,10 +1302,13 @@ impl PubGrubReportFormatter<'_> {
         set: &Range<Version>,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
+        explicit_prerelease: bool,
         options: &Options,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        if selector.prerelease_strategy().selection(name, env, false)
+        if selector
+            .prerelease_strategy()
+            .selection(name, env, explicit_prerelease)
             != PrereleaseSelection::Disallow
         {
             return;

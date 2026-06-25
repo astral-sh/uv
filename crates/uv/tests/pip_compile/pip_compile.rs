@@ -558,6 +558,64 @@ fn prerelease_proxy_respects_base_range() -> Result<()> {
     Ok(())
 }
 
+/// An explicit transitive pre-release requirement already enables pre-releases for the package,
+/// so an unsatisfiable range should not suggest enabling them again.
+#[test]
+fn prerelease_proxy_suppresses_disabled_hint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("a")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("1.0.0")?,
+                PackageMetadata {
+                    requires: vec![Requirement::from_str("c>=3.0.0a1")?],
+                    sdist: false,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    scenario.packages.insert(
+        PackageName::from_str("c")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("2.0.0a1")?,
+                PackageMetadata {
+                    sdist: false,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("a")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only c==2.0.0a1 is available and a==1.0.0 depends on c>=3.0.0a1, we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Resolve a package from a `requirements.in` file, with an inline constraint.
 #[test]
 fn compile_constraints_inline() -> Result<()> {
