@@ -1,0 +1,22 @@
+name = "transitive-prerelease-authorization-forks"
+description = "A transitive pre-release authorization applies only to the universal-resolution fork in which its marker is active."
+
+[resolver_options]
+universal = true
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release."
+
+[packages.a.versions."1.0.0"]
+requires = [
+  "c>=2.0.0b1 ; sys_platform == 'linux'",
+  "c==1.0.0 ; sys_platform != 'linux'",
+]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0b1"]
