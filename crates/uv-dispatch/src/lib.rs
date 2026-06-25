@@ -203,11 +203,6 @@ impl<'a> BuildDispatch<'a> {
             .collect();
         self
     }
-
-    /// Return the resolved preview configuration.
-    pub fn preview(&self) -> Preview {
-        self.preview
-    }
 }
 
 #[allow(refining_impl_trait)]
@@ -311,7 +306,6 @@ impl BuildContext for BuildDispatch<'_> {
                 self.client,
                 self,
                 self.concurrency.downloads_semaphore.clone(),
-                self.preview,
             )
             .with_build_stack(build_stack),
         )
@@ -345,7 +339,6 @@ impl BuildContext for BuildDispatch<'_> {
                 self.client,
                 self,
                 self.concurrency.downloads_semaphore.clone(),
-                self.preview,
             )
             .with_build_stack(build_stack),
         )?;
@@ -442,7 +435,6 @@ impl BuildContext for BuildDispatch<'_> {
                     self.client,
                     self,
                     self.concurrency.downloads_semaphore.clone(),
-                    self.preview,
                 )
                 .with_build_stack(build_stack),
             );

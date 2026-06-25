@@ -29,7 +29,7 @@ use uv_fs::write_atomic;
 use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
-use uv_preview::{Preview, PreviewFeature};
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
 use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
@@ -68,14 +68,13 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         client: &'a RegistryClient,
         build_context: &'a Context,
         downloads_semaphore: Arc<Semaphore>,
-        preview: Preview,
     ) -> Self {
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
-            content_addressed_cache: preview.is_enabled(PreviewFeature::ContentAddressedCache),
+            content_addressed_cache: uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
         }
     }
 
