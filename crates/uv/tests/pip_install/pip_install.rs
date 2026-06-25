@@ -4451,6 +4451,62 @@ fn build_transitive_prerelease() -> Result<()> {
     Ok(())
 }
 
+/// `--prerelease=explicit` should reject pre-releases when no active requirement contains a
+/// pre-release marker.
+#[test]
+fn explicit_prerelease_requires_marker() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-only-prereleases-in-range.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit")
+        .arg("a>0.1.0"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
+
+    context.assert_not_installed("a");
+}
+
+/// `--prerelease=explicit` should honor an active transitive pre-release proxy.
+#[test]
+fn explicit_prerelease_allows_transitive_marker() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit")
+        .arg("a")
+        .arg("b"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b1
+    ");
+
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0b1");
+}
+
 /// `--prerelease=disallow` should continue to reject explicitly requested transitive
 /// pre-releases.
 #[test]
