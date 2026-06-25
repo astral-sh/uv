@@ -16,7 +16,7 @@ use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
-use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
+use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
@@ -85,11 +85,15 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
+        explicit_prerelease: bool,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
+        let prerelease_selection =
+            self.prerelease_strategy
+                .selection(package_name, env, explicit_prerelease);
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -108,6 +112,7 @@ impl CandidateSelector {
             installed_packages,
             reinstall,
             index,
+            prerelease_selection,
             env,
             tags,
         ) {
@@ -133,7 +138,13 @@ impl CandidateSelector {
         }
 
         // Otherwise, find the best candidate from the version maps.
-        let compatible = self.select_no_preference(package_name, range, version_maps, env);
+        let compatible = self.select_no_preference_with(
+            package_name,
+            range,
+            version_maps,
+            prerelease_selection,
+            env,
+        );
 
         // Cross-reference against the already-installed distribution.
         //
@@ -177,6 +188,7 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
         index: Option<&'a IndexUrl>,
+        prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
@@ -226,28 +238,27 @@ impl CandidateSelector {
             }
         };
 
-        self.get_preferred_from_iter(
+        Self::get_preferred_from_iter(
             preferences,
             package_name,
             range,
             version_maps,
             installed_packages,
             reinstall,
-            env,
+            prerelease_selection,
             tags,
         )
     }
 
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
-        &'a self,
         preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
-        env: &ResolverEnvironment,
+        prerelease_selection: PrereleaseSelection,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
         for (version, source) in preferences {
@@ -301,12 +312,12 @@ impl CandidateSelector {
 
             // Respect the pre-release strategy for this fork.
             if version.any_prerelease() {
-                let allow = match self.prerelease_strategy.allows(package_name, env) {
-                    AllowPrerelease::Yes => true,
-                    AllowPrerelease::No => false,
+                let allow = match prerelease_selection {
+                    PrereleaseSelection::Allow => true,
+                    PrereleaseSelection::Disallow => false,
                     // If the pre-release was provided via an existing file, rather than from the
                     // current solve, accept it unless pre-releases are completely banned.
-                    AllowPrerelease::IfNecessary => match source {
+                    PrereleaseSelection::PreferStable => match source {
                         PreferenceSource::Resolver => false,
                         PreferenceSource::Lock
                         | PreferenceSource::Environment
@@ -418,18 +429,71 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
+        self.select_no_preference_with(
+            package_name,
+            range,
+            version_maps,
+            self.prerelease_strategy.selection(package_name, env, false),
+            env,
+        )
+    }
+
+    fn select_no_preference_with<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        prerelease_selection: PrereleaseSelection,
+        env: &ResolverEnvironment,
+    ) -> Option<Candidate<'a>> {
+        match prerelease_selection {
+            PrereleaseSelection::Allow => self.select_no_preference_from(
+                package_name,
+                range,
+                version_maps,
+                PrereleaseCandidates::All,
+                env,
+            ),
+            PrereleaseSelection::Disallow => self.select_no_preference_from(
+                package_name,
+                range,
+                version_maps,
+                PrereleaseCandidates::Stable,
+                env,
+            ),
+            PrereleaseSelection::PreferStable => self
+                .select_no_preference_from(
+                    package_name,
+                    range,
+                    version_maps,
+                    PrereleaseCandidates::Stable,
+                    env,
+                )
+                .or_else(|| {
+                    self.select_no_preference_from(
+                        package_name,
+                        range,
+                        version_maps,
+                        PrereleaseCandidates::Prerelease,
+                        env,
+                    )
+                }),
+        }
+    }
+
+    fn select_no_preference_from<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        version_maps: &'a [VersionMap],
+        prerelease_candidates: PrereleaseCandidates,
+        env: &ResolverEnvironment,
+    ) -> Option<Candidate<'a>> {
         trace!(
             "Selecting candidate for {package_name} with range {range} with {} remote versions",
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name, env);
-
-        let allow_prerelease = match self.prerelease_strategy.allows(package_name, env) {
-            AllowPrerelease::Yes => true,
-            AllowPrerelease::No => false,
-            // Allow pre-releases if there are no stable versions available.
-            AllowPrerelease::IfNecessary => !version_maps.iter().any(VersionMap::stable),
-        };
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
@@ -455,7 +519,7 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    allow_prerelease,
+                    prerelease_candidates,
                     highest,
                 )
             } else {
@@ -478,7 +542,7 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    allow_prerelease,
+                    prerelease_candidates,
                     highest,
                 )
             }
@@ -489,7 +553,7 @@ impl CandidateSelector {
                         version_map.iter(range).rev(),
                         package_name,
                         range,
-                        allow_prerelease,
+                        prerelease_candidates,
                         highest,
                     )
                 })
@@ -499,7 +563,7 @@ impl CandidateSelector {
                         version_map.iter(range),
                         package_name,
                         range,
-                        allow_prerelease,
+                        prerelease_candidates,
                         highest,
                     )
                 })
@@ -536,7 +600,7 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        allow_prerelease: bool,
+        prerelease_candidates: PrereleaseCandidates,
         highest: bool,
     ) -> Option<Candidate<'a>> {
         let segments = range.iter();
@@ -566,7 +630,11 @@ impl CandidateSelector {
             }
 
             let candidate = {
-                if version.any_prerelease() && !allow_prerelease {
+                if match prerelease_candidates {
+                    PrereleaseCandidates::All => false,
+                    PrereleaseCandidates::Stable => version.any_prerelease(),
+                    PrereleaseCandidates::Prerelease => !version.any_prerelease(),
+                } {
                     continue;
                 }
                 if !cursor.contains(version) {
@@ -758,6 +826,13 @@ mod tests {
     fn range_cursor_descending() {
         assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PrereleaseCandidates {
+    All,
+    Stable,
+    Prerelease,
 }
 
 #[derive(Debug, Clone)]

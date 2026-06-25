@@ -1,6 +1,6 @@
 use uv_distribution_types::RequirementSource;
 use uv_normalize::PackageName;
-use uv_pep440::Operator;
+use uv_pep440::{Operator, VersionSpecifiers};
 
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
@@ -16,15 +16,15 @@ pub enum PrereleaseMode {
     /// Allow all pre-release versions.
     Allow,
 
-    /// Allow pre-release versions if all versions of a package are pre-release.
+    /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions for first-party packages with explicit pre-release markers in
-    /// their version requirements.
+    /// Prefer stable candidates, but allow pre-releases to participate in normal version ordering
+    /// when an active direct or transitive requirement contains an explicit pre-release marker.
     Explicit,
 
-    /// Allow pre-release versions if all versions of a package are pre-release, or if the package
-    /// has an explicit pre-release marker in its version requirements.
+    /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
+    /// when an active direct or transitive requirement contains an explicit pre-release marker.
     #[default]
     IfNecessaryOrExplicit,
 }
@@ -51,15 +51,15 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow all pre-release versions.
     Allow,
 
-    /// Allow pre-release versions if all versions of a package are pre-release.
+    /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions for first-party packages with explicit pre-release markers in
-    /// their version requirements.
+    /// Prefer stable candidates, but allow pre-releases to participate in normal version ordering
+    /// when an active requirement contains an explicit pre-release marker.
     Explicit(ForkSet),
 
-    /// Allow pre-release versions if all versions of a package are pre-release, or if the package
-    /// has an explicit pre-release marker in its version requirements.
+    /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
+    /// when an active requirement contains an explicit pre-release marker.
     IfNecessaryOrExplicit(ForkSet),
 }
 
@@ -82,13 +82,7 @@ impl PrereleaseStrategy {
                         continue;
                     };
 
-                    if specifier
-                        .iter()
-                        .filter(|spec| {
-                            !matches!(spec.operator(), Operator::NotEqual | Operator::NotEqualStar)
-                        })
-                        .any(uv_pep440::VersionSpecifier::any_prerelease)
-                    {
+                    if contains_prerelease(specifier) {
                         packages.add(&requirement, ());
                     }
                 }
@@ -102,43 +96,58 @@ impl PrereleaseStrategy {
         }
     }
 
-    /// Returns `true` if a [`PackageName`] is allowed to have pre-release versions.
-    pub(crate) fn allows(
+    /// Returns the pre-release candidate selection policy for a package.
+    ///
+    /// An explicit transitive dependency is represented by a PubGrub package, so its
+    /// authorization is part of the partial solution and follows normal backtracking. When no
+    /// explicit authorization is active, pre-releases remain in the candidate universe but are
+    /// considered only after stable candidates. Keeping the candidate universe fixed is required
+    /// for PubGrub's learned incompatibilities to remain valid.
+    pub(crate) fn selection(
         &self,
         package_name: &PackageName,
         env: &ResolverEnvironment,
-    ) -> AllowPrerelease {
+        explicit_prerelease: bool,
+    ) -> PrereleaseSelection {
         match self {
-            Self::Disallow => AllowPrerelease::No,
-            Self::Allow => AllowPrerelease::Yes,
-            Self::IfNecessary => AllowPrerelease::IfNecessary,
-            Self::Explicit(packages) => {
-                if packages.contains(package_name, env) {
-                    AllowPrerelease::Yes
+            Self::Disallow => PrereleaseSelection::Disallow,
+            Self::Allow => PrereleaseSelection::Allow,
+            Self::IfNecessary => PrereleaseSelection::PreferStable,
+            Self::Explicit(packages) | Self::IfNecessaryOrExplicit(packages) => {
+                if explicit_prerelease || packages.contains(package_name, env) {
+                    PrereleaseSelection::Allow
                 } else {
-                    AllowPrerelease::No
-                }
-            }
-            Self::IfNecessaryOrExplicit(packages) => {
-                if packages.contains(package_name, env) {
-                    AllowPrerelease::Yes
-                } else {
-                    AllowPrerelease::IfNecessary
+                    PrereleaseSelection::PreferStable
                 }
             }
         }
     }
 }
 
-/// The pre-release strategy for a given package.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum AllowPrerelease {
-    /// Allow all pre-release versions.
-    Yes,
+/// Returns `true` if the specifiers explicitly mention a pre-release version.
+///
+/// Exclusions do not opt a package into pre-releases. For example, `!=1.0a1` should not change
+/// which candidate kinds are considered.
+pub(crate) fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
+    specifiers
+        .iter()
+        .filter(|specifier| {
+            !matches!(
+                specifier.operator(),
+                Operator::NotEqual | Operator::NotEqualStar
+            )
+        })
+        .any(uv_pep440::VersionSpecifier::any_prerelease)
+}
 
-    /// Disallow all pre-release versions.
-    No,
-
-    /// Allow pre-release versions if all versions of this package are pre-release.
-    IfNecessary,
+/// How pre-release candidates participate in version selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrereleaseSelection {
+    /// Do not consider pre-release candidates.
+    Disallow,
+    /// Consider stable and pre-release candidates in normal version order.
+    Allow,
+    /// Prefer stable candidates, falling back to pre-releases only after stable candidates are
+    /// exhausted.
+    PreferStable,
 }
