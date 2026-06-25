@@ -1004,23 +1004,38 @@ fn parse_email_message_file(
 /// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
 pub(crate) fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
     // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let file_type = entry.file_type().ok()?;
-        if file_type.is_dir() {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "dist-info") {
-                Some(path)
-            } else {
-                None
+    let mut dist_infos = fs::read_dir(path.as_ref())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let file_type = entry.file_type().ok()?;
+            if file_type.is_dir() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "dist-info") {
+                    return Some(path);
+                }
             }
-        } else {
             None
+        })
+        .collect::<Vec<_>>();
+    dist_infos.sort();
+
+    let dist_info = match dist_infos.as_slice() {
+        [] => {
+            return Err(Error::InvalidWheel(
+                "Missing .dist-info directory".to_string(),
+            ));
         }
-    }) else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
+        [dist_info] => dist_info,
+        _ => {
+            return Err(Error::InvalidWheel(format!(
+                "Multiple .dist-info directories found: {}",
+                dist_infos
+                    .iter()
+                    .filter_map(|path| path.file_stem())
+                    .map(|name| name.to_string_lossy())
+                    .join(", ")
+            )));
+        }
     };
 
     let Some(dist_info_prefix) = dist_info.file_stem() else {
@@ -1111,9 +1126,28 @@ mod test {
     use indoc::{formatdoc, indoc};
 
     use super::{
-        Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
+        Error, RecordEntry, Script, WheelFile, find_dist_info, format_shebang,
+        get_script_executable, parse_email_message_file, parse_scripts, read_record,
+        write_installer_metadata,
     };
+
+    #[test]
+    fn multiple_dist_info_directories() -> Result<()> {
+        let wheel = assert_fs::TempDir::new()?;
+        wheel.child("example-1.0.0.dist-info").create_dir_all()?;
+        wheel.child("example-2.0.0.dist-info").create_dir_all()?;
+
+        let error = find_dist_info(&wheel)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("multiple .dist-info directories should be rejected"))?;
+
+        assert_eq!(
+            error.to_string(),
+            "The wheel is invalid: Multiple .dist-info directories found: example-1.0.0, example-2.0.0"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn test_parse_email_message_file() {
