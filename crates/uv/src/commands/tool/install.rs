@@ -28,7 +28,7 @@ use uv_python::{
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_types::SourceTreeEditablePolicy;
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
@@ -762,6 +762,7 @@ pub(crate) async fn install(
         match sync_environment(
             environment,
             &resolution.into(),
+            HashStrategy::default(),
             Modifications::Exact,
             Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
