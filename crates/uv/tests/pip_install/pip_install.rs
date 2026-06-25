@@ -3428,7 +3428,6 @@ fn install_only_binary_all_and_no_binary_all() {
       × No solution found when resolving dependencies:
       ╰─▶ Because all versions of anyio have no usable wheels and you require anyio, we can conclude that your requirements are unsatisfiable.
 
-    hint: Pre-releases are available for `anyio` in the requested range (e.g., 4.0.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     hint: Wheels are required for `anyio` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
     );
@@ -4378,9 +4377,9 @@ fn install_git_source_respects_offline_mode() {
     );
 }
 
-/// Build requirements should explain how to opt into prereleases when they are the only solution.
+/// Transitive pre-releases should be enabled when resolving isolated build requirements.
 #[test]
-fn build_prerelease_hint() -> Result<()> {
+fn build_transitive_prerelease() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("prereleases/transitive-package-only-prereleases-in-range.toml");
 
@@ -4393,7 +4392,40 @@ fn build_prerelease_hint() -> Result<()> {
 
         [build-system]
         requires = ["a"]
-        build-backend = "setuptools.build_meta"
+        backend-path = ["."]
+        build-backend = "backend"
+    "#})?;
+
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        import pathlib
+        import zipfile
+
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel_name = "project-0.1.0-py3-none-any.whl"
+            wheel_path = pathlib.Path(wheel_directory, wheel_name)
+            records = [
+                ("project/__init__.py", b""),
+                (
+                    "project-0.1.0.dist-info/METADATA",
+                    b"Metadata-Version: 2.1\nName: project\nVersion: 0.1.0\n",
+                ),
+                (
+                    "project-0.1.0.dist-info/WHEEL",
+                    b"Wheel-Version: 1.0\nGenerator: uv-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                ),
+            ]
+
+            with zipfile.ZipFile(wheel_path, "w") as wheel:
+                for path, contents in records:
+                    wheel.writestr(path, contents)
+                record = "\n".join(f"{path},," for path, _ in records)
+                wheel.writestr(
+                    "project-0.1.0.dist-info/RECORD",
+                    record + "\nproject-0.1.0.dist-info/RECORD,,\n",
+                )
+
+            return wheel_name
     "#})?;
 
     let mut command = context.pip_install();
@@ -4404,23 +4436,48 @@ fn build_prerelease_hint() -> Result<()> {
         context.filters(),
         command,
         @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "
+    );
+
+    Ok(())
+}
+
+/// `--prerelease=disallow` should continue to reject explicitly requested transitive
+/// pre-releases.
+#[test]
+fn disallow_transitive_prerelease() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=disallow")
+        .arg("a")
+        .arg("b"), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to resolve requirements from `build-system.requires`
-      ├─▶ No solution found when resolving: `a`
-      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
-          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
+          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
 
-    hint: Only pre-releases of `b` (e.g., 1.0.0a1) match these build requirements, and build environments can't enable pre-releases automatically. Add `b>=1.0.0a1` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.
-    "
-    );
+    hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
 
-    Ok(())
+    context.assert_not_installed("a");
+    context.assert_not_installed("b");
 }
 
 /// Test that constraint markers are respected when validating the current environment (i.e., we

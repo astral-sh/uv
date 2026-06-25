@@ -2318,19 +2318,19 @@ fn package_only_prereleases_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a>0.1.0")
         , @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
-
-    hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
     ");
 
-    // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
-    context.assert_not_installed("a");
+    // Since no stable version of `a` matches the requested range, the matching pre-release is selected.
+    context.assert_installed("a", "1.0.0a1");
 }
 
 /// The user requires any version of package `a` which only has prerelease versions available.
@@ -2754,20 +2754,21 @@ fn transitive_package_only_prereleases_in_range() {
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
         , @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
-          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
-
-    hint: Pre-releases are available for `b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==0.1.0
+     + b==1.0.0a1
     ");
 
-    // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
-    context.assert_not_installed("a");
+    // Since no stable version of `b` matches the transitive requirement, the matching pre-release is selected.
+    context.assert_installed("a", "0.1.0");
+    context.assert_installed("b", "1.0.0a1");
 }
 
 /// The user requires any version of package `a` which requires `b` which only has prerelease versions available.
@@ -2888,34 +2889,23 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of c are available:
-              c<=1.0.0
-              c>=2.0.0a5,<=2.0.0a7
-              c==2.0.0b1
-              c>=2.0.0b5
-          and a==1.0.0 depends on one of:
-              c>1.0.0,<2.0.0a5
-              c>2.0.0a7,<2.0.0b1
-              c>2.0.0b1,<2.0.0b5
-          we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
-
-    hint: `c` was requested with a pre-release marker (e.g., all of:
-        c>1.0.0,<2.0.0a5
-        c>2.0.0a7,<2.0.0b1
-        c>2.0.0b1,<2.0.0b5
-    ), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b4
     ");
 
-    // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    context.assert_not_installed("a");
-    context.assert_not_installed("b");
+    // The selected version of `a` explicitly authorizes the highest matching pre-release of `c`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0b4");
 }
 
 /// A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. There are many prerelease versions.
@@ -2995,23 +2985,23 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on c>=2.0.0b1, we can conclude that all versions of a depend on c>=2.0.0b1.
-          And because only c<2.0.0b1 is available, we can conclude that all versions of a depend on c>3.0.0.
-          And because b==1.0.0 depends on c and only b==1.0.0 is available, we can conclude that all versions of a and all versions of b are incompatible.
-          And because you require a and b, we can conclude that your requirements are unsatisfiable.
-
-    hint: `c` was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b9
     ");
 
-    // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    context.assert_not_installed("a");
-    context.assert_not_installed("b");
+    // The selected version of `a` explicitly authorizes pre-releases of `c`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0b9");
 }
 
 /// A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. The user includes an opt-in to prereleases of the transitive dependency.
@@ -3104,21 +3094,184 @@ fn transitive_prerelease_and_stable_dependency() {
         .arg("a")
         .arg("b")
         , @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
-
-    hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0b1
     ");
 
-    // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
-    context.assert_not_installed("a");
-    context.assert_not_installed("b");
+    // The selected version of `a` explicitly authorizes the pre-release of `c`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0b1");
+}
+
+/// A transitive pre-release authorization discovered after the target was decided causes the target to be reconsidered without restarting resolution.
+///
+/// ```text
+/// transitive-prerelease-authorization-after-decision
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// ├── b
+/// │   └── b-1.0.0
+/// │       └── requires d
+/// │           └── satisfied by d-1.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   └── c-2.0.0a1
+/// └── d
+///     └── d-1.0.0
+///         └── requires c>=2.0.0a1
+///             └── satisfied by c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_authorization_after_decision() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/transitive-prerelease-authorization-after-decision.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("b")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + a==1.0.0
+     + b==1.0.0
+     + c==2.0.0a1
+     + d==1.0.0
+    ");
+
+    // The pre-release proxy introduced through `d` unifies with the previously selected `c` package and moves it to the required pre-release.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("d", "1.0.0");
+}
+
+/// A pre-release authorization introduced by a rejected parent version does not leak into the selected parent version.
+///
+/// ```text
+/// transitive-prerelease-authorization-backtracks
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires d==1.0.0
+/// │       └── satisfied by d-1.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires c>=1.0.0
+/// │   │       ├── satisfied by c-1.0.0
+/// │   │       └── satisfied by c-2.0.0b1
+/// │   └── a-2.0.0
+/// │       └── requires c>=2.0.0b1
+/// │           └── satisfied by c-2.0.0b1
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   └── c-2.0.0b1
+/// │       └── requires d==2.0.0
+/// │           └── satisfied by d-2.0.0
+/// └── d
+///     ├── d-1.0.0
+///     └── d-2.0.0
+/// ```
+#[test]
+fn transitive_prerelease_authorization_backtracks() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/transitive-prerelease-authorization-backtracks.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("d==1.0.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + c==1.0.0
+     + d==1.0.0
+    ");
+
+    // The latest version of `a` is rejected, so its explicit pre-release dependency no longer authorizes pre-releases of `c`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "1.0.0");
+    context.assert_installed("d", "1.0.0");
+}
+
+/// An active transitive dependency with a pre-release specifier authorizes newer matching pre-releases.
+///
+/// ```text
+/// transitive-prerelease-authorizes-newer-prerelease
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c>=1.0.0a1
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_authorizes_newer_prerelease() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/transitive-prerelease-authorizes-newer-prerelease.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + c==2.0.0a1
+    ");
+
+    // The selected version of `a` explicitly opts `c` into pre-releases.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
 }
 
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
