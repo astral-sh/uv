@@ -15517,8 +15517,6 @@ fn install_missing_python_with_target() {
 fn install_missing_python_with_target_downloads_disabled() {
     let context = uv_test::test_context_with_versions!(&[]);
 
-    // Remove the venv if TestContext created one, so uv doesn't try to
-    // inspect a venv with no Python binary inside it.
     if context.venv.path().exists() {
         fs_err::remove_dir_all(context.venv.path()).unwrap();
     }
@@ -15527,7 +15525,9 @@ fn install_missing_python_with_target_downloads_disabled() {
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("anyio")
-        .arg("--target").arg(target_dir.path()), @"
+        .arg("--target").arg(target_dir.path())
+        .env_remove("VIRTUAL_ENV"),  // ← stop uv following the env var to the deleted venv
+    @"
     success: false
     exit_code: 2
     ----- stdout -----
