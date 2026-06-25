@@ -1709,7 +1709,7 @@
           "const": "if-necessary"
         },
         {
-          "description": "Prefer stable candidates, but allow pre-releases to participate in normal version ordering\nwhen an active direct or transitive requirement contains an explicit pre-release marker.",
+          "description": "Allow pre-release versions when an active direct or transitive requirement contains an\nexplicit pre-release marker.",
           "type": "string",
           "const": "explicit"
         },
