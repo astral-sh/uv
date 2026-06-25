@@ -7732,6 +7732,71 @@ async fn find_links_uppercase_html() -> Result<()> {
     Ok(())
 }
 
+/// Reject a wheel with multiple `.dist-info` directories when PEP 658 metadata bypasses
+/// reading metadata from the wheel archive.
+#[tokio::test]
+async fn reject_wheel_with_multiple_dist_info_directories() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let wheel_filename = "validation-3.0.0-py3-none-any.whl";
+    let wheel_path = context
+        .workspace_root
+        .join("test/links")
+        .join(wheel_filename);
+
+    Mock::given(method("GET"))
+        .and(path("/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            formatdoc! {r#"
+                {{
+                    "name": "validation",
+                    "files": [{{
+                        "filename": "{wheel_filename}",
+                        "url": "/{wheel_filename}",
+                        "hashes": {{}},
+                        "core-metadata": true,
+                        "upload-time": "2024-03-24T00:00:00Z"
+                    }}]
+                }}
+            "#},
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}.metadata")))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.1
+            Name: validation
+            Version: 3.0.0
+        "}))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/{wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs::read(wheel_path)?))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("validation==3.0.0")
+        .arg("--index-url")
+        .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+      × Failed to download `validation==3.0.0`
+      ╰─▶ The wheel is invalid: Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// Sync using `--find-links` with a local directory, with wheels disabled.
 #[test]
 fn find_links_no_binary() {
