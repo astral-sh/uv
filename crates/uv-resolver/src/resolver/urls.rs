@@ -48,30 +48,18 @@ impl Urls {
                 // Registry requirement
                 continue;
             };
+            add_regular_url(&mut regular, &requirement.name, url, git);
+        }
 
-            let package_urls = regular.entry(requirement.name.clone()).or_default();
-            if let Some(package_url) = package_urls
-                .iter_mut()
-                .find(|package_url| same_resource(&package_url.parsed_url, &url.parsed_url, git))
-            {
-                // Allow editables to override non-editables.
-                let previous_editable = package_url.is_editable();
-                *package_url = url;
-                if previous_editable {
-                    if let VerbatimParsedUrl {
-                        parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }),
-                        verbatim: _,
-                    } = package_url
-                    {
-                        if editable.is_none() {
-                            debug!("Allowing an editable variant of {}", &package_url.verbatim);
-                            *editable = Some(true);
-                        }
-                    }
-                }
-            } else {
-                package_urls.push(url);
-            }
+        // Scoped override URLs are valid user-provided URLs, but they should only be selected when
+        // the scoped override applies to a matching package version. Treat them as regular URLs so
+        // that a matching override is allowed without forcing the URL for unrelated requirements.
+        for (_, _, requirement) in manifest.overrides.scoped_requirements() {
+            let Some(url) = requirement.source.to_verbatim_parsed_url() else {
+                // Registry requirement
+                continue;
+            };
+            add_regular_url(&mut regular, &requirement.name, url, git);
         }
 
         // Add all URLs from overrides. If there is an override URL, all other URLs from
@@ -166,6 +154,37 @@ impl Urls {
             });
         };
         Ok(*allowed_url)
+    }
+}
+
+fn add_regular_url(
+    regular: &mut FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
+    name: &PackageName,
+    url: VerbatimParsedUrl,
+    git: &GitResolver,
+) {
+    let package_urls = regular.entry(name.clone()).or_default();
+    if let Some(package_url) = package_urls
+        .iter_mut()
+        .find(|package_url| same_resource(&package_url.parsed_url, &url.parsed_url, git))
+    {
+        // Allow editables to override non-editables.
+        let previous_editable = package_url.is_editable();
+        *package_url = url;
+        if previous_editable {
+            if let VerbatimParsedUrl {
+                parsed_url: ParsedUrl::Directory(ParsedDirectoryUrl { editable, .. }),
+                verbatim: _,
+            } = package_url
+            {
+                if editable.is_none() {
+                    debug!("Allowing an editable variant of {}", &package_url.verbatim);
+                    *editable = Some(true);
+                }
+            }
+        }
+    } else {
+        package_urls.push(url);
     }
 }
 

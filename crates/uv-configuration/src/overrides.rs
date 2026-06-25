@@ -145,17 +145,37 @@ impl Overrides {
         Self { global, scoped }
     }
 
-    /// Return an iterator over all [`Requirement`]s in the override set.
-    pub fn requirements(&self) -> impl Iterator<Item = &Requirement> {
+    /// Return an iterator over all global [`Requirement`]s in the override set.
+    pub fn global_requirements(&self) -> impl Iterator<Item = &Requirement> {
         self.global
             .values()
             .flat_map(|requirements| requirements.iter())
-            .chain(
-                self.scoped
+    }
+
+    /// Return all scoped [`Requirement`]s with the package and version they apply to.
+    pub fn scoped_requirements(
+        &self,
+    ) -> impl Iterator<Item = (&PackageName, Option<&Version>, &Requirement)> {
+        self.scoped.iter().flat_map(|(package, entries)| {
+            entries.iter().flat_map(move |entry| {
+                entry
+                    .overrides
                     .values()
                     .flatten()
-                    .flat_map(|scoped| scoped.overrides.values().flatten()),
-            )
+                    .map(move |requirement| (package, entry.version.as_ref(), requirement))
+            })
+        })
+    }
+
+    /// Return the scoped [`Requirement`]s that apply to a specific package version.
+    pub fn scoped_requirements_for(
+        &self,
+        package: &PackageName,
+        version: &Version,
+    ) -> impl Iterator<Item = &Requirement> {
+        self.scoped_for(package, version)
+            .into_iter()
+            .flat_map(|scoped| scoped.overrides.values().flatten())
     }
 
     /// Get the overrides for a package.
