@@ -521,21 +521,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let explicit_prerelease =
                         matches!(&**next_package, PubGrubPackageInner::Prerelease { .. })
                             || state.has_active_prerelease_proxy(next_package);
-                    let decision = self.choose_version(
-                        next_package,
-                        next_id,
-                        index.map(IndexMetadata::url),
-                        term_intersection.unwrap_positive(),
-                        &mut state.pins,
-                        &preferences,
-                        &state.fork_urls,
-                        &state.env,
-                        &state.python_requirement,
-                        &state.pubgrub,
-                        explicit_prerelease,
-                        &mut visited,
-                        request_sink,
-                    )?;
+                    let range = term_intersection.unwrap_positive();
+                    let prerelease_proxy_range = state.prerelease_proxy_range(next_id, range);
+                    let mut choose_version = |range| {
+                        self.choose_version(
+                            next_package,
+                            next_id,
+                            index.map(IndexMetadata::url),
+                            range,
+                            &mut state.pins,
+                            &preferences,
+                            &state.fork_urls,
+                            &state.env,
+                            &state.python_requirement,
+                            &state.pubgrub,
+                            explicit_prerelease,
+                            &mut visited,
+                            request_sink,
+                        )
+                    };
+                    let decision = if let Some(prerelease_proxy_range) = &prerelease_proxy_range {
+                        match choose_version(prerelease_proxy_range)? {
+                            None => choose_version(range)?,
+                            decision => decision,
+                        }
+                    } else {
+                        choose_version(range)?
+                    };
 
                     let decision = match decision {
                         Some(ResolverVersion::DeferredPrerelease)
@@ -3036,6 +3048,8 @@ pub(crate) struct ForkState {
     prefetcher: BatchPrefetcher,
     /// Pre-release proxy packages discovered for each package name.
     prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
+    /// The wrapped package for each pre-release proxy.
+    prerelease_proxy_packages: FxHashMap<Id<PubGrubPackage>, Id<PubGrubPackage>>,
     /// Packages whose no-versions incompatibility is deferred while unresolved dependencies may
     /// still introduce a pre-release proxy.
     deferred_prereleases: VecDeque<Id<PubGrubPackage>>,
@@ -3063,8 +3077,31 @@ impl ForkState {
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
             prerelease_proxies: FxHashMap::default(),
+            prerelease_proxy_packages: FxHashMap::default(),
             deferred_prereleases: VecDeque::default(),
         }
+    }
+
+    /// Prefer candidates compatible with the wrapped package's current range.
+    ///
+    /// An empty intersection is ignored so a newly discovered proxy can still invalidate an
+    /// incompatible decision on the wrapped package.
+    fn prerelease_proxy_range(
+        &self,
+        package: Id<PubGrubPackage>,
+        range: &Range<Version>,
+    ) -> Option<Range<Version>> {
+        let wrapped = *self.prerelease_proxy_packages.get(&package)?;
+        let wrapped = self
+            .pubgrub
+            .partial_solution
+            .term_intersection_for_package(wrapped)?;
+        let wrapped = match wrapped {
+            Term::Positive(range) => range.clone(),
+            Term::Negative(range) => range.complement(),
+        };
+        let range = range.intersection(&wrapped);
+        if range.is_empty() { None } else { Some(range) }
     }
 
     /// Returns `true` if PubGrub has another package ready for a decision.
@@ -3253,6 +3290,8 @@ impl ForkState {
                     continue;
                 };
                 let proxy = self.pubgrub.package_store.alloc(package.clone());
+                let wrapped = self.pubgrub.package_store.alloc(wrapped.clone());
+                self.prerelease_proxy_packages.insert(proxy, wrapped);
                 let proxies = self.prerelease_proxies.entry(name.clone()).or_default();
                 if !proxies.contains(&proxy) {
                     proxies.push(proxy);
