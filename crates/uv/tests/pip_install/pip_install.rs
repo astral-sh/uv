@@ -15514,6 +15514,7 @@ fn install_missing_python_with_target() {
 /// into a `--target` directory should fail with a clear hint pointing at the cause, rather
 /// than a generic "no interpreter found" error.
 #[test]
+#[cfg(not(windows))]
 fn install_missing_python_with_target_downloads_disabled() {
     let context = uv_test::test_context_with_versions!(&[]);
 
