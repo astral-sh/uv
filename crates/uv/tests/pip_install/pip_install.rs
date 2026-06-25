@@ -15535,42 +15535,49 @@ fn install_missing_python_with_target_downloads_disabled() {
     ");
 }
 
-/// If the target directory is on a filesystem with no space remaining,
-/// `uv pip install --target` should fail with a clear error indicating
-/// the cause (No space left on device / os error 28).
+/// If the target directory has insufficient disk space, `uv pip install --target`
+/// should fail with a clear error indicating the cause (No space left on device),
+/// rather than a confusing or generic failure message.
+///
+/// This test mounts a 16KB tmpfs over the target directory using an unprivileged
+/// mount namespace (Linux only). Any package will exceed 16KB and trigger ENOSPC
+/// during wheel extraction.
 #[test]
 #[cfg(target_os = "linux")]
 fn install_target_no_space_left_on_device() {
-    // Check if unprivileged user namespaces are available.
-    // Some kernels disable this (kernel.unprivileged_userns_clone=0).
+    // Verify that unprivileged user namespaces are available on this kernel.
+    // Some distros disable them via kernel.unprivileged_userns_clone=0.
     let ns_check = std::process::Command::new("unshare")
         .args(["--user", "--map-root-user", "--mount", "true"])
         .output();
     let Ok(ns_output) = ns_check else {
-        return; // unshare not available, skip
+        return; // `unshare` binary not found, skip
     };
     if !ns_output.status.success() {
-        return; // user namespaces disabled, skip
+        return; // user namespaces disabled on this kernel, skip
     }
 
     let context = TestContext::new("3.12");
     let target_dir = context.temp_dir.child("tiny-target");
     fs_err::create_dir_all(target_dir.path()).unwrap();
 
-    // Build the uv command string to run inside the new mount namespace.
-    // We mount a 16KB tmpfs over the target dir, then run uv pip install into it.
-    // Any package will exceed 16KB and trigger ENOSPC during extraction.
-    let uv_bin = context.uv_bin(); // path to the uv binary under test
+    // Mount a 16KB tmpfs over target_dir, then install into it.
+    // --link-mode=copy avoids the cross-device hardlink warning
+    // (hardlinks fail because tmpfs and cache are on different mounts).
+    // --no-cache ensures bytes are actually written to the target,
+    // triggering ENOSPC rather than a zero-cost hardlink.
     let cmd = format!(
         "mount -t tmpfs -o size=16k tmpfs {target} && \
-         {uv} pip install certifi --target {target} --no-cache",
+         {uv} pip install certifi \
+             --target {target} \
+             --no-cache \
+             --link-mode copy",
         target = target_dir.path().display(),
-        uv = uv_bin.display(),
+        uv = context.uv_bin().display(),
     );
 
     let output = std::process::Command::new("unshare")
         .args(["--user", "--map-root-user", "--mount", "sh", "-c", &cmd])
-        // Mirror the env vars that TestContext sets so uv behaves the same way
         .env("UV_PYTHON_DOWNLOADS", "never")
         .env("UV_NO_PROGRESS", "1")
         .env("UV_PYTHON", context.python_path())
@@ -15581,7 +15588,7 @@ fn install_target_no_space_left_on_device() {
 
     assert!(
         !output.status.success(),
-        "expected uv to fail with ENOSPC, but it succeeded"
+        "expected uv to fail with ENOSPC, but it succeeded\nstderr: {stderr}"
     );
     assert!(
         stderr.contains("No space left on device") || stderr.contains("os error 28"),
