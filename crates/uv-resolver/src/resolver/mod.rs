@@ -354,11 +354,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let start = Instant::now();
             loop {
-                let highest_priority_pkg =
+                let highest_priority_pkg: Id<PubGrubPackage> =
                     if let Some(initial) = state.initial_id.take() {
-                        // If we just forked based on `requires-python`, we can skip unit
-                        // propagation, since we already propagated the package that initiated
-                        // the fork.
+                        // If we just forked based on `requires-python` or resumed a deferred
+                        // package, we can skip unit propagation. The fork operation already
+                        // propagated its initiating package, and deferred packages are resumed
+                        // immediately after propagation exhausts the other active packages.
                         initial
                     } else {
                         // Run unit propagation.
@@ -414,10 +415,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) =
-                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
-                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
-                            )
+                        let Some(highest_priority_pkg) =
+                            state.pick_highest_priority_non_deferred_package()
                         else {
                             if let Some(deferred) = state.take_deferred_prerelease() {
                                 state.initial_id = Some(deferred);
@@ -477,7 +476,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .join(", ")
                         );
 
-                        state.remove_deferred_prerelease(highest_priority_pkg);
                         highest_priority_pkg
                     };
 
@@ -3046,8 +3044,8 @@ pub(crate) struct ForkState {
     prefetcher: BatchPrefetcher,
     /// Pre-release proxy packages discovered for each package name.
     prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
-    /// Packages whose no-versions incompatibility is deferred while unresolved dependencies may
-    /// still introduce a pre-release proxy.
+    /// Packages whose decision is deferred while unresolved dependencies may still introduce or
+    /// reactivate a pre-release proxy.
     deferred_prereleases: VecDeque<Id<PubGrubPackage>>,
 }
 
@@ -3086,17 +3084,27 @@ impl ForkState {
             .is_some()
     }
 
-    /// Defer a package while other dependencies may still introduce its pre-release proxy.
+    /// Return the highest-priority package that has not been explicitly deferred.
+    fn pick_highest_priority_non_deferred_package(&mut self) -> Option<Id<PubGrubPackage>> {
+        loop {
+            let (package, _) =
+                self.pubgrub
+                    .partial_solution
+                    .pick_highest_priority_pkg(|id, _range| {
+                        self.priorities.get(&self.pubgrub.package_store[id])
+                    })?;
+            if !self.deferred_prereleases.contains(&package) {
+                return Some(package);
+            }
+        }
+    }
+
+    /// Defer a package while other dependencies may still introduce or reactivate its pre-release
+    /// proxy.
     fn defer_prerelease(&mut self, package: Id<PubGrubPackage>) {
         if !self.deferred_prereleases.contains(&package) {
             self.deferred_prereleases.push_back(package);
         }
-    }
-
-    /// Remove a package from the deferred queue when PubGrub selects it again.
-    fn remove_deferred_prerelease(&mut self, package: Id<PubGrubPackage>) {
-        self.deferred_prereleases
-            .retain(|deferred| *deferred != package);
     }
 
     /// Return the next still-relevant deferred package after all other packages are exhausted.
@@ -3315,17 +3323,17 @@ impl ForkState {
 
         if !decided_prerelease_targets.is_empty() {
             // PubGrub otherwise preserves the earlier target decision by trying an older proxy
-            // version. Reconsider the target after the parent has been prioritized, so the proxy
-            // is active when the target next selects a candidate. The dependency incompatibility
-            // added above survives the backtrack and reactivates the proxy with the parent.
-            self.priorities
-                .mark_conflict_early(&self.pubgrub.package_store[for_package]);
+            // version. Reconsider the target only after the other active packages have expanded,
+            // giving the authorizing path time to reactivate its proxy. The dependency
+            // incompatibility added above survives the backtrack and is reactivated with its
+            // parent.
             for package in decided_prerelease_targets {
                 if let Some(backtracked) = self.pubgrub.backtrack_package(package) {
                     debug!(
                         "Backtracked {backtracked} decisions for late pre-release authorization"
                     );
                 }
+                self.defer_prerelease(package);
             }
         }
     }

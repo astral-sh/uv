@@ -490,7 +490,10 @@ fn prerelease_proxy_reconsiders_stable_decision() -> Result<()> {
     let mut scenario = Scenario::empty();
     scenario.packages.insert(
         PackageName::from_str("a")?,
-        package(vec![Requirement::from_str("c")?])?,
+        package(vec![
+            Requirement::from_str("c")?,
+            Requirement::from_str("b")?,
+        ])?,
     );
     scenario.packages.insert(
         PackageName::from_str("b")?,
@@ -526,7 +529,7 @@ fn prerelease_proxy_reconsiders_stable_decision() -> Result<()> {
     let server = PackseServer::from_scenario(&scenario);
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("a\nb")?;
+    requirements_in.write_str("a")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
@@ -542,7 +545,7 @@ fn prerelease_proxy_reconsiders_stable_decision() -> Result<()> {
     a==1.0.0
         # via -r requirements.in
     b==1.0.0
-        # via -r requirements.in
+        # via a
     c==2.0.0a1
         # via
         #   a
