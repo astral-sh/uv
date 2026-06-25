@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -513,7 +513,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
                     let explicit_prerelease =
-                        matches!(&**next_package, PubGrubPackageInner::Prerelease { .. });
+                        matches!(&**next_package, PubGrubPackageInner::Prerelease { .. })
+                            || state.has_active_prerelease_proxy(next_package);
 
                     // In a specific environment, an implicit registry candidate is stable for a
                     // given range and pre-release policy. Avoid repeating candidate selection when
@@ -3041,6 +3042,8 @@ pub(crate) struct ForkState {
     ///
     /// Tracked on the fork state to avoid counting each identical version between forks as new try.
     prefetcher: BatchPrefetcher,
+    /// Pre-release proxy packages discovered for each package name.
+    prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
 }
 
 impl ForkState {
@@ -3066,7 +3069,27 @@ impl ForkState {
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
+            prerelease_proxies: FxHashMap::default(),
         }
+    }
+
+    /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
+    fn has_active_prerelease_proxy(&self, package: &PubGrubPackage) -> bool {
+        let Some(name) = package.name_no_root() else {
+            return false;
+        };
+        self.prerelease_proxies
+            .get(name)
+            .into_iter()
+            .flatten()
+            .any(|proxy| {
+                matches!(
+                    self.pubgrub
+                        .partial_solution
+                        .term_intersection_for_package(*proxy),
+                    Some(Term::Positive(_))
+                )
+            })
     }
 
     /// Visit the dependencies for the selected version of the current package, incorporating any
@@ -3184,6 +3207,17 @@ impl ForkState {
                 parent: _,
                 source: _,
             } = dependency;
+
+            if let PubGrubPackageInner::Prerelease { package: wrapped } = &**package {
+                let Some(name) = wrapped.name_no_root() else {
+                    continue;
+                };
+                let proxy = self.pubgrub.package_store.alloc(package.clone());
+                let proxies = self.prerelease_proxies.entry(name.clone()).or_default();
+                if !proxies.contains(&proxy) {
+                    proxies.push(proxy);
+                }
+            }
 
             let Some(base_package) = package.base_package() else {
                 continue;
