@@ -31,9 +31,9 @@ Additional project metadata and configuration includes:
 When working on a project with uv, uv will create a virtual environment as needed. While some uv
 commands will create a temporary environment (e.g., `uv run --isolated`), uv also manages a
 persistent environment with the project and its dependencies in a `.venv` directory next to the
-`pyproject.toml`. It is stored inside the project to make it easy for editors to find — they need
-the environment to give code completions and type hints. It is not recommended to include the
-`.venv` directory in version control; it is automatically excluded from `git` with an internal
+`pyproject.toml`. By default, it is stored inside the project to make it easy for editors to find —
+they need the environment to give code completions and type hints. It is not recommended to include
+the `.venv` directory in version control; it is automatically excluded from `git` with an internal
 `.gitignore` file.
 
 To run a command in the project environment, use `uv run`. Alternatively the project environment can
@@ -57,6 +57,17 @@ use [`uvx`](../../guides/tools.md) or
     [tool.uv]
     managed = false
     ```
+
+### Centralized project environments
+
+With the [`centralized-project-envs` preview feature](../preview.md), uv stores the default project
+environment in its cache. uv attempts to maintain a `.venv` directory link to the cached environment
+so existing activation and editor workflows can continue to use the usual path. If link creation
+fails, uv continues using the cached environment directly, but tools relying on `.venv` may not
+discover it. Switching interpreters selects separate cached environments and can reuse them later.
+
+Explicit project environment paths, including `UV_PROJECT_ENVIRONMENT` and environments selected
+with `--active`, are not centralized. The feature has no effect when `--no-cache` is enabled.
 
 ## The lockfile
 

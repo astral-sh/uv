@@ -31,8 +31,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
-    WorkspacePython, default_dependency_groups,
+    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    UniversalState, WorkspacePython, default_dependency_groups,
 };
 use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
@@ -265,6 +265,7 @@ pub(crate) async fn remove(
                     active,
                     cache,
                     DryRun::Disabled,
+                    LinkErrorReporting::User,
                     printer,
                 )
                 .await?

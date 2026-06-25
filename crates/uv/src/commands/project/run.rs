@@ -68,8 +68,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
@@ -712,6 +712,7 @@ pub(crate) async fn run(
                     active,
                     &cache,
                     DryRun::Disabled,
+                    LinkErrorReporting::Log,
                     printer,
                 )
                 .await?

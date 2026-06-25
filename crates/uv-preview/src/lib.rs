@@ -258,6 +258,7 @@ pub enum PreviewFeature {
     VenvSafeClear = 1 << 32,
     Check = 1 << 33,
     PackagedInit = 1 << 34,
+    CentralizedProjectEnvs = 1 << 35,
 }
 
 impl PreviewFeature {
@@ -299,6 +300,7 @@ impl PreviewFeature {
             Self::VenvSafeClear => "venv-safe-clear",
             Self::Check => "check-command",
             Self::PackagedInit => "packaged-init",
+            Self::CentralizedProjectEnvs => "centralized-project-envs",
         }
     }
 }
@@ -353,6 +355,7 @@ impl FromStr for PreviewFeature {
             "venv-safe-clear" => Self::VenvSafeClear,
             "check" | "check-command" => Self::Check,
             "packaged-init" => Self::PackagedInit,
+            "centralized-project-envs" => Self::CentralizedProjectEnvs,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -644,6 +647,10 @@ mod tests {
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
         assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
         assert_eq!(PreviewFeature::Check.as_str(), "check-command");
+        assert_eq!(
+            PreviewFeature::CentralizedProjectEnvs.as_str(),
+            "centralized-project-envs"
+        );
     }
 
     #[test]

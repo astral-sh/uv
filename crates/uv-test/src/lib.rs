@@ -234,6 +234,16 @@ impl TestContext {
         self
     }
 
+    /// Filter hashes from backticked centralized environment cache entry names.
+    #[must_use]
+    pub fn with_filtered_centralized_environment_hashes(mut self) -> Self {
+        self.filters.push((
+            r"`([\w.\[\]-]+)-[a-f0-9]{16}`".to_string(),
+            "`$1-[HASH]`".to_string(),
+        ));
+        self
+    }
+
     /// Add extra standard filtering for Windows-compatible missing file errors.
     #[must_use]
     pub fn with_filtered_missing_file_error(mut self) -> Self {
@@ -1053,9 +1063,9 @@ impl TestContext {
             ),
             r#"requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]"#.to_string(),
         ));
-        // Filter script environment hashes
+        // Filter environment cache entry hashes
         filters.push((
-            r"environments-v(\d+)[\\/](\w+)-[a-z0-9]+".to_string(),
+            r"environments-v(\d+)[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
             "environments-v$1/$2-[HASH]".to_string(),
         ));
         // Filter archive hashes
