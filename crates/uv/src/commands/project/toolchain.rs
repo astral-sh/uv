@@ -46,25 +46,17 @@ pub(crate) fn find_locked_tool<'lock>(
             marker_environment.markers(),
         )
         .map_err(anyhow::Error::msg)?;
-    let group_package = selection.group(dependency_group);
-    let production_package = if group_package.is_none() {
-        selection.production()
+    let (package, installed) = if let Some(package) = selection.group(dependency_group) {
+        (package, groups.contains(dependency_group))
+    } else if let Some(package) = selection.production() {
+        (package, groups.prod())
     } else {
-        None
-    };
-    let Some(package) = group_package.or(production_package) else {
         return Ok(None);
     };
 
-    let installed_by_production = groups.prod() && production_package == Some(package);
-    // Require the exact package: `dev` may select ty 0.0.17 while an enabled conflicting group selects 0.0.16.
-    let installed_by_group = selection
-        .groups()
-        .any(|(group, selected)| groups.contains(group) && selected == package);
-
     Ok(Some(LockedTool {
         package,
-        requires_separate_environment: !(installed_by_production || installed_by_group),
+        requires_separate_environment: !installed,
     }))
 }
 

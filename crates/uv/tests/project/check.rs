@@ -519,6 +519,35 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     "#})?;
     context.temp_dir.child("main.py").write_str("x = 1")?;
 
+    // `dev` includes `typing`, so the selected tool is installed in the project environment.
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-default-groups")
+            .arg("--group")
+            .arg("dev")
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+    assert!(context.site_packages().join("ty").exists());
+
+    // The preferred `dev` group is not enabled, so the tool uses a cached environment even though
+    // the enabled `typing` group selects the same package.
     uv_snapshot!(
         context.filters(),
         context
@@ -541,9 +570,6 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     Using ty 0.0.17
     "
     );
-
-    assert!(context.temp_dir.child("uv.lock").exists());
-    assert!(context.site_packages().join("ty").exists());
 
     Ok(())
 }

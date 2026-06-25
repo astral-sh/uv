@@ -322,13 +322,6 @@ impl<'lock> DependencySelection<'lock> {
     pub fn group(&self, group: &GroupName) -> Option<&'lock Package> {
         self.groups.get(group).copied()
     }
-
-    /// Returns the dependency groups and their package selections.
-    pub fn groups(&self) -> impl Iterator<Item = (&'lock GroupName, &'lock Package)> + '_ {
-        self.groups
-            .iter()
-            .map(|(group, package)| (*group, *package))
-    }
 }
 
 impl Lock {
@@ -7269,14 +7262,6 @@ source = { registry = "https://example.com/simple" }
         let selection = lock
             .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
             .expect("unique project package");
-        assert_eq!(
-            selection
-                .groups()
-                .map(|(group, _package)| group)
-                .collect::<Vec<_>>(),
-            [&dev, &typing]
-        );
-
         let preferred = selection.group(&dev).expect("dev dependency");
         let included = selection.group(&typing).expect("typing dependency");
         let production = selection.production().expect("production dependency");
