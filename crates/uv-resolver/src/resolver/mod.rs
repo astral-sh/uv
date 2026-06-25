@@ -354,12 +354,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let start = Instant::now();
             loop {
-                let highest_priority_pkg: Id<PubGrubPackage> =
+                let mut resuming_deferred_prerelease = false;
+                let highest_priority_pkg: Id<PubGrubPackage> = {
                     if let Some(initial) = state.initial_id.take() {
-                        // If we just forked based on `requires-python` or resumed a deferred
-                        // package, we can skip unit propagation. The fork operation already
-                        // propagated its initiating package, and deferred packages are resumed
-                        // immediately after propagation exhausts the other active packages.
+                        // If we just forked based on `requires-python`, we can skip unit
+                        // propagation, since we already propagated the package that initiated
+                        // the fork.
                         initial
                     } else {
                         // Run unit propagation.
@@ -415,14 +415,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some(highest_priority_pkg) =
+                        let highest_priority_pkg = if let Some(package) =
                             state.pick_highest_priority_non_deferred_package()
-                        else {
-                            if let Some(deferred) = state.take_deferred_prerelease() {
-                                state.initial_id = Some(deferred);
-                                continue;
-                            }
-
+                        {
+                            package
+                        } else if let Some(package) = state.take_deferred_prerelease() {
+                            resuming_deferred_prerelease = true;
+                            package
+                        } else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
                                 state.prefetcher.log_tried_versions();
@@ -477,7 +477,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         );
 
                         highest_priority_pkg
-                    };
+                    }
+                };
 
                 state.next = highest_priority_pkg;
 
@@ -539,7 +540,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         Some(ResolverVersion::DeferredPrerelease)
                             if state.has_undecided_package() =>
                         {
-                            state.defer_prerelease(next_id);
+                            // A retried package leaves the worklist. If another package activates
+                            // its proxy, PubGrub changes its derivations and prioritizes it again.
+                            if !resuming_deferred_prerelease {
+                                state.defer_prerelease(next_id);
+                            }
                             continue;
                         }
                         Some(ResolverVersion::DeferredPrerelease) => None,
@@ -3075,13 +3080,18 @@ impl ForkState {
         }
     }
 
-    /// Returns `true` if PubGrub has another package ready for a decision.
+    /// Returns `true` if another package can make progress before the current package is finalized.
     fn has_undecided_package(&self) -> bool {
         self.pubgrub
             .partial_solution
             .undecided_packages()
-            .next()
-            .is_some()
+            .any(|(package, _)| {
+                *package != self.next && self.is_relevant_undecided_package(*package)
+            })
+            || self
+                .deferred_prereleases
+                .iter()
+                .any(|package| self.is_relevant_undecided_package(*package))
     }
 
     /// Return the highest-priority package that has not been explicitly deferred.
@@ -3107,23 +3117,24 @@ impl ForkState {
         }
     }
 
+    /// Return `true` if a package is still positively required and undecided.
+    fn is_relevant_undecided_package(&self, package: Id<PubGrubPackage>) -> bool {
+        matches!(
+            self.pubgrub
+                .partial_solution
+                .term_intersection_for_package(package),
+            Some(Term::Positive(_))
+        ) && !self
+            .pubgrub
+            .partial_solution
+            .extract_solution()
+            .any(|(decided, _)| decided == package)
+    }
+
     /// Return the next still-relevant deferred package after all other packages are exhausted.
     fn take_deferred_prerelease(&mut self) -> Option<Id<PubGrubPackage>> {
         while let Some(package) = self.deferred_prereleases.pop_front() {
-            if !matches!(
-                self.pubgrub
-                    .partial_solution
-                    .term_intersection_for_package(package),
-                Some(Term::Positive(_))
-            ) {
-                continue;
-            }
-            if self
-                .pubgrub
-                .partial_solution
-                .extract_solution()
-                .any(|(decided, _)| decided == package)
-            {
+            if !self.is_relevant_undecided_package(package) {
                 continue;
             }
             return Some(package);
