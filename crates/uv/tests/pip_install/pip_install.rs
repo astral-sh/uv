@@ -15557,7 +15557,7 @@ fn install_target_no_space_left_on_device() {
         return; // user namespaces disabled on this kernel, skip
     }
 
-    let context = TestContext::new_with_versions_and_bin("3.12");
+    let context = TestContext::new_bin("3.12"); 
     let target_dir = context.temp_dir.child("tiny-target");
     fs_err::create_dir_all(target_dir.path()).unwrap();
 
@@ -15573,7 +15573,7 @@ fn install_target_no_space_left_on_device() {
              --no-cache \
              --link-mode copy",
         target = target_dir.path().display(),
-        uv = context.uv_bin().display(),
+        uv = context.uv_bin.display(), // ← was context.uv_bin() — it's a field, not a method
     );
 
     let output = std::process::Command::new("unshare")
