@@ -900,6 +900,266 @@ fn check_script() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_uses_ty_version_from_forked_lock() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "ty==0.0.16 ; python_version < '3.12'",
+        #   "ty==0.0.17 ; python_version >= '3.12'",
+        # ]
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    assert!(!context.temp_dir.child("script.py.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_uses_ty_from_path_with_transitive_dependency() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let ty = context.temp_dir.child("ty");
+    ty.create_dir_all()?;
+    ty.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "ty"
+        version = "1.2.3"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [project.scripts]
+        ty = "ty:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let ty_package = ty.child("src").child("ty");
+    ty_package.create_dir_all()?;
+    ty_package.child("__init__.py").write_str(indoc! {r#"
+        import sys
+
+        import iniconfig
+
+        def main():
+            assert iniconfig is not None
+            if "--version" in sys.argv:
+                print("ty 1.2.3")
+            else:
+                print("All checks passed!")
+    "#})?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["ty"]
+        #
+        # [tool.uv.sources]
+        # ty = { path = "ty" }
+        # ///
+
+        value: int = 1
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 2 packages in [TIME]
+    Using ty 1.2.3
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_ty_override_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
+        .with_filter((
+            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+            "",
+        ));
+    let tool_dir = context.root.child("tools");
+    let bin_dir = context.root.child("tool-bin");
+
+    context
+        .tool_install()
+        .arg("ty==0.0.17")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::UV_EXCLUDE_NEWER, "2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["ty==0.0.16"]
+        # ///
+
+        value: int = 1
+    "#})?;
+    let ty_path = bin_dir.child(format!("ty{}", std::env::consts::EXE_SUFFIX));
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg(">=999.0.0")
+            .arg("--show-version")
+            .env(EnvVars::TY, ty_path.as_os_str()),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--ty-version")
+            .arg("0.0.17")
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_script_ignores_transitive_ty_for_tool_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"))
+        .with_filter((
+            r"(?m)^WARN Failed to fetch `ty` from .+; falling back to .+\n",
+            "",
+        ));
+
+    let wrapper = context.temp_dir.child("wrapper");
+    wrapper.create_dir_all()?;
+    wrapper.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "wrapper"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["ty==0.0.16"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let wrapper_package = wrapper.child("src").child("wrapper");
+    wrapper_package.create_dir_all()?;
+    wrapper_package.child("__init__.py").write_str("")?;
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = ["wrapper"]
+        #
+        # [tool.uv.sources]
+        # wrapper = { path = "wrapper" }
+        # ///
+
+        import wrapper
+    "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--script")
+            .arg(script.path())
+            .arg("--exclude-newer")
+            .arg("2026-02-15T00:00:00Z")
+            .arg("--show-version"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 2 packages in [TIME]
+    Using ty 0.0.17
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn check_passes_workspace_metadata_to_ty() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

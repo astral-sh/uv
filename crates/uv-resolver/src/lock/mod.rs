@@ -305,14 +305,21 @@ pub struct Lock {
 
 /// Package selections from a [`Lock`] for a named direct dependency.
 ///
-/// The dependency can come from a dependency group, the production packages, or both.
+/// The dependency can come from the lock manifest, a dependency group, the production packages,
+/// or a combination thereof.
 #[derive(Debug)]
 pub struct DependencySelection<'lock> {
+    root: Option<&'lock Package>,
     production: Option<&'lock Package>,
     groups: BTreeMap<&'lock GroupName, &'lock Package>,
 }
 
 impl<'lock> DependencySelection<'lock> {
+    /// Returns the package selected by a direct requirement on the lock manifest.
+    pub fn root(&self) -> Option<&'lock Package> {
+        self.root
+    }
+
     /// Returns the package selected by the production dependency.
     pub fn production(&self) -> Option<&'lock Package> {
         self.production
@@ -820,16 +827,17 @@ impl Lock {
     /// Returns the environment-specific direct dependency selections for a lock target.
     ///
     /// If `project_name` is provided, dependencies attached to that package are used. Otherwise,
-    /// dependency groups attached directly to the lock manifest are used.
+    /// requirements and dependency groups attached directly to the lock manifest are used.
     pub fn dependency_selection<'lock>(
         &'lock self,
         project_name: Option<&PackageName>,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
     ) -> Result<DependencySelection<'lock>, String> {
-        let (production, groups) = if let Some(project_name) = project_name {
+        let (root, production, groups) = if let Some(project_name) = project_name {
             let Some(project) = self.find_by_name(project_name)? else {
                 return Ok(DependencySelection {
+                    root: None,
                     production: None,
                     groups: BTreeMap::new(),
                 });
@@ -847,11 +855,16 @@ impl Lock {
                     groups.insert(group, package);
                 }
             }
-            (production, groups)
+            (None, production, groups)
         } else {
-            // Lock-manifest dependency groups only record requirements, not resolved package IDs.
-            // Select the environment-specific package once, then associate it with each group that
-            // has an applicable direct requirement.
+            let root_applies = self.manifest.requirements.iter().any(|requirement| {
+                &requirement.name == dependency_name
+                    && requirement.marker.evaluate(marker_environment, &[])
+            });
+
+            // Lock-manifest requirements and dependency groups only record requirements, not
+            // resolved package IDs. Select the environment-specific package once, then associate
+            // it with every applicable direct requirement.
             let mut applicable_groups = self
                 .manifest
                 .dependency_groups
@@ -866,16 +879,22 @@ impl Lock {
                         .then_some(group)
                 })
                 .peekable();
-            let groups = if applicable_groups.peek().is_some()
-                && let Some(package) = self.find_by_markers(dependency_name, marker_environment)?
-            {
-                applicable_groups.map(|group| (group, package)).collect()
+            let package = if root_applies || applicable_groups.peek().is_some() {
+                self.find_by_markers(dependency_name, marker_environment)?
             } else {
-                BTreeMap::new()
+                None
             };
-            (None, groups)
+            let root = root_applies.then_some(package).flatten();
+            let groups = package.map_or_else(BTreeMap::new, |package| {
+                applicable_groups.map(|group| (group, package)).collect()
+            });
+            (root, None, groups)
         };
-        Ok(DependencySelection { production, groups })
+        Ok(DependencySelection {
+            root,
+            production,
+            groups,
+        })
     }
 
     /// Returns the package selected by a dependency group on a non-virtual project.
@@ -7304,6 +7323,36 @@ source = { registry = "https://example.com/simple" }
 
         assert!(std::ptr::eq(preferred, included));
         assert!(std::ptr::eq(preferred, production));
+    }
+
+    #[test]
+    fn dependency_selection_resolves_lock_manifest_requirement() {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "ty" }]
+
+[[package]]
+name = "ty"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .expect("valid lock");
+        let dependency_name = PackageName::from_str("ty").expect("valid package name");
+        let marker_environment = marker_environment();
+
+        let selection = lock
+            .dependency_selection(None, &dependency_name, &marker_environment)
+            .expect("unique root package");
+        let root = selection.root().expect("root dependency");
+
+        assert_eq!(root.name(), &dependency_name);
+        assert!(selection.production().is_none());
     }
 
     #[test]
