@@ -2044,6 +2044,229 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with `tool.uv.override-dependencies` scoped to a package version.
+#[test]
+fn lock_project_with_scoped_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            "idna==3.1",
+            # A bare override must remain a global override when round-tripping the lockfile.
+            "sniffio",
+            # The package-scoped override takes precedence for AnyIO's dependency.
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "==3.2" }] },
+            { name = "idna", specifier = "==3.1" },
+            { name = "sniffio" },
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/cb/38/4c4d00ddfa48abe616d7e572e02a04273603db446975ab46bbcd36552005/idna-3.2.tar.gz", hash = "sha256:467fbad99067910785144ce333826c71fb0e63a425657295239737f7ecd125f3", size = 243962, upload-time = "2021-05-29T16:53:32.008Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a", size = 59633, upload-time = "2021-05-29T16:53:30.337Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2
+     + sniffio==1.3.1
+    ");
+
+    // A package-scoped override does not replace a direct requirement for the same dependency.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "idna==3.6"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and your project depends on anyio==3.7.0, we can conclude that your project depends on idna==3.2.
+          And because your project depends on idna==3.6, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    // A version-gated override is ignored for other versions of the parent package.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "idna==3.6"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated idna v3.2 -> v3.6
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.2
+     + idna==3.6
+    ");
+
+    Ok(())
+}
+
+/// Reject conflicting overrides scoped to the same package version.
+#[test]
+fn lock_project_with_conflicting_scoped_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.3"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and idna==3.3, we can conclude that anyio==3.7.0 cannot be used.
+          And because your project depends on anyio==3.7.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_override_sources() -> Result<()> {
@@ -2097,6 +2320,155 @@ fn lock_project_with_override_sources() -> Result<()> {
      + anyio==3.7.0
      + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
      + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// Reject a URL override scoped to a package version.
+#[test]
+fn lock_project_with_scoped_override_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna @ https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Scoped override for `anyio` cannot use a URL or path source for `idna`; scoped overrides currently support version specifiers only
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with a pre-release pin from a scoped override.
+#[test]
+fn lock_project_with_scoped_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["pandas==2.2.3"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pandas", version = "2.2.3" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── pandas v2.2.3
+        ├── numpy v2.4.0rc1
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with an explicitly pinned yanked release from a scoped override.
+#[test]
+fn lock_project_with_scoped_override_yank() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [tool.uv]
+        constraint-dependencies = ["urllib3>=2.0,<2.0.1"]
+        override-dependencies = [
+            { package = { name = "requests", version = "2.31.0" }, dependencies = ["urllib3==2.0.0"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: `urllib3==2.0.0` is yanked (reason: "Truncated response bodies when streaming a large compressed body. Upgrade to at least 2.0.2 (See: https://github.com/urllib3/urllib3/issues/3009)")
+    "###);
+
+    Ok(())
+}
+
+/// Reject a scoped override from an explicit index.
+#[test]
+fn lock_project_with_scoped_override_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+
+        [tool.uv.sources]
+        idna = { index = "custom" }
+
+        [[tool.uv.index]]
+        name = "custom"
+        url = "https://example.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Scoped override for `anyio` cannot use an explicit index for `idna`; scoped overrides currently support version specifiers only
     ");
 
     Ok(())

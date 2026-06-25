@@ -1355,6 +1355,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        &spec.override_dependencies,
         InstallationStrategy::Permissive,
         &markers,
         tags,

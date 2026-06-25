@@ -108,10 +108,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
                     hasher = hasher.augment_with_requirements(lookahead.requirements().iter())?;
-                    for requirement in self
-                        .constraints
-                        .apply(self.overrides.apply(lookahead.requirements()))
-                    {
+                    for requirement in self.constraints.apply(self.overrides.apply_for(
+                        lookahead.package(),
+                        lookahead.version(),
+                        lookahead.requirements(),
+                    )) {
                         if requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
@@ -175,6 +176,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
+        let package = metadata.name.clone();
+        let version = metadata.version.clone();
         let requires_dist = Box::into_iter(metadata.requires_dist)
             .chain(
                 metadata
@@ -203,6 +206,8 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(
+            package,
+            version,
             requirement.extras,
             requires_dist,
             direct,

@@ -120,6 +120,27 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
+    /// Return all requirements that affect manifest-wide candidate selection policy.
+    ///
+    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements(env, mode).chain(
+            self.overrides
+                .scoped_requirements()
+                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .filter(|requirement| !self.excludes.contains(&requirement.name))
+                .filter(move |requirement| {
+                    requirement.evaluate_markers(env.marker_environment(), &[])
+                }),
+        )
+    }
+
     /// Like [`Self::requirements`], but without the overrides.
     pub(crate) fn requirements_no_overrides<'a>(
         &'a self,
@@ -133,7 +154,11 @@ impl Manifest {
                     .iter()
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
                                 requirement
@@ -181,7 +206,7 @@ impl Manifest {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -191,7 +216,7 @@ impl Manifest {
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -225,7 +250,11 @@ impl Manifest {
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())

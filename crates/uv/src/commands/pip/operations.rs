@@ -14,7 +14,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroups, DryRun, Excludes,
-    ExtrasSpecification, Overrides, Reinstall, Upgrade,
+    ExtrasSpecification, Override, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
@@ -100,6 +100,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
+    lowered_overrides: Vec<Override<Requirement>>,
     excludes: Vec<PackageName>,
     source_trees: Vec<SourceTree>,
     mut project: Option<PackageName>,
@@ -306,7 +307,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .map(|constraint| constraint.requirement)
             .chain(upgrade.constraints().cloned()),
     );
-    let overrides = Overrides::from_requirements(overrides);
+    let overrides = Overrides::from_entries(
+        lowered_overrides
+            .into_iter()
+            .chain(overrides.into_iter().map(Override::Requirement))
+            .collect(),
+    )
+    .map_err(anyhow::Error::from)?;
     let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 

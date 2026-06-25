@@ -1053,7 +1053,7 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            overrides.iter(),
+                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,

@@ -21,7 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::GitLfsSetting;
+use uv_configuration::{GitLfsSetting, Override};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -289,6 +289,9 @@ where
     Ok(indexes)
 }
 
+/// An override dependency before source lowering.
+pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -458,27 +461,32 @@ pub struct ToolUv {
     /// own; instead, the package must be requested elsewhere in the project's first-party or
     /// transitive dependencies.
     ///
+    /// Overrides can be limited to the dependencies declared by a specific package version by
+    /// using a table with `package` and `dependencies`. The `package` table identifies the package
+    /// whose dependencies will be overridden by `name` and, optionally, `version`. If `version` is
+    /// omitted, the overrides apply to all versions of that package. Dependencies not listed in
+    /// `dependencies` are left unchanged.
+    ///
+    /// Scoped overrides currently support registry version specifiers only. Direct URL and path
+    /// sources, including Git sources, and explicit indexes are not supported.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
-            # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
-            # a different version.
-            override-dependencies = ["werkzeug==2.3.0"]
+            override-dependencies = [
+                # Always install Werkzeug 2.3.0.
+                "werkzeug==2.3.0",
+                # Use itsdangerous 2.1.2 when requested by Flask 3.0.0.
+                { package = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous==2.1.2"] },
+            ]
         "#
     )]
-    pub(crate) override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) override_dependencies: Option<Vec<OverrideDependency>>,
 
     /// Dependencies to exclude when resolving the project's dependencies.
     ///

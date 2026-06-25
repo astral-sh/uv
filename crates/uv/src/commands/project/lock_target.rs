@@ -13,6 +13,7 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroup};
+use uv_workspace::pyproject::OverrideDependency;
 use uv_workspace::{Editability, Workspace, WorkspaceMember};
 
 use crate::commands::project::{ProjectError, find_requires_python};
@@ -47,7 +48,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of overrides for the [`LockTarget`].
-    pub(crate) fn overrides(self) -> Vec<uv_pep508::Requirement<VerbatimParsedUrl>> {
+    pub(crate) fn overrides(self) -> Vec<OverrideDependency> {
         match self {
             Self::Workspace(workspace) => workspace.overrides(),
             Self::Script(script) => script

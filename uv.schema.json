@@ -400,10 +400,10 @@
       "type": ["boolean", "null"]
     },
     "override-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of that package. Dependencies not listed in\n`dependencies` are left unchanged.\n\nScoped overrides currently support registry version specifiers only. Direct URL and path\nsources, including Git sources, and explicit indexes are not supported.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/Override"
       }
     },
     "package": {
@@ -1164,6 +1164,17 @@
         }
       ]
     },
+    "Override": {
+      "description": "An override, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageOverride"
+        },
+        {
+          "$ref": "#/definitions/Requirement"
+        }
+      ]
+    },
     "PackageConfigSettings": {
       "description": "Settings to pass to PEP 517 build backends on a per-package basis.",
       "type": "object",
@@ -1179,6 +1190,38 @@
       "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
+    "PackageOverride": {
+      "description": "An override that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageOverrideTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageOverrideTarget": {
+      "description": "The package and optional version selected by a [`PackageOverride`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",

@@ -19,6 +19,8 @@ use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
 
+pub use uv_workspace::pyproject::OverrideDependency;
+
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
 
 /// A PEP 723 item, either read from a script on disk or provided via `stdin`.
@@ -412,7 +414,7 @@ pub struct ToolUv {
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerSchema,
-    pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,

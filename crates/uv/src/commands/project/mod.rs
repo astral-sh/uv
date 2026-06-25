@@ -14,7 +14,7 @@ use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
@@ -2356,6 +2356,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         ..
@@ -2500,6 +2501,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,
@@ -2744,6 +2746,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         ..
@@ -2765,6 +2768,7 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
+            &override_dependencies,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -2903,6 +2907,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,
@@ -3139,27 +3144,60 @@ pub(crate) fn script_specification(
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let overrides = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.override_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned()
-        .flat_map(|requirement| {
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources,
-                script_indexes,
-                &settings.index_locations,
-                credentials_cache,
-            )
-            .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let overrides = {
+        let override_entries = script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned();
+        let mut overrides = Vec::new();
+        for entry in override_entries {
+            match entry {
+                Override::Requirement(requirement) => {
+                    overrides.extend(
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            credentials_cache,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                        .map_ok(Override::Requirement)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Override::Package(package) => {
+                    let dependencies = package
+                        .dependencies
+                        .into_vec()
+                        .into_iter()
+                        .flat_map(|requirement| {
+                            LoweredRequirement::from_non_workspace_requirement(
+                                requirement,
+                                script_dir.as_ref(),
+                                script_sources,
+                                script_indexes,
+                                &settings.index_locations,
+                                credentials_cache,
+                            )
+                            .map_ok(LoweredRequirement::into_inner)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    overrides.push(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: dependencies.into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        overrides
+    };
     let excludes = script
         .metadata()
         .tool
@@ -3171,12 +3209,10 @@ pub(crate) fn script_specification(
         .cloned()
         .collect::<Vec<_>>();
 
-    Ok(Some(RequirementsSpecification::from_excludes(
-        requirements,
-        constraints,
-        overrides,
-        excludes,
-    )))
+    let mut specification =
+        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), excludes);
+    specification.override_dependencies = overrides;
+    Ok(Some(specification))
 }
 
 /// Determine the extra build requires for a script.

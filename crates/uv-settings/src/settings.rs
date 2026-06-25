@@ -27,7 +27,7 @@ use uv_resolver::{
     serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
@@ -146,7 +146,7 @@ pub struct Options {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub override_dependencies: Option<Vec<OverrideDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
@@ -2523,7 +2523,7 @@ struct OptionsWire {
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
-    override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<PackageName>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
