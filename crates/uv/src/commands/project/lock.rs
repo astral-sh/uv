@@ -546,11 +546,10 @@ async fn do_lock(
                 }
                 Override::Package(package) => {
                     lowered_overrides.push(Override::Package(PackageOverride {
-                        name: package.name,
-                        version: package.version,
-                        requires_dist: target
+                        scope: package.scope,
+                        dependencies: target
                             .lower(
-                                package.requires_dist.into_vec(),
+                                package.dependencies.into_vec(),
                                 index_locations,
                                 sources,
                                 client_builder.credentials_cache(),

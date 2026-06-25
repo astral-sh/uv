@@ -3239,10 +3239,9 @@ fn workspace_overrides(filesystem: Option<&FilesystemOptions>) -> Vec<Override<R
             }
             OverrideDependency::Package(package) => {
                 overrides.push(Override::Package(PackageOverride {
-                    name: package.name.clone(),
-                    version: package.version.clone(),
-                    requires_dist: package
-                        .requires_dist
+                    scope: package.scope.clone(),
+                    dependencies: package
+                        .dependencies
                         .iter()
                         .cloned()
                         .map(|requirement| {

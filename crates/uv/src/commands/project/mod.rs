@@ -2900,8 +2900,8 @@ pub(crate) fn script_specification(
                     );
                 }
                 Override::Package(package) => {
-                    let requires_dist = package
-                        .requires_dist
+                    let dependencies = package
+                        .dependencies
                         .into_vec()
                         .into_iter()
                         .flat_map(|requirement| {
@@ -2917,9 +2917,8 @@ pub(crate) fn script_specification(
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     overrides.push(Override::Package(PackageOverride {
-                        name: package.name,
-                        version: package.version,
-                        requires_dist: requires_dist.into_boxed_slice(),
+                        scope: package.scope,
+                        dependencies: dependencies.into_boxed_slice(),
                     }));
                 }
             }

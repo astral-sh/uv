@@ -2061,8 +2061,10 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
         [tool.uv]
         override-dependencies = [
             "idna==3.1",
+            # A bare override must remain a global override when round-tripping the lockfile.
+            "sniffio",
             # The package-scoped override takes precedence for AnyIO's dependency.
-            { name = "anyio", version = "3.7.0", requires-dist = ["idna==3.2"] },
+            { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -2089,8 +2091,9 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [manifest]
         overrides = [
-            { name = "anyio", version = "3.7.0", requires-dist = [{ name = "idna", specifier = "==3.2" }] },
+            { scope = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "==3.2" }] },
             { name = "idna", specifier = "==3.1" },
+            { name = "sniffio" },
         ]
 
         [[package]]
@@ -2170,7 +2173,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [tool.uv]
         override-dependencies = [
-            { name = "anyio", version = "3.7.0", requires-dist = ["idna==3.2"] },
+            { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -2197,7 +2200,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [tool.uv]
         override-dependencies = [
-            { name = "anyio", version = "3.6.2", requires-dist = ["idna==3.2"] },
+            { scope = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;

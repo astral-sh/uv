@@ -142,10 +142,9 @@ impl RequirementsSpecification {
                         Override::Requirement(Requirement::from(requirement.clone()))
                     }
                     OverrideDependency::Package(package) => Override::Package(PackageOverride {
-                        name: package.name.clone(),
-                        version: package.version.clone(),
-                        requires_dist: package
-                            .requires_dist
+                        scope: package.scope.clone(),
+                        dependencies: package
+                            .dependencies
                             .iter()
                             .cloned()
                             .map(Requirement::from)

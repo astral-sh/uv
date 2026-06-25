@@ -21,6 +21,15 @@ use uv_pep508::MarkerTree;
     )
 )]
 pub struct PackageOverride<T> {
+    pub scope: PackageOverrideScope,
+    pub dependencies: Box<[T]>,
+}
+
+/// The package and optional version selected by a [`PackageOverride`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct PackageOverrideScope {
     pub name: PackageName,
     #[cfg_attr(
         feature = "schemars",
@@ -30,8 +39,6 @@ pub struct PackageOverride<T> {
         )
     )]
     pub version: Option<Version>,
-    #[serde(default)]
-    pub requires_dist: Box<[T]>,
 }
 
 /// An override, either global or scoped to a specific package version.
@@ -112,20 +119,20 @@ impl Overrides {
                         .push(requirement);
                 }
                 Override::Package(package) => {
-                    let packages = scoped.entry(package.name.clone()).or_default();
+                    let packages = scoped.entry(package.scope.name.clone()).or_default();
                     let position = packages
                         .iter()
-                        .position(|overrides| overrides.version == package.version)
+                        .position(|overrides| overrides.version == package.scope.version)
                         .unwrap_or_else(|| {
                             let position = packages.len();
                             packages.push(ScopedOverrides {
-                                version: package.version,
+                                version: package.scope.version,
                                 overrides: FxHashMap::default(),
                             });
                             position
                         });
                     let overrides = &mut packages[position].overrides;
-                    for requirement in package.requires_dist {
+                    for requirement in package.dependencies {
                         overrides
                             .entry(requirement.name.clone())
                             .or_default()
