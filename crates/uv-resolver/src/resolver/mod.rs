@@ -2625,8 +2625,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // We don't have access to the fork state when prefetching, so assume that
-                // pre-release versions are allowed.
+                // Prefetch runs before package selection and has no active transitive pre-release
+                // proxy. Use the base strategy so speculative metadata requests cannot download
+                // or build a pre-release that the resolver is not yet authorized to select.
                 let env = ResolverEnvironment::universal(vec![]);
 
                 // Try to find a compatible version. If there aren't any compatible versions,
@@ -2639,7 +2640,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.installed_packages,
                     &self.exclusions,
                     None,
-                    true,
+                    false,
                     &env,
                     self.tags.as_ref(),
                 ) else {
