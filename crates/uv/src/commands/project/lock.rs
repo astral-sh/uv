@@ -546,7 +546,7 @@ async fn do_lock(
                 }
                 Override::Package(package) => {
                     lowered_overrides.push(Override::Package(PackageOverride {
-                        scope: package.scope,
+                        package: package.package,
                         dependencies: target
                             .lower(
                                 package.dependencies.into_vec(),

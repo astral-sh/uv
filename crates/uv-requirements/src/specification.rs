@@ -142,7 +142,7 @@ impl RequirementsSpecification {
                         Override::Requirement(Requirement::from(requirement.clone()))
                     }
                     OverrideDependency::Package(package) => Override::Package(PackageOverride {
-                        scope: package.scope.clone(),
+                        package: package.package.clone(),
                         dependencies: package
                             .dependencies
                             .iter()

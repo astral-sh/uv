@@ -423,7 +423,7 @@ impl SitePackages {
                         .map(Override::Requirement),
                 )
                 .collect(),
-        );
+        )?;
 
         self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),

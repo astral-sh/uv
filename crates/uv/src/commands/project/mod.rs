@@ -2917,7 +2917,7 @@ pub(crate) fn script_specification(
                         })
                         .collect::<Result<Vec<_>, _>>()?;
                     overrides.push(Override::Package(PackageOverride {
-                        scope: package.scope,
+                        package: package.package,
                         dependencies: dependencies.into_boxed_slice(),
                     }));
                 }

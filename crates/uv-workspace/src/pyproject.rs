@@ -462,10 +462,13 @@ pub struct ToolUv {
     /// transitive dependencies.
     ///
     /// Overrides can be limited to the dependencies declared by a specific package version by
-    /// using a table with `scope` and `dependencies`. The `scope` identifies the package whose
-    /// dependencies will be overridden by `name` and, optionally, `version`. If `version` is
-    /// omitted, the overrides apply to all versions of the scoped package. Dependencies not listed
-    /// in `dependencies` are left unchanged.
+    /// using a table with `package` and `dependencies`. The `package` table identifies the package
+    /// whose dependencies will be overridden by `name` and, optionally, `version`. If `version` is
+    /// omitted, the overrides apply to all versions of that package. Dependencies not listed in
+    /// `dependencies` are left unchanged.
+    ///
+    /// Scoped overrides currently support registry version specifiers only. Direct URL and path
+    /// sources, including Git sources, and explicit indexes are not supported.
     ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
@@ -479,7 +482,7 @@ pub struct ToolUv {
                 # Always install Werkzeug 2.3.0.
                 "werkzeug==2.3.0",
                 # Use itsdangerous 2.1.2 when requested by Flask 3.0.0.
-                { scope = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous==2.1.2"] },
+                { package = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous==2.1.2"] },
             ]
         "#
     )]

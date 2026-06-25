@@ -420,15 +420,23 @@ by using an inline table:
 [tool.uv]
 override-dependencies = [
     "foo>1",
-    { scope = { name = "bar", version = "0.0.5" }, dependencies = ["foo>2"] },
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["foo>2"] },
 ]
 ```
 
 In this example, `foo>1` is the global override, while `foo>2` replaces requirements for `foo`
 declared by `bar==0.0.5`. Other dependencies declared by `bar` are unchanged. The `version` field in
-`scope` can be omitted to apply the scoped overrides to all versions of `bar`. A version-specific
+`package` can be omitted to apply the scoped overrides to all versions of `bar`. A version-specific
 entry takes precedence over an all-versions entry, and a scoped override takes precedence over a
 global override for the same dependency.
+
+Scoped overrides currently support registry version specifiers only. Direct URL and path sources,
+including Git sources, and explicit indexes are not supported.
+
+Pre-release and yanked-version permissions are determined before uv knows which scoped overrides
+will apply. As a result, an explicit pre-release or yanked-version pin in any scoped override opts
+that package into the corresponding candidate-selection behavior for the entire resolution, even if
+the scope is not selected.
 
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced

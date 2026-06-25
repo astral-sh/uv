@@ -4290,7 +4290,7 @@ fn scoped_override_dependency_from_pyproject() -> Result<()> {
 
     [tool.uv]
     override-dependencies = [
-      { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] }
+      { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] }
     ]
     "#,
     )?;
@@ -4328,7 +4328,7 @@ fn scoped_override_dependency_from_pyproject() -> Result<()> {
 
     [tool.uv]
     override-dependencies = [
-      { scope = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] }
+      { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] }
     ]
     "#,
     )?;

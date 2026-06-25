@@ -312,7 +312,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .into_iter()
             .chain(overrides.into_iter().map(Override::Requirement))
             .collect(),
-    );
+    )
+    .map_err(anyhow::Error::from)?;
     let excludes = excludes.into_iter().collect::<Excludes>();
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 

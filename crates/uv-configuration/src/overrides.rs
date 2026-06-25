@@ -4,7 +4,7 @@ use either::Either;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use serde::de::IntoDeserializer;
 
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -21,7 +21,7 @@ use uv_pep508::MarkerTree;
     )
 )]
 pub struct PackageOverride<T> {
-    pub scope: PackageOverrideScope,
+    pub package: PackageOverrideTarget,
     pub dependencies: Box<[T]>,
 }
 
@@ -29,7 +29,7 @@ pub struct PackageOverride<T> {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct PackageOverrideScope {
+pub struct PackageOverrideTarget {
     pub name: PackageName,
     #[cfg_attr(
         feature = "schemars",
@@ -93,19 +93,46 @@ struct ScopedOverrides {
     overrides: FxHashMap<PackageName, Vec<Requirement>>,
 }
 
+/// An unsupported source in a scoped dependency override.
+#[derive(Debug, thiserror::Error)]
+pub enum ScopedOverrideSourceError {
+    #[error(
+        "Scoped override for `{package}` cannot use a URL or path source for `{dependency}`; scoped overrides currently support version specifiers only"
+    )]
+    Url {
+        package: PackageName,
+        dependency: PackageName,
+    },
+    #[error(
+        "Scoped override for `{package}` cannot use an explicit index for `{dependency}`; scoped overrides currently support version specifiers only"
+    )]
+    Index {
+        package: PackageName,
+        dependency: PackageName,
+    },
+}
+
 impl Overrides {
     /// Create a new set of overrides from a set of requirements.
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
-        Self::from_entries(
-            requirements
-                .into_iter()
-                .map(Override::Requirement)
-                .collect(),
-        )
+        let mut global: FxHashMap<PackageName, Vec<Requirement>> =
+            FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+        for requirement in requirements {
+            global
+                .entry(requirement.name.clone())
+                .or_default()
+                .push(requirement);
+        }
+        Self {
+            global,
+            scoped: FxHashMap::default(),
+        }
     }
 
     /// Create an indexed set of overrides.
-    pub fn from_entries(entries: Vec<Override<Requirement>>) -> Self {
+    pub fn from_entries(
+        entries: Vec<Override<Requirement>>,
+    ) -> Result<Self, ScopedOverrideSourceError> {
         let mut global: FxHashMap<PackageName, Vec<Requirement>> =
             FxHashMap::with_capacity_and_hasher(entries.len(), FxBuildHasher);
         let mut scoped: FxHashMap<PackageName, Vec<ScopedOverrides>> = FxHashMap::default();
@@ -119,14 +146,35 @@ impl Overrides {
                         .push(requirement);
                 }
                 Override::Package(package) => {
-                    let packages = scoped.entry(package.scope.name.clone()).or_default();
+                    for requirement in &package.dependencies {
+                        match &requirement.source {
+                            RequirementSource::Registry { index: Some(_), .. } => {
+                                return Err(ScopedOverrideSourceError::Index {
+                                    package: package.package.name.clone(),
+                                    dependency: requirement.name.clone(),
+                                });
+                            }
+                            RequirementSource::Registry { index: None, .. } => {}
+                            RequirementSource::Url { .. }
+                            | RequirementSource::GitDirectory { .. }
+                            | RequirementSource::GitPath { .. }
+                            | RequirementSource::Path { .. }
+                            | RequirementSource::Directory { .. } => {
+                                return Err(ScopedOverrideSourceError::Url {
+                                    package: package.package.name.clone(),
+                                    dependency: requirement.name.clone(),
+                                });
+                            }
+                        }
+                    }
+                    let packages = scoped.entry(package.package.name.clone()).or_default();
                     let position = packages
                         .iter()
-                        .position(|overrides| overrides.version == package.scope.version)
+                        .position(|overrides| overrides.version == package.package.version)
                         .unwrap_or_else(|| {
                             let position = packages.len();
                             packages.push(ScopedOverrides {
-                                version: package.scope.version,
+                                version: package.package.version,
                                 overrides: FxHashMap::default(),
                             });
                             position
@@ -142,7 +190,7 @@ impl Overrides {
             }
         }
 
-        Self { global, scoped }
+        Ok(Self { global, scoped })
     }
 
     /// Return an iterator over all global [`Requirement`]s in the override set.

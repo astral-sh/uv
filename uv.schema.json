@@ -400,7 +400,7 @@
       "type": ["boolean", "null"]
     },
     "override-dependencies": {
-      "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `scope` and `dependencies`. The `scope` identifies the package whose\ndependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of the scoped package. Dependencies not listed\nin `dependencies` are left unchanged.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
+      "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of that package. Dependencies not listed in\n`dependencies` are left unchanged.\n\nScoped overrides currently support registry version specifiers only. Direct URL and path\nsources, including Git sources, and explicit indexes are not supported.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
         "$ref": "#/definitions/Override"
@@ -1201,14 +1201,14 @@
             "$ref": "#/definitions/Requirement"
           }
         },
-        "scope": {
-          "$ref": "#/definitions/PackageOverrideScope"
+        "package": {
+          "$ref": "#/definitions/PackageOverrideTarget"
         }
       },
       "additionalProperties": false,
-      "required": ["scope", "dependencies"]
+      "required": ["package", "dependencies"]
     },
-    "PackageOverrideScope": {
+    "PackageOverrideTarget": {
       "description": "The package and optional version selected by a [`PackageOverride`].",
       "type": "object",
       "properties": {

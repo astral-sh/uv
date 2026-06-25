@@ -120,6 +120,27 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
+    /// Return all requirements that affect manifest-wide candidate selection policy.
+    ///
+    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements(env, mode).chain(
+            self.overrides
+                .scoped_requirements()
+                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .filter(|requirement| !self.excludes.contains(&requirement.name))
+                .filter(move |requirement| {
+                    requirement.evaluate_markers(env.marker_environment(), &[])
+                }),
+        )
+    }
+
     /// Like [`Self::requirements`], but without the overrides.
     pub(crate) fn requirements_no_overrides<'a>(
         &'a self,

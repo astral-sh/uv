@@ -22,7 +22,7 @@ impl AllowedYanks {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
         // Allow yanks for any pinned input requirements.
-        for requirement in manifest.requirements(env, dependencies) {
+        for requirement in manifest.candidate_selection_requirements(env, dependencies) {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };

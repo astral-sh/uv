@@ -2064,7 +2064,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
             # A bare override must remain a global override when round-tripping the lockfile.
             "sniffio",
             # The package-scoped override takes precedence for AnyIO's dependency.
-            { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -2091,7 +2091,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [manifest]
         overrides = [
-            { scope = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "==3.2" }] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "==3.2" }] },
             { name = "idna", specifier = "==3.1" },
             { name = "sniffio" },
         ]
@@ -2173,7 +2173,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [tool.uv]
         override-dependencies = [
-            { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -2200,7 +2200,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
         [tool.uv]
         override-dependencies = [
-            { scope = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] },
         ]
         "#,
     )?;
@@ -2289,7 +2289,7 @@ fn lock_project_with_override_sources() -> Result<()> {
     Ok(())
 }
 
-/// Lock a project with a URL override scoped to a package version.
+/// Reject a URL override scoped to a package version.
 #[test]
 fn lock_project_with_scoped_override_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2305,57 +2305,134 @@ fn lock_project_with_scoped_override_url() -> Result<()> {
 
         [tool.uv]
         override-dependencies = [
-            { scope = { name = "anyio", version = "3.7.0" }, dependencies = ["idna @ https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna @ https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl"] },
         ]
         "#,
     )?;
 
     uv_snapshot!(context.filters(), context.lock(), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    error: Scoped override for `anyio` cannot use a URL or path source for `idna`; scoped overrides currently support version specifiers only
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    Ok(())
+}
+
+/// Lock a project with a pre-release pin from a scoped override.
+#[test]
+fn lock_project_with_scoped_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["pandas==2.2.3"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pandas", version = "2.2.3" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
     success: true
     exit_code: 0
     ----- stdout -----
+    project v0.1.0
+    └── pandas v2.2.3
+        ├── numpy v2.4.0rc1
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.2 (from https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl)
-     + sniffio==1.3.1
+    Resolved 7 packages in [TIME]
     ");
 
-    // The URL must not be forced when the scope does not match the selected AnyIO version.
+    Ok(())
+}
+
+/// Lock a project with an explicitly pinned yanked release from a scoped override.
+#[test]
+fn lock_project_with_scoped_override_yank() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio==3.7.0", "idna==3.6"]
+        dependencies = ["requests==2.31.0"]
 
         [tool.uv]
+        constraint-dependencies = ["urllib3>=2.0,<2.0.1"]
         override-dependencies = [
-            { scope = { name = "anyio", version = "3.6.2" }, dependencies = ["idna @ https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl"] },
+            { package = { name = "requests", version = "2.31.0" }, dependencies = ["urllib3==2.0.0"] },
         ]
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Updated idna v3.2 -> v3.6
+    Resolved 6 packages in [TIME]
+    warning: `urllib3==2.0.0` is yanked (reason: "Truncated response bodies when streaming a large compressed body. Upgrade to at least 2.0.2 (See: https://github.com/urllib3/urllib3/issues/3009)")
+    "###);
+
+    Ok(())
+}
+
+/// Reject a scoped override from an explicit index.
+#[test]
+fn lock_project_with_scoped_override_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+
+        [tool.uv.sources]
+        idna = { index = "custom" }
+
+        [[tool.uv.index]]
+        name = "custom"
+        url = "https://example.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Scoped override for `anyio` cannot use an explicit index for `idna`; scoped overrides currently support version specifiers only
     ");
 
     Ok(())

@@ -1921,7 +1921,7 @@ impl Lock {
                         normalize_requirement(requirement, root, &self.requires_python)?,
                     )),
                     Override::Package(package) => Ok(Override::Package(PackageOverride {
-                        scope: package.scope,
+                        package: package.package,
                         dependencies: package
                             .dependencies
                             .into_vec()
@@ -2849,7 +2849,7 @@ impl ResolverManifest {
                         Ok(Override::Requirement(requirement.relative_to(root)?))
                     }
                     Override::Package(package) => Ok(Override::Package(PackageOverride {
-                        scope: package.scope,
+                        package: package.package,
                         dependencies: package
                             .dependencies
                             .into_vec()
