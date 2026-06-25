@@ -632,10 +632,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 {
                     // `dep_incompats` are already in `incompatibilities` so we know there are not satisfied
                     // terms and can add the decision directly.
+                    let prerelease_targets = state
+                        .prerelease_targets
+                        .get(&(next_id, version.clone()))
+                        .cloned()
+                        .unwrap_or_default();
                     state
                         .pubgrub
                         .partial_solution
                         .add_decision(next_id, version);
+                    state.reconsider_prerelease_targets(prerelease_targets, &self.selector);
                     continue;
                 }
 
@@ -3049,6 +3055,10 @@ pub(crate) struct ForkState {
     prefetcher: BatchPrefetcher,
     /// Pre-release proxy packages discovered for each package name.
     prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
+    /// Pre-release targets introduced by each cached package version.
+    prerelease_targets: FxHashMap<(Id<PubGrubPackage>, Version), Vec<Id<PubGrubPackage>>>,
+    /// Stable target decisions already reconsidered with pre-releases enabled.
+    reconsidered_prerelease_targets: FxHashSet<(Id<PubGrubPackage>, Version)>,
     /// Packages whose decision is deferred while unresolved dependencies may still introduce or
     /// reactivate a pre-release proxy.
     deferred_prereleases: VecDeque<Id<PubGrubPackage>>,
@@ -3076,6 +3086,8 @@ impl ForkState {
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
             prerelease_proxies: FxHashMap::default(),
+            prerelease_targets: FxHashMap::default(),
+            reconsidered_prerelease_targets: FxHashSet::default(),
             deferred_prereleases: VecDeque::default(),
         }
     }
@@ -3159,6 +3171,44 @@ impl ForkState {
                     Some(Term::Positive(_))
                 )
             })
+    }
+
+    /// Reconsider decided targets under the pre-release policy activated by their proxies.
+    fn reconsider_prerelease_targets(
+        &mut self,
+        prerelease_targets: impl IntoIterator<Item = Id<PubGrubPackage>>,
+        selector: &CandidateSelector,
+    ) {
+        for package in prerelease_targets {
+            let Some(name) = self.pubgrub.package_store[package].name_no_root() else {
+                continue;
+            };
+            let prerelease_strategy = selector.prerelease_strategy();
+            if prerelease_strategy.selection(name, &self.env, false)
+                == prerelease_strategy.selection(name, &self.env, true)
+            {
+                continue;
+            }
+            let Some((_, version)) = self
+                .pubgrub
+                .partial_solution
+                .extract_solution()
+                .find(|(decided, _)| *decided == package)
+            else {
+                continue;
+            };
+            if version.any_prerelease()
+                || !self
+                    .reconsidered_prerelease_targets
+                    .insert((package, version))
+            {
+                continue;
+            }
+            if let Some(backtracked) = self.pubgrub.backtrack_package(package) {
+                debug!("Backtracked {backtracked} decisions for late pre-release authorization");
+            }
+            self.defer_prerelease(package);
+        }
     }
 
     /// Visit the dependencies for the selected version of the current package, incorporating any
@@ -3270,7 +3320,7 @@ impl ForkState {
         dependencies: Vec<PubGrubDependency>,
         selector: &CandidateSelector,
     ) {
-        let mut decided_prerelease_targets = Vec::new();
+        let mut prerelease_targets = Vec::new();
         for dependency in &dependencies {
             let PubGrubDependency {
                 package,
@@ -3290,16 +3340,8 @@ impl ForkState {
                     .pubgrub
                     .package_store
                     .alloc(wrapped.base_package().unwrap_or_else(|| wrapped.clone()));
-                let prerelease_strategy = selector.prerelease_strategy();
-                if prerelease_strategy.selection(name, &self.env, false)
-                    != prerelease_strategy.selection(name, &self.env, true)
-                    && self
-                        .pubgrub
-                        .partial_solution
-                        .extract_solution()
-                        .any(|(decided, _)| decided == target)
-                {
-                    decided_prerelease_targets.push(target);
+                if !prerelease_targets.contains(&target) {
+                    prerelease_targets.push(target);
                 }
                 let proxies = self.prerelease_proxies.entry(name.clone()).or_default();
                 if !proxies.contains(&proxy) {
@@ -3337,21 +3379,13 @@ impl ForkState {
             self.record_conflict(for_package, Some(for_version), incompatibility);
         }
 
-        if !decided_prerelease_targets.is_empty() {
-            // PubGrub otherwise preserves the earlier target decision by trying an older proxy
-            // version. Reconsider the target only after the other active packages have expanded,
-            // giving the authorizing path time to reactivate its proxy. The dependency
-            // incompatibility added above survives the backtrack and is reactivated with its
-            // parent.
-            for package in decided_prerelease_targets {
-                if let Some(backtracked) = self.pubgrub.backtrack_package(package) {
-                    debug!(
-                        "Backtracked {backtracked} decisions for late pre-release authorization"
-                    );
-                }
-                self.defer_prerelease(package);
-            }
-        }
+        self.prerelease_targets.insert(
+            (for_package, for_version.clone()),
+            prerelease_targets.clone(),
+        );
+        // PubGrub otherwise preserves earlier target decisions by trying older proxy versions.
+        // The dependency incompatibilities survive any backtrack and reactivate with their parent.
+        self.reconsider_prerelease_targets(prerelease_targets, selector);
     }
 
     fn record_conflict(
