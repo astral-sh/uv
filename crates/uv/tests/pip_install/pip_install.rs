@@ -15517,10 +15517,11 @@ fn install_missing_python_with_target() {
 fn install_missing_python_with_target_downloads_disabled() {
     let context = uv_test::test_context_with_versions!(&[]);
 
-    // TestContext creates a .venv automatically. Remove it so uv doesn't
-    // find and try to inspect it — we want it to fall through to the
-    // "no interpreter found" + downloads hint path.
-    fs_err::remove_dir_all(context.venv.path()).unwrap();
+    // Remove the venv if TestContext created one, so uv doesn't try to
+    // inspect a venv with no Python binary inside it.
+    if context.venv.path().exists() {
+        fs_err::remove_dir_all(context.venv.path()).unwrap();
+    }
 
     let target_dir = context.temp_dir.child("target-dir");
 
