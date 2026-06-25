@@ -299,7 +299,7 @@ async fn build_impl(
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build\"]\nbuild-backend = \"uv_build\"\n```",
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>=0.11.9,<0.12.0\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
                 "build-system".green(),
                 "uv_build".cyan(),
@@ -344,7 +344,7 @@ async fn build_impl(
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build\"]\nbuild-backend = \"uv_build\"\n```",
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>=0.11.9,<0.12.0\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
                 "uv_build".cyan(),
                 "build-system".green(),
