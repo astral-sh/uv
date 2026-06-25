@@ -15536,7 +15536,7 @@ fn install_missing_python_with_target_downloads_disabled() {
     ");
 }
 
-/// Same scenario on Windows: uv finds the TestContext venv but the interpreter
+/// Same scenario on Windows: uv finds the `TestContext` venv but the interpreter
 /// binary doesn't exist, producing a different but equally clear error.
 #[test]
 #[cfg(windows)]
