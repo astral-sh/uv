@@ -3273,7 +3273,12 @@ impl ForkState {
                     continue;
                 };
                 let proxy = self.pubgrub.package_store.alloc(package.clone());
-                let wrapped = self.pubgrub.package_store.alloc(wrapped.clone());
+                // Extra and marker wrappers may not be decided yet, but their mandatory base
+                // package can already have a stale stable decision.
+                let target = self
+                    .pubgrub
+                    .package_store
+                    .alloc(wrapped.base_package().unwrap_or_else(|| wrapped.clone()));
                 let prerelease_strategy = selector.prerelease_strategy();
                 if prerelease_strategy.selection(name, &self.env, false)
                     != prerelease_strategy.selection(name, &self.env, true)
@@ -3281,9 +3286,9 @@ impl ForkState {
                         .pubgrub
                         .partial_solution
                         .extract_solution()
-                        .any(|(decided, _)| decided == wrapped)
+                        .any(|(decided, _)| decided == target)
                 {
-                    decided_prerelease_targets.push(wrapped);
+                    decided_prerelease_targets.push(target);
                 }
                 let proxies = self.prerelease_proxies.entry(name.clone()).or_default();
                 if !proxies.contains(&proxy) {
