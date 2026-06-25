@@ -19,8 +19,8 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Prefer stable candidates, but allow pre-releases to participate in normal version ordering
-    /// when an active direct or transitive requirement contains an explicit pre-release marker.
+    /// Allow pre-release versions when an active direct or transitive requirement contains an
+    /// explicit pre-release marker.
     Explicit,
 
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
@@ -54,8 +54,8 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Prefer stable candidates, but allow pre-releases to participate in normal version ordering
-    /// when an active requirement contains an explicit pre-release marker.
+    /// Allow pre-release versions when an active requirement contains an explicit pre-release
+    /// marker.
     Explicit(ForkSet),
 
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
@@ -113,7 +113,14 @@ impl PrereleaseStrategy {
             Self::Disallow => PrereleaseSelection::Disallow,
             Self::Allow => PrereleaseSelection::Allow,
             Self::IfNecessary => PrereleaseSelection::PreferStable,
-            Self::Explicit(packages) | Self::IfNecessaryOrExplicit(packages) => {
+            Self::Explicit(packages) => {
+                if explicit_prerelease || packages.contains(package_name, env) {
+                    PrereleaseSelection::Allow
+                } else {
+                    PrereleaseSelection::Disallow
+                }
+            }
+            Self::IfNecessaryOrExplicit(packages) => {
                 if explicit_prerelease || packages.contains(package_name, env) {
                     PrereleaseSelection::Allow
                 } else {
