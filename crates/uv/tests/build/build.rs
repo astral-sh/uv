@@ -2066,11 +2066,11 @@ fn build_non_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Package `member` is missing a `build-system`. For example, to build with `setuptools`, add the following to `packages/member/pyproject.toml`:
+    error: Package `member` is missing a `build-system`. For example, to build with `uv_build`, add the following to `packages/member/pyproject.toml`:
     ```toml
     [build-system]
-    requires = ["setuptools"]
-    build-backend = "setuptools.build_meta"
+    requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+    build-backend = "uv_build"
     ```
     "#);
 
@@ -2090,11 +2090,11 @@ fn build_non_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Workspace does not contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
+    error: Workspace does not contain any buildable packages. For example, to build `member` with `uv_build`, add a `build-system` to `packages/member/pyproject.toml`:
     ```toml
     [build-system]
-    requires = ["setuptools"]
-    build-backend = "setuptools.build_meta"
+    requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+    build-backend = "uv_build"
     ```
     "#);
 
