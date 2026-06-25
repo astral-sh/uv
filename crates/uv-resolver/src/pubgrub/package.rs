@@ -210,6 +210,18 @@ impl PubGrubPackage {
         }
     }
 
+    /// Returns the package name to use for registry availability diagnostics.
+    ///
+    /// Pre-release proxies delegate availability to their wrapped registry package. Other proxy
+    /// packages retain their existing handling through the base package selected by PubGrub.
+    pub(crate) fn name_for_availability(&self) -> Option<&PackageName> {
+        match &**self {
+            PubGrubPackageInner::Package { name, .. } => Some(name),
+            PubGrubPackageInner::Prerelease { package } => package.name_no_root(),
+            _ => None,
+        }
+    }
+
     /// Returns the marker expression associated with this PubGrub package, if
     /// it has one.
     pub(crate) fn marker(&self) -> MarkerTree {

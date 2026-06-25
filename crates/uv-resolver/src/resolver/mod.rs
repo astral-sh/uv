@@ -541,18 +541,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(next_id)
                             .expect("a package was chosen but we don't have a term");
 
-                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
-                            // Check if the decision was due to the package being unavailable
-                            if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::custom_term(
-                                        next_id,
-                                        term_intersection.clone(),
-                                        UnavailableReason::Package(reason.clone()),
-                                    ));
-                                continue;
-                            }
+                        // Check if the decision was due to the package being unavailable.
+                        if let Some(name) = next_package.name_for_availability()
+                            && let Some(reason) = self.unavailable_packages.pin().get(name)
+                        {
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::custom_term(
+                                    next_id,
+                                    term_intersection.clone(),
+                                    UnavailableReason::Package(reason.clone()),
+                                ));
+                            continue;
                         }
 
                         state
@@ -2741,17 +2741,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
-            if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                    unavailable_packages.insert(name.clone(), reason.clone());
-                }
+            if let Some(name) = package.name_for_availability()
+                && let Some(reason) = self.unavailable_packages.pin().get(name)
+            {
+                unavailable_packages.insert(name.clone(), reason.clone());
             }
         }
 
         let mut incomplete_packages = FxHashMap::default();
         let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
-            if let PubGrubPackageInner::Package { name, .. } = &**package
+            if let Some(name) = package.name_for_availability()
                 && let Some(versions) = incomplete_packages_cache.get(name)
             {
                 for (version, reason) in &versions.pin() {

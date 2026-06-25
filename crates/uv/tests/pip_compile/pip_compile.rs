@@ -7278,6 +7278,31 @@ fn offline_registry() -> Result<()> {
     Ok(())
 }
 
+/// Preserve package availability diagnostics when an explicit pre-release requirement is routed
+/// through a resolver proxy.
+#[test]
+fn offline_registry_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("flask==2.0.0rc1")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--offline"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask was not found in the cache and you require flask==2.0.0rc1, we can conclude that your requirements are unsatisfiable.
+
+    hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
+    ");
+
+    Ok(())
+}
+
 /// Resolve a registry package without network access via the `--offline` flag. We should backtrack
 /// to the latest version of the package that's available in the cache.
 #[test]
