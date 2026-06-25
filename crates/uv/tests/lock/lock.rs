@@ -2231,6 +2231,42 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Reject conflicting overrides scoped to the same package version.
+#[test]
+fn lock_project_with_conflicting_scoped_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.3"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and idna==3.3, we can conclude that anyio==3.7.0 cannot be used.
+          And because your project depends on anyio==3.7.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
 #[test]
 fn lock_project_with_override_sources() -> Result<()> {
