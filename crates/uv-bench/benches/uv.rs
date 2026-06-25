@@ -559,7 +559,6 @@ mod resolver {
                 client,
                 &build_context,
                 concurrency.downloads_semaphore.clone(),
-                Preview::default(),
             ),
         )?;
 
