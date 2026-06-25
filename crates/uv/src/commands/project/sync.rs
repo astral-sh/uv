@@ -32,7 +32,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -834,6 +834,20 @@ pub(crate) async fn do_sync(
         FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
     };
 
+    // Extract locked build resolutions from the lock file for source builds.
+    let locked_build_resolutions = {
+        let build_tags = venv.interpreter().tags()?;
+        let map = target.lock().all_build_resolutions(
+            &resolution,
+            target.install_path(),
+            build_tags,
+            build_options,
+            &marker_env,
+            venv.interpreter().markers(),
+        )?;
+        LockedBuildResolutions::new(map)
+    };
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -859,7 +873,8 @@ pub(crate) async fn do_sync(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_locked_build_resolutions(locked_build_resolutions);
 
     // Run a malware check against OSV before installing.
     if malware_settings.enabled {

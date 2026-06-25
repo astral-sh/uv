@@ -1486,7 +1486,7 @@ fn workspace_inherit_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 
@@ -2004,6 +2004,8 @@ fn test_path_hopping() -> Result<()> {
         dependencies = ["foo"]
         [tool.uv.sources]
         foo = { path = "../libs/foo", editable = true }
+        [tool.uv]
+        exclude-newer-package = { uv-build = "2026-02-15T00:00:00Z" }
     "#};
     let main_project_dir = context.temp_dir.join("project");
     make_project(&main_project_dir, "project", deps)?;
@@ -2267,7 +2269,7 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.12"
 

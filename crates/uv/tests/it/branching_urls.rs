@@ -210,16 +210,22 @@ fn root_package_splits_transitive_too() -> Result<()> {
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
+    version = 2
     revision = 3
     requires-python = ">=3.11, <3.13"
-    resolution-markers = [
-        "python_full_version >= '3.12'",
-        "python_full_version < '3.12'",
-    ]
 
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[resolution]]
+    id = "runtime:0"
+    kind = "runtime"
+    target = { marker = "python_full_version >= '3.12'" }
+
+    [[resolution]]
+    id = "runtime:1"
+    kind = "runtime"
+    target = { marker = "python_full_version < '3.12'" }
 
     [[package]]
     name = "a"
@@ -242,8 +248,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "anyio"
     version = "4.2.0"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     dependencies = [
         { name = "idna", marker = "python_full_version < '3.12'" },
@@ -258,8 +264,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "anyio"
     version = "4.3.0"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     dependencies = [
         { name = "idna", marker = "python_full_version >= '3.12'" },
@@ -320,8 +326,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "iniconfig"
     version = "1.1.1"
     source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
@@ -331,8 +337,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
     name = "iniconfig"
     version = "2.0.0"
     source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -407,16 +413,22 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
+    version = 2
     revision = 3
     requires-python = ">=3.11, <3.13"
-    resolution-markers = [
-        "python_full_version >= '3.12'",
-        "python_full_version < '3.12'",
-    ]
 
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[resolution]]
+    id = "runtime:0"
+    kind = "runtime"
+    target = { marker = "python_full_version >= '3.12'" }
+
+    [[resolution]]
+    id = "runtime:1"
+    kind = "runtime"
+    target = { marker = "python_full_version < '3.12'" }
 
     [[package]]
     name = "a"
@@ -441,8 +453,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     name = "anyio"
     version = "4.2.0"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     dependencies = [
         { name = "idna", marker = "python_full_version < '3.12'" },
@@ -457,8 +469,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     name = "anyio"
     version = "4.3.0"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     dependencies = [
         { name = "idna", marker = "python_full_version >= '3.12'" },
@@ -504,8 +516,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     name = "iniconfig"
     version = "1.1.1"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2020-10-14T10:20:18.572Z" }
     wheels = [
@@ -516,8 +528,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     name = "iniconfig"
     version = "2.0.0"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
     wheels = [
@@ -570,16 +582,22 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
+    version = 2
     revision = 3
     requires-python = ">=3.11, <3.13"
-    resolution-markers = [
-        "python_full_version >= '3.12'",
-        "python_full_version < '3.12'",
-    ]
 
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[resolution]]
+    id = "runtime:0"
+    kind = "runtime"
+    target = { marker = "python_full_version >= '3.12'" }
+
+    [[resolution]]
+    id = "runtime:1"
+    kind = "runtime"
+    target = { marker = "python_full_version < '3.12'" }
 
     [[package]]
     name = "a"
@@ -600,8 +618,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     name = "iniconfig"
     version = "1.1.1"
     source = { registry = "https://pypi.org/simple" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/23/a2/97899f6bd0e873fed3a7e67ae8d3a08b21799430fb4da15cfedf10d6e2c2/iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32", size = 8104, upload-time = "2020-10-14T10:20:18.572Z" }
     wheels = [
@@ -612,8 +630,8 @@ fn branching_between_registry_and_direct_url() -> Result<()> {
     name = "iniconfig"
     version = "2.0.0"
     source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" },
@@ -657,16 +675,22 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
 
     // We have source dist and wheel for the registry, but only the wheel for the direct URL.
     assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
+    version = 2
     revision = 3
     requires-python = ">=3.11, <3.13"
-    resolution-markers = [
-        "python_full_version >= '3.12'",
-        "python_full_version < '3.12'",
-    ]
 
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[resolution]]
+    id = "runtime:0"
+    kind = "runtime"
+    target = { marker = "python_full_version >= '3.12'" }
+
+    [[resolution]]
+    id = "runtime:1"
+    kind = "runtime"
+    target = { marker = "python_full_version < '3.12'" }
 
     [[package]]
     name = "a"
@@ -687,8 +711,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     name = "iniconfig"
     version = "1.1.1"
     source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }
-    resolution-markers = [
-        "python_full_version < '3.12'",
+    selectors = [
+        { target = "runtime:1" },
     ]
     wheels = [
         { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3" },
@@ -698,8 +722,8 @@ fn branching_urls_of_different_sources_disjoint() -> Result<()> {
     name = "iniconfig"
     version = "2.0.0"
     source = { git = "https://github.com/pytest-dev/iniconfig?rev=93f5930e668c0d1ddf4597e38dd0dea4e2665e7a#93f5930e668c0d1ddf4597e38dd0dea4e2665e7a" }
-    resolution-markers = [
-        "python_full_version >= '3.12'",
+    selectors = [
+        { target = "runtime:0" },
     ]
     "#);
 
@@ -787,7 +811,7 @@ fn dont_pre_visit_url_packages() -> Result<()> {
     );
 
     assert_snapshot!(context.read("uv.lock"), @r#"
-    version = 1
+    version = 2
     revision = 3
     requires-python = ">=3.11, <3.13"
 

@@ -2336,7 +2336,7 @@ fn script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 
@@ -2522,7 +2522,7 @@ fn script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 1
+        version = 2
         revision = 3
         requires-python = ">=3.11"
 

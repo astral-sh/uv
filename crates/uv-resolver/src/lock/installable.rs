@@ -254,6 +254,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((dist, dep));
                 }
@@ -490,6 +493,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     Either::Right(package.dependencies.iter())
                 };
                 for dep in deps {
+                    if !dep.is_runtime_edge() {
+                        continue;
+                    }
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
                     if !dep.complexified_marker.evaluate(
@@ -580,6 +586,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 Either::Right(package.dependencies.iter())
             };
             for dep in deps {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 if validate_conflicts && dep.complexified_marker.has_conflict_marker() {
                     dependencies_for_conflict_validation.push((package, dep));
                 }

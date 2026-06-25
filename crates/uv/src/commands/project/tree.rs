@@ -191,8 +191,7 @@ pub(crate) async fn tree(
     let latest = if outdated {
         // Filter to packages that are derived from a registry.
         let packages = lock
-            .packages()
-            .iter()
+            .runtime_packages()
             .filter_map(|package| {
                 // TODO(charlie): We would need to know the format here.
                 let index = match package.index(target.install_path()) {

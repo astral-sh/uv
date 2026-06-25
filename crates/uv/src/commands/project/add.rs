@@ -1090,7 +1090,7 @@ async fn lock_and_sync(
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
-        for dist in lock.packages() {
+        for dist in lock.runtime_packages() {
             let name = dist.name();
             let Some(version) = dist.version() else {
                 continue;

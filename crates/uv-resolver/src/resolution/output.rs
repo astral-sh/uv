@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -6,20 +7,24 @@ use indexmap::IndexSet;
 use petgraph::{
     Directed, Direction,
     graph::{Graph, NodeIndex},
+    visit::EdgeRef,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
-    ResolutionDiagnostic, ResolvedDist,
+    Dist, DistributionId, Edge, ExtraBuildRequires, ExtraBuildRequiresError, Identifier, IndexUrl,
+    Name, Node, Requirement, RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
+use uv_types::{
+    BuildDependencyEdge, BuildDependencyPackage, BuildResolutionGraph, ResolvedBuildDependency,
+};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -597,6 +602,274 @@ impl ResolverOutput {
             })
     }
 
+    /// Constrain extra build dependencies to distributions selected by each fork of this
+    /// universal resolution.
+    pub fn match_runtime_extra_build_requires_by_fork(
+        &self,
+        extra_build_requires: &ExtraBuildRequires,
+    ) -> Result<Vec<(Option<UniversalMarker>, ExtraBuildRequires)>, ExtraBuildRequiresError> {
+        let mut all_sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+            BTreeMap::new();
+        for dist in self.dists().filter(|dist| dist.is_base()) {
+            all_sources
+                .entry(dist.name.clone())
+                .or_default()
+                .push((RequirementSource::from(&dist.dist), dist.marker.pep508()));
+        }
+        extra_build_requires
+            .clone()
+            .match_runtime_sources(&all_sources)?;
+
+        let forks = if self.fork_markers.is_empty() {
+            vec![None]
+        } else {
+            self.fork_markers.iter().copied().map(Some).collect()
+        };
+        forks
+            .into_iter()
+            .map(|fork| {
+                let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
+                    BTreeMap::new();
+                for dist in self.dists().filter(|dist| dist.is_base()) {
+                    if fork.is_some_and(|fork| dist.marker.is_disjoint(fork)) {
+                        continue;
+                    }
+                    sources
+                        .entry(dist.name.clone())
+                        .or_default()
+                        .push((RequirementSource::from(&dist.dist), MarkerTree::TRUE));
+                }
+                let mut fork_extra_build_requires = extra_build_requires.clone();
+                for requirements in fork_extra_build_requires.values_mut() {
+                    requirements.retain(|requirement| {
+                        !requirement.match_runtime
+                            || sources.contains_key(&requirement.requirement.name)
+                    });
+                }
+                Ok((
+                    fork,
+                    fork_extra_build_requires.match_runtime_sources(&sources)?,
+                ))
+            })
+            .collect()
+    }
+
+    /// Extract the build resolution graph: direct build requirements (root edges)
+    /// and all packages with their direct dependency edges.
+    ///
+    /// This preserves the dependency graph structure so that transitive build
+    /// dependencies can be walked at sync time via
+    /// [`Lock::all_build_resolutions`] with proper marker evaluation.
+    pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
+        let mut direct_dependencies = Vec::new();
+        let mut packages = BTreeMap::new();
+
+        // Find the root node.
+        let root_index = self
+            .graph
+            .node_indices()
+            .find(|&idx| matches!(self.graph[idx], ResolutionGraphNode::Root));
+
+        let key_for = |dist: &AnnotatedDist| -> (PackageName, Version, DistributionId) {
+            (
+                dist.name.clone(),
+                dist.version.clone(),
+                dist.dist.distribution_id(),
+            )
+        };
+
+        let mut base_dists = BTreeMap::new();
+        for dist in self.dists().filter(|dist| dist.is_base()) {
+            base_dists.insert(key_for(dist), dist);
+        }
+
+        // Collect packages with their direct dependency edges. Extra and group
+        // nodes are folded into the base package so PEP 508 extras from
+        // `build-system.requires` keep their extra-only dependencies.
+        for node_index in self.graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &self.graph[node_index] else {
+                continue;
+            };
+            let package_dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
+            let marker = package_dist.marker.pep508();
+            let package = packages
+                .entry(key_for(package_dist))
+                .and_modify(|package: &mut BuildDependencyPackage| package.marker.or(marker))
+                .or_insert_with(|| BuildDependencyPackage {
+                    dist: package_dist.dist.clone(),
+                    hashes: package_dist.hashes.clone().into_iter().collect(),
+                    marker,
+                    dependencies: Vec::new(),
+                    optional_dependencies: BTreeMap::new(),
+                });
+
+            for edge in self.graph.edges(node_index) {
+                let ResolutionGraphNode::Dist(dep_dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                let dep_extras = dep_dist.extra.iter().cloned().collect::<BTreeSet<_>>();
+                let dep_dist = base_dists
+                    .get(&key_for(dep_dist))
+                    .copied()
+                    .unwrap_or(dep_dist);
+                let dependency = BuildDependencyEdge {
+                    dist: dep_dist.dist.clone(),
+                    marker: edge.weight().pep508(),
+                    extras: dep_extras,
+                };
+                if let Some(extra) = dist.extra.as_ref() {
+                    package
+                        .optional_dependencies
+                        .entry(extra.clone())
+                        .or_default()
+                        .push(dependency);
+                } else {
+                    package.dependencies.push(dependency);
+                }
+            }
+        }
+
+        // Collect direct build requirements (edges from the resolution root
+        // to the packages listed in `build-system.requires`).
+        if let Some(root_idx) = root_index {
+            for edge in self.graph.edges(root_idx) {
+                let ResolutionGraphNode::Dist(dist) = &self.graph[edge.target()] else {
+                    continue;
+                };
+                let extras = dist.extra.iter().cloned().collect();
+                let dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
+                direct_dependencies.push(ResolvedBuildDependency {
+                    dist: dist.dist.clone(),
+                    hashes: dist.hashes.clone().into_iter().collect(),
+                    marker: edge.weight().pep508(),
+                    extras,
+                });
+            }
+        }
+
+        BuildResolutionGraph {
+            direct_dependencies,
+            packages: packages.into_values().collect(),
+        }
+    }
+
+    /// Convert the resolution into an installable graph for the active build
+    /// environment.
+    ///
+    /// Build dependency locking can resolve across multiple supported marker
+    /// environments, but metadata extraction still runs in one concrete
+    /// interpreter environment. Project the universal graph onto that concrete
+    /// marker environment before producing the installable build resolution.
+    pub fn into_build_resolution(
+        self,
+        markers: Option<&MarkerEnvironment>,
+    ) -> uv_distribution_types::Resolution {
+        self.into_resolution(true, markers)
+    }
+
+    fn into_resolution(
+        self,
+        allow_universal: bool,
+        markers: Option<&MarkerEnvironment>,
+    ) -> uv_distribution_types::Resolution {
+        let Self {
+            graph,
+            diagnostics,
+            fork_markers,
+            ..
+        } = self;
+
+        assert!(
+            allow_universal || fork_markers.is_empty(),
+            "universal resolutions are not supported"
+        );
+
+        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
+        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+        // Create the root node.
+        let root = transformed.add_node(Node::Root);
+
+        // Re-add the nodes to the reduced graph.
+        for index in graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
+                continue;
+            };
+
+            if !dist.is_base() {
+                continue;
+            }
+
+            if markers.is_some_and(|markers| !dist.marker.evaluate_no_extras(markers)) {
+                continue;
+            }
+
+            if inverse.contains_key(&dist.name) {
+                // This is guaranteed by `find_conflicting_distributions` when
+                // conflicts are empty. However, when conflicts are non-empty,
+                // we may detect false positives. See the rationale in
+                // `ResolverOutput::from_state` for details.
+                //
+                // When we do see a conflict at this stage, we keep the first
+                // distribution that was inserted. The resolution remains
+                // guarded by its edge markers in the full resolver output; this
+                // reduced representation is only used for the concrete build
+                // environment.
+                continue;
+            }
+
+            let index = transformed.add_node(Node::Dist {
+                dist: dist.dist.clone(),
+                hashes: dist.hashes.clone(),
+                install: true,
+            });
+            inverse.insert(&dist.name, index);
+        }
+
+        // Re-add the edges to the reduced graph.
+        for edge in graph.edge_indices() {
+            let (source, target) = graph.edge_endpoints(edge).unwrap();
+            if markers.is_some_and(|markers| !graph[edge].evaluate_no_extras(markers)) {
+                continue;
+            }
+
+            match (&graph[source], &graph[target]) {
+                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
+                    let Some(&target) = inverse.get(target_dist.name()) else {
+                        continue;
+                    };
+                    transformed.update_edge(root, target, Edge::Prod);
+                }
+                (
+                    ResolutionGraphNode::Dist(source_dist),
+                    ResolutionGraphNode::Dist(target_dist),
+                ) => {
+                    let Some(&source) = inverse.get(source_dist.name()) else {
+                        continue;
+                    };
+                    let Some(&target) = inverse.get(target_dist.name()) else {
+                        continue;
+                    };
+
+                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
+                        Edge::Optional(extra.clone())
+                    } else if let Some(group) = source_dist.group.as_ref() {
+                        Edge::Dev(group.clone())
+                    } else {
+                        Edge::Prod
+                    };
+
+                    transformed.add_edge(source, target, edge);
+                }
+                _ => {
+                    unreachable!("root should not contain incoming edges");
+                }
+            }
+        }
+
+        uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+    }
+
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
         self.dists().filter(|dist| dist.is_base()).count()
@@ -852,74 +1125,7 @@ impl Display for ConflictingDistributionError {
 /// single version of each package to be present in the graph.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
     fn from(output: ResolverOutput) -> Self {
-        let ResolverOutput {
-            graph,
-            diagnostics,
-            fork_markers,
-            ..
-        } = output;
-
-        assert!(
-            fork_markers.is_empty(),
-            "universal resolutions are not supported"
-        );
-
-        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
-        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
-
-        // Create the root node.
-        let root = transformed.add_node(Node::Root);
-
-        // Re-add the nodes to the reduced graph.
-        for index in graph.node_indices() {
-            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
-                continue;
-            };
-            if dist.is_base() {
-                inverse.insert(
-                    &dist.name,
-                    transformed.add_node(Node::Dist {
-                        dist: dist.dist.clone(),
-                        hashes: dist.hashes.clone(),
-                        install: true,
-                    }),
-                );
-            }
-        }
-
-        // Re-add the edges to the reduced graph.
-        for edge in graph.edge_indices() {
-            let (source, target) = graph.edge_endpoints(edge).unwrap();
-
-            match (&graph[source], &graph[target]) {
-                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
-                    let target = inverse[&target_dist.name()];
-                    transformed.update_edge(root, target, Edge::Prod);
-                }
-                (
-                    ResolutionGraphNode::Dist(source_dist),
-                    ResolutionGraphNode::Dist(target_dist),
-                ) => {
-                    let source = inverse[&source_dist.name()];
-                    let target = inverse[&target_dist.name()];
-
-                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
-                        Edge::Optional(extra.clone())
-                    } else if let Some(group) = source_dist.group.as_ref() {
-                        Edge::Dev(group.clone())
-                    } else {
-                        Edge::Prod
-                    };
-
-                    transformed.add_edge(source, target, edge);
-                }
-                _ => {
-                    unreachable!("root should not contain incoming edges");
-                }
-            }
-        }
-
-        Self::new(transformed).with_diagnostics(diagnostics)
+        output.into_resolution(false, None)
     }
 }
 

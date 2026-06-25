@@ -437,11 +437,36 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -9,21 +9,21 @@
-         ]
+        @@ -1,43 +1,43 @@
+         version = 2
+         revision = 3
+         requires-python = ">=3.9.0"
 
          [options]
          exclude-newer = "2024-03-25T00:00:00Z"
+
+         [[resolution]]
+         id = "runtime:0"
+         kind = "runtime"
+        -target = { marker = "python_full_version >= '3.12'" }
+        +target = { marker = "python_full_version < '3.10'" }
+
+         [[resolution]]
+         id = "runtime:1"
+         kind = "runtime"
+        -target = { marker = "python_full_version == '3.11.*'" }
+        +target = { marker = "python_full_version >= '3.12'" }
+
+         [[resolution]]
+         id = "runtime:2"
+         kind = "runtime"
+         target = { marker = "python_full_version == '3.10.*'" }
+
+         [[resolution]]
+         id = "runtime:3"
+         kind = "runtime"
+        -target = { marker = "python_full_version < '3.10'" }
+        +target = { marker = "python_full_version == '3.11.*'" }
 
          [[package]]
          name = "importlib-metadata"
@@ -460,7 +485,7 @@ fn jax_instability() -> Result<()> {
          name = "jax"
          version = "0.4.17"
          source = { registry = "https://pypi.org/simple" }
-        @@ -150,28 +150,41 @@
+        @@ -164,28 +164,41 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713, upload-time = "2024-01-20T21:12:26.619Z" },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252, upload-time = "2024-01-20T21:12:33.197Z" },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374, upload-time = "2024-01-20T21:12:39.176Z" },
@@ -517,7 +542,47 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -150,41 +150,28 @@
+        @@ -1,36 +1,36 @@
+         version = 2
+         revision = 3
+         requires-python = ">=3.9.0"
+
+         [options]
+         exclude-newer = "2024-03-25T00:00:00Z"
+
+         [[resolution]]
+         id = "runtime:0"
+         kind = "runtime"
+        -target = { marker = "python_full_version < '3.10'" }
+        +target = { marker = "python_full_version >= '3.12'" }
+
+         [[resolution]]
+         id = "runtime:1"
+         kind = "runtime"
+        -target = { marker = "python_full_version >= '3.12'" }
+        +target = { marker = "python_full_version == '3.11.*'" }
+
+         [[resolution]]
+         id = "runtime:2"
+         kind = "runtime"
+         target = { marker = "python_full_version == '3.10.*'" }
+
+         [[resolution]]
+         id = "runtime:3"
+         kind = "runtime"
+        -target = { marker = "python_full_version == '3.11.*'" }
+        +target = { marker = "python_full_version < '3.10'" }
+
+         [[package]]
+         name = "importlib-metadata"
+         version = "7.1.0"
+         source = { registry = "https://pypi.org/simple" }
+         dependencies = [
+             { name = "zipp", marker = "python_full_version < '3.10'" },
+         ]
+         sdist = { url = "https://files.pythonhosted.org/packages/a0/fc/c4e6078d21fc4fa56300a241b87eae76766aa380a23fc450fc85bb7bf547/importlib_metadata-7.1.0.tar.gz", hash = "sha256:b78938b926ee8d5f020fc4772d487045805a55ddbad2ecf21c6d60938dc7fcd2", size = 52120, upload-time = "2024-03-20T19:51:32.429Z" }
+         wheels = [
+        @@ -164,41 +164,28 @@
              { url = "https://files.pythonhosted.org/packages/f3/31/91a2a3c5eb85d2bfa86d7c98f2df5d77dcdefb3d80ca9f9037ad04393acf/scipy-1.12.0-cp312-cp312-win_amd64.whl", hash = "sha256:e646d8571804a304e1da01040d21577685ce8e2db08ac58e543eaca063453e1c", size = 45816713, upload-time = "2024-01-20T21:12:26.619Z" },
              { url = "https://files.pythonhosted.org/packages/ed/be/49a3f999dc91f1a653847f38c34763dcdeaa8a327f3665bdfe9bf5555109/scipy-1.12.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:913d6e7956c3a671de3b05ccb66b11bc293f56bfdef040583a7221d9e22a2e35", size = 38929252, upload-time = "2024-01-20T21:12:33.197Z" },
              { url = "https://files.pythonhosted.org/packages/32/48/f605bad3e610efe05a51b56698578f7a98f900513a4bad2c9f12df845cd6/scipy-1.12.0-cp39-cp39-macosx_12_0_arm64.whl", hash = "sha256:bba1b0c7256ad75401c73e4b3cf09d1f176e9bd4248f0d3112170fb2ec4db067", size = 31356374, upload-time = "2024-01-20T21:12:39.176Z" },
@@ -578,11 +643,11 @@ fn jax_instability() -> Result<()> {
         assert_snapshot!(diff, @r#"
         --- old
         +++ new
-        @@ -9,21 +9,21 @@
-         ]
-
-         [options]
-         exclude-newer = "2024-03-25T00:00:00Z"
+        @@ -23,21 +23,21 @@
+         [[resolution]]
+         id = "runtime:3"
+         kind = "runtime"
+         target = { marker = "python_full_version < '3.10'" }
 
          [[package]]
          name = "importlib-metadata"

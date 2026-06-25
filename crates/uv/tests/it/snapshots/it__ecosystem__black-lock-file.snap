@@ -2,20 +2,42 @@
 source: crates/uv/tests/it/ecosystem.rs
 expression: lock
 ---
-version = 1
+version = 2
 revision = 3
 requires-python = ">=3.8"
-resolution-markers = [
-    "python_full_version >= '3.10' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "python_full_version == '3.9.*' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "python_full_version < '3.9' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "(python_full_version >= '3.10' and implementation_name != 'pypy') or (python_full_version >= '3.10' and sys_platform != 'win32')",
-    "(python_full_version == '3.9.*' and implementation_name != 'pypy') or (python_full_version == '3.9.*' and sys_platform != 'win32')",
-    "(python_full_version < '3.9' and implementation_name != 'pypy') or (python_full_version < '3.9' and sys_platform != 'win32')",
-]
 
 [options]
 exclude-newer = "2024-08-08T00:00:00Z"
+
+[[resolution]]
+id = "runtime:0"
+kind = "runtime"
+target = { marker = "python_full_version >= '3.10' and implementation_name == 'pypy' and sys_platform == 'win32'" }
+
+[[resolution]]
+id = "runtime:1"
+kind = "runtime"
+target = { marker = "python_full_version == '3.9.*' and implementation_name == 'pypy' and sys_platform == 'win32'" }
+
+[[resolution]]
+id = "runtime:2"
+kind = "runtime"
+target = { marker = "python_full_version < '3.9' and implementation_name == 'pypy' and sys_platform == 'win32'" }
+
+[[resolution]]
+id = "runtime:3"
+kind = "runtime"
+target = { marker = "(python_full_version >= '3.10' and implementation_name != 'pypy') or (python_full_version >= '3.10' and sys_platform != 'win32')" }
+
+[[resolution]]
+id = "runtime:4"
+kind = "runtime"
+target = { marker = "(python_full_version == '3.9.*' and implementation_name != 'pypy') or (python_full_version == '3.9.*' and sys_platform != 'win32')" }
+
+[[resolution]]
+id = "runtime:5"
+kind = "runtime"
+target = { marker = "(python_full_version < '3.9' and implementation_name != 'pypy') or (python_full_version < '3.9' and sys_platform != 'win32')" }
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -371,9 +393,9 @@ wheels = [
 name = "ipython"
 version = "8.12.3"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.9' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "(python_full_version < '3.9' and implementation_name != 'pypy') or (python_full_version < '3.9' and sys_platform != 'win32')",
+selectors = [
+    { target = "runtime:2" },
+    { target = "runtime:5" },
 ]
 dependencies = [
     { name = "appnope", marker = "python_full_version < '3.9' and sys_platform == 'darwin'" },
@@ -399,9 +421,9 @@ wheels = [
 name = "ipython"
 version = "8.18.1"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version == '3.9.*' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "(python_full_version == '3.9.*' and implementation_name != 'pypy') or (python_full_version == '3.9.*' and sys_platform != 'win32')",
+selectors = [
+    { target = "runtime:1" },
+    { target = "runtime:4" },
 ]
 dependencies = [
     { name = "colorama", marker = "python_full_version == '3.9.*' and sys_platform == 'win32'" },
@@ -425,9 +447,9 @@ wheels = [
 name = "ipython"
 version = "8.26.0"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.10' and implementation_name == 'pypy' and sys_platform == 'win32'",
-    "(python_full_version >= '3.10' and implementation_name != 'pypy') or (python_full_version >= '3.10' and sys_platform != 'win32')",
+selectors = [
+    { target = "runtime:0" },
+    { target = "runtime:3" },
 ]
 dependencies = [
     { name = "colorama", marker = "python_full_version >= '3.10' and sys_platform == 'win32'" },

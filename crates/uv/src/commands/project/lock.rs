@@ -1,42 +1,51 @@
 #![expect(clippy::single_match_else)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Write;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
+use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
+    ExtrasSpecification, NoBinary, NoBuild, NoSources, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Requirement, RequiresPython, UnresolvedRequirementSpecification,
+    BuiltDist, DependencyMetadata, Dist, ExtraBuildRequires, HashGeneration, Index, IndexLocations,
+    Name, NameRequirementSpecification, PackageConfigSettings, Requirement, RequiresPython,
+    ResolvedDist, SourceDist, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+    MarkerValueVersion,
+};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, Package, PythonRequirement,
-    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
+    ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker, UpgradePackages,
 };
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraphKey,
+    BuildResolutionGraphMap, BuildResolutionOperation, BuildResolutionStage, BuildStack,
+    EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{
@@ -713,6 +722,14 @@ async fn do_lock(
         .platform(interpreter.platform())
         .build()?;
 
+    let build_isolation_settings: Option<Option<BTreeSet<String>>> = match build_isolation {
+        uv_configuration::BuildIsolation::Isolate => None,
+        uv_configuration::BuildIsolation::Shared => Some(None),
+        uv_configuration::BuildIsolation::SharedPackage(packages) => {
+            Some(Some(packages.iter().map(ToString::to_string).collect()))
+        }
+    };
+
     // Determine whether to enable build isolation.
     let environment;
     let build_isolation = match build_isolation {
@@ -782,32 +799,127 @@ async fn do_lock(
     // Convert to the `Constraints` format.
     let dispatch_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
 
-    // Create a build dispatch.
-    let build_dispatch = BuildDispatch::new(
-        &client,
-        cache,
-        &dispatch_constraints,
-        interpreter,
-        index_locations,
-        &flat_index,
-        dependency_metadata,
-        state.fork().into_inner(),
-        *index_strategy,
-        config_setting,
-        config_settings_package,
-        build_isolation,
-        &extra_build_requires,
-        extra_build_variables,
-        *link_mode,
-        build_options,
-        &build_hasher,
-        exclude_newer.clone(),
-        sources.clone(),
-        SourceTreeEditablePolicy::Project,
-        workspace_cache.clone(),
-        concurrency.clone(),
-        preview,
-    );
+    // Extract build dependency preferences from the existing lock file so the
+    // resolver prefers previously locked build dependency versions.
+    let build_preferences = existing_lock
+        .as_ref()
+        .map(|lock| {
+            let mut build_preferences = lock.build_dependency_preferences();
+            if !upgrade.is_none() {
+                let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
+                for preferences in build_preferences.values_mut() {
+                    preferences.retain(|(name, _)| !upgrade_packages.contains(name));
+                }
+                build_preferences.retain(|_, preferences| !preferences.is_empty());
+            }
+            BuildPreferences::new(build_preferences)
+        })
+        .unwrap_or_default();
+
+    let no_build_packages = match build_options.no_build() {
+        NoBuild::Packages(packages) => packages.iter().map(ToString::to_string).collect(),
+        NoBuild::None | NoBuild::All => BTreeSet::new(),
+    };
+    let no_build_all = matches!(build_options.no_build(), NoBuild::All);
+    let no_binary_settings: Option<(&str, BTreeSet<String>)> = match build_options.no_binary() {
+        NoBinary::None => None,
+        NoBinary::All => Some(("all", BTreeSet::new())),
+        NoBinary::Packages(packages) => Some((
+            "packages",
+            packages.iter().map(ToString::to_string).collect(),
+        )),
+    };
+    let has_build_settings = !config_setting.is_empty()
+        || *config_settings_package != PackageConfigSettings::default()
+        || !extra_build_variables.is_empty()
+        || !no_build_packages.is_empty();
+    let source_settings = match sources {
+        NoSources::None => None,
+        NoSources::All => Some(("all", Vec::new())),
+        NoSources::Packages(packages) => Some((
+            "packages",
+            packages.iter().map(PackageName::as_ref).collect(),
+        )),
+    };
+    let build_settings = if let Some(build_isolation_settings) = build_isolation_settings.as_ref()
+        && let Some(source_settings) = &source_settings
+    {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+            build_isolation_settings,
+            source_settings,
+        )))
+    } else if let Some(build_isolation_settings) = build_isolation_settings.as_ref() {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+            build_isolation_settings,
+        )))
+    } else if let Some(source_settings) = &source_settings {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+            source_settings,
+        )))
+    } else if has_build_settings {
+        Some(cache_digest(&(
+            config_setting,
+            config_settings_package,
+            extra_build_variables,
+            &no_build_packages,
+        )))
+    } else {
+        None
+    };
+    let build_settings = if let Some(no_binary_settings) = &no_binary_settings {
+        Some(cache_digest(&(
+            build_settings.as_deref(),
+            no_build_all,
+            no_binary_settings,
+        )))
+    } else {
+        build_settings
+    };
+
+    let make_build_dispatch = |build_preferences, extra_build_requires| {
+        BuildDispatch::new(
+            &client,
+            cache,
+            &dispatch_constraints,
+            interpreter,
+            index_locations,
+            &flat_index,
+            dependency_metadata,
+            state.fork().into_inner(),
+            *index_strategy,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            extra_build_requires,
+            extra_build_variables,
+            *link_mode,
+            build_options,
+            &build_hasher,
+            exclude_newer.clone(),
+            sources.clone(),
+            SourceTreeEditablePolicy::Project,
+            workspace_cache.clone(),
+            concurrency.clone(),
+            preview,
+        )
+        .with_build_preferences(build_preferences)
+    };
+
+    // Runtime metadata builds use the active interpreter. Universal build dependency
+    // locking runs after the runtime resolution can provide source reachability markers.
+    let build_dispatch = make_build_dispatch(build_preferences.clone(), &extra_build_requires);
 
     let database = DistributionDatabase::new(
         &client,
@@ -829,6 +941,8 @@ async fn do_lock(
             &overrides,
             &excludes,
             &build_constraints,
+            &extra_build_requires,
+            build_settings.as_deref(),
             &conflicts,
             environments,
             required_environments,
@@ -863,6 +977,42 @@ async fn do_lock(
         }
     } else {
         None
+    };
+
+    let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+        match existing_lock {
+            Some(ValidatedLock::Satisfies(lock))
+                if build_options.allows_package_builds() && !lock.supports_build_dependencies() =>
+            {
+                debug!(
+                    "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile revision does not support build dependencies"
+                );
+                Some(ValidatedLock::Preferable(lock))
+            }
+            Some(ValidatedLock::Satisfies(lock)) => {
+                if lock_missing_build_dependencies(
+                    &lock,
+                    target.install_path(),
+                    build_options,
+                    &extra_build_requires,
+                    &database,
+                    &build_hasher,
+                )
+                .await
+                .map_err(ProjectError::from)?
+                {
+                    debug!(
+                        "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile is missing build dependencies"
+                    );
+                    Some(ValidatedLock::Preferable(lock))
+                } else {
+                    Some(ValidatedLock::Satisfies(lock))
+                }
+            }
+            lock => lock,
+        }
+    } else {
+        existing_lock
     };
 
     match existing_lock {
@@ -989,7 +1139,7 @@ async fn do_lock(
             // Notify the user of any resolution diagnostics.
             pip::operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-            let manifest = ResolverManifest::new(
+            let mut manifest = ResolverManifest::new(
                 members,
                 requirements,
                 constraints,
@@ -1000,16 +1150,196 @@ async fn do_lock(
                 dependency_metadata.values().cloned(),
             )
             .relative_to(target.install_path())?;
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies)
+                && build_options.allows_package_builds()
+            {
+                manifest = manifest.with_build_settings(build_settings.clone());
+            }
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let lock = Lock::from_resolution(
+            let (lock, build_markers) = Lock::from_resolution_with_build_markers(
                 &resolution,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
-            )?
-            .with_manifest(manifest)
-            .with_conflicts(conflicts)
-            .with_required_environments(lock_required_environments.into_markers());
+            )?;
+            let mut lock = lock
+                .with_manifest(manifest)
+                .with_conflicts(conflicts)
+                .with_required_environments(lock_required_environments.into_markers());
+
+            // Only record build dependencies in the lock file when the preview feature is enabled.
+            if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
+                if build_options.allows_package_builds() {
+                    let match_runtime_packages = extra_build_requires
+                        .iter()
+                        .filter(|(_, requirements)| {
+                            requirements
+                                .iter()
+                                .any(|requirement| requirement.match_runtime)
+                        })
+                        .map(|(name, _)| name.clone())
+                        .collect::<BTreeSet<_>>();
+                    let mut general_extra_build_requires = extra_build_requires.clone();
+                    general_extra_build_requires
+                        .retain(|name, _| !match_runtime_packages.contains(name));
+                    let mut build_resolutions = BuildResolutionGraphMap::new();
+                    let executor_artifact_environments =
+                        executor_artifact_environments(interpreter.markers());
+
+                    // Build backend hooks are assumed to return the same requirements for every
+                    // executor, except for variation expressed by PEP 508 environment markers on
+                    // those requirements. Discovering arbitrary executor-dependent hook results
+                    // would require running the backend in every possible environment, so resolve
+                    // the returned requirements universally and evaluate their markers on replay.
+                    {
+                        let build_dispatch = BuildDispatch::new(
+                            &client,
+                            cache,
+                            &dispatch_constraints,
+                            interpreter,
+                            index_locations,
+                            &flat_index,
+                            dependency_metadata,
+                            state.fork().into_inner(),
+                            *index_strategy,
+                            config_setting,
+                            config_settings_package,
+                            build_isolation,
+                            &general_extra_build_requires,
+                            extra_build_variables,
+                            *link_mode,
+                            build_options,
+                            &build_hasher,
+                            exclude_newer.clone(),
+                            sources.clone(),
+                            SourceTreeEditablePolicy::Project,
+                            workspace_cache.clone(),
+                            concurrency.clone(),
+                            preview,
+                        )
+                        .with_build_preferences(build_preferences.clone())
+                        .with_universal_build_resolution(
+                            requires_python.clone(),
+                            SupportedEnvironments::default(),
+                            executor_artifact_environments.clone(),
+                        );
+                        let build_database = DistributionDatabase::new(
+                            &client,
+                            &build_dispatch,
+                            concurrency.downloads_semaphore.clone(),
+                        );
+                        resolve_all_possible_builds(
+                            &lock,
+                            target.install_path(),
+                            build_options,
+                            &build_dispatch,
+                            &build_database,
+                            &build_hasher,
+                            &build_markers,
+                            None,
+                            None,
+                            &match_runtime_packages,
+                        )
+                        .await
+                        .map_err(ProjectError::from)?;
+                        build_resolutions
+                            .extend(build_dispatch.build_resolutions().snapshot_contexts());
+                    }
+
+                    if !match_runtime_packages.is_empty() {
+                        let matched_extra_build_requires = resolution
+                            .match_runtime_extra_build_requires_by_fork(&extra_build_requires)?;
+                        let no_excluded_packages = BTreeSet::new();
+                        for (runtime_marker, matched_extra_build_requires) in
+                            matched_extra_build_requires
+                        {
+                            let included_root_packages = matched_extra_build_requires
+                                .keys()
+                                .filter(|name| match_runtime_packages.contains(*name))
+                                .cloned()
+                                .collect::<BTreeSet<_>>();
+                            if included_root_packages.is_empty() {
+                                continue;
+                            }
+
+                            let build_dispatch = BuildDispatch::new(
+                                &client,
+                                cache,
+                                &dispatch_constraints,
+                                interpreter,
+                                index_locations,
+                                &flat_index,
+                                dependency_metadata,
+                                state.fork().into_inner(),
+                                *index_strategy,
+                                config_setting,
+                                config_settings_package,
+                                build_isolation,
+                                &matched_extra_build_requires,
+                                extra_build_variables,
+                                *link_mode,
+                                build_options,
+                                &build_hasher,
+                                exclude_newer.clone(),
+                                sources.clone(),
+                                SourceTreeEditablePolicy::Project,
+                                workspace_cache.clone(),
+                                concurrency.clone(),
+                                preview,
+                            )
+                            .with_build_preferences(build_preferences.clone())
+                            .with_universal_build_resolution(
+                                requires_python.clone(),
+                                SupportedEnvironments::default(),
+                                executor_artifact_environments.clone(),
+                            );
+                            let build_database = DistributionDatabase::new(
+                                &client,
+                                &build_dispatch,
+                                concurrency.downloads_semaphore.clone(),
+                            );
+                            resolve_all_possible_builds(
+                                &lock,
+                                target.install_path(),
+                                build_options,
+                                &build_dispatch,
+                                &build_database,
+                                &build_hasher,
+                                &build_markers,
+                                runtime_marker,
+                                Some(&included_root_packages),
+                                &no_excluded_packages,
+                            )
+                            .await
+                            .map_err(ProjectError::from)?;
+                            build_resolutions
+                                .extend(build_dispatch.build_resolutions().snapshot_contexts());
+                        }
+                    }
+
+                    let build_metadata_dispatch =
+                        make_build_dispatch(build_preferences.clone(), &extra_build_requires);
+                    let build_metadata_database = DistributionDatabase::new(
+                        &client,
+                        &build_metadata_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    );
+                    lock = lock
+                        .with_build_resolutions(
+                            &build_resolutions,
+                            &extra_build_requires,
+                            &build_markers,
+                            target.install_path(),
+                            &build_metadata_database,
+                            &build_hasher,
+                        )
+                        .await?;
+                } else {
+                    debug!(
+                        "Skipping lock build dependency resolution because `--no-build` is enabled"
+                    );
+                }
+            }
 
             if previous.as_ref().is_some_and(|previous| *previous == lock) {
                 Ok(LockResult::Unchanged(lock))
@@ -1018,6 +1348,425 @@ async fn do_lock(
             }
         }
     }
+}
+
+fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<SourceDist> {
+    let ResolvedDist::Installable { dist, .. } = resolved_dist else {
+        return None;
+    };
+
+    match dist.as_ref() {
+        Dist::Source(source_dist) => Some(source_dist.clone()),
+        Dist::Built(BuiltDist::Registry(built_dist)) => built_dist
+            .sdist
+            .as_ref()
+            .map(|sdist| SourceDist::Registry(sdist.clone())),
+        Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_)) => None,
+    }
+}
+
+async fn lock_missing_build_dependencies(
+    lock: &Lock,
+    workspace_root: &Path,
+    build_options: &BuildOptions,
+    extra_build_requires: &ExtraBuildRequires,
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    build_hasher: &HashStrategy,
+) -> anyhow::Result<bool> {
+    if !build_options.allows_package_builds() {
+        return Ok(false);
+    }
+
+    for (key, source_dist) in lock.source_distributions_missing_build_dependencies(
+        workspace_root,
+        build_options,
+        extra_build_requires,
+    )? {
+        let extra_build_dependencies = extra_build_requires
+            .get(&key.name)
+            .is_some_and(|requirements| !requirements.is_empty());
+        let dist = Dist::Source(source_dist.clone());
+        if !extra_build_dependencies
+            && database
+                .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
+                .await?
+        {
+            continue;
+        }
+
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+async fn resolve_all_possible_builds(
+    lock: &Lock,
+    workspace_root: &Path,
+    build_options: &uv_configuration::BuildOptions,
+    build_dispatch: &BuildDispatch<'_>,
+    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+    build_hasher: &HashStrategy,
+    build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+    runtime_marker: Option<UniversalMarker>,
+    included_root_packages: Option<&BTreeSet<PackageName>>,
+    excluded_packages: &BTreeSet<PackageName>,
+) -> anyhow::Result<()> {
+    struct BuildResolutionRequest {
+        key: BuildPackageKey,
+        dispatch_key: BuildPackageKey,
+        source_dist: SourceDist,
+        operation: BuildResolutionOperation,
+        solve_marker: Option<MarkerTree>,
+        context_marker: Option<MarkerTree>,
+    }
+
+    fn build_resolution_requests(
+        key: BuildPackageKey,
+        source_dist: SourceDist,
+        solve_marker: Option<MarkerTree>,
+        context_marker: Option<MarkerTree>,
+    ) -> Vec<BuildResolutionRequest> {
+        if solve_marker.is_some_and(MarkerTree::is_false)
+            || context_marker.is_some_and(MarkerTree::is_false)
+        {
+            return Vec::new();
+        }
+        let mut requests = Vec::with_capacity(if source_dist.is_editable() { 2 } else { 1 });
+        if source_dist.is_editable() {
+            requests.push(BuildResolutionRequest {
+                dispatch_key: key.clone(),
+                key: key.clone(),
+                source_dist: source_dist.clone(),
+                operation: BuildResolutionOperation::Editable,
+                solve_marker,
+                context_marker,
+            });
+
+            let SourceDist::Directory(mut wheel_source_dist) = source_dist else {
+                return requests;
+            };
+            wheel_source_dist.editable = Some(false);
+            let source_dist = SourceDist::Directory(wheel_source_dist);
+            requests.push(BuildResolutionRequest {
+                dispatch_key: BuildPackageKey::from_source_dist(
+                    key.name.clone(),
+                    key.version.clone(),
+                    Some(&source_dist),
+                ),
+                key,
+                source_dist,
+                operation: BuildResolutionOperation::Wheel,
+                solve_marker,
+                context_marker,
+            });
+        } else {
+            requests.push(BuildResolutionRequest {
+                dispatch_key: key.clone(),
+                key,
+                source_dist,
+                operation: BuildResolutionOperation::Wheel,
+                solve_marker,
+                context_marker,
+            });
+        }
+        requests
+    }
+
+    let mut queue: VecDeque<BuildResolutionRequest> = lock
+        .source_distributions_for_build(workspace_root)?
+        .into_iter()
+        .filter(|(key, _)| {
+            !build_options.no_build_package(&key.name)
+                && !excluded_packages.contains(&key.name)
+                && included_root_packages.is_none_or(|packages| packages.contains(&key.name))
+        })
+        .flat_map(|(key, source_dist)| {
+            let build_marker = build_markers.get(&key).copied();
+            let solve_marker = match (build_marker, runtime_marker) {
+                (Some(build_marker), Some(runtime_marker)) => {
+                    let mut marker = source_python_marker(build_marker.combined());
+                    marker.and(source_python_marker(runtime_marker.combined()));
+                    Some(marker)
+                }
+                (Some(build_marker), None) => Some(source_python_marker(build_marker.combined())),
+                (None, Some(runtime_marker)) => {
+                    Some(source_python_marker(runtime_marker.combined()))
+                }
+                (None, None) => None,
+            };
+            let context_marker = runtime_marker.map(|runtime_marker| {
+                let mut marker = build_marker
+                    .map(UniversalMarker::combined)
+                    .unwrap_or(MarkerTree::TRUE);
+                marker.and(runtime_marker.combined());
+                marker
+            });
+            build_resolution_requests(key, source_dist, solve_marker, context_marker)
+        })
+        .collect();
+
+    let mut seen: FxHashSet<BuildResolutionGraphKey> = FxHashSet::default();
+
+    while let Some(BuildResolutionRequest {
+        key,
+        dispatch_key,
+        source_dist,
+        operation,
+        solve_marker,
+        context_marker,
+    }) = queue.pop_front()
+    {
+        // A registry source distribution can be selected as a fallback on a target where none of
+        // the locked wheels are compatible, even if the runtime resolution selected a wheel in
+        // every environment it considered.
+        // TODO: Avoid resolving backend hooks when the locked wheels cover every reachable target,
+        // while accounting for `--no-binary` policies that can force the source distribution.
+        let resolve_backend_hook_requirements =
+            solve_marker.is_some() || matches!(&source_dist, SourceDist::Registry(_));
+        let target_marker = context_marker.filter(|marker| !marker.is_true());
+        let nested_context_marker = match (build_markers.get(&key).copied(), context_marker) {
+            (Some(build_marker), Some(context_marker)) => {
+                let mut marker = build_marker.combined();
+                marker.and(context_marker);
+                Some(marker)
+            }
+            (Some(build_marker), None) => Some(build_marker.combined()),
+            (None, context_marker) => context_marker,
+        }
+        .filter(|marker| !marker.is_true());
+        let bootstrap_context = if context_marker.is_none() && build_markers.contains_key(&key) {
+            lock.build_resolution_context_id_for(
+                &key,
+                operation,
+                BuildResolutionStage::Bootstrap,
+                build_markers,
+                workspace_root,
+            )?
+        } else {
+            lock.build_resolution_context_id_for_marker(
+                &key,
+                operation,
+                BuildResolutionStage::Bootstrap,
+                target_marker,
+                workspace_root,
+            )?
+        };
+        let build_context = if context_marker.is_none() && build_markers.contains_key(&key) {
+            lock.build_resolution_context_id_for(
+                &key,
+                operation,
+                BuildResolutionStage::Build,
+                build_markers,
+                workspace_root,
+            )?
+        } else {
+            lock.build_resolution_context_id_for_marker(
+                &key,
+                operation,
+                BuildResolutionStage::Build,
+                target_marker,
+                workspace_root,
+            )?
+        };
+        let bootstrap_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
+            key.clone(),
+            operation,
+            bootstrap_context,
+            BuildResolutionStage::Bootstrap,
+            target_marker,
+        );
+        let build_graph_key = BuildResolutionGraphKey::context_with_marker_and_operation(
+            key.clone(),
+            operation,
+            build_context,
+            BuildResolutionStage::Build,
+            target_marker,
+        );
+        build_dispatch.set_build_resolution_stage_contexts(
+            dispatch_key.clone(),
+            bootstrap_graph_key.clone(),
+            build_graph_key.clone(),
+        );
+        let marker_widened = solve_marker.is_some_and(|marker| {
+            let bootstrap_widened = build_dispatch
+                .add_universal_build_context_marker(bootstrap_graph_key.clone(), marker);
+            let build_widened =
+                build_dispatch.add_universal_build_context_marker(build_graph_key.clone(), marker);
+            bootstrap_widened || build_widened
+        });
+        let seen_before = !seen.insert(build_graph_key.clone());
+        if seen_before && !marker_widened {
+            continue;
+        }
+        let re_resolve_build_requirements = seen_before && marker_widened;
+
+        let dist = Dist::Source(source_dist.clone());
+        let hash_policy = build_hasher.get(&dist);
+        database
+            .get_or_build_wheel_metadata(&dist, hash_policy)
+            .await?;
+
+        let build_resolutions = build_dispatch.build_resolutions();
+        let mut graph = if re_resolve_build_requirements {
+            None
+        } else {
+            build_resolutions
+                .get(&build_graph_key)
+                .or_else(|| build_resolutions.get(&bootstrap_graph_key))
+        };
+        let extra_build_dependencies = build_dispatch
+            .extra_build_requires()
+            .get(&key.name)
+            .cloned()
+            .unwrap_or_default();
+
+        if graph.is_none() {
+            let direct_build = extra_build_dependencies.is_empty()
+                && database
+                    .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
+                    .await?;
+            let build_system = if direct_build {
+                None
+            } else {
+                database
+                    .get_static_build_system(&source_dist, build_hasher.get(&dist))
+                    .await?
+            };
+            let has_explicit_build_system = build_system.is_some();
+            let build_requirements = build_system.map(|build_system| build_system.requires);
+
+            if !direct_build && resolve_backend_hook_requirements {
+                database
+                    .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
+                    .await?;
+                graph = build_resolutions
+                    .get(&build_graph_key)
+                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
+            }
+
+            if graph.is_none()
+                && let Some(mut requirements) = build_requirements
+            {
+                requirements.extend(
+                    extra_build_dependencies
+                        .clone()
+                        .into_iter()
+                        .map(Requirement::from),
+                );
+                if !requirements.is_empty() {
+                    let build_stack = BuildStack::default();
+                    let _ = build_dispatch
+                        .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
+                        .await?;
+                    graph = build_resolutions
+                        .get(&build_graph_key)
+                        .or_else(|| build_resolutions.get(&bootstrap_graph_key));
+                }
+            }
+
+            if graph.is_none()
+                && !source_dist.is_virtual()
+                && !direct_build
+                && !has_explicit_build_system
+            {
+                let mut requirements = vec![Requirement::from(uv_pep508::Requirement::from_str(
+                    "setuptools >= 40.8.0",
+                )?)];
+                requirements.extend(extra_build_dependencies.into_iter().map(Requirement::from));
+                let build_stack = BuildStack::default();
+                let _ = build_dispatch
+                    .resolve(&requirements, Some(&dispatch_key), &build_stack, None)
+                    .await?;
+                graph = build_resolutions
+                    .get(&build_graph_key)
+                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
+            }
+        }
+
+        let graphs = [
+            build_resolutions.get(&bootstrap_graph_key),
+            build_resolutions.get(&build_graph_key),
+            graph,
+        ];
+
+        for graph in graphs.into_iter().flatten() {
+            for package in &graph.packages {
+                let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
+                    continue;
+                };
+
+                let name = package.dist.name().clone();
+                if build_options.no_build_package(&name) || excluded_packages.contains(&name) {
+                    continue;
+                }
+
+                let dep_key = BuildPackageKey::from_source_dist(
+                    name,
+                    package.dist.version().cloned(),
+                    Some(&source_dist),
+                );
+                queue.extend(build_resolution_requests(
+                    dep_key,
+                    source_dist,
+                    resolve_backend_hook_requirements.then_some(package.marker),
+                    nested_context_marker,
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Restrict a source build solve to Python versions where the source can be
+/// selected without applying target platform markers to the build host.
+fn source_python_marker(marker: MarkerTree) -> MarkerTree {
+    if marker.is_true() || marker.is_false() {
+        return marker;
+    }
+
+    let mut python_marker = MarkerTree::FALSE;
+    for clause in marker.to_dnf() {
+        let mut python_clause = MarkerTree::TRUE;
+        for expression in clause {
+            if matches!(
+                &expression,
+                MarkerExpression::Version {
+                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                    ..
+                } | MarkerExpression::VersionIn {
+                    key: MarkerValueVersion::PythonVersion | MarkerValueVersion::PythonFullVersion,
+                    ..
+                }
+            ) {
+                python_clause.and(MarkerTree::expression(expression));
+            }
+        }
+        python_marker.or(python_clause);
+    }
+    python_marker
+}
+
+/// Return the marker environment used to require artifact coverage for dependencies installed into
+/// the build environment.
+///
+/// Build requirement markers are resolved universally, but an artifact selected during capture
+/// must be installable by the executor performing the build.
+fn executor_artifact_environments(markers: &MarkerEnvironment) -> SupportedEnvironments {
+    let mut marker = MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::SysPlatform,
+        operator: MarkerOperator::Equal,
+        value: markers.sys_platform().into(),
+    });
+    if !markers.platform_machine().is_empty() {
+        marker.and(MarkerTree::expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformMachine,
+            operator: MarkerOperator::Equal,
+            value: markers.platform_machine().into(),
+        }));
+    }
+    SupportedEnvironments::from_markers(vec![marker])
 }
 
 #[derive(Debug)]
@@ -1048,6 +1797,8 @@ impl ValidatedLock {
         overrides: &[Requirement],
         excludes: &[PackageName],
         build_constraints: &[Requirement],
+        extra_build_requires: &uv_distribution_types::ExtraBuildRequires,
+        build_settings: Option<&str>,
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1252,6 +2003,8 @@ impl ValidatedLock {
                 overrides,
                 excludes,
                 build_constraints,
+                extra_build_requires,
+                build_settings,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -1429,6 +2182,24 @@ impl ValidatedLock {
                         expected, actual
                     );
                 }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildSystem(name, version) => {
+                if let Some(version) = version {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}=={version}`"
+                    );
+                } else {
+                    debug!(
+                        "Resolving despite existing lockfile due to mismatched `build-system` for: `{name}`"
+                    );
+                }
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildSettings => {
+                debug!(
+                    "Resolving despite existing lockfile due to changed build configuration settings, variables, or policies"
+                );
                 Ok(Self::Preferable(lock))
             }
             SatisfiesResult::MissingVersion(name) => {
