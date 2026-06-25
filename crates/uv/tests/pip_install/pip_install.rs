@@ -15514,11 +15514,13 @@ fn install_missing_python_with_target() {
 /// into a `--target` directory should fail with a clear hint pointing at the cause, rather
 /// than a generic "no interpreter found" error.
 #[test]
-#[cfg(not(windows))]
 fn install_missing_python_with_target_downloads_disabled() {
-    // Zero installed interpreters, and downloads are disabled by default in tests
-    // (`UV_PYTHON_DOWNLOADS=never` unless `.with_managed_python_dirs()` is used).
     let context = uv_test::test_context_with_versions!(&[]);
+
+    // TestContext creates a .venv automatically. Remove it so uv doesn't
+    // find and try to inspect it — we want it to fall through to the
+    // "no interpreter found" + downloads hint path.
+    fs_err::remove_dir_all(context.venv.path()).unwrap();
 
     let target_dir = context.temp_dir.child("target-dir");
 
@@ -15533,27 +15535,6 @@ fn install_missing_python_with_target_downloads_disabled() {
     error: No interpreter found in virtual environments, managed installations, or search path
 
     hint: A managed Python download is available, but Python downloads are set to 'never'
-    ");
-}
-
-/// Same scenario on Windows: uv finds the `TestContext` venv but the interpreter
-/// binary doesn't exist, producing a different but equally clear error.
-#[test]
-#[cfg(windows)]
-fn install_missing_python_with_target_downloads_disabled_windows() {
-    let context = uv_test::test_context_with_versions!(&[]);
-    let target_dir = context.temp_dir.child("target-dir");
-
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("anyio")
-        .arg("--target").arg(target_dir.path()), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv\\Scripts\\python.exe`
-      Caused by: Python interpreter not found at `[VENV]\\Scripts\\python.exe`
     ");
 }
 
