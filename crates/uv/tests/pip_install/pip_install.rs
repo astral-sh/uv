@@ -15545,27 +15545,22 @@ fn install_missing_python_with_target_downloads_disabled() {
 #[test]
 #[cfg(target_os = "linux")]
 fn install_target_no_space_left_on_device() {
-    // Verify that unprivileged user namespaces are available on this kernel.
-    // Some distros disable them via kernel.unprivileged_userns_clone=0.
     let ns_check = std::process::Command::new("unshare")
         .args(["--user", "--map-root-user", "--mount", "true"])
         .output();
     let Ok(ns_output) = ns_check else {
-        return; // `unshare` binary not found, skip
+        return;
     };
     if !ns_output.status.success() {
-        return; // user namespaces disabled on this kernel, skip
+        return;
     }
 
-    let context = TestContext::new_with_bin("3.12");
+    let uv_bin = get_bin!(); // ← the macro gives us the path
+    let context = TestContext::new_with_bin("3.12", uv_bin.clone()); // ← pass it here
+
     let target_dir = context.temp_dir.child("tiny-target");
     fs_err::create_dir_all(target_dir.path()).unwrap();
 
-    // Mount a 16KB tmpfs over target_dir, then install into it.
-    // --link-mode=copy avoids the cross-device hardlink warning
-    // (hardlinks fail because tmpfs and cache are on different mounts).
-    // --no-cache ensures bytes are actually written to the target,
-    // triggering ENOSPC rather than a zero-cost hardlink.
     let cmd = format!(
         "mount -t tmpfs -o size=16k tmpfs {target} && \
          {uv} pip install certifi \
@@ -15573,7 +15568,7 @@ fn install_target_no_space_left_on_device() {
              --no-cache \
              --link-mode copy",
         target = target_dir.path().display(),
-        uv = context.uv_bin.display(), // ← was context.uv_bin() — it's a field, not a method
+        uv = uv_bin.display(), // ← use the local variable, not context.uv_bin
     );
 
     let output = std::process::Command::new("unshare")
