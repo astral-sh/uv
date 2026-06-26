@@ -9,12 +9,10 @@ use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
-    ExtrasSpecificationWithDefaults, InstallOptions,
-};
+use uv_configuration::ExtrasSpecificationWithDefaults;
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
-use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
@@ -72,24 +70,6 @@ pub trait Installable<'lock> {
 
     /// Return the [`PackageName`] of the target, if available.
     fn project_name(&self) -> Option<&PackageName>;
-
-    /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and
-    /// root, without any extras, dependency groups, or install options.
-    fn to_resolution_simple(
-        &self,
-        marker_env: &ResolverMarkerEnvironment,
-        tags: &Tags,
-        build_options: &BuildOptions,
-    ) -> Result<Resolution, LockError> {
-        self.to_resolution(
-            marker_env,
-            tags,
-            &ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
-            &DependencyGroupsWithDefaults::none(),
-            build_options,
-            &InstallOptions::default(),
-        )
-    }
 
     /// Convert the [`Lock`] to a [`Resolution`] using the given marker environment, tags, and root.
     fn to_resolution(

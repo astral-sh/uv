@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
@@ -1694,7 +1695,6 @@ fn tool_upgrade_writes_preview_lock() -> Result<()> {
         .arg("--no-index")
         .arg("--find-links")
         .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
@@ -1702,6 +1702,7 @@ fn tool_upgrade_writes_preview_lock() -> Result<()> {
         .success();
 
     let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    lock_path.assert(predicate::path::missing());
     context
         .tool_upgrade()
         .arg("simple-launcher")

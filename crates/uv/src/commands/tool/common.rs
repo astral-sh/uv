@@ -12,7 +12,10 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{BuildOptions, ExcludeDependency, GitLfsSetting, TargetTriple};
+use uv_configuration::{
+    BuildOptions, DependencyGroupsWithDefaults, ExcludeDependency, ExtrasSpecification,
+    GitLfsSetting, InstallOptions, TargetTriple,
+};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
     DependencyMetadata, InstalledDist, Name, Requirement, RequirementSource, RequiresPython,
@@ -24,7 +27,7 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -414,7 +417,14 @@ pub(crate) fn tool_lock_to_resolution(
         lock,
         project_name,
     }
-    .to_resolution_simple(&markers, &tags, build_options)?)
+    .to_resolution(
+        &markers,
+        &tags,
+        &ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
+        &DependencyGroupsWithDefaults::none(),
+        build_options,
+        &InstallOptions::default(),
+    )?)
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when

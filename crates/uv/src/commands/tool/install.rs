@@ -497,6 +497,7 @@ pub(crate) async fn install(
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
+    let tool_dir = installed_tools.tool_dir(package_name);
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
@@ -555,7 +556,7 @@ pub(crate) async fn install(
             .and_then(uv_tool::Tool::lock)
             .filter(|lock| {
                 tool_lock_is_fresh(
-                    &installed_tools.tool_dir(package_name),
+                    &tool_dir,
                     lock,
                     &lock_manifest,
                     &lock_settings,
@@ -612,7 +613,8 @@ pub(crate) async fn install(
                         environment.environment().root(),
                         lock,
                         tool_receipt
-                            .target_requirement()
+                            .requirements()
+                            .first()
                             .map(|requirement| &requirement.name),
                         environment.environment().interpreter(),
                         python_platform.as_ref(),
@@ -705,6 +707,15 @@ pub(crate) async fn install(
         ..spec
     };
 
+    let resolution_scope = if tool_locks {
+        EnvironmentResolution::Universal {
+            environments: &lock_settings.environments,
+            required_environments: &lock_settings.required_environments,
+        }
+    } else {
+        EnvironmentResolution::Specific
+    };
+
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
@@ -717,13 +728,10 @@ pub(crate) async fn install(
                 tool_environment_spec(
                     spec.clone(),
                     existing_tool_lock.as_ref(),
-                    &installed_tools.tool_dir(package_name),
+                    &tool_dir,
                     Some(&site_packages),
                 ),
-                EnvironmentResolution::Universal {
-                    environments: &lock_settings.environments,
-                    required_environments: &lock_settings.required_environments,
-                },
+                resolution_scope,
                 environment.interpreter(),
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
@@ -751,14 +759,9 @@ pub(crate) async fn install(
                 Err(err) => return Err(err.into()),
             };
 
-            let tool_lock = tool_lock(
-                &installed_tools.tool_dir(package_name),
-                &resolution,
-                &lock_manifest,
-                &lock_settings,
-            )?;
+            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest, &lock_settings)?;
             let resolution = tool_lock_to_resolution(
-                &installed_tools.tool_dir(package_name),
+                &tool_dir,
                 &tool_lock,
                 Some(package_name),
                 environment.interpreter(),
@@ -863,15 +866,6 @@ pub(crate) async fn install(
         (environment, tool_lock)
     } else {
         let spec = EnvironmentSpecification::from(spec);
-        let resolution_scope = if tool_locks {
-            EnvironmentResolution::Universal {
-                environments: &lock_settings.environments,
-                required_environments: &lock_settings.required_environments,
-            }
-        } else {
-            EnvironmentResolution::Specific
-        };
-
         // If we're creating a new environment, ensure that we can resolve the requirements prior
         // to removing any existing tools.
         let resolution = resolve_environment(
@@ -966,14 +960,9 @@ pub(crate) async fn install(
         };
 
         let (resolution, tool_lock) = if tool_locks {
-            let tool_lock = tool_lock(
-                &installed_tools.tool_dir(package_name),
-                &resolution,
-                &lock_manifest,
-                &lock_settings,
-            )?;
+            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest, &lock_settings)?;
             let resolution = tool_lock_to_resolution(
-                &installed_tools.tool_dir(package_name),
+                &tool_dir,
                 &tool_lock,
                 Some(package_name),
                 &interpreter,

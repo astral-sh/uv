@@ -256,14 +256,15 @@ impl InstalledTools {
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
-        let lock_path = self.tool_dir(name).join("uv.lock");
+        let directory = self.tool_dir(name);
+        let lock_path = directory.join("uv.lock");
         let lock = tool
             .lock()
             .map(Lock::to_toml)
             .transpose()
             .map_err(|err| Error::LockWrite(lock_path.clone(), Box::new(err)))?;
         let tool_receipt = ToolReceipt::from(tool);
-        let path = self.tool_dir(name).join("uv-receipt.toml");
+        let path = directory.join("uv-receipt.toml");
 
         debug!(
             "Adding metadata entry for tool `{name}` at {}",

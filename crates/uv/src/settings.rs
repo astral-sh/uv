@@ -48,7 +48,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::SupportedEnvironments;
+use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
@@ -1032,38 +1032,28 @@ impl ToolLockSettings {
             return Self::default();
         };
 
+        let workspace_requirements =
+            |requirements: Option<&[uv_pep508::Requirement<VerbatimParsedUrl>]>| {
+                requirements
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+                    .map(|requirement| {
+                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                    })
+                    .collect()
+            };
+
         Self {
-            constraints: configuration
-                .constraint_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .collect(),
-            overrides: configuration
-                .override_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .collect(),
+            constraints: workspace_requirements(configuration.constraint_dependencies.as_deref()),
+            overrides: workspace_requirements(configuration.override_dependencies.as_deref()),
             excludes: configuration
                 .exclude_dependencies
                 .clone()
                 .unwrap_or_default(),
-            build_constraints: configuration
-                .build_constraint_dependencies
-                .clone()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|requirement| {
-                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                })
-                .collect(),
+            build_constraints: workspace_requirements(
+                configuration.build_constraint_dependencies.as_deref(),
+            ),
             environments: configuration.environments.clone().unwrap_or_default(),
             required_environments: configuration
                 .required_environments

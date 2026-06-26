@@ -6453,16 +6453,6 @@ fn tool_install_locks_are_preview() -> Result<()> {
     lock_path.assert(predicate::path::missing());
 
     context
-        .tool_upgrade()
-        .arg("simple-launcher")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-    lock_path.assert(predicate::path::missing());
-
-    context
         .tool_install()
         .arg("simple-launcher")
         .arg("--no-index")
@@ -6527,118 +6517,82 @@ fn tool_install_lock_respects_global_configuration() -> Result<()> {
     let user_config = context.user_config_dir.child("uv");
     user_config.create_dir_all()?;
     let user_config = user_config.child("uv.toml");
-    user_config.write_str(indoc! {r#"
-        preview-features = ["tool-install-locks"]
-        constraint-dependencies = ["ok==1.0.0"]
-        override-dependencies = ["tqdm==1000.0.0"]
-        exclude-dependencies = ["validation"]
-        build-constraint-dependencies = ["basic-package==0.1.0"]
-        environments = ["sys_platform == 'win32'", "sys_platform != 'win32'"]
-        required-environments = ["sys_platform == 'win32'"]
-    "#})?;
-
-    context
-        .tool_install()
-        .arg("simple-launcher")
-        .arg("--with")
-        .arg("ok")
-        .arg("--with")
-        .arg("tqdm")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
     let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
-    let lock: toml::Value = toml::from_str(&fs_err::read_to_string(&lock_path)?)?;
-    assert_eq!(
-        lock["required-markers"][0].as_str(),
-        Some("sys_platform == 'win32'")
-    );
-    assert_eq!(
-        lock["supported-markers"][0].as_str(),
-        Some("sys_platform == 'win32'")
-    );
-    assert_eq!(
-        lock["supported-markers"][1].as_str(),
-        Some("sys_platform != 'win32'")
-    );
-    assert_eq!(
-        lock["manifest"]["constraints"][0]["name"].as_str(),
-        Some("ok")
-    );
-    assert_eq!(
-        lock["manifest"]["constraints"][0]["specifier"].as_str(),
-        Some("==1.0.0")
-    );
-    assert_eq!(
-        lock["manifest"]["overrides"][0]["specifier"].as_str(),
-        Some("==1000.0.0")
-    );
-    assert_eq!(lock["manifest"]["excludes"][0].as_str(), Some("validation"));
-    assert_eq!(
-        lock["manifest"]["build-constraints"][0]["name"].as_str(),
-        Some("basic-package")
-    );
-    assert!(lock["package"].as_array().is_some_and(|packages| {
-        packages.iter().any(|package| {
-            package["name"].as_str() == Some("ok") && package["version"].as_str() == Some("1.0.0")
-        })
-    }));
-    assert!(lock["package"].as_array().is_some_and(|packages| {
-        packages.iter().any(|package| {
-            package["name"].as_str() == Some("tqdm")
-                && package["version"].as_str() == Some("1000.0.0")
-        })
-    }));
+    for (version, required_environment) in [
+        ("1.0.0", "sys_platform == 'win32'"),
+        ("2.0.0", "sys_platform == 'darwin'"),
+    ] {
+        user_config.write_str(&format!(
+            r#"preview-features = ["tool-install-locks"]
+constraint-dependencies = ["ok=={version}"]
+override-dependencies = ["tqdm==1000.0.0"]
+exclude-dependencies = ["validation"]
+build-constraint-dependencies = ["basic-package==0.1.0"]
+environments = ["sys_platform == 'win32'", "sys_platform != 'win32'"]
+required-environments = ["{required_environment}"]
+"#
+        ))?;
 
-    user_config.write_str(indoc! {r#"
-        preview-features = ["tool-install-locks"]
-        constraint-dependencies = ["ok==2.0.0"]
-        override-dependencies = ["tqdm==1000.0.0"]
-        exclude-dependencies = ["validation"]
-        build-constraint-dependencies = ["basic-package==0.1.0"]
-        environments = ["sys_platform == 'win32'", "sys_platform != 'win32'"]
-        required-environments = ["sys_platform == 'darwin'"]
-    "#})?;
-    context
-        .tool_install()
-        .arg("simple-launcher")
-        .arg("--with")
-        .arg("ok")
-        .arg("--with")
-        .arg("tqdm")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(&links)
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
+        context
+            .tool_install()
+            .arg("simple-launcher")
+            .arg("--with")
+            .arg("ok")
+            .arg("--with")
+            .arg("tqdm")
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(&links)
+            .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+            .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+            .env(EnvVars::PATH, bin_dir.as_os_str())
+            .assert()
+            .success();
 
-    let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
-    assert_eq!(
-        lock["required-markers"][0].as_str(),
-        Some("sys_platform == 'darwin'")
-    );
-    assert_eq!(
-        lock["manifest"]["constraints"][0]["specifier"].as_str(),
-        Some("==2.0.0")
-    );
-    assert_eq!(
-        lock["manifest"]["overrides"][0]["specifier"].as_str(),
-        Some("==1000.0.0")
-    );
-    assert!(lock["package"].as_array().is_some_and(|packages| {
-        packages.iter().any(|package| {
-            package["name"].as_str() == Some("ok") && package["version"].as_str() == Some("2.0.0")
-        })
-    }));
+        let lock: toml::Value = toml::from_str(&fs_err::read_to_string(&lock_path)?)?;
+        let constraint = format!("=={version}");
+        assert_eq!(
+            lock["required-markers"][0].as_str(),
+            Some(required_environment)
+        );
+        assert_eq!(
+            lock["supported-markers"][0].as_str(),
+            Some("sys_platform == 'win32'")
+        );
+        assert_eq!(
+            lock["supported-markers"][1].as_str(),
+            Some("sys_platform != 'win32'")
+        );
+        assert_eq!(
+            lock["manifest"]["constraints"][0]["name"].as_str(),
+            Some("ok")
+        );
+        assert_eq!(
+            lock["manifest"]["constraints"][0]["specifier"].as_str(),
+            Some(constraint.as_str())
+        );
+        assert_eq!(
+            lock["manifest"]["overrides"][0]["specifier"].as_str(),
+            Some("==1000.0.0")
+        );
+        assert_eq!(lock["manifest"]["excludes"][0].as_str(), Some("validation"));
+        assert_eq!(
+            lock["manifest"]["build-constraints"][0]["name"].as_str(),
+            Some("basic-package")
+        );
+        assert!(lock["package"].as_array().is_some_and(|packages| {
+            packages.iter().any(|package| {
+                package["name"].as_str() == Some("ok")
+                    && package["version"].as_str() == Some(version)
+            })
+        }));
+        assert!(lock["package"].as_array().is_some_and(|packages| {
+            packages.iter().any(|package| {
+                package["name"].as_str() == Some("tqdm")
+                    && package["version"].as_str() == Some("1000.0.0")
+            })
+        }));
+    }
 
     Ok(())
 }

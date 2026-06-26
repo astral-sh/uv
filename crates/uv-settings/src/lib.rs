@@ -280,7 +280,7 @@ fn check_uv_toml_required_version(path: &Path, content: &str, source: Error) -> 
     required_version_mismatch(uv_toml.required_version).unwrap_or(source)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum UvTomlKind {
     /// A user, system, or explicitly provided configuration file.
     Global,

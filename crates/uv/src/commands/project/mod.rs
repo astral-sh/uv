@@ -2314,7 +2314,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) enum EnvironmentResolution<'settings> {
     Specific,
     Universal {

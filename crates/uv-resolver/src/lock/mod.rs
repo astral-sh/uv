@@ -2935,41 +2935,23 @@ impl ResolverManifest {
 
     /// Convert the manifest to an absolute form using the given root.
     fn into_absolute(self, root: &Path) -> Self {
+        let absolute = |requirements: BTreeSet<Requirement>| {
+            requirements
+                .into_iter()
+                .map(|requirement| requirement.to_absolute(root))
+                .collect()
+        };
         Self {
             members: self.members,
-            requirements: self
-                .requirements
-                .into_iter()
-                .map(|requirement| requirement.to_absolute(root))
-                .collect(),
-            constraints: self
-                .constraints
-                .into_iter()
-                .map(|requirement| requirement.to_absolute(root))
-                .collect(),
-            overrides: self
-                .overrides
-                .into_iter()
-                .map(|requirement| requirement.to_absolute(root))
-                .collect(),
+            requirements: absolute(self.requirements),
+            constraints: absolute(self.constraints),
+            overrides: absolute(self.overrides),
             excludes: self.excludes,
-            build_constraints: self
-                .build_constraints
-                .into_iter()
-                .map(|requirement| requirement.to_absolute(root))
-                .collect(),
+            build_constraints: absolute(self.build_constraints),
             dependency_groups: self
                 .dependency_groups
                 .into_iter()
-                .map(|(group, requirements)| {
-                    (
-                        group,
-                        requirements
-                            .into_iter()
-                            .map(|requirement| requirement.to_absolute(root))
-                            .collect(),
-                    )
-                })
+                .map(|(group, requirements)| (group, absolute(requirements)))
                 .collect(),
             dependency_metadata: self.dependency_metadata,
         }
@@ -3053,7 +3035,7 @@ impl TryFrom<LockWire> for Lock {
         if options.exclude_newer.exclude_newer_span.is_some() {
             options.exclude_newer.exclude_newer = None;
         }
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -3066,7 +3048,6 @@ impl TryFrom<LockWire> for Lock {
             fork_markers,
         )?;
 
-        let mut lock = lock;
         lock.tool_lock_version = wire.tool_lock_version;
 
         Ok(lock)

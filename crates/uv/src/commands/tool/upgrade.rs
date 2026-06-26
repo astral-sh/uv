@@ -10,7 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
+use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
@@ -382,12 +382,13 @@ async fn upgrade_tool(
     // requested tool.
     let requested_interpreter =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter));
+    let tool_dir = installed_tools.tool_dir(name);
     let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
         let existing_lock = existing_tool_receipt.lock().filter(|lock| {
             tool_lock_is_fresh(
-                &installed_tools.tool_dir(name),
+                &tool_dir,
                 lock,
                 &lock_manifest,
                 lock_settings,
@@ -396,12 +397,7 @@ async fn upgrade_tool(
         });
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let universal_resolution = resolve_environment(
-            tool_environment_spec(
-                spec,
-                existing_lock,
-                &installed_tools.tool_dir(name),
-                Some(&site_packages),
-            ),
+            tool_environment_spec(spec, existing_lock, &tool_dir, Some(&site_packages)),
             EnvironmentResolution::Universal {
                 environments: &lock_settings.environments,
                 required_environments: &lock_settings.required_environments,
@@ -422,13 +418,13 @@ async fn upgrade_tool(
         )
         .await?;
         let tool_lock = tool_lock(
-            &installed_tools.tool_dir(name),
+            &tool_dir,
             &universal_resolution,
             &lock_manifest,
             lock_settings,
         )?;
         let resolution = tool_lock_to_resolution(
-            &installed_tools.tool_dir(name),
+            &tool_dir,
             &tool_lock,
             Some(name),
             target_interpreter,
@@ -496,9 +492,13 @@ async fn upgrade_tool(
                 &tags,
             )?;
             let plan_is_empty = plan.is_empty();
+            let changes_tool = plan.cached.iter().any(|dist| dist.name() == name)
+                || plan.remote.iter().any(|dist| dist.name() == name)
+                || plan.reinstalls.iter().any(|dist| dist.name() == name)
+                || plan.extraneous.iter().any(|dist| dist.name() == name);
             let outcome = if plan_is_empty {
                 UpgradeOutcome::NoOp
-            } else if plan.changes(name) {
+            } else if changes_tool {
                 UpgradeOutcome::UpgradeTool
             } else {
                 UpgradeOutcome::UpgradeDependencies
