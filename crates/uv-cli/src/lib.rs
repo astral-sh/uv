@@ -8376,7 +8376,7 @@ pub struct WorkspaceListArgs {
     #[arg(long)]
     pub paths: bool,
 
-    /// List PEP 723 scripts instead of workspace members.
+    /// List all standalone scripts with inline metadata in the workspace.
     #[arg(long, conflicts_with = "paths")]
     pub scripts: bool,
 }
