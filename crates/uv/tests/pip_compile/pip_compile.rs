@@ -11364,14 +11364,15 @@ fn editable_scoped_exclusion_missing_path() -> Result<()> {
 
     let parent = context.temp_dir.child("parent");
     parent.create_dir_all()?;
-    parent.child("pyproject.toml").write_str(
-        r#"
-            [project]
-            name = "parent"
-            version = "1.0.0"
-            dependencies = ["child @ file:///missing"]
-            "#,
-    )?;
+    let missing = context.temp_dir.child("missing");
+    parent
+        .child("pyproject.toml")
+        .write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "parent"
+        version = "1.0.0"
+        dependencies = ["child @ {}"]
+        "#, Url::from_file_path(missing).unwrap()})?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
             .arg("pyproject.toml")

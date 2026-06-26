@@ -8324,8 +8324,7 @@ fn install_with_excludes_from_stdin() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved in [TIME]
-    Checked in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
