@@ -593,6 +593,9 @@ pub(crate) async fn install(
                 )
                 .into_inner();
 
+                // Determine the markers and tags to use for the resolution. We use the existing
+                // environment for markers here — above we filter the environment to `None` if
+                // `existing_environment_usable` is `false`, so we've determined it's valid.
                 let markers = resolution_markers(
                     None,
                     python_platform.as_ref(),
@@ -603,7 +606,11 @@ pub(crate) async fn install(
                     python_platform.as_ref(),
                     environment.environment().interpreter(),
                 )?;
+
+                // Check if the installed packages meet the requirements.
                 let site_packages = SitePackages::from_environment(environment.environment())?;
+                // This fast path only validates the explicitly requested requirements. It can miss
+                // editable-mode drift for implicit workspace members.
                 let excludes_satisfied = receipt_excludes
                     .iter()
                     .all(|exclude| site_packages.get_packages(exclude).is_empty());
