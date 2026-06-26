@@ -9,7 +9,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DryRun, Excludes, GitLfsSetting, Overrides, Reinstall, TargetTriple,
+    Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -611,14 +612,12 @@ pub(crate) async fn install(
                 let site_packages = SitePackages::from_environment(environment.environment())?;
                 // This fast path only validates the explicitly requested requirements. It can miss
                 // editable-mode drift for implicit workspace members.
-                let excludes_satisfied = receipt_excludes
-                    .iter()
-                    .all(|exclude| site_packages.get_packages(exclude).is_empty());
                 let already_installed = matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
                         receipt_constraints.iter().chain(latest.iter()),
-                        receipt_overrides.iter(),
+                        &Overrides::from_requirements(receipt_overrides.clone()),
+                        &Excludes::from_entries(receipt_excludes.iter().cloned()),
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,
@@ -628,7 +627,7 @@ pub(crate) async fn install(
                         extra_build_variables,
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
-                ) && excludes_satisfied;
+                );
                 if already_installed {
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
@@ -818,6 +817,7 @@ pub(crate) async fn install(
                 sync_environment(
                     environment,
                     &resolution,
+                    HashStrategy::default(),
                     Modifications::Exact,
                     Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                     (&settings).into(),

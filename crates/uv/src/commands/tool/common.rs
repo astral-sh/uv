@@ -15,7 +15,7 @@ use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
-    ExtrasSpecification, GitLfsSetting, InstallOptions, TargetTriple,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{
@@ -315,7 +315,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[PackageName],
+        excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
         dependency_metadata: &DependencyMetadata,
     ) -> ResolverManifest {
@@ -323,7 +323,7 @@ impl ToolLock {
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
             constraints.iter().cloned(),
-            overrides.iter().cloned(),
+            overrides.iter().cloned().map(Override::Requirement),
             excludes.iter().cloned(),
             build_constraints.iter().cloned(),
             std::iter::empty::<(GroupName, Vec<Requirement>)>(),
@@ -395,7 +395,7 @@ impl ToolLock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
-        excludes: &[PackageName],
+        excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
         refresh: &Refresh,
         interpreter: &Interpreter,
@@ -511,6 +511,11 @@ impl ToolLock {
 
         let requires_python =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+        let overrides = overrides
+            .iter()
+            .cloned()
+            .map(Override::Requirement)
+            .collect::<Vec<_>>();
         let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
             lock,
@@ -521,7 +526,7 @@ impl ToolLock {
             requirements,
             &BTreeMap::new(),
             constraints,
-            overrides,
+            &overrides,
             excludes,
             build_constraints,
             &Conflicts::empty(),

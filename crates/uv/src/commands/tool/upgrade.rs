@@ -397,6 +397,7 @@ async fn upgrade_tool(
             let environment = sync_environment(
                 environment,
                 &resolution,
+                HashStrategy::default(),
                 Modifications::Exact,
                 build_constraints,
                 (&settings).into(),
@@ -469,6 +470,7 @@ async fn upgrade_tool(
                 sync_environment(
                     environment.into_environment(),
                     &resolution,
+                    HashStrategy::default(),
                     Modifications::Exact,
                     build_constraints,
                     (&settings).into(),

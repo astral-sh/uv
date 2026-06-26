@@ -5,9 +5,8 @@ use serde::Deserialize;
 use toml_edit::{Array, Item, Table, Value, value};
 
 use uv_configuration::ExcludeDependency;
-use uv_distribution_types::{Requirement, StaticMetadata};
+use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
-use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonRequest;
 use uv_settings::{ToolOptions, ToolOptionsWire};
