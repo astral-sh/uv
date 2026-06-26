@@ -15,7 +15,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
+    NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -23,12 +23,13 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    UnresolvedRequirementSpecification, Verbatim,
+    Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
@@ -46,7 +47,7 @@ use uv_resolver::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
-use uv_torch::{TorchMode, TorchSource, TorchStrategy};
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
 use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
@@ -67,7 +68,7 @@ pub(crate) async fn pip_compile(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    overrides_from_workspace: Vec<Requirement>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
@@ -96,6 +97,8 @@ pub(crate) async fn pip_compile(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -201,6 +204,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        mut override_dependencies,
         excludes,
         pylock,
         source_trees,
@@ -222,6 +226,8 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
+    override_dependencies.extend(overrides_from_workspace);
+
     // Reject `pylock.toml` files, which are valid outputs but not inputs.
     if pylock.is_some() {
         return Err(anyhow!(
@@ -236,16 +242,6 @@ pub(crate) async fn pip_compile(
             constraints_from_workspace
                 .into_iter()
                 .map(NameRequirementSpecification::from),
-        )
-        .collect();
-
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
 
@@ -301,7 +297,6 @@ pub(crate) async fn pip_compile(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await
     } else {
@@ -324,7 +319,6 @@ pub(crate) async fn pip_compile(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await
     }?
@@ -458,6 +452,8 @@ pub(crate) async fn pip_compile(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
+                amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -575,6 +571,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,

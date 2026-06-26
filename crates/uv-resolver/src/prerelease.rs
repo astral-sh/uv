@@ -77,7 +77,7 @@ impl PrereleaseStrategy {
             PrereleaseMode::Allow => Self::Allow,
             PrereleaseMode::IfNecessary => Self::IfNecessary,
             _ => {
-                for requirement in manifest.requirements(env, dependencies) {
+                for requirement in manifest.candidate_selection_requirements(env, dependencies) {
                     let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                         continue;
                     };

@@ -16,7 +16,7 @@ pub struct IndexName(SmallString);
 impl IndexName {
     /// Validates the given index name and returns [`IndexName`] if it's valid, or an error
     /// otherwise.
-    pub fn new(name: &str) -> Result<Self, IndexNameError> {
+    fn new(name: &str) -> Result<Self, IndexNameError> {
         for c in name.chars() {
             match c {
                 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => {}

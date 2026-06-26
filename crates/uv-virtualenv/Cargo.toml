@@ -1,6 +1,6 @@
 [package]
 name = "uv-virtualenv"
-version = "0.0.49"
+version = "0.0.57"
 description = "This is an internal component crate of uv"
 keywords = ["virtualenv", "venv", "python"]
 
@@ -27,6 +27,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-shell = { workspace = true }
 uv-version = { workspace = true }
+uv-warnings = { workspace = true }
 
 console = { workspace = true }
 fs-err = { workspace = true }

@@ -33,7 +33,7 @@ pub struct ToolEnvironment {
 }
 
 impl ToolEnvironment {
-    pub fn new(environment: PythonEnvironment, name: PackageName) -> Self {
+    fn new(environment: PythonEnvironment, name: PackageName) -> Self {
         Self { environment, name }
     }
 
@@ -352,13 +352,6 @@ impl InstalledTools {
         )?;
 
         Ok(venv)
-    }
-
-    /// Create a temporary tools directory.
-    pub fn temp() -> Result<Self, Error> {
-        Ok(Self::from_path(
-            StateStore::temp()?.bucket(StateBucket::Tools),
-        ))
     }
 
     /// Initialize the tools directory.

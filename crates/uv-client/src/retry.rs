@@ -75,7 +75,7 @@ impl RetryState {
     }
 
     /// The total duration from the first request to the (failure) of the last request.
-    pub fn duration(&self) -> Result<Duration, SystemTimeError> {
+    pub(crate) fn duration(&self) -> Result<Duration, SystemTimeError> {
         self.start_time.elapsed()
     }
 

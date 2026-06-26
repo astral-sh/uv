@@ -12,13 +12,30 @@ use uv_test::{uv_snapshot, venv_bin_path};
 use wiremock::matchers::{basic_auth, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn dummy_wheel() -> PathBuf {
+fn test_link(filename: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .parent()
         .unwrap()
-        .join("test/links/ok-1.0.0-py3-none-any.whl")
+        .join("test/links")
+        .join(filename)
+}
+
+fn dummy_wheel() -> PathBuf {
+    test_link("ok-1.0.0-py3-none-any.whl")
+}
+
+fn basic_app_wheel() -> PathBuf {
+    test_link("basic_app-0.1.0-py3-none-any.whl")
+}
+
+fn basic_package_sdist() -> PathBuf {
+    test_link("basic_package-0.1.0.tar.gz")
+}
+
+fn basic_package_wheel() -> PathBuf {
+    test_link("basic_package-0.1.0-py3-none-any.whl")
 }
 
 #[test]
@@ -209,6 +226,48 @@ fn dubious_filenames() {
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-a-wheel.whl`
     warning: Skipping file that looks like a distribution, but is not a valid distribution filename: `[TEMP_DIR]/not-sdist-1-2-3-asdf.zip`
     error: No files found to publish
+    "
+    );
+}
+
+#[tokio::test]
+async fn publish_wheels_before_sdist_in_filename_order() {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    let app_wheel = basic_app_wheel();
+    let sdist = basic_package_sdist();
+    let package_wheel = basic_package_wheel();
+
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(3)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        // Pass the source distribution first and the wheels in reverse filename order.
+        .arg(sdist)
+        .arg(package_wheel)
+        .arg(app_wheel)
+        .arg("--username")
+        .arg("dummy")
+        .arg("--password")
+        .arg("dummy")
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri())), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 3 files to http://[LOCALHOST]/upload
+    Hashing basic_app-0.1.0-py3-none-any.whl ([SIZE])
+    Uploading basic_app-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing basic_package-0.1.0-py3-none-any.whl ([SIZE])
+    Uploading basic_package-0.1.0-py3-none-any.whl ([SIZE])
+    Hashing basic_package-0.1.0.tar.gz ([SIZE])
+    Uploading basic_package-0.1.0.tar.gz ([SIZE])
     "
     );
 }
@@ -511,6 +570,103 @@ async fn read_index_credential_env_vars_for_check_url() {
     ----- stderr -----
     Publishing 1 file to http://[LOCALHOST]/upload
     File astral_test_private-0.1.0-py3-none-any.whl already exists, skipping
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_missing_package_ignores_content_type() {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", server.uri()))
+        .arg(dummy_wheel()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
+    "
+    );
+}
+
+#[tokio::test]
+async fn check_url_missing_package_follows_redirect() {
+    let context = uv_test::test_context!("3.12");
+
+    let gitlab_server = MockServer::start().await;
+    let pypi_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("Location", format!("{}/simple/ok/", pypi_server.uri()))
+                .set_body_raw("Redirecting", "text/plain"),
+        )
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(
+            ResponseTemplate::new(404).set_body_raw("Not found", "text/plain; charset=UTF-8"),
+        )
+        .expect(1)
+        .mount(&pypi_server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&gitlab_server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.publish()
+        .arg("-u")
+        .arg("dummy")
+        .arg("-p")
+        .arg("dummy")
+        .arg("--check-url")
+        .arg(format!("{}/simple/", gitlab_server.uri()))
+        .arg("--publish-url")
+        .arg(format!("{}/upload", gitlab_server.uri()))
+        .arg(dummy_wheel()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Publishing 1 file to http://[LOCALHOST]/upload
+    Hashing ok-1.0.0-py3-none-any.whl ([SIZE])
+    Uploading ok-1.0.0-py3-none-any.whl ([SIZE])
     "
     );
 }

@@ -37,7 +37,7 @@ use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
+use uv_configuration::{DependencyGroups, NoBinary, NoBuild, Override, PackageOverride};
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
@@ -48,7 +48,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::Pep723Metadata;
+use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -63,6 +63,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The overrides that have already been lowered to named requirements.
+    pub override_dependencies: Vec<Override<Requirement>>,
     /// The excludes for the project.
     pub excludes: Vec<PackageName>,
     /// The `pylock.toml` file from which to extract the resolution.
@@ -130,25 +132,31 @@ impl RequirementsSpecification {
                 })
                 .unwrap_or_default();
 
-            let overrides = tool_uv
+            let override_dependencies = tool_uv
                 .override_dependencies
                 .as_ref()
-                .map(|dependencies| {
-                    dependencies
-                        .iter()
-                        .map(|dependency| {
-                            UnresolvedRequirementSpecification::from(Requirement::from(
-                                dependency.to_owned(),
-                            ))
-                        })
-                        .collect::<Vec<UnresolvedRequirementSpecification>>()
+                .into_iter()
+                .flatten()
+                .map(|dependency| match dependency {
+                    OverrideDependency::Requirement(requirement) => {
+                        Override::Requirement(Requirement::from(requirement.clone()))
+                    }
+                    OverrideDependency::Package(package) => Override::Package(PackageOverride {
+                        package: package.package.clone(),
+                        dependencies: package
+                            .dependencies
+                            .iter()
+                            .cloned()
+                            .map(Requirement::from)
+                            .collect(),
+                    }),
                 })
-                .unwrap_or_default();
+                .collect();
 
             Self {
                 requirements,
                 constraints,
-                overrides,
+                override_dependencies,
                 index_url: tool_uv
                     .top_level
                     .index_url
@@ -544,6 +552,8 @@ impl RequirementsSpecification {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
 
@@ -565,12 +575,12 @@ impl RequirementsSpecification {
             }
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -603,12 +613,12 @@ impl RequirementsSpecification {
             spec.constraints.extend(source.constraints);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -625,14 +635,16 @@ impl RequirementsSpecification {
             let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
 
             if let Some(index_url) = source.index_url {
-                if let Some(existing) = spec.index_url {
-                    if CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url()) {
-                        return Err(anyhow::anyhow!(
-                            "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
-                        ));
-                    }
+                if let Some(existing) = spec.index_url
+                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                {
+                    return Err(anyhow::anyhow!(
+                        "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
+                    ));
                 }
                 spec.index_url = Some(index_url);
             }
@@ -703,11 +715,6 @@ impl RequirementsSpecification {
             excludes,
             ..Self::default()
         }
-    }
-
-    /// Return true if the specification does not include any requirements to install.
-    pub fn is_empty(&self) -> bool {
-        self.requirements.is_empty() && self.source_trees.is_empty() && self.overrides.is_empty()
     }
 }
 

@@ -30,7 +30,7 @@ pub struct Authenticator {
 
 impl Authenticator {
     #[allow(dead_code)]
-    pub fn new(login: &str, account: &str, password: &str) -> Self {
+    pub(crate) fn new(login: &str, account: &str, password: &str) -> Self {
         Self {
             login: login.to_owned(),
             account: account.to_owned(),

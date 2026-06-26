@@ -79,14 +79,6 @@ struct Comment {
     kind: CommentType,
 }
 
-impl ArrayEdit {
-    pub fn index(&self) -> usize {
-        match self {
-            Self::Update(i) | Self::Add(i) => *i,
-        }
-    }
-}
-
 /// The default version specifier when adding a dependency.
 // While PEP 440 allows an arbitrary number of version digits, the `major` and `minor` build on
 // most projects sticking to two or three components and a SemVer-ish versioning system, so can
@@ -357,6 +349,50 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    ///
+    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
+    pub fn replace_dependency(
+        &mut self,
+        req: &Requirement,
+        raw: bool,
+    ) -> Result<Option<ArrayEdit>, Error> {
+        let Some(dependencies) = self
+            .project_mut()?
+            .and_then(|project| project.get_mut("dependencies"))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(None);
+        };
+        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
+
+        match to_replace.as_slice() {
+            [] => Ok(None),
+            [_] => {
+                let (index, _) = to_replace.remove(0);
+                let req_string = if raw {
+                    req.displayable_with_credentials().to_string()
+                } else {
+                    req.to_string()
+                };
+                dependencies.replace(index, req_string);
+                Ok(Some(ArrayEdit::Update(index)))
+            }
+            _ => Err(Error::Ambiguous {
+                package_name: req.name.clone(),
+                requirements: to_replace
+                    .into_iter()
+                    .map(|(_, requirement)| requirement)
+                    .collect(),
+            }),
+        }
+    }
+
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -414,14 +450,13 @@ impl PyProjectTomlMut {
             .iter()
             .find(|table| {
                 // If the index has the same name, reuse it.
-                if let Some(index) = index.name.as_deref() {
-                    if table
+                if let Some(index) = index.name.as_deref()
+                    && table
                         .get("name")
                         .and_then(|name| name.as_str())
                         .is_some_and(|name| name == index)
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
 
                 // If the index is the default, and there's another default index, reuse it.
@@ -451,23 +486,22 @@ impl PyProjectTomlMut {
             .unwrap_or_default();
 
         // If necessary, update the name.
-        if let Some(index) = index.name.as_deref() {
-            if table
+        if let Some(index) = index.name.as_deref()
+            && table
                 .get("name")
                 .and_then(|name| name.as_str())
                 .is_none_or(|name| name != index)
-            {
-                let mut formatted = Formatted::new(index.to_string());
-                if let Some(value) = table.get("name").and_then(Item::as_value) {
-                    if let Some(prefix) = value.decor().prefix() {
-                        formatted.decor_mut().set_prefix(prefix.clone());
-                    }
-                    if let Some(suffix) = value.decor().suffix() {
-                        formatted.decor_mut().set_suffix(suffix.clone());
-                    }
+        {
+            let mut formatted = Formatted::new(index.to_string());
+            if let Some(value) = table.get("name").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
                 }
-                table.insert("name", Value::String(formatted).into());
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
             }
+            table.insert("name", Value::String(formatted).into());
         }
 
         // If necessary, update the URL.
@@ -511,14 +545,13 @@ impl PyProjectTomlMut {
         // Remove any replaced tables.
         existing.retain(|table| {
             // If the index has the same name, skip it.
-            if let Some(index) = index.name.as_deref() {
-                if table
+            if let Some(index) = index.name.as_deref()
+                && table
                     .get("name")
                     .and_then(|name| name.as_str())
                     .is_some_and(|name| name == index)
-                {
-                    return false;
-                }
+            {
+                return false;
             }
 
             // If there's another default index, skip it.
@@ -1132,10 +1165,10 @@ impl PyProjectTomlMut {
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
-            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, marker, dependencies).is_empty() {
-                    types.push(DependencyType::Production);
-                }
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
+                && !find_dependencies(name, marker, dependencies).is_empty()
+            {
+                types.push(DependencyType::Production);
             }
 
             // Check `project.optional-dependencies`.
@@ -1183,10 +1216,9 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
+            && !find_dependencies(name, marker, dev_dependencies).is_empty()
         {
-            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
-                types.push(DependencyType::Dev);
-            }
+            types.push(DependencyType::Dev);
         }
 
         types
@@ -1251,7 +1283,7 @@ fn implicit() -> Item {
 /// Adds a dependency to the given `deps` array.
 ///
 /// Returns `true` if the dependency was added, `false` if it was updated.
-pub fn add_dependency(
+fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
@@ -1612,10 +1644,11 @@ fn find_dependencies(
 ) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
-                to_replace.push((i, req));
-            }
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement)
+            && marker.is_none_or(|m| *m == req.marker)
+            && *name == req.name
+        {
+            to_replace.push((i, req));
         }
     }
     to_replace
@@ -1790,12 +1823,17 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use super::{
+        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        remove_dependency, split_specifiers,
+    };
+    use anyhow::Result;
     use insta::assert_snapshot;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_pep508::Requirement;
 
     #[test]
     fn split() {
@@ -1968,6 +2006,35 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn replace_dependency_preserves_source() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let requirement = Requirement::from_str("anyio")?;
+
+        let replaced = pyproject.replace_dependency(&requirement, false)?;
+        assert!(replaced.is_some());
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+"#
+        );
+        Ok(())
     }
 
     #[test]

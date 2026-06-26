@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
+use uv_configuration::{Override, Overrides};
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
@@ -187,7 +188,7 @@ impl SitePackages {
     }
 
     /// Returns `true` if there are any installed packages.
-    pub fn any(&self) -> bool {
+    pub(crate) fn any(&self) -> bool {
         self.distributions.iter().any(Option::is_some)
     }
 
@@ -322,6 +323,7 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
+        override_dependencies: &[Override<Requirement>],
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -409,10 +411,24 @@ impl SitePackages {
             named
         };
 
+        let overrides = Overrides::from_entries(
+            override_dependencies
+                .iter()
+                .cloned()
+                .chain(
+                    overrides
+                        .iter()
+                        .map(Cow::as_ref)
+                        .cloned()
+                        .map(Override::Requirement),
+                )
+                .collect(),
+        )?;
+
         self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
-            overrides.iter().map(Cow::as_ref),
+            &overrides,
             installation,
             markers,
             tags,
@@ -428,7 +444,7 @@ impl SitePackages {
         &self,
         requirements: impl ExactSizeIterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'a Requirement>,
-        overrides: impl Iterator<Item = &'a Requirement>,
+        overrides: &'a Overrides,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -437,7 +453,7 @@ impl SitePackages {
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
-        // Collect the constraints and overrides by package name.
+        // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
             constraints.fold(FxHashMap::default(), |mut constraints, constraint| {
                 constraints
@@ -446,33 +462,15 @@ impl SitePackages {
                     .push(constraint);
                 constraints
             });
-        let overrides: FxHashMap<&PackageName, Vec<&Requirement>> =
-            overrides.fold(FxHashMap::default(), |mut overrides, r#override| {
-                overrides
-                    .entry(&r#override.name)
-                    .or_default()
-                    .push(r#override);
-                overrides
-            });
-
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in requirements {
-            if let Some(r#overrides) = overrides.get(&requirement.name) {
-                for dependency in r#overrides {
-                    if dependency.evaluate_markers(Some(markers), &[]) {
-                        if seen.insert((*dependency).clone()) {
-                            stack.push(Cow::Borrowed(*dependency));
-                        }
-                    }
-                }
-            } else {
-                if requirement.evaluate_markers(Some(markers), &[]) {
-                    if seen.insert(requirement.clone()) {
-                        stack.push(Cow::Borrowed(requirement));
-                    }
+        for requirement in overrides.apply(requirements) {
+            if requirement.evaluate_markers(Some(markers), &[]) {
+                let requirement = requirement.into_owned();
+                if seen.insert(requirement.clone()) {
+                    stack.push(requirement);
                 }
             }
         }
@@ -543,21 +541,19 @@ impl SitePackages {
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
-                    for dependency in &metadata.requires_dist {
-                        let dependency = Requirement::from(dependency.clone());
-                        if let Some(r#overrides) = overrides.get(&dependency.name) {
-                            for dependency in r#overrides {
-                                if dependency.evaluate_markers(Some(markers), &requirement.extras) {
-                                    if seen.insert((*dependency).clone()) {
-                                        stack.push(Cow::Borrowed(*dependency));
-                                    }
-                                }
-                            }
-                        } else {
-                            if dependency.evaluate_markers(Some(markers), &requirement.extras) {
-                                if seen.insert(dependency.clone()) {
-                                    stack.push(Cow::Owned(dependency));
-                                }
+                    let dependencies = metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(Requirement::from)
+                        .collect::<Vec<_>>();
+                    for dependency in
+                        overrides.apply_for(name, distribution.version(), &dependencies)
+                    {
+                        if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                            let dependency = dependency.into_owned();
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
                             }
                         }
                     }

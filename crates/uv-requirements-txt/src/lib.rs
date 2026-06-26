@@ -52,7 +52,7 @@ use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
 use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
+use uv_fs::{Simplified, normalize_path};
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
@@ -392,7 +392,7 @@ impl RequirementsTxt {
                         };
                     match visited {
                         VisitedFiles::Requirements { requirements, .. } => {
-                            if !requirements.insert(sub_file.clone()) {
+                            if !requirements.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -400,7 +400,7 @@ impl RequirementsTxt {
                         // from `pip`, which seems to treat `-r` requirements in constraints files as
                         // _requirements_, but we don't want to support that.
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                         }
@@ -469,13 +469,13 @@ impl RequirementsTxt {
                     // Switch to constraints mode, if we aren't in it already.
                     let mut visited = match visited {
                         VisitedFiles::Requirements { constraints, .. } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
                         }
                         VisitedFiles::Constraints { constraints } => {
-                            if !constraints.insert(sub_file.clone()) {
+                            if !constraints.insert(visited_file(&sub_file)) {
                                 continue;
                             }
                             VisitedFiles::Constraints { constraints }
@@ -1034,7 +1034,7 @@ fn parse_requirement_and_hashes(
 /// Parse `--hash=... --hash ...` after a requirement
 fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, RequirementsTxtParserError> {
     let mut hashes = Vec::new();
-    if s.eat_while("--hash").is_empty() {
+    if !s.eat_if("--hash") {
         let (line, column) = calculate_row_column(content, s.cursor());
         return Err(RequirementsTxtParserError::Parser {
             message: format!(
@@ -1509,6 +1509,15 @@ enum VisitedFiles<'a> {
     Constraints {
         constraints: &'a mut FxHashSet<PathBuf>,
     },
+}
+
+/// Return a stable identity for a requirements file without changing the path used to read it.
+fn visited_file(path: &Path) -> PathBuf {
+    if path.starts_with("http://") || path.starts_with("https://") {
+        path.to_path_buf()
+    } else {
+        normalize_path(path).into_owned()
+    }
 }
 
 /// Calculates the column and line offset of a given cursor based on the
@@ -2884,6 +2893,28 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"Unexpected '-', expected '-c', '-e', '-r' or the start of a requirement at <REQUIREMENTS_TXT>:2:3");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_hash_option() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str("flask==3.0.0 --hash--hash=sha256:deadbeef")?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"Expected '=' or whitespace, found Some('-') at <REQUIREMENTS_TXT>:1:20");
         });
 
         Ok(())

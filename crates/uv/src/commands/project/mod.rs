@@ -8,32 +8,34 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace, warn};
 use uv_audit::osv;
 use uv_audit::{Dependency, VulnerabilityID};
-use uv_auth::CredentialsCache;
+use uv_auth::{CredentialsCache, CredentialsFromUrlError};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    GitLfsSetting, Override, PackageOverride, Reinstall, TargetTriple, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, Index, IndexCredentialsError, Requirement,
+    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
-    BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads,
-    PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest, PythonSource,
-    PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
+    BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
+    LenientImplementationName, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonSource, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::{
     LockedRequirements, NamedRequirementsResolver, RequirementsSpecification,
@@ -51,7 +53,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeE
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
-use uv_workspace::{RequiresPythonSources, Workspace, WorkspaceCache};
+use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -66,17 +68,20 @@ use crate::settings::{
 
 pub(crate) mod add;
 pub(crate) mod audit;
+pub(crate) mod check;
 pub(crate) mod environment;
 pub(crate) mod export;
 pub(crate) mod format;
 pub(crate) mod init;
-mod install_target;
+pub(crate) mod install_target;
 pub(crate) mod lock;
 pub(crate) mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
+pub(crate) mod toolchain;
 pub(crate) mod tree;
+pub(crate) mod upgrade;
 pub(crate) mod version;
 
 /// The source of a missing lockfile error.
@@ -294,6 +299,12 @@ pub(crate) enum ProjectError {
     ClientBuild(#[from] uv_client::ClientBuildError),
 
     #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
+
+    #[error(transparent)]
     Python(#[from] uv_python::Error),
 
     #[error(transparent)]
@@ -404,11 +415,11 @@ impl uv_errors::Hint for ProjectError {
 #[derive(Debug)]
 pub(crate) struct ConflictError {
     /// The set from which the conflict was derived.
-    pub(crate) set: ConflictSet,
+    set: ConflictSet,
     /// The items from the set that were enabled, and thus create the conflict.
-    pub(crate) conflicts: Vec<ConflictItem>,
+    conflicts: Vec<ConflictItem>,
     /// Enabled dependency groups with defaults applied.
-    pub(crate) groups: DependencyGroupsWithDefaults,
+    groups: DependencyGroupsWithDefaults,
 }
 
 impl std::fmt::Display for ConflictError {
@@ -533,12 +544,12 @@ impl std::ops::Deref for PlatformState {
 
 impl PlatformState {
     /// Fork the [`PlatformState`] to create a [`UniversalState`].
-    pub(crate) fn fork(&self) -> UniversalState {
+    fn fork(&self) -> UniversalState {
         UniversalState(self.0.fork())
     }
 
     /// Create a [`SharedState`] from the [`PlatformState`].
-    pub(crate) fn into_inner(self) -> SharedState {
+    fn into_inner(self) -> SharedState {
         self.0
     }
 }
@@ -608,9 +619,7 @@ pub(crate) fn validate_project_requires_python(
         .flatten()
         .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
         .collect::<RequiresPythonSources>();
-    let workspace_non_trivial = workspace
-        .map(|workspace| workspace.packages().len() > 1)
-        .unwrap_or(false);
+    let workspace_non_trivial = workspace.is_some_and(|workspace| workspace.packages().len() > 1);
 
     match source {
         PythonRequestSource::UserRequest => {
@@ -688,8 +697,8 @@ impl ScriptInterpreter {
     ///
     /// If `--active` is set, the active virtual environment will be preferred.
     ///
-    /// See: [`Workspace::venv`].
-    pub(crate) fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
+    /// See: [`Workspace::environment_selection`].
+    fn root(script: Pep723ItemRef<'_>, active: Option<bool>, cache: &Cache) -> PathBuf {
         /// Resolve the `VIRTUAL_ENV` variable, if any.
         fn from_virtual_env_variable() -> Option<PathBuf> {
             let value = std::env::var_os(EnvVars::VIRTUAL_ENV)?;
@@ -782,7 +791,6 @@ impl ScriptInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;
@@ -796,7 +804,7 @@ impl ScriptInterpreter {
         let root = Self::root(script, active, cache);
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
-                match environment_is_usable(
+                match check_environment_compatibility(
                     &venv,
                     EnvironmentKind::Script,
                     python_request.as_ref(),
@@ -836,7 +844,6 @@ impl ScriptInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?
         .into_interpreter();
@@ -871,7 +878,7 @@ impl ScriptInterpreter {
     }
 
     /// Grab a file lock for the script to prevent concurrent writes across processes.
-    pub(crate) async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
+    async fn lock(script: Pep723ItemRef<'_>) -> Result<LockedFile, LockedFileError> {
         match script {
             Pep723ItemRef::Script(script) => {
                 LockedFile::acquire(
@@ -902,7 +909,7 @@ impl ScriptInterpreter {
 }
 
 #[derive(Debug)]
-pub(crate) enum EnvironmentKind {
+enum EnvironmentKind {
     Script,
     Project,
 }
@@ -917,7 +924,7 @@ impl std::fmt::Display for EnvironmentKind {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum EnvironmentIncompatibilityError {
+enum EnvironmentIncompatibilityError {
     #[error("The {0} environment's Python version does not satisfy the request: `{1}`")]
     PythonRequest(EnvironmentKind, PythonRequest),
 
@@ -933,8 +940,8 @@ pub(crate) enum EnvironmentIncompatibilityError {
     PythonPreference(EnvironmentKind, PythonPreference),
 }
 
-/// Whether an environment is usable for a project or script, i.e., if it matches the requirements.
-fn environment_is_usable(
+/// Check whether an environment satisfies the requested Python constraints.
+fn check_environment_compatibility(
     environment: &PythonEnvironment,
     kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
@@ -992,6 +999,246 @@ fn environment_is_usable(
     Ok(())
 }
 
+/// Discover a compatible project environment at `root`.
+fn discover_project_environment(
+    root: &Path,
+    python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
+    requires_python: Option<&RequiresPython>,
+    keep_incompatible: bool,
+    centralized: bool,
+    cache: &Cache,
+) -> Result<Option<PythonEnvironment>, ProjectError> {
+    let environment = match PythonEnvironment::from_root(root, cache) {
+        Ok(environment) => environment,
+        Err(uv_python::Error::MissingEnvironment(_)) => return Ok(None),
+        Err(uv_python::Error::InvalidEnvironment(inner)) => {
+            match inner.kind {
+                InvalidEnvironmentKind::NotDirectory => {
+                    return Err(ProjectError::InvalidProjectEnvironmentDir(
+                        root.to_path_buf(),
+                        inner.kind.to_string(),
+                    ));
+                }
+                InvalidEnvironmentKind::MissingExecutable(_) => {
+                    if !centralized
+                        && fs_err::read_dir(root).is_ok_and(|mut dir| dir.next().is_some())
+                    {
+                        if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
+                            return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                root.to_path_buf(),
+                                "it is not a valid Python environment (no Python executable was found)"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+                InvalidEnvironmentKind::Empty => {}
+            }
+            return Ok(None);
+        }
+        Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {
+            return Ok(None);
+        }
+        Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
+            path,
+            unix,
+            venv: _,
+        }))) => {
+            if unix {
+                let target_path = fs_err::read_link(&path)?;
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    path.user_display().cyan(),
+                    target_path.user_display().cyan(),
+                );
+            } else {
+                warn_user!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
+                    path.user_display().cyan(),
+                );
+            }
+            return Ok(None);
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    match check_environment_compatibility(
+        &environment,
+        EnvironmentKind::Project,
+        python_request,
+        python_preference,
+        requires_python,
+        cache,
+    ) {
+        Ok(()) => Ok(Some(environment)),
+        Err(err) if keep_incompatible => {
+            if centralized {
+                let root = environment.root();
+                warn_user!(
+                    "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                    root.file_name()
+                        .unwrap_or(root.as_os_str())
+                        .to_string_lossy()
+                        .cyan(),
+                );
+            } else {
+                warn_user!(
+                    "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                    environment.root().user_display().cyan(),
+                );
+            }
+            Ok(Some(environment))
+        }
+        Err(err) => {
+            debug!("{err}");
+            Ok(None)
+        }
+    }
+}
+
+/// Return whether to use centralized project environments for this invocation.
+fn centralized_environments_enabled(
+    selection: &ProjectEnvironmentSelection,
+    cache: &Cache,
+) -> bool {
+    if !selection.is_default() || !uv_preview::is_enabled(PreviewFeature::CentralizedProjectEnvs) {
+        return false;
+    }
+    if cache.is_temporary() {
+        warn_user_once!(
+            "The `centralized-project-envs` feature has no effect when `--no-cache` is enabled"
+        );
+        return false;
+    }
+    true
+}
+
+/// Return whether `path` is a link into the current cache's environment bucket.
+fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
+    let Ok(target) = fs_err::read_link(path) else {
+        return false;
+    };
+    let Ok(environments) = std::path::absolute(cache.bucket(CacheBucket::Environments)) else {
+        // If we can't resolve the cache directory, the environment can't be in the cache.
+        return false;
+    };
+    // Compare Windows paths in the verbatim namespace so long targets returned with `\\?\` match
+    // the cache root.
+    let starts_with =
+        |path: &Path, base: &Path| verbatim_path(path).starts_with(verbatim_path(base).as_ref());
+    if starts_with(&target, &environments) {
+        return true;
+    }
+
+    // Resolve existing relative or indirect links; only lexical targets can be dangling.
+    fs_err::canonicalize(path).is_ok_and(|target| {
+        fs_err::canonicalize(&environments)
+            .is_ok_and(|environments| starts_with(&target, &environments))
+    })
+}
+
+/// Return the centralized environment path for a given workspace and interpreter.
+fn centralized_environment_root(
+    workspace: &Workspace,
+    interpreter: &Interpreter,
+    upgradeable: bool,
+    cache: &Cache,
+) -> PathBuf {
+    let interpreter_key = interpreter.key();
+    // Use the workspace path to isolate projects and the interpreter key to maximize intra-project
+    // environment re-use while avoiding clashes with incompatible environments. Ignoring the patch
+    // version allows upgradeable managed environments to be re-used after an upgrade.
+    let (digest, python_version) = if upgradeable
+        && let Some(installation) = ManagedPythonInstallation::try_from_interpreter(interpreter)
+        && PythonMinorVersionLink::from_installation(&installation)
+            .is_some_and(|link| link.exists())
+    {
+        (
+            cache_digest(&(workspace.install_path(), installation.minor_version_key())),
+            interpreter.python_minor_version(),
+        )
+    } else {
+        (
+            cache_digest(&(workspace.install_path(), &interpreter_key)),
+            interpreter.python_version().clone(),
+        )
+    };
+    let name = workspace
+        .pyproject_toml()
+        .project
+        .as_ref()
+        .and_then(|project| cache_name(project.name.as_ref(), Some(100)))
+        .or_else(|| {
+            workspace
+                .install_path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| cache_name(name, Some(100)))
+        });
+    let implementation = interpreter_key.implementation();
+    let implementation = match implementation.as_ref() {
+        LenientImplementationName::Known(implementation) => implementation
+            .short_name()
+            .unwrap_or_else(|| implementation.long_name()),
+        LenientImplementationName::Unknown(implementation) => implementation,
+    };
+    let entry = name.map_or_else(
+        // A virtual workspace can be nameless if its directory has no cache-safe characters.
+        || format!("{implementation}{python_version}-{digest}"),
+        |name| format!("{name}-{implementation}{python_version}-{digest}"),
+    );
+    cache
+        .shard(CacheBucket::Environments, entry)
+        .into_path_buf()
+}
+
+/// How to report failures updating `.venv`.
+#[derive(Clone, Copy)]
+pub(crate) enum LinkErrorReporting {
+    /// Report failures to the user.
+    User,
+    /// Log failures at warning level.
+    Log,
+}
+
+/// Point the workspace's `.venv` to the centralized environment.
+fn update_project_environment_link(
+    environment: &PythonEnvironment,
+    workspace: &Workspace,
+    link_error_reporting: LinkErrorReporting,
+) {
+    let link = workspace.install_path().join(".venv");
+    let report_error = |message: &str, err: &std::io::Error| match link_error_reporting {
+        LinkErrorReporting::User => {
+            warn_user_once!("{message} at `{}`: {err}", link.user_display());
+        }
+        LinkErrorReporting::Log => warn!("{message} at `{}`: {err}", link.user_display()),
+    };
+
+    if fs_err::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_dir()) {
+        if uv_fs::is_virtualenv_base(&link) {
+            if let Err(err) = uv_fs::remove_virtualenv(&link) {
+                report_error("Failed to remove existing local virtual environment", &err);
+                return;
+            }
+        } else {
+            // On Windows, copying a junction can produce an empty directory.
+            #[cfg(windows)]
+            if let Err(err) = fs_err::remove_dir(&link) {
+                report_error("Failed to create link to project environment", &err);
+                return;
+            }
+        }
+    }
+
+    // TODO(tk): When directory links are unavailable, write `.venv` as a file containing the
+    // environment path.
+    if let Err(err) = uv_fs::replace_symlink(environment.root(), &link) {
+        report_error("Failed to create link to project environment", &err);
+    }
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[expect(clippy::large_enum_variant)]
@@ -1016,7 +1263,6 @@ impl ProjectInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         let WorkspacePython {
             source,
@@ -1024,82 +1270,47 @@ impl ProjectInterpreter {
             requires_python,
         } = workspace_python;
 
-        // Read from the virtual environment first.
-        let root = workspace.venv(active);
-        match PythonEnvironment::from_root(&root, cache) {
-            Ok(venv) => {
-                match environment_is_usable(
-                    &venv,
-                    EnvironmentKind::Project,
+        let environment_selection = workspace.environment_selection(active);
+        let centralized = centralized_environments_enabled(&environment_selection, cache);
+        let upgradeable = python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
+
+        // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
+        // the cache root instead of trusting the link target.
+        if centralized {
+            let project_environment_path = workspace.install_path().join(".venv");
+            if let Ok(candidate) = PythonEnvironment::from_root(&project_environment_path, cache) {
+                let root = centralized_environment_root(
+                    workspace,
+                    candidate.interpreter(),
+                    upgradeable,
+                    cache,
+                );
+                if let Some(environment) = discover_project_environment(
+                    &root,
                     python_request.as_ref(),
                     python_preference,
                     requires_python.as_ref(),
+                    keep_incompatible,
+                    centralized,
                     cache,
-                ) {
-                    Ok(()) => return Ok(Self::Environment(venv)),
-                    Err(err) if keep_incompatible => {
-                        warn_user!(
-                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
-                            root.user_display().cyan(),
-                        );
-                        return Ok(Self::Environment(venv));
-                    }
-                    Err(err) => {
-                        debug!("{err}");
-                    }
+                )? {
+                    return Ok(Self::Environment(environment));
                 }
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => {}
-            Err(uv_python::Error::InvalidEnvironment(inner)) => {
-                // If there's an invalid environment with existing content, we error instead of
-                // deleting it later on
-                match inner.kind {
-                    InvalidEnvironmentKind::NotDirectory => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
-                            inner.kind.to_string(),
-                        ));
-                    }
-                    InvalidEnvironmentKind::MissingExecutable(_) => {
-                        // If it's not an empty directory
-                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
-                            // ... and there's no `pyvenv.cfg`
-                            if !root.join("pyvenv.cfg").try_exists().unwrap_or_default() {
-                                // ... then it's not a valid Python environment
-                                return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                    root,
-                                    "it is not a valid Python environment (no Python executable was found)"
-                                        .to_string(),
-                                ));
-                            }
-                        }
-                        // Otherwise, we'll delete it
-                    }
-                    // If the environment is an empty directory, it's fine to use
-                    InvalidEnvironmentKind::Empty => {}
-                }
-            }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }))) => {
-                if unix {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn_user!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                        path.user_display().cyan(),
-                    );
-                }
-            }
-            Err(err) => return Err(err.into()),
+        } else if let Some(environment) = discover_project_environment(
+            &environment_selection
+                .explicit_path()
+                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf),
+            python_request.as_ref(),
+            python_preference,
+            requires_python.as_ref(),
+            keep_incompatible,
+            centralized,
+            cache,
+        )? {
+            return Ok(Self::Environment(environment));
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1116,9 +1327,24 @@ impl ProjectInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
+
+        if centralized {
+            let root =
+                centralized_environment_root(workspace, python.interpreter(), upgradeable, cache);
+            if let Some(environment) = discover_project_environment(
+                &root,
+                python_request.as_ref(),
+                python_preference,
+                requires_python.as_ref(),
+                keep_incompatible,
+                centralized,
+                cache,
+            )? {
+                return Ok(Self::Environment(environment));
+            }
+        }
 
         let managed = python.source().is_managed();
         let implementation = python.implementation();
@@ -1160,27 +1386,29 @@ impl ProjectInterpreter {
     pub(crate) fn into_interpreter(self) -> Interpreter {
         match self {
             Self::Interpreter(interpreter) => interpreter,
-            Self::Environment(venv) => venv.into_interpreter(),
+            Self::Environment(environment) => environment.into_interpreter(),
         }
     }
+}
 
-    /// Grab a file lock for the environment to prevent concurrent writes across processes.
-    pub(crate) async fn lock(workspace: &Workspace) -> Result<LockedFile, LockedFileError> {
-        LockedFile::acquire(
-            std::env::temp_dir().join(format!(
-                "uv-{}.lock",
-                cache_digest(workspace.install_path())
-            )),
-            LockedFileMode::Exclusive,
-            workspace.install_path().simplified_display(),
-        )
-        .await
-    }
+/// Grab a file lock for the project environment to prevent concurrent writes across processes.
+pub(crate) async fn lock_project_environment(
+    workspace: &Workspace,
+) -> Result<LockedFile, LockedFileError> {
+    LockedFile::acquire(
+        std::env::temp_dir().join(format!(
+            "uv-{}.lock",
+            cache_digest(workspace.install_path())
+        )),
+        LockedFileMode::Exclusive,
+        workspace.install_path().simplified_display(),
+    )
+    .await
 }
 
 /// The source of a `Requires-Python` specifier.
 #[derive(Debug, Clone)]
-pub(crate) enum RequiresPythonSource {
+enum RequiresPythonSource {
     /// From the PEP 723 inline script metadata.
     Script,
     /// From a `pyproject.toml` in a workspace.
@@ -1293,21 +1521,21 @@ impl WorkspacePython {
 
 /// The resolved Python request and requirement for a [`Pep723Script`]
 #[derive(Debug, Clone)]
-pub(crate) struct ScriptPython {
+struct ScriptPython {
     /// The source of the Python request.
-    pub(crate) source: PythonRequestSource,
+    source: PythonRequestSource,
     /// The resolved Python request, computed by considering (1) any explicit request from the user
     /// via `--python`, (2) any implicit request from the user via `.python-version`, (3) any
     /// `Requires-Python` specifier in the script metadata, and (4) any `Requires-Python` specifier
     /// in the `pyproject.toml`.
-    pub(crate) python_request: Option<PythonRequest>,
+    python_request: Option<PythonRequest>,
     /// The resolved Python requirement for the script and its source.
-    pub(crate) requires_python: Option<(RequiresPython, RequiresPythonSource)>,
+    requires_python: Option<(RequiresPython, RequiresPythonSource)>,
 }
 
 impl ScriptPython {
     /// Determine the [`ScriptPython`] for the current [`Pep723Script`].
-    pub(crate) async fn from_request(
+    async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
         script: Pep723ItemRef<'_>,
@@ -1402,7 +1630,7 @@ impl ScriptPython {
 
 /// The Python environment for a project.
 #[derive(Debug)]
-enum ProjectEnvironment {
+pub(crate) enum ProjectEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the project's requirements.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the project's
@@ -1442,11 +1670,14 @@ impl ProjectEnvironment {
         active: Option<bool>,
         cache: &Cache,
         dry_run: DryRun,
+        link_error_reporting: LinkErrorReporting,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
+        let environment_selection = workspace.environment_selection(active);
+        let centralized = centralized_environments_enabled(&environment_selection, cache);
+
         // Lock the project environment to avoid synchronization issues.
-        let _lock = ProjectInterpreter::lock(workspace)
+        let _lock = lock_project_environment(workspace)
             .await
             .inspect_err(|err| {
                 warn!("Failed to acquire project environment lock: {err}");
@@ -1461,7 +1692,6 @@ impl ProjectEnvironment {
             no_config,
         )
         .await?;
-
         let upgradeable = workspace_python
             .python_request
             .as_ref()
@@ -1479,43 +1709,63 @@ impl ProjectEnvironment {
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         {
             // If we found an existing, compatible environment, use it.
-            ProjectInterpreter::Environment(environment) => Ok(Self::Existing(environment)),
+            ProjectInterpreter::Environment(environment) => {
+                if centralized && !dry_run.enabled() {
+                    update_project_environment_link(&environment, workspace, link_error_reporting);
+                }
+                Ok(Self::Existing(environment))
+            }
 
             // Otherwise, create a virtual environment with the discovered interpreter.
             ProjectInterpreter::Interpreter(interpreter) => {
-                let root = workspace.venv(active);
+                let root = if centralized {
+                    centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+                } else {
+                    environment_selection
+                        .explicit_path()
+                        .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf)
+                };
+                let centralized_environment_link =
+                    !centralized && is_centralized_environment_link(&root, cache);
 
-                // Avoid removing things that are not virtual environments
-                let replace = match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
-                    // It's a virtual environment we can remove it
-                    (_, Ok(true)) => true,
-                    // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
-                    (Ok(false), Ok(false)) => false,
-                    // If it's not a virtual environment, bail
-                    (Ok(true), Ok(false)) => {
-                        // Unless it's empty, in which case we just ignore it
-                        if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
-                            false
-                        } else {
+                // Avoid removing things that are not virtual environments and are outside the
+                // environment cache.
+                let replace_environment = if centralized_environment_link {
+                    true
+                } else {
+                    match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
+                        // It's a virtual environment we can remove it
+                        (_, Ok(true)) => true,
+                        // It doesn't exist at all, we should use it without deleting it to avoid TOCTOU bugs
+                        (Ok(false), Ok(false)) => false,
+                        // If it's not a virtual environment, bail
+                        (Ok(true), Ok(false)) => {
+                            // Unless it's empty, in which case we just ignore it
+                            if root.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+                                false
+                            } else if centralized {
+                                // Unless it's the derived cache entry, which is uv-owned and safe to replace
+                                true
+                            } else {
+                                return Err(ProjectError::InvalidProjectEnvironmentDir(
+                                    root,
+                                    "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                                ));
+                            }
+                        }
+                        // Similarly, if we can't _tell_ if it exists we should bail
+                        (_, Err(err)) | (Err(err), _) => {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
                                 root,
-                                "it is not a compatible environment but cannot be recreated because it is not a virtual environment".to_string(),
+                                format!(
+                                    "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
+                                ),
                             ));
                         }
-                    }
-                    // Similarly, if we can't _tell_ if it exists we should bail
-                    (_, Err(err)) | (Err(err), _) => {
-                        return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            root,
-                            format!(
-                                "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
-                            ),
-                        ));
                     }
                 };
 
@@ -1549,37 +1799,59 @@ impl ProjectEnvironment {
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
-                        false,
+                        uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                         false,
                         upgradeable,
                     )?;
-                    return Ok(if replace {
+                    return Ok(if replace_environment {
                         Self::WouldReplace(root, environment, temp_dir)
                     } else {
                         Self::WouldCreate(root, environment, temp_dir)
                     });
                 }
 
-                // Remove the existing virtual environment if it doesn't meet the requirements.
-                if replace {
-                    match uv_fs::remove_virtualenv(&root) {
-                        Ok(()) => {
-                            writeln!(
-                                printer.stderr(),
-                                "Removed virtual environment at: {}",
-                                root.user_display().cyan()
-                            )?;
+                if replace_environment {
+                    // `clear_virtualenv` follows directory links, so unlink centralized links
+                    // directly to preserve their cached targets.
+                    let removed = if centralized_environment_link {
+                        match uv_fs::remove_virtualenv(&root) {
+                            Ok(()) => true,
+                            Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                            Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
                         }
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                        Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
+                    } else {
+                        uv_fs::clear_virtualenv(&root).map_err(uv_virtualenv::Error::from)?
+                    };
+                    if removed {
+                        let removed_entry = if centralized_environment_link {
+                            "link to project environment"
+                        } else {
+                            "virtual environment"
+                        };
+                        writeln!(
+                            printer.stderr(),
+                            "Removed {removed_entry} at: {}",
+                            root.user_display().cyan()
+                        )?;
                     }
                 }
 
-                writeln!(
-                    printer.stderr(),
-                    "Creating virtual environment at: {}",
-                    root.user_display().cyan()
-                )?;
+                if centralized {
+                    writeln!(
+                        printer.stderr(),
+                        "Creating virtual environment `{}`",
+                        root.file_name()
+                            .unwrap_or(root.as_os_str())
+                            .to_string_lossy()
+                            .cyan(),
+                    )?;
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "Creating virtual environment at: {}",
+                        root.user_display().cyan()
+                    )?;
+                }
 
                 let environment = uv_virtualenv::create_venv(
                     &root,
@@ -1589,12 +1861,16 @@ impl ProjectEnvironment {
                     uv_virtualenv::OnExisting::Remove(
                         uv_virtualenv::RemovalReason::ManagedEnvironment,
                     ),
-                    false,
+                    uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
                     false,
                     upgradeable,
                 )?;
 
-                if replace {
+                if centralized {
+                    update_project_environment_link(&environment, workspace, link_error_reporting);
+                }
+
+                if replace_environment {
                     Ok(Self::Replaced(environment))
                 } else {
                     Ok(Self::Created(environment))
@@ -1618,7 +1894,7 @@ impl ProjectEnvironment {
     }
 
     /// Return the path to the actual target, if this was a dry run environment.
-    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+    fn dry_run_target(&self) -> Option<&Path> {
         match self {
             Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
             Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
@@ -1642,7 +1918,7 @@ impl std::ops::Deref for ProjectEnvironment {
 
 /// The Python environment for a script.
 #[derive(Debug)]
-enum ScriptEnvironment {
+pub(crate) enum ScriptEnvironment {
     /// An existing [`PythonEnvironment`] was discovered, which satisfies the script's requirements.
     Existing(PythonEnvironment),
     /// An existing [`PythonEnvironment`] was discovered, but did not satisfy the script's
@@ -1682,7 +1958,6 @@ impl ScriptEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
-        preview: Preview,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script)
@@ -1708,7 +1983,6 @@ impl ScriptEnvironment {
             active,
             cache,
             printer,
-            preview,
         )
         .await?
         {
@@ -1807,7 +2081,7 @@ impl ScriptEnvironment {
     }
 
     /// Return the path to the actual target, if this was a dry run environment.
-    pub(crate) fn dry_run_target(&self) -> Option<&Path> {
+    fn dry_run_target(&self) -> Option<&Path> {
         match self {
             Self::WouldReplace(path, _, _) | Self::WouldCreate(path, _, _) => Some(path),
             Self::Created(_) | Self::Existing(_) | Self::Replaced(_) => None,
@@ -1881,6 +2155,8 @@ pub(crate) async fn resolve_names(
                 resolution: _,
                 sources,
                 torch_backend,
+                cuda_driver_version,
+                amd_gpu_architecture,
                 upgrade: _,
             },
         compile_bytecode: _,
@@ -1899,7 +2175,13 @@ pub(crate) async fn resolve_names(
             } else {
                 TorchSource::default()
             };
-            TorchStrategy::from_mode(mode, source, interpreter.platform().os())
+            TorchStrategy::from_mode(
+                mode,
+                source,
+                interpreter.platform().os(),
+                cuda_driver_version.clone(),
+                *amd_gpu_architecture,
+            )
         })
         .transpose()
         .ok()
@@ -2018,7 +2300,7 @@ impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
 impl<'lock> EnvironmentSpecification<'lock> {
     /// Set the [`PreferenceLocation`] for the specification.
     #[must_use]
-    pub(crate) fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
+    fn with_preferences(self, preferences: PreferenceLocation<'lock>) -> Self {
         Self {
             preferences: Some(preferences),
             ..self
@@ -2064,6 +2346,8 @@ pub(crate) async fn resolve_environment(
         build_options,
         sources,
         torch_backend,
+        cuda_driver_version,
+        amd_gpu_architecture,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -2072,6 +2356,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         ..
@@ -2102,6 +2387,8 @@ pub(crate) async fn resolve_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version.clone(),
+                *amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -2214,6 +2501,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,
@@ -2442,6 +2730,8 @@ pub(crate) async fn update_environment(
                 resolution,
                 sources,
                 torch_backend,
+                cuda_driver_version,
+                amd_gpu_architecture,
                 upgrade,
             },
         compile_bytecode,
@@ -2456,6 +2746,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         ..
@@ -2477,6 +2768,7 @@ pub(crate) async fn update_environment(
             &requirements,
             &constraints,
             &overrides,
+            &override_dependencies,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -2530,6 +2822,8 @@ pub(crate) async fn update_environment(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version.clone(),
+                *amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -2613,6 +2907,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,
@@ -2690,7 +2985,6 @@ pub(crate) async fn init_script_python_requirement(
     client_builder: &BaseClientBuilder<'_>,
     cache: &Cache,
     reporter: &PythonDownloadReporter,
-    preview: Preview,
 ) -> anyhow::Result<RequiresPython> {
     let python_request = if let Some(request) = python {
         // (1) Explicit request from user
@@ -2722,7 +3016,6 @@ pub(crate) async fn init_script_python_requirement(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -2851,27 +3144,60 @@ pub(crate) fn script_specification(
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let overrides = script
-        .metadata()
-        .tool
-        .as_ref()
-        .and_then(|tool| tool.uv.as_ref())
-        .and_then(|uv| uv.override_dependencies.as_ref())
-        .into_iter()
-        .flatten()
-        .cloned()
-        .flat_map(|requirement| {
-            LoweredRequirement::from_non_workspace_requirement(
-                requirement,
-                script_dir.as_ref(),
-                script_sources,
-                script_indexes,
-                &settings.index_locations,
-                credentials_cache,
-            )
-            .map_ok(LoweredRequirement::into_inner)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let overrides = {
+        let override_entries = script
+            .metadata()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.override_dependencies.as_ref())
+            .into_iter()
+            .flatten()
+            .cloned();
+        let mut overrides = Vec::new();
+        for entry in override_entries {
+            match entry {
+                Override::Requirement(requirement) => {
+                    overrides.extend(
+                        LoweredRequirement::from_non_workspace_requirement(
+                            requirement,
+                            script_dir.as_ref(),
+                            script_sources,
+                            script_indexes,
+                            &settings.index_locations,
+                            credentials_cache,
+                        )
+                        .map_ok(LoweredRequirement::into_inner)
+                        .map_ok(Override::Requirement)
+                        .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                Override::Package(package) => {
+                    let dependencies = package
+                        .dependencies
+                        .into_vec()
+                        .into_iter()
+                        .flat_map(|requirement| {
+                            LoweredRequirement::from_non_workspace_requirement(
+                                requirement,
+                                script_dir.as_ref(),
+                                script_sources,
+                                script_indexes,
+                                &settings.index_locations,
+                                credentials_cache,
+                            )
+                            .map_ok(LoweredRequirement::into_inner)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    overrides.push(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: dependencies.into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        overrides
+    };
     let excludes = script
         .metadata()
         .tool
@@ -2883,12 +3209,10 @@ pub(crate) fn script_specification(
         .cloned()
         .collect::<Vec<_>>();
 
-    Ok(Some(RequirementsSpecification::from_excludes(
-        requirements,
-        constraints,
-        overrides,
-        excludes,
-    )))
+    let mut specification =
+        RequirementsSpecification::from_excludes(requirements, constraints, Vec::new(), excludes);
+    specification.override_dependencies = overrides;
+    Ok(Some(specification))
 }
 
 /// Determine the extra build requires for a script.

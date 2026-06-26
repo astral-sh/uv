@@ -1,6 +1,6 @@
 [package]
 name = "uv-unix"
-version = "0.0.49"
+version = "0.0.57"
 description = "Unix-specific functionality for uv"
 edition = { workspace = true }
 rust-version = { workspace = true }

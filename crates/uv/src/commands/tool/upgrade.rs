@@ -1,6 +1,6 @@
 use anyhow::Result;
 use itertools::Itertools;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
@@ -10,6 +10,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
 use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::CWD;
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
@@ -22,7 +23,6 @@ use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
 use uv_types::SourceTreeEditablePolicy;
-use uv_warnings::write_error_chain;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -102,7 +102,6 @@ pub(crate) async fn upgrade(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
-                preview,
             )
             .await?
             .into_interpreter(),
@@ -171,12 +170,10 @@ pub(crate) async fn upgrade(
             .sorted_unstable_by(|(name_a, _), (name_b, _)| name_a.cmp(name_b))
         {
             trace!("Error trace: {err:?}");
-            write_error_chain(
+            write_error_chain_with_options(
                 err.context(format!("Failed to upgrade {}", name.green()))
                     .as_ref(),
-                printer.stderr(),
-                "error",
-                AnsiColors::Red,
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
         return Ok(ExitStatus::Failure);

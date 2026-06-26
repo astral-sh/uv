@@ -27,23 +27,13 @@ pub struct LocalWheel {
 }
 
 impl LocalWheel {
-    /// Return the path to the downloaded wheel's entry in the cache.
-    pub fn target(&self) -> &Path {
-        &self.archive
-    }
-
     /// Return the [`Dist`] from which this wheel was downloaded.
-    pub fn remote(&self) -> &Dist {
+    fn remote(&self) -> &Dist {
         &self.dist
     }
 
-    /// Return the [`WheelFilename`] of this wheel.
-    pub fn filename(&self) -> &WheelFilename {
-        &self.filename
-    }
-
     /// Read the [`ResolutionMetadata`] from a wheel.
-    pub fn metadata(&self) -> Result<ResolutionMetadata, Error> {
+    pub(crate) fn metadata(&self) -> Result<ResolutionMetadata, Error> {
         read_flat_wheel_metadata(&self.filename, &self.archive)
             .map_err(|err| Error::WheelMetadata(self.archive.to_path_buf(), Box::new(err)))
     }

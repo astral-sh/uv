@@ -19,6 +19,14 @@ impl EnvVars {
     #[attr_added_in("0.6.0")]
     pub const UV: &'static str = "UV";
 
+    /// The path to the Ruff binary used by `uv format`.
+    #[attr_added_in("0.11.22")]
+    pub const RUFF: &'static str = "RUFF";
+
+    /// The path to the ty binary used by `uv check`.
+    #[attr_added_in("0.11.22")]
+    pub const TY: &'static str = "TY";
+
     /// Equivalent to the `--offline` command-line argument. If set, uv will disable network access.
     #[attr_added_in("0.5.9")]
     pub const UV_OFFLINE: &'static str = "UV_OFFLINE";
@@ -197,7 +205,8 @@ impl EnvVars {
     pub const UV_ISOLATED: &'static str = "UV_ISOLATED";
 
     /// Equivalent to the `--exclude-newer` command-line argument. If set, uv will
-    /// exclude distributions published after the specified date.
+    /// exclude distributions published after the specified date. Set to `false` to disable
+    /// `exclude-newer`.
     #[attr_added_in("0.2.12")]
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 
@@ -260,6 +269,38 @@ impl EnvVars {
     #[attr_added_in("0.9.9")]
     pub const UV_NO_DEFAULT_GROUPS: &'static str = "UV_NO_DEFAULT_GROUPS";
 
+    /// Equivalent to the `--no-install-project` command-line argument. If set, uv will
+    /// install the project's dependencies but not the project itself.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_PROJECT: &'static str = "UV_NO_INSTALL_PROJECT";
+
+    /// Equivalent to the `--no-install-workspace` command-line argument. If set, uv will
+    /// install workspace dependencies but not workspace members (including the current
+    /// project).
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_WORKSPACE: &'static str = "UV_NO_INSTALL_WORKSPACE";
+
+    /// Equivalent to the `--no-install-local` command-line argument. If set, uv will skip
+    /// the current project, workspace members, and any other local (path or editable)
+    /// packages, installing only remote dependencies.
+    #[attr_added_in("0.11.20")]
+    pub const UV_NO_INSTALL_LOCAL: &'static str = "UV_NO_INSTALL_LOCAL";
+
+    /// Equivalent to the hidden `--only-install-project` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_PROJECT: &'static str = "UV_ONLY_INSTALL_PROJECT";
+
+    /// Equivalent to the hidden `--only-install-workspace` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_WORKSPACE: &'static str = "UV_ONLY_INSTALL_WORKSPACE";
+
+    /// Equivalent to the hidden `--only-install-local` command-line argument.
+    #[attr_hidden]
+    #[attr_added_in("0.11.20")]
+    pub const UV_ONLY_INSTALL_LOCAL: &'static str = "UV_ONLY_INSTALL_LOCAL";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
@@ -311,6 +352,7 @@ impl EnvVars {
     #[attr_added_in("0.4.16")]
     pub const UV_PUBLISH_PASSWORD: &'static str = "UV_PUBLISH_PASSWORD";
 
+    /// Equivalent to the `--check-url` command-line argument in `uv publish`.
     /// Don't upload a file if it already exists on the index. The value is the URL of the index.
     #[attr_added_in("0.4.30")]
     pub const UV_PUBLISH_CHECK_URL: &'static str = "UV_PUBLISH_CHECK_URL";
@@ -616,6 +658,11 @@ impl EnvVars {
     #[attr_hidden]
     #[attr_added_in("0.2.0")]
     pub const UV_INTERNAL__PARENT_INTERPRETER: &'static str = "UV_INTERNAL__PARENT_INTERPRETER";
+
+    /// Used to identify the source tree when invoking PEP 517 build hooks.
+    #[attr_hidden]
+    #[attr_added_in("0.11.22")]
+    pub const UV_INTERNAL__BUILD_DIR: &'static str = "UV_INTERNAL__BUILD_DIR";
 
     /// Used to force showing the derivation tree during resolver error reporting.
     #[attr_hidden]
@@ -1201,11 +1248,6 @@ impl EnvVars {
     /// Used to disable delay for HTTP retries in tests.
     #[attr_added_in("0.7.21")]
     pub const UV_TEST_NO_HTTP_RETRY_DELAY: &'static str = "UV_TEST_NO_HTTP_RETRY_DELAY";
-
-    /// Used to set a packse index url for tests.
-    #[attr_hidden]
-    #[attr_added_in("0.2.12")]
-    pub const UV_TEST_PACKSE_INDEX: &'static str = "UV_TEST_PACKSE_INDEX";
 
     /// Used for testing named indexes in tests.
     #[attr_hidden]

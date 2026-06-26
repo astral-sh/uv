@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use console::Term;
-use owo_colors::{AnsiColors, OwoColorize};
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
 use uv_auth::{Credentials, PyxTokenStore};
@@ -12,7 +12,9 @@ use uv_client::{
     AuthIntegration, BaseClient, BaseClientBuilder, RedirectPolicy, RegistryClientBuilder,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_preview::{Preview, PreviewFeature};
 use uv_publish::{
     CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
@@ -20,7 +22,7 @@ use uv_publish::{
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_warnings::{warn_user_once, write_error_chain};
+use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
 use crate::commands::{ExitStatus, human_readable_bytes};
@@ -101,7 +103,11 @@ pub(crate) async fn publish(
         (publish_url, check_url)
     };
 
-    let groups = group_files_for_publishing(paths, no_attestations)?;
+    let mut groups = group_files_for_publishing(paths, no_attestations)?;
+    // Sort by filename first so the stable type sort preserves filename order within each type.
+    groups.sort_by(|left, right| left.raw_filename.cmp(&right.raw_filename));
+    // Sort by distribution type, with wheels before source distributions.
+    groups.sort_by_key(|group| matches!(&group.filename, DistFilename::SourceDistFilename(_)));
     match groups.len() {
         0 => bail!("No files found to publish"),
         1 => {
@@ -240,7 +246,10 @@ pub(crate) async fn publish(
                 Ok(false) => {}
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        write_error_chain_with_options(
+                            &err,
+                            ErrorOptions::default().with_stream(printer.stderr()),
+                        )?;
                         error_count += 1;
                         continue;
                     }
@@ -278,7 +287,10 @@ pub(crate) async fn publish(
                 Ok(metadata) => metadata,
                 Err(err) => {
                     if dry_run {
-                        write_error_chain(&err, printer.stderr(), "error", AnsiColors::Red)?;
+                        write_error_chain_with_options(
+                            &err,
+                            ErrorOptions::default().with_stream(printer.stderr()),
+                        )?;
                         error_count += 1;
                         continue;
                     }
@@ -319,11 +331,9 @@ pub(crate) async fn publish(
                     }
                     Err(err) => {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
+                        write_error_chain_with_options(
                             err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
+                            ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
                     }
@@ -382,11 +392,9 @@ pub(crate) async fn publish(
                 Err(err) => {
                     if dry_run {
                         let err: anyhow::Error = err.into();
-                        write_error_chain(
+                        write_error_chain_with_options(
                             err.as_ref(),
-                            printer.stderr(),
-                            "error",
-                            AnsiColors::Red,
+                            ErrorOptions::default().with_stream(printer.stderr()),
                         )?;
                         error_count += 1;
                         continue;
@@ -544,13 +552,11 @@ async fn gather_credentials(
             )?;
 
             trace!("Error trace: {err:?}");
-            write_error_chain(
+            write_error_chain_with_options(
                 anyhow::Error::from(err)
                     .context("Trusted publishing failed")
                     .as_ref(),
-                printer.stderr(),
-                "error",
-                AnsiColors::Red,
+                ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
     }

@@ -29,7 +29,7 @@ jobs:
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -43,9 +43,9 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
-          version: "0.11.14"
+          version: "0.11.23"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -53,7 +53,7 @@ jobs:
       - name: "Install secret service"
         run: |
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
-          sudo apt install -y --update gnome-keyring
+          sudo apt install -y gnome-keyring
 
       - name: "Start gnome-keyring"
         # run gnome-keyring with 'foobar' as password for the login keyring
@@ -63,7 +63,7 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y --update btrfs-progs
+          sudo apt install -y btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
@@ -85,7 +85,7 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /minix
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
         with:
           tool: cargo-nextest
 
@@ -134,7 +134,7 @@ jobs:
     runs-on: depot-macos-15
     name: "cargo test on macos"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -151,15 +151,15 @@ jobs:
           hdiutil attach /tmp/noreflink.dmg
           echo "HFS_MOUNT=/Volumes/NoReflink" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
-          version: "0.11.14"
+          version: "0.11.23"
 
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
         with:
           tool: cargo-nextest
 
@@ -205,14 +205,14 @@ jobs:
 
   cargo-test-windows:
     timeout-minutes: 15
-    runs-on: github-windows-2025-x86_64-16
+    runs-on: namespace-profile-windows-2022-x86-64-16
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
       fail-fast: false
       matrix:
         partition: [1, 2, 3]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -224,9 +224,9 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
-          version: "0.11.14"
+          version: "0.11.23"
 
       - name: "Install required Python versions"
         run: uv python install
@@ -251,7 +251,7 @@ jobs:
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@fa0dd4cd0a40696e6f9766370614a5ce482e6aa8 # v2.77.5
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
         with:
           tool: cargo-nextest
 

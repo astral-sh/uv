@@ -1,6 +1,6 @@
 [package]
 name = "uv-warnings"
-version = "0.0.49"
+version = "0.0.57"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,11 +16,12 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-errors = { workspace = true }
+
 anstream = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-indoc = { workspace = true }
 insta = { workspace = true }

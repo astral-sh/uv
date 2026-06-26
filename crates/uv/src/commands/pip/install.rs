@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Reinstall, Upgrade,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -20,12 +20,12 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
-    UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
@@ -38,7 +38,7 @@ use uv_resolver::{
     ResolutionMode, ResolverEnvironment,
 };
 use uv_settings::PythonInstallMirrors;
-use uv_torch::{TorchMode, TorchSource, TorchStrategy};
+use uv_torch::{AmdGpuArchitecture, TorchMode, TorchSource, TorchStrategy};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
@@ -82,7 +82,7 @@ pub(crate) async fn pip_install(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    overrides_from_workspace: Vec<Requirement>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
     excludes_from_workspace: Vec<uv_normalize::PackageName>,
     build_constraints_from_workspace: Vec<Requirement>,
     editable: Option<EditableMode>,
@@ -95,6 +95,8 @@ pub(crate) async fn pip_install(
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
     torch_backend: Option<TorchMode>,
+    cuda_driver_version: Option<Version>,
+    amd_gpu_architecture: Option<AmdGpuArchitecture>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     client_builder: &BaseClientBuilder<'_>,
@@ -140,6 +142,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        mut override_dependencies,
         excludes,
         pylock,
         source_trees,
@@ -162,6 +165,8 @@ pub(crate) async fn pip_install(
     )
     .await?;
 
+    override_dependencies.extend(overrides_from_workspace);
+
     if pylock.is_some() {
         if !preview.is_enabled(PreviewFeature::Pylock) {
             warn_user!(
@@ -178,16 +183,6 @@ pub(crate) async fn pip_install(
             constraints_from_workspace
                 .into_iter()
                 .map(NameRequirementSpecification::from),
-        )
-        .collect();
-
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
         )
         .collect();
 
@@ -225,7 +220,6 @@ pub(crate) async fn pip_install(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&installation, true, printer)?;
@@ -239,7 +233,6 @@ pub(crate) async fn pip_install(
             EnvironmentPreference::from_system_flag(system, true),
             PythonPreference::default().with_system_flag(system),
             &cache,
-            preview,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment
@@ -331,6 +324,7 @@ pub(crate) async fn pip_install(
             &requirements,
             &constraints,
             &overrides,
+            &override_dependencies,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,
@@ -420,6 +414,8 @@ pub(crate) async fn pip_install(
                     .as_ref()
                     .unwrap_or(interpreter.platform())
                     .os(),
+                cuda_driver_version,
+                amd_gpu_architecture,
             )
         })
         .transpose()?;
@@ -554,6 +550,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
+            override_dependencies,
             excludes,
             source_trees,
             project,

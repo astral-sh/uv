@@ -91,7 +91,7 @@ pub enum TomlCredentialError {
 }
 
 impl TomlCredentialError {
-    pub fn as_io_error(&self) -> Option<&std::io::Error> {
+    pub(crate) fn as_io_error(&self) -> Option<&std::io::Error> {
         match self {
             Self::Io(err) => Some(err),
             Self::LockedFile(err) => err.as_io_error(),
@@ -231,7 +231,7 @@ impl TryFrom<TomlCredentialWire> for TomlCredential {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct TomlCredentials {
     /// Array of credential entries.
-    #[serde(rename = "credential")]
+    #[serde(default, rename = "credential")]
     credentials: Vec<TomlCredential>,
 }
 
@@ -261,7 +261,7 @@ impl TextCredentialStore {
     }
 
     /// Acquire a lock on the credentials file at the given path.
-    pub async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
+    async fn lock(path: &Path) -> Result<LockedFile, TomlCredentialError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -297,7 +297,9 @@ impl TextCredentialStore {
     /// Returns [`TextCredentialStore`] and a [`LockedFile`] to hold if mutating the store.
     ///
     /// If the store will not be written to following the read, the lock can be dropped.
-    pub async fn read<P: AsRef<Path>>(path: P) -> Result<(Self, LockedFile), TomlCredentialError> {
+    pub(crate) async fn read<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<(Self, LockedFile), TomlCredentialError> {
         let lock = Self::lock(path.as_ref()).await?;
         let store = Self::from_file(path)?;
         Ok((store, lock))

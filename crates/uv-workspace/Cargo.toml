@@ -1,6 +1,6 @@
 [package]
 name = "uv-workspace"
-version = "0.0.49"
+version = "0.0.57"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-build-backend = { workspace = true, features = ["schemars"] }
+uv-cache = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -25,12 +26,14 @@ uv-fs = { workspace = true, features = ["tokio"] }
 uv-git-types = { workspace = true }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true }
+uv-once-map = { workspace = true }
 uv-options-metadata = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
+uv-toml = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true, optional = true }
@@ -58,6 +61,7 @@ tempfile = { workspace = true }
 schemars = [
   "dep:schemars",
   "uv-build-backend/schemars",
+  "uv-distribution-types/schemars",
   "uv-fs/schemars",
   "uv-normalize/schemars",
   "uv-pep508/schemars",

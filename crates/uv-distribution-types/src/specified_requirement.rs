@@ -185,14 +185,6 @@ impl UnresolvedRequirement {
         }
     }
 
-    /// Returns the extras for the requirement.
-    pub fn extras(&self) -> &[ExtraName] {
-        match self {
-            Self::Named(requirement) => &requirement.extras,
-            Self::Unnamed(requirement) => &requirement.extras,
-        }
-    }
-
     /// Return the version specifier or URL for the requirement.
     pub fn source(&self) -> Cow<'_, RequirementSource> {
         match self {
@@ -201,14 +193,6 @@ impl UnresolvedRequirement {
                 requirement.url.parsed_url.clone(),
                 requirement.url.verbatim.clone(),
             )),
-        }
-    }
-
-    /// Returns `true` if the requirement is editable.
-    pub fn is_editable(&self) -> bool {
-        match self {
-            Self::Named(requirement) => requirement.is_editable(),
-            Self::Unnamed(requirement) => requirement.url.is_editable(),
         }
     }
 
@@ -221,17 +205,6 @@ impl UnresolvedRequirement {
                 Hashes::parse_fragment(fragment).ok()
             }
         }
-    }
-}
-
-impl NameRequirementSpecification {
-    /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
-        let RequirementSource::Url { ref url, .. } = self.requirement.source else {
-            return None;
-        };
-        let fragment = url.fragment()?;
-        Hashes::parse_fragment(fragment).ok()
     }
 }
 

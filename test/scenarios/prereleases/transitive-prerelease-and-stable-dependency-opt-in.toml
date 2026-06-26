@@ -1,0 +1,24 @@
+name = "transitive-prerelease-and-stable-dependency-opt-in"
+description = "A transitive dependency has both a prerelease and a stable selector, but can only be satisfied by a prerelease. The user includes an opt-in to prereleases of the transitive dependency."
+
+[root]
+requires = ["a", "b", "c>=0.0.0a1"]
+
+[expected]
+satisfiable = true
+explanation = "Since the user explicitly opted-in to a prerelease for `c`, it can be installed."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "2.0.0b1"
+
+[packages.a.versions."1.0.0"]
+requires = ["c==2.0.0b1"]
+
+[packages.b.versions."1.0.0"]
+requires = ["c>=1.0.0,<=3.0.0"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0b1"]

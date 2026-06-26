@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-pub(super) const EOF_CHAR: char = '\0';
+const EOF_CHAR: char = '\0';
 
 /// A cursor represents a pointer in the source code.
 ///
@@ -25,7 +25,7 @@ impl<'src> Cursor<'src> {
     }
 
     /// Returns `true` if the cursor is at the end of file.
-    pub(super) fn is_eof(&self) -> bool {
+    fn is_eof(&self) -> bool {
         self.chars.as_str().is_empty()
     }
 

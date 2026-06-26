@@ -491,6 +491,7 @@ impl BuildContext for BuildDispatch<'_> {
         source: &'data Path,
         subdirectory: Option<&'data Path>,
         install_path: &'data Path,
+        stop_discovery_at: Option<&'data Path>,
         version_id: Option<&'data str>,
         dist: Option<&'data SourceDist>,
         sources: &'data NoSources,
@@ -554,6 +555,7 @@ impl BuildContext for BuildDispatch<'_> {
             source,
             subdirectory,
             install_path,
+            stop_discovery_at,
             dist_name,
             dist_version,
             self.interpreter,
@@ -688,15 +690,5 @@ impl SharedState {
     /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
-    }
-
-    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
-    pub fn capabilities(&self) -> &IndexCapabilities {
-        &self.capabilities
-    }
-
-    /// Return the [`BuildArena`] used by the [`SharedState`].
-    pub fn build_arena(&self) -> &BuildArena<SourceBuild> {
-        &self.build_arena
     }
 }

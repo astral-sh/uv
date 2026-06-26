@@ -116,13 +116,9 @@ async fn do_uninstall(
         .map(|installation| installation.key().clone())
         .collect::<BTreeSet<_>>()
     });
-    let specific_patch_requests = download_requests
+    let specific_patch_requests = requests
         .iter()
-        .map(|request| {
-            request.version().is_some_and(|version| {
-                matches!(version, uv_python::VersionRequest::MajorMinorPatch(..))
-            })
-        })
+        .map(PythonRequest::includes_patch)
         .collect::<Vec<_>>();
     let report_outdated = outdated && specific_patch_requests.iter().any(|specific| !specific);
 
@@ -321,12 +317,7 @@ async fn do_uninstall(
                 PythonMinorVersionLink::from_installation(installation)
             {
                 if minor_version_link.exists() {
-                    let result = if cfg!(windows) {
-                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
-                    } else {
-                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
-                    };
-                    if result.is_err() {
+                    if uv_fs::remove_symlink(&minor_version_link.symlink_directory).is_err() {
                         return Err(anyhow::anyhow!(
                             "Failed to remove symlink directory {}",
                             minor_version_link.symlink_directory.display()

@@ -194,6 +194,12 @@ Use the `UV_PROJECT_ENVIRONMENT` environment variable to override this location.
 see the
 [projects environment documentation](../concepts/projects/config.md#project-environment-path).
 
+With the [`centralized-project-envs` preview feature](../concepts/preview.md), uv stores default
+project environments in the [cache directory](#cache-directory). They can be removed by
+`uv cache clean` or `uv cache prune` and are recreated when next needed. See the
+[centralized project environments](../concepts/projects/layout.md#centralized-project-environments)
+documentation for details.
+
 ### Script virtual environments
 
 When running [scripts with inline metadata](../guides/scripts.md), uv creates a dedicated virtual

@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::iter;
+use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
 
@@ -8,8 +8,8 @@ use std::sync::{LazyLock, Mutex};
 pub use anstream;
 #[doc(hidden)]
 pub use owo_colors;
-use owo_colors::{DynColor, OwoColorize};
 use rustc_hash::FxHashSet;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 
 /// Whether user-facing warnings are enabled.
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
@@ -22,6 +22,23 @@ pub fn enable() {
 /// Disable user-facing warnings.
 pub fn disable() {
     ENABLED.store(false, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Format a warning chain to standard error.
+pub fn write_warning_chain(err: &dyn Error) -> fmt::Result {
+    write_warning_chain_with_options(err, ErrorOptions::default())
+}
+
+fn write_warning_chain_with_options<C, W: fmt::Write>(
+    err: &dyn Error,
+    options: ErrorOptions<'_, C, W>,
+) -> fmt::Result {
+    write_error_chain_with_options(
+        err,
+        options
+            .with_level("warning")
+            .with_color(owo_colors::AnsiColors::Yellow),
+    )
 }
 
 /// Warn a user, if warnings are enabled.
@@ -60,99 +77,27 @@ macro_rules! warn_user_once {
     }};
 }
 
-/// Format an error or warning chain.
-///
-/// # Example
-///
-/// ```text
-/// error: Failed to install app
-///   Caused By: Failed to install dependency
-///   Caused By: Error writing failed `/home/ferris/deps/foo`: Permission denied
-/// ```
-///
-/// ```text
-/// warning: Failed to create registry entry for Python 3.12
-///   Caused By: Security policy forbids chaining registry entries
-/// ```
-///
-/// ```text
-/// error: Failed to download Python 3.12
-///  Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
-///             Server says: This endpoint only support POST requests.
-///
-///             For downloads, please refer to https://example.com/download/python3.13.tar.zst
-///  Caused by: Caused By: HTTP Error 400
-/// ```
-pub fn write_error_chain(
-    err: &dyn Error,
-    mut stream: impl std::fmt::Write,
-    level: impl AsRef<str>,
-    color: impl DynColor + Copy,
-) -> std::fmt::Result {
-    writeln!(
-        &mut stream,
-        "{}{} {}",
-        level.as_ref().color(color).bold(),
-        ":".bold(),
-        err.to_string().trim().bold()
-    )?;
-    for source in iter::successors(err.source(), |&err| err.source()) {
-        let msg = source.to_string();
-        let mut lines = msg.lines();
-        if let Some(first) = lines.next() {
-            let padding = "  ";
-            let cause = "Caused by";
-            let child_padding = " ".repeat(padding.len() + cause.len() + 2);
-            writeln!(
-                &mut stream,
-                "{}{}: {}",
-                padding,
-                cause.color(color).bold(),
-                first.trim()
-            )?;
-            for line in lines {
-                let line = line.trim_end();
-                if line.is_empty() {
-                    // Avoid showing indents on empty lines
-                    writeln!(&mut stream)?;
-                } else {
-                    writeln!(&mut stream, "{}{}", child_padding, line.trim_end())?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::write_error_chain;
     use anyhow::anyhow;
-    use indoc::indoc;
     use insta::assert_snapshot;
-    use owo_colors::AnsiColors;
+    use uv_errors::ErrorOptions;
+
+    use super::write_warning_chain_with_options;
 
     #[test]
-    fn format_multiline_message() {
-        let err_middle = indoc! {"Failed to fetch https://example.com/upload/python3.13.tar.zst
-        Server says: This endpoint only support POST requests.
+    fn format_warning_chain() {
+        let error = anyhow!("Failed to create registry entry");
+        let mut output = String::new();
+        write_warning_chain_with_options(
+            error.as_ref(),
+            ErrorOptions::default().with_stream(&mut output),
+        )
+        .unwrap();
+        assert_snapshot!(format!("{output:?}"), @r#""\u{1b}[1m\u{1b}[33mwarning\u{1b}[39m\u{1b}[0m\u{1b}[1m:\u{1b}[0m Failed to create registry entry\n""#);
+        let output = anstream::adapter::strip_str(&output);
 
-        For downloads, please refer to https://example.com/download/python3.13.tar.zst"};
-        let err = anyhow!("Caused By: HTTP Error 400")
-            .context(err_middle)
-            .context("Failed to download Python 3.12");
-
-        let mut rendered = String::new();
-        write_error_chain(err.as_ref(), &mut rendered, "error", AnsiColors::Red).unwrap();
-        let rendered = anstream::adapter::strip_str(&rendered);
-
-        assert_snapshot!(rendered, @"
-        error: Failed to download Python 3.12
-          Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
-                     Server says: This endpoint only support POST requests.
-
-                     For downloads, please refer to https://example.com/download/python3.13.tar.zst
-          Caused by: Caused By: HTTP Error 400
-        ");
+        assert_snapshot!(output, @"warning: Failed to create registry entry
+");
     }
 }

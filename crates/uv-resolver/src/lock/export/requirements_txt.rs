@@ -139,11 +139,15 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         write!(f, "{}", anchor(path).portable_display())?;
                     }
                 }
-                Source::Editable(path) => match self.editable {
-                    None | Some(EditableMode::Editable) => {
+                Source::Editable(path) => match self
+                    .editable
+                    .as_ref()
+                    .and_then(|editable| editable.for_package(&package.id.name))
+                {
+                    None | Some(true) => {
                         write!(f, "-e {}", anchor(path).portable_display())?;
                     }
-                    Some(EditableMode::NonEditable) => {
+                    Some(false) => {
                         if path.is_absolute() {
                             write!(
                                 f,

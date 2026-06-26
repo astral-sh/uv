@@ -111,13 +111,34 @@ impl Manifest {
     /// - Determining which requirements should allow yanked versions.
     /// - Determining which requirements should allow pre-release versions (e.g., `torch>=2.2.0a1`).
     /// - Determining which requirements should allow direct URLs (e.g., `torch @ https://...`).
-    pub fn requirements<'a>(
+    pub(crate) fn requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
         self.requirements_no_overrides(env, mode)
             .chain(self.overrides(env, mode))
+    }
+
+    /// Return all requirements that affect manifest-wide candidate selection policy.
+    ///
+    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements(env, mode).chain(
+            self.overrides
+                .scoped_requirements()
+                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .filter(|requirement| !self.excludes.contains(&requirement.name))
+                .filter(move |requirement| {
+                    requirement.evaluate_markers(env.marker_environment(), &[])
+                }),
+        )
     }
 
     /// Like [`Self::requirements`], but without the overrides.
@@ -133,7 +154,11 @@ impl Manifest {
                     .iter()
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
                             .filter(move |requirement| {
                                 requirement
@@ -172,7 +197,7 @@ impl Manifest {
     }
 
     /// Only the overrides from [`Self::requirements`].
-    pub fn overrides<'a>(
+    pub(crate) fn overrides<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
@@ -181,7 +206,7 @@ impl Manifest {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -191,7 +216,7 @@ impl Manifest {
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -225,7 +250,11 @@ impl Manifest {
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -247,17 +276,6 @@ impl Manifest {
                 ))
             }
         }
-    }
-
-    /// Apply the overrides and constraints to a set of requirements.
-    ///
-    /// Constraints are always applied _on top_ of overrides, such that constraints are applied
-    /// even if a requirement is overridden.
-    pub fn apply<'a>(
-        &'a self,
-        requirements: impl IntoIterator<Item = &'a Requirement>,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.constraints.apply(self.overrides.apply(requirements))
     }
 
     /// Returns the number of input requirements.

@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{fmt, io};
+use std::{fmt, io, iter};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -240,6 +240,8 @@ async fn build_impl(
         build_options,
         sources,
         torch_backend: _,
+        cuda_driver_version: _,
+        amd_gpu_architecture: _,
     } = settings;
 
     // Determine the source to build.
@@ -268,9 +270,24 @@ async fn build_impl(
     let workspace = Workspace::discover(
         src.directory(),
         &DiscoveryOptions::default(),
+        cache,
         workspace_cache,
     )
     .await;
+
+    // Limit to the stable version range.
+    let min_version = Version::from_str(uv_version::version()).unwrap();
+    debug_assert!(
+        min_version.release()[0] == 0,
+        "migrate to major version bumps"
+    );
+    let max_version = Version::new(
+        [0, min_version.release()[1] + 1]
+            .into_iter()
+            // Add trailing zeroes to match the version length, to use the same style
+            // as `--bounds`.
+            .chain(iter::repeat_n(0, min_version.release().len() - 2)),
+    );
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
@@ -296,10 +313,10 @@ async fn build_impl(
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>={min_version},<{max_version}\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
                 "build-system".green(),
-                "setuptools".cyan(),
+                "uv_build".cyan(),
                 pyproject_toml.user_display().cyan()
             ));
         }
@@ -341,9 +358,9 @@ async fn build_impl(
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>={min_version},<{max_version}\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
-                "setuptools".cyan(),
+                "uv_build".cyan(),
                 "build-system".green(),
                 pyproject_toml.user_display().cyan()
             ));
@@ -361,7 +378,7 @@ async fn build_impl(
             python_request,
             install_mirrors.clone(),
             no_config,
-            workspace.as_ref(),
+            workspace.as_deref(),
             python_preference,
             python_downloads,
             cache,
@@ -563,7 +580,6 @@ async fn build_package(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
-        preview,
     )
     .await?
     .into_interpreter();
@@ -1014,6 +1030,7 @@ async fn build_sdist(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
                     sources,
@@ -1120,6 +1137,7 @@ async fn build_wheel(
                     source_tree,
                     subdirectory,
                     source.path(),
+                    None,
                     version_id,
                     dist,
                     &sources,

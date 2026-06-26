@@ -55,14 +55,12 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
     attrs
         .iter()
         .filter_map(|attr| {
-            if attr.path().is_ident("doc") {
-                if let syn::Meta::NameValue(meta) = &attr.meta {
-                    if let syn::Expr::Lit(expr) = &meta.value {
-                        if let syn::Lit::Str(str) = &expr.lit {
-                            return Some(str.value().trim().to_string());
-                        }
-                    }
-                }
+            if attr.path().is_ident("doc")
+                && let syn::Meta::NameValue(meta) = &attr.meta
+                && let syn::Expr::Lit(expr) = &meta.value
+                && let syn::Lit::Str(str) = &expr.lit
+            {
+                return Some(str.value().trim().to_string());
             }
             None
         })

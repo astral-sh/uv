@@ -117,19 +117,44 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
                 }
             }
 
-            for requirement in self
-                .resolution
-                .overrides
-                .requirements()
-                .filter(|requirement| {
-                    requirement.evaluate_markers(self.env.marker_environment(), &[])
-                })
+            for requirement in
+                self.resolution
+                    .overrides
+                    .global_requirements()
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    })
             {
                 if let Some(origin) = &requirement.origin {
                     sources.add(
                         &requirement.name,
                         SourceAnnotation::Override(origin.clone()),
                     );
+                }
+            }
+
+            for edge in self.resolution.graph.edge_references() {
+                let (ResolutionGraphNode::Dist(parent), ResolutionGraphNode::Dist(dependency)) = (
+                    self.resolution.graph.node_weight(edge.source()).unwrap(),
+                    self.resolution.graph.node_weight(edge.target()).unwrap(),
+                ) else {
+                    continue;
+                };
+                for requirement in self
+                    .resolution
+                    .overrides
+                    .scoped_requirements_for(&parent.name, &parent.version)
+                    .filter(|requirement| requirement.name == dependency.name)
+                    .filter(|requirement| {
+                        requirement.evaluate_markers(self.env.marker_environment(), &[])
+                    })
+                {
+                    if let Some(origin) = &requirement.origin {
+                        sources.add(
+                            &requirement.name,
+                            SourceAnnotation::Override(origin.clone()),
+                        );
+                    }
                 }
             }
 

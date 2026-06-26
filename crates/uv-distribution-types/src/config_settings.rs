@@ -136,11 +136,6 @@ impl FromIterator<ConfigSettingEntry> for ConfigSettings {
 }
 
 impl ConfigSettings {
-    /// Returns the number of settings in the configuration.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     /// Returns `true` if the configuration contains no settings.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
@@ -268,11 +263,6 @@ impl PackageConfigSettings {
     /// Returns the config settings for a specific package, if any.
     pub fn get(&self, package: &PackageName) -> Option<&ConfigSettings> {
         self.0.get(package)
-    }
-
-    /// Returns `true` if there are no package-specific settings.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 
     /// Merge two sets of package config settings, with the values in `self` taking precedence.

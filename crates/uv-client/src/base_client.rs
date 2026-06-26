@@ -21,9 +21,13 @@ use tracing::{debug, warn};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
+use uv_auth::{
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, PyxTokenStore,
+};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
+use uv_distribution_types::IndexCredentialsError;
+use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_preview::Preview;
@@ -60,13 +64,13 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
 #[derive(Debug, Error)]
-#[error("failed to build HTTP client")]
-pub struct ClientBuildError(#[source] reqwest::Error);
-
-impl From<reqwest::Error> for ClientBuildError {
-    fn from(error: reqwest::Error) -> Self {
-        Self(error)
-    }
+pub enum ClientBuildError {
+    #[error("failed to build HTTP client")]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -260,13 +264,13 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
+    pub(crate) fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
     }
 
     #[must_use]
-    pub fn platform(mut self, platform: &'a Platform) -> Self {
+    pub(crate) fn platform(mut self, platform: &'a Platform) -> Self {
         self.platform = Some(platform);
         self
     }
@@ -278,7 +282,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn indexes(mut self, indexes: Indexes) -> Self {
+    pub(crate) fn indexes(mut self, indexes: Indexes) -> Self {
         self.indexes = indexes;
         self
     }
@@ -360,7 +364,10 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// See [`CredentialsCache::store_credentials_from_url`].
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
@@ -430,7 +437,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
+    pub(crate) fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_client.clone()),
@@ -714,20 +721,22 @@ impl BaseClient {
     }
 
     /// Returns `true` if the host is trusted to use the insecure client.
-    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
+    fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
         self.allow_insecure_host
             .iter()
             .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
-    /// The configured client read timeout.
-    pub fn read_timeout(&self) -> Duration {
-        self.read_timeout
+    /// Return the [`GitHttpSettings`] for fetching from the given URL.
+    pub fn git_http_settings(&self, url: &DisplaySafeUrl) -> GitHttpSettings {
+        GitHttpSettings::default()
+            .with_disabled_ssl(self.disable_ssl(url))
+            .with_offline(self.connectivity().is_offline())
     }
 
-    /// The configured client connect timeout.
-    pub fn connect_timeout(&self) -> Duration {
-        self.connect_timeout
+    /// The configured client read timeout.
+    pub(crate) fn read_timeout(&self) -> Duration {
+        self.read_timeout
     }
 
     /// The configured connectivity mode.
@@ -740,7 +749,7 @@ impl BaseClient {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub fn credentials_cache(&self) -> &CredentialsCache {
+    pub(crate) fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
     }
 
@@ -778,12 +787,12 @@ impl RedirectClientWithMiddleware {
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
-    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
+    pub(crate) fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder<'_> {
         RequestBuilder::new(self.client.head(url), self)
     }
 
     /// Executes a request, applying the redirect policy.
-    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+    async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
         match self.redirect_policy {
             RedirectPolicy::BypassMiddleware => self.client.execute(req).await,
             RedirectPolicy::RetriggerMiddleware => self.execute_with_redirect_handling(req).await,
@@ -959,7 +968,9 @@ fn request_into_redirect(
     // Check if there are credentials on the redirect location itself.
     // If so, move them to Authorization header.
     if !redirect_url.username().is_empty() {
-        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+        if let Some(credentials) =
+            Credentials::from_url(&redirect_url).map_err(reqwest_middleware::Error::middleware)?
+        {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
             headers.insert(AUTHORIZATION, credentials.to_header_value());
@@ -1019,7 +1030,7 @@ pub struct RequestBuilder<'a> {
 }
 
 impl<'a> RequestBuilder<'a> {
-    pub fn new(
+    fn new(
         builder: reqwest_middleware::RequestBuilder,
         client: &'a RedirectClientWithMiddleware,
     ) -> Self {
@@ -1035,20 +1046,6 @@ impl<'a> RequestBuilder<'a> {
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         self.builder = self.builder.header(key, value);
-        self
-    }
-
-    /// Add a set of Headers to the existing ones on this Request.
-    ///
-    /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: HeaderMap) -> Self {
-        self.builder = self.builder.headers(headers);
-        self
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn version(mut self, version: reqwest::Version) -> Self {
-        self.builder = self.builder.version(version);
         self
     }
 

@@ -279,6 +279,15 @@ impl UniversalMarker {
         self.marker.is_false()
     }
 
+    /// Returns true if this universal marker contains a conflict marker.
+    ///
+    /// Conflict items are encoded as `extra` expressions in `marker`, while `pep508` is the same
+    /// canonical marker with all `extra` expressions removed. Since [`MarkerTree`] equality is
+    /// semantic, the trees differ exactly when the marker depends on a conflict item.
+    pub(crate) fn has_conflict_marker(self) -> bool {
+        self.marker != self.pep508
+    }
+
     /// Returns true if this universal marker is disjoint with the one given.
     ///
     /// Two universal markers are disjoint when it is impossible for them both
@@ -359,7 +368,7 @@ impl UniversalMarker {
     /// producing different versions of the same package), then one should
     /// always use a universal marker since it accounts for all possible ways
     /// for a package to be installed.
-    pub fn pep508(self) -> MarkerTree {
+    pub(crate) fn pep508(self) -> MarkerTree {
         self.pep508
     }
 
@@ -378,6 +387,35 @@ impl UniversalMarker {
         ConflictMarker {
             marker: self.marker.only_extras(),
         }
+    }
+
+    /// Returns the conflict marker that remains after evaluating all PEP 508 expressions in the
+    /// given environment.
+    ///
+    /// Unlike [`UniversalMarker::conflict`], this preserves the relationship between PEP 508 and
+    /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
+    /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
+    pub(crate) fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+        let mut remaining = MarkerTree::FALSE;
+
+        'conjunctions: for conjunction in self.marker.to_dnf() {
+            let mut conflict = MarkerTree::TRUE;
+            for expression in conjunction {
+                match expression {
+                    expression @ MarkerExpression::Extra { .. } => {
+                        conflict.and(MarkerTree::expression(expression));
+                    }
+                    expression => {
+                        if !MarkerTree::expression(expression).evaluate(env, &[]) {
+                            continue 'conjunctions;
+                        }
+                    }
+                }
+            }
+            remaining.or(conflict);
+        }
+
+        ConflictMarker { marker: remaining }
     }
 }
 
@@ -436,7 +474,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the production
     /// dependencies for the given package are activated.
-    pub fn project(package: &PackageName) -> Self {
+    fn project(package: &PackageName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_project(package));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -446,7 +484,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
-    pub fn extra(package: &PackageName, extra: &ExtraName) -> Self {
+    fn extra(package: &PackageName, extra: &ExtraName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -456,7 +494,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    pub fn group(package: &PackageName, group: &GroupName) -> Self {
+    fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -466,7 +504,7 @@ impl ConflictMarker {
 
     /// Returns a new conflict marker that is the negation of this one.
     #[must_use]
-    pub fn negate(self) -> Self {
+    pub(crate) fn negate(self) -> Self {
         Self {
             marker: self.marker.negate(),
         }
@@ -475,7 +513,7 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the union of `self` and
     /// `other`.
     #[must_use]
-    pub fn or(self, other: Self) -> Self {
+    fn or(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.or(other.marker);
         Self { marker }
@@ -484,32 +522,20 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
-    pub fn and(self, other: Self) -> Self {
+    pub(crate) fn and(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.and(other.marker);
         Self { marker }
     }
 
-    /// Returns a new conflict marker corresponding to the logical implication
-    /// of `self` and the given consequent.
-    ///
-    /// If the conflict marker returned is always `true`, then it can be said
-    /// that `self` implies `consequent`.
-    #[must_use]
-    pub fn implies(self, other: Self) -> Self {
-        let mut marker = self.marker;
-        marker.implies(other.marker);
-        Self { marker }
-    }
-
     /// Returns true if this conflict marker will always evaluate to `true`.
-    pub fn is_true(self) -> bool {
+    pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
     }
 
-    /// Returns true if this conflict marker will always evaluate to `false`.
-    pub fn is_false(self) -> bool {
-        self.marker.is_false()
+    /// Returns true if this conflict marker always evaluates to the same value.
+    pub(crate) fn is_constant(self) -> bool {
+        self.marker.is_true() || self.marker.is_false()
     }
 
     /// Returns inclusion and exclusion (respectively) conflict items parsed
@@ -1034,6 +1060,14 @@ mod tests {
         );
         dep_conflict_marker.imbibe(conflicts_marker);
         assert_eq!(format!("{dep_conflict_marker:?}"), "true");
+    }
+
+    #[test]
+    fn has_conflict_marker() {
+        let pep508 =
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker expression");
+        assert!(!UniversalMarker::from_combined(pep508).has_conflict_marker());
+        assert!(UniversalMarker::new(pep508, create_extra_marker("foo")).has_conflict_marker());
     }
 
     #[test]

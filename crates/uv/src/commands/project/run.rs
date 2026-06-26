@@ -45,7 +45,7 @@ use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_types::SourceTreeEditablePolicy;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::child::run_to_completion;
 
@@ -68,13 +68,13 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    EnvironmentSpecification, LinkErrorReporting, PreferenceLocation, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, script_extra_build_requires, script_specification,
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -165,41 +165,7 @@ pub(crate) async fn run(
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
 
-    // Read from the `.env` file, if necessary.
-    for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
-        match dotenvy::from_path(env_file_path) {
-            Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
-                bail!(
-                    "No environment file found at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::Io(err)) => {
-                bail!(
-                    "Failed to read environment file `{}`: {err}",
-                    env_file_path.simplified_display()
-                );
-            }
-            Err(dotenvy::Error::LineParse(content, position)) => {
-                warn_user!(
-                    "Failed to parse environment file `{}` at position {position}: {content}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Err(err) => {
-                warn_user!(
-                    "Failed to parse environment file `{}`: {err}",
-                    env_file_path.simplified_display(),
-                );
-            }
-            Ok(()) => {
-                debug!(
-                    "Read environment file at: `{}`",
-                    env_file_path.simplified_display()
-                );
-            }
-        }
-    }
+    let env_file_environment = read_env_files(env_file.iter())?;
 
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
@@ -250,7 +216,6 @@ pub(crate) async fn run(
                 &cache,
                 DryRun::Disabled,
                 printer,
-                preview,
             )
             .await?
             .into_environment()?;
@@ -319,7 +284,7 @@ pub(crate) async fn run(
                 &environment,
                 &extras.with_defaults(DefaultExtras::default()),
                 &groups.with_defaults(DefaultGroups::default()),
-                editable,
+                editable.clone(),
                 install_options,
                 modifications,
                 python_platform.as_ref(),
@@ -421,7 +386,6 @@ pub(crate) async fn run(
                     &cache,
                     DryRun::Disabled,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?;
@@ -507,7 +471,6 @@ pub(crate) async fn run(
                     active.map_or(Some(false), Some),
                     &cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -577,6 +540,7 @@ pub(crate) async fn run(
             let project = VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
                 package.clone(),
             )
@@ -586,6 +550,7 @@ pub(crate) async fn run(
             match VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions::default(),
+                &cache,
                 workspace_cache,
             )
             .await
@@ -598,20 +563,24 @@ pub(crate) async fn run(
                         Some(project)
                     }
                 }
-                Err(WorkspaceError::MissingPyprojectToml | WorkspaceError::NonWorkspace(_)) => {
-                    // If the user runs with `--no-project` and we can't find a project, warn.
-                    if no_project {
-                        warn!("`--no-project` was provided, but no project was found");
-                    }
-                    None
-                }
                 Err(err) => {
-                    // If the user runs with `--no-project`, ignore the error.
-                    if no_project {
-                        warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                    if matches!(
+                        err.as_ref(),
+                        WorkspaceErrorKind::MissingPyprojectToml
+                            | WorkspaceErrorKind::NonWorkspace(_)
+                    ) {
+                        if no_project {
+                            warn!("`--no-project` was provided, but no project was found");
+                        }
                         None
                     } else {
-                        return Err(err.into());
+                        // If the user runs with `--no-project`, ignore the error.
+                        if no_project {
+                            warn!("Ignoring project discovery error due to `--no-project`: {err}");
+                            None
+                        } else {
+                            return Err(err.into());
+                        }
                     }
                 }
             }
@@ -699,7 +668,6 @@ pub(crate) async fn run(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -744,8 +712,8 @@ pub(crate) async fn run(
                     active,
                     &cache,
                     DryRun::Disabled,
+                    LinkErrorReporting::Log,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_environment()?
@@ -941,7 +909,6 @@ pub(crate) async fn run(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
-                    preview,
                 )
                 .await?;
 
@@ -1298,6 +1265,7 @@ pub(crate) async fn run(
 
     debug!("Running `{command}`");
     let mut process = command.as_command(interpreter);
+    process.envs(env_file_environment);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1387,6 +1355,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
+        &spec.override_dependencies,
         InstallationStrategy::Permissive,
         &markers,
         tags,
@@ -1868,7 +1837,7 @@ impl RunCommand {
     }
 
     /// Return the directory containing the script, if any.
-    pub(crate) fn script_dir(&self) -> Option<&Path> {
+    fn script_dir(&self) -> Option<&Path> {
         let parent = match self {
             Self::PythonScript(target, _)
             | Self::PythonGuiScript(target, _)
@@ -2194,8 +2163,8 @@ fn copy_entrypoint(
 #[derive(Debug, thiserror::Error)]
 #[error("`uv run` was recursively invoked {depth} times which exceeds the limit of {max}")]
 pub(crate) struct RecursionLimitError {
-    pub(crate) depth: u32,
-    pub(crate) max: u32,
+    depth: u32,
+    max: u32,
 }
 
 impl uv_errors::Hint for RecursionLimitError {

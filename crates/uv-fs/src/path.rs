@@ -174,12 +174,12 @@ pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
 /// For example, `./a/../../b` cannot be normalized because it escapes the base directory.
 pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
+    let mut ret = components
+        .next_if_map_mut(|component| match component {
+            Component::Prefix(..) => Some(PathBuf::from(component.as_os_str())),
+            _ => None,
+        })
+        .unwrap_or_default();
 
     for component in components {
         match component {
@@ -362,6 +362,16 @@ pub fn relative_to(
     let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
+}
+
+/// Find the root of the nearest Git repository containing `path`.
+///
+/// A `.git` directory or file is treated as a repository marker to support both regular
+/// repositories and linked worktrees.
+pub fn find_git_repository_root(path: &Path) -> Option<&Path> {
+    // TODO: Consider supporting GIT_CEILING_DIRECTORIES here.
+    path.ancestors()
+        .find(|ancestor| ancestor.join(".git").exists())
 }
 
 /// Try to compute a path relative to `base` if `should_relativize` is true, otherwise return
@@ -609,6 +619,28 @@ impl AsRef<Path> for PortablePathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find_git_repository_root() -> std::io::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+
+        let repository = temp_dir.path().join("repository");
+        let nested = repository.join("packages/project");
+        fs_err::create_dir_all(repository.join(".git"))?;
+        fs_err::create_dir_all(&nested)?;
+        assert_eq!(
+            find_git_repository_root(&nested),
+            Some(repository.as_path())
+        );
+
+        let worktree = temp_dir.path().join("worktree");
+        let nested = worktree.join("packages/project");
+        fs_err::create_dir_all(&nested)?;
+        fs_err::write(worktree.join(".git"), "gitdir: ../repository/.git")?;
+        assert_eq!(find_git_repository_root(&nested), Some(worktree.as_path()));
+
+        Ok(())
+    }
 
     #[test]
     fn test_normalize_url() {

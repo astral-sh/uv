@@ -17,6 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
+use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
 use uv_preview::{Preview, PreviewFeature};
@@ -35,11 +36,11 @@ use uv_python::{
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
-use uv_warnings::{warn_user, write_error_chain};
+use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, elapsed};
+use crate::commands::{ExitStatus, conjunction, elapsed};
 use crate::printer::Printer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -938,11 +939,9 @@ async fn perform_install(
         {
             match kind {
                 InstallErrorKind::DownloadUnpack => {
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install {key}")).as_ref(),
-                        printer.stderr(),
-                        "error",
-                        AnsiColors::Red,
+                        ErrorOptions::default().with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Bin => {
@@ -952,12 +951,13 @@ async fn perform_install(
                         Some(true) => ("error", AnsiColors::Red),
                     };
 
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to install executable for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
                 InstallErrorKind::Registry => {
@@ -968,12 +968,13 @@ async fn perform_install(
                     };
 
                     trace!("Error trace: {err:?}");
-                    write_error_chain(
+                    write_error_chain_with_options(
                         err.context(format!("Failed to create registry entry for {key}"))
                             .as_ref(),
-                        printer.stderr(),
-                        level,
-                        color,
+                        ErrorOptions::default()
+                            .with_level(level)
+                            .with_color(color)
+                            .with_stream(printer.stderr()),
                     )?;
                 }
             }
@@ -1149,6 +1150,8 @@ fn create_bin_links(
         vec![installation.key().executable_name_minor()]
     };
 
+    let mut existing_unmanaged = Vec::new();
+
     for target in targets {
         let target = bin.join(target);
         if upgrade && !target.try_exists().unwrap_or_default() {
@@ -1224,14 +1227,8 @@ fn create_bin_links(
                                         installation.key().variant().display_suffix()
                                     );
                                 } else {
-                                    errors.push((
-                                        InstallErrorKind::Bin,
-                                        installation.key().clone(),
-                                        anyhow::anyhow!(
-                                            "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
-                                            target.simplified_display()
-                                        ),
-                                    ));
+                                    // Defer reporting to allow grouping.
+                                    existing_unmanaged.push(target.clone());
                                 }
                                 continue;
                             }
@@ -1355,6 +1352,33 @@ fn create_bin_links(
                 ));
             }
         }
+    }
+
+    match existing_unmanaged.as_slice() {
+        [] => {}
+        [executable] => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executable already exists at `{}` but is not managed by uv; use `--force` to replace it",
+                executable.simplified_display()
+            ),
+        )),
+        executables => errors.push((
+            InstallErrorKind::Bin,
+            installation.key().clone(),
+            anyhow::anyhow!(
+                "Executables {} already exist in `{}` but are not managed by uv; use `--force` to replace them",
+                conjunction(
+                    executables
+                        .iter()
+                        .filter_map(|path| path.file_name())
+                        .map(|name| format!("`{}`", name.to_string_lossy()))
+                        .collect(),
+                ),
+                bin.simplified_display()
+            ),
+        )),
     }
 }
 

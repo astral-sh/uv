@@ -554,7 +554,7 @@ impl From<&ParsedArchiveUrl> for DirectUrl {
 impl From<&ParsedGitDirectoryUrl> for DirectUrl {
     fn from(value: &ParsedGitDirectoryUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.repository().to_string(),
+            url: value.url.url().to_string(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
@@ -570,7 +570,7 @@ impl From<&ParsedGitDirectoryUrl> for DirectUrl {
 impl From<&ParsedGitPathUrl> for DirectUrl {
     fn from(value: &ParsedGitPathUrl) -> Self {
         Self::VcsUrl {
-            url: value.url.repository().to_string(),
+            url: value.url.url().to_string(),
             vcs_info: VcsInfo {
                 vcs: VcsKind::Git,
                 commit_id: value.url.precise().as_ref().map(ToString::to_string),
@@ -655,7 +655,7 @@ impl From<ParsedGitDirectoryUrl> for DisplaySafeUrl {
 mod tests {
     use anyhow::Result;
 
-    use crate::parsed_url::ParsedUrl;
+    use crate::{DirectUrl, parsed_url::ParsedUrl};
     use uv_redacted::DisplaySafeUrl;
 
     #[test]
@@ -692,6 +692,21 @@ mod tests {
         )?;
         let actual = DisplaySafeUrl::from(ParsedUrl::try_from(expected.clone())?);
         assert_ne!(expected, actual);
+
+        Ok(())
+    }
+
+    #[test]
+    fn direct_url_preserves_git_repository_url() -> Result<()> {
+        for expected in [
+            "git+ssh://git@github.com/pallets/flask.git",
+            "git+ssh://git@github.com/pallets/flask.git#path=dist/flask-1.0-py3-none-any.whl",
+        ] {
+            let expected = DisplaySafeUrl::parse(expected)?;
+            let parsed_url = ParsedUrl::try_from(expected.clone())?;
+            let actual = DisplaySafeUrl::try_from(&DirectUrl::from(&parsed_url))?;
+            assert_eq!(expected, actual);
+        }
 
         Ok(())
     }

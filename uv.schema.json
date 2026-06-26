@@ -185,10 +185,10 @@
       }
     },
     "exclude-newer": {
-      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+      "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.\n\nSet to `false` to disable `exclude-newer`.",
       "anyOf": [
         {
-          "$ref": "#/definitions/ExcludeNewerValue"
+          "$ref": "#/definitions/ExcludeNewerOverride"
         },
         {
           "type": "null"
@@ -400,10 +400,10 @@
       "type": ["boolean", "null"]
     },
     "override-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of that package. Requirements in `dependencies`\nreplace dependencies with the same name and add dependencies that are not declared by the\npackage. Dependencies not listed in `dependencies` are left unchanged.\n\nScoped overrides currently support registry version specifiers only. Direct URL and path\nsources, including Git sources, and explicit indexes are not supported.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/Override"
       }
     },
     "package": {
@@ -432,8 +432,20 @@
       ]
     },
     "preview": {
-      "description": "Whether to enable experimental, preview features.",
-      "type": ["boolean", "null"]
+      "description": "Whether to enable all experimental, preview features.\n\nUse `preview-features` instead.",
+      "type": ["boolean", "null"],
+      "deprecated": true
+    },
+    "preview-features": {
+      "description": "Whether to enable specific or all experimental preview features.\n\nUnknown feature names are ignored with a warning.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PreviewFeaturesOption"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
@@ -581,6 +593,9 @@
     }
   },
   "additionalProperties": false,
+  "not": {
+    "required": ["preview", "preview-features"]
+  },
   "definitions": {
     "AddBoundsKind": {
       "description": "The default version specifier when adding a dependency.",
@@ -1149,6 +1164,17 @@
         }
       ]
     },
+    "Override": {
+      "description": "An override, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageOverride"
+        },
+        {
+          "$ref": "#/definitions/Requirement"
+        }
+      ]
+    },
     "PackageConfigSettings": {
       "description": "Settings to pass to PEP 517 build backends on a per-package basis.",
       "type": "object",
@@ -1164,6 +1190,38 @@
       "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
+    "PackageOverride": {
+      "description": "An override that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageOverrideTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageOverrideTarget": {
+      "description": "The package and optional version selected by a [`PackageOverride`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",
@@ -1263,10 +1321,10 @@
           "type": ["boolean", "null"]
         },
         "exclude-newer": {
-          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.",
+          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nThe date is compared against the upload time of each individual distribution artifact\n(i.e., when each file was uploaded to the package index), not the release date of the\npackage version.\n\nAccepts RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`), a \"friendly\" duration (e.g.,\n`24 hours`, `1 week`, `30 days`), or an ISO 8601 duration (e.g., `PT24H`, `P7D`, `P30D`).\n\nDurations do not respect semantics of the local time zone and are always resolved to a fixed\nnumber of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).\nCalendar units such as months and years are not allowed.\n\nSet to `false` to disable `exclude-newer`.",
           "anyOf": [
             {
-              "$ref": "#/definitions/ExcludeNewerValue"
+              "$ref": "#/definitions/ExcludeNewerOverride"
             },
             {
               "type": "null"
@@ -1616,6 +1674,68 @@
           "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package\nhas an explicit pre-release marker in its version requirements.",
           "type": "string",
           "const": "if-necessary-or-explicit"
+        }
+      ]
+    },
+    "PreviewFeature": {
+      "type": "string",
+      "anyOf": [
+        {
+          "enum": [
+            "python-install-default",
+            "python-upgrade",
+            "json-output",
+            "pylock",
+            "add-bounds",
+            "package-conflicts",
+            "extra-build-dependencies",
+            "detect-module-conflicts",
+            "format-command",
+            "native-auth",
+            "s3-endpoint",
+            "cache-size",
+            "init-project-flag",
+            "workspace-metadata",
+            "workspace-dir",
+            "workspace-list",
+            "sbom-export",
+            "auth-helper",
+            "direct-publish",
+            "target-workspace-discovery",
+            "metadata-json",
+            "gcs-endpoint",
+            "adjust-ulimit",
+            "special-conda-env-names",
+            "relocatable-envs-default",
+            "publish-require-normalized",
+            "audit-command",
+            "project-directory-must-exist",
+            "index-exclude-newer",
+            "azure-endpoint",
+            "toml-backwards-compatibility",
+            "malware-check",
+            "venv-safe-clear",
+            "check-command",
+            "packaged-init",
+            "centralized-project-envs"
+          ]
+        },
+        {
+          "pattern": "\\S"
+        }
+      ]
+    },
+    "PreviewFeaturesOption": {
+      "description": "Represents the `preview-features` configuration option.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PreviewFeature"
+          }
         }
       ]
     },
@@ -2256,9 +2376,14 @@
           "const": "x86_64-linux-android"
         },
         {
-          "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.",
+          "description": "A wasm32 target using the Pyodide 2024 platform. Meant for use with Python 3.12.\nSee <https://pyodide.org/en/stable/development/abi/312.html>",
           "type": "string",
           "const": "wasm32-pyodide2024"
+        },
+        {
+          "description": "A wasm32 target using the Pyodide 2025 platform. Meant for use with Python 3.13.\nSee <https://pyodide.org/en/stable/development/abi/313.html>",
+          "type": "string",
+          "const": "wasm32-pyodide2025"
         },
         {
           "description": "An ARM64 target for iOS device\n\nBy default, iOS 13.0 is used, but respects the `IPHONEOS_DEPLOYMENT_TARGET`\nenvironment variable if set.",

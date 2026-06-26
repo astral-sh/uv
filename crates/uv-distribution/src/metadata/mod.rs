@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use uv_auth::CredentialsCache;
+use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{GitDirectorySourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -78,7 +79,7 @@ pub struct Metadata {
 impl Metadata {
     /// Lower without considering `tool.uv` in `pyproject.toml`, used for index and other archive
     /// dependencies.
-    pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
+    pub(crate) fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             name: metadata.name,
             version: metadata.version,
@@ -101,7 +102,8 @@ impl Metadata {
         locations: &IndexLocations,
         sources: NoSources,
         editable: bool,
-        cache: &WorkspaceCache,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
@@ -125,6 +127,7 @@ impl Metadata {
             sources,
             editable,
             cache,
+            workspace_cache,
             credentials_cache,
         )
         .await?;

@@ -21,7 +21,7 @@ pub enum IndexStatusCodeStrategy {
 impl IndexStatusCodeStrategy {
     /// Derive a strategy from an index URL. We special-case PyTorch. Otherwise,
     /// we follow the default strategy.
-    pub fn from_index_url(url: &Url) -> Self {
+    pub(crate) fn from_index_url(url: &Url) -> Self {
         if url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case("download.pytorch.org"))

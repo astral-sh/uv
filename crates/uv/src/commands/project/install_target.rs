@@ -6,11 +6,17 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
-use uv_distribution_types::Index;
+use uv_configuration::{
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions,
+};
+use uv_distribution_types::{Index, Resolution};
 use uv_normalize::{ExtraName, PackageName};
-use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
-use uv_resolver::{Installable, Lock, Package};
+use uv_platform_tags::Tags;
+use uv_pypi_types::{
+    DependencyGroupSpecifier, LenientRequirement, ResolverMarkerEnvironment, VerbatimParsedUrl,
+};
+use uv_resolver::{Installable, Lock, LockError, Package};
 use uv_scripts::Pep723Script;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
@@ -113,6 +119,56 @@ impl<'lock> Installable<'lock> for InstallTarget<'lock> {
 }
 
 impl<'lock> InstallTarget<'lock> {
+    /// Convert the target's locked packages to a [`Resolution`].
+    pub(crate) fn to_resolution(
+        self,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        extras: &ExtrasSpecificationWithDefaults,
+        groups: &DependencyGroupsWithDefaults,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+    ) -> Result<Resolution, LockError> {
+        // Package-backed project and workspace targets without conflicts can use concrete roots.
+        // Other targets need the generic path to include manifest dependencies or evaluate
+        // conflict markers from project roots.
+        let use_concrete_roots = self.lock().conflicts().is_empty()
+            && match self {
+                Self::Project { workspace, .. }
+                | Self::Projects { workspace, .. }
+                | Self::Workspace { workspace, .. } => !workspace.is_non_project(),
+                Self::NonProjectWorkspace { .. } | Self::Script { .. } => false,
+            };
+        if use_concrete_roots
+            && let Some(roots) = self
+                .roots()
+                .map(|root_name| self.lock().find_by_name(root_name).ok().flatten())
+                .collect::<Option<Vec<_>>>()
+        {
+            return self.lock().to_resolution(
+                self.install_path(),
+                roots,
+                self.project_name(),
+                marker_env,
+                tags,
+                extras,
+                groups,
+                build_options,
+                install_options,
+            );
+        }
+
+        Installable::to_resolution(
+            &self,
+            marker_env,
+            tags,
+            extras,
+            groups,
+            build_options,
+            install_options,
+        )
+    }
+
     /// Return an iterator over the [`Index`] definitions in the target.
     pub(crate) fn indexes(self) -> impl Iterator<Item = &'lock Index> {
         match self {

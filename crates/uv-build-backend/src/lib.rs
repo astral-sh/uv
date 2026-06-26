@@ -160,7 +160,7 @@ pub(crate) struct ListWriter<'a> {
 
 impl<'a> ListWriter<'a> {
     /// Convert the writer to the collected file names.
-    pub(crate) fn new(files: &'a mut FileList) -> Self {
+    fn new(files: &'a mut FileList) -> Self {
         Self { files }
     }
 }

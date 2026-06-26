@@ -17,7 +17,7 @@ use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{
     LockedFile, LockedFileError, LockedFileMode, Simplified, normalize_absolute_path,
-    replace_symlink, symlink_or_copy_file,
+    replace_symlink, symlink_or_copy_file, verbatim_path,
 };
 use uv_platform::{Error as PlatformError, Os};
 use uv_platform::{LibcDetectionError, Platform};
@@ -33,9 +33,7 @@ use crate::implementation::{
 use crate::installation::{self, PythonInstallationKey};
 use crate::interpreter::Interpreter;
 use crate::python_version::PythonVersion;
-use crate::{
-    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
-};
+use crate::{PythonInstallationMinorVersionKey, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -230,8 +228,7 @@ impl ManagedPythonInstallations {
             .filter(|path| {
                 path.file_name()
                     .and_then(OsStr::to_str)
-                    .map(|name| !name.starts_with('.'))
-                    .unwrap_or(true)
+                    .is_none_or(|name| !name.starts_with('.'))
             })
             .filter_map(|path| {
                 ManagedPythonInstallation::from_path(path)
@@ -327,7 +324,7 @@ impl ManagedPythonInstallation {
         }
     }
 
-    pub(crate) fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
 
         let key = PythonInstallationKey::from_str(
@@ -464,7 +461,7 @@ impl ManagedPythonInstallation {
     }
 
     /// The [`PythonVersion`] of the toolchain.
-    pub fn version(&self) -> PythonVersion {
+    pub(crate) fn version(&self) -> PythonVersion {
         self.key.version()
     }
 
@@ -485,7 +482,7 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
-    pub fn platform(&self) -> &Platform {
+    pub(crate) fn platform(&self) -> &Platform {
         self.key.platform()
     }
 
@@ -496,26 +493,6 @@ impl ManagedPythonInstallation {
 
     pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
         PythonInstallationMinorVersionKey::ref_cast(&self.key)
-    }
-
-    pub fn satisfies(&self, request: &PythonRequest) -> bool {
-        match request {
-            PythonRequest::File(path) => self.executable(false) == *path,
-            PythonRequest::Default | PythonRequest::Any => true,
-            PythonRequest::Directory(path) => self.path() == *path,
-            PythonRequest::ExecutableName(name) => self
-                .executable(false)
-                .file_name()
-                .is_some_and(|filename| filename.to_string_lossy() == *name),
-            PythonRequest::Implementation(implementation) => {
-                *implementation == self.implementation()
-            }
-            PythonRequest::ImplementationVersion(implementation, version) => {
-                *implementation == self.implementation() && version.matches_version(&self.version())
-            }
-            PythonRequest::Version(version) => version.matches_version(&self.version()),
-            PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
-        }
     }
 
     /// Ensure the environment contains the canonical Python executable names.
@@ -596,7 +573,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure that the `sysconfig` data is patched to match the installation path.
     pub fn ensure_sysconfig_patched(&self) -> Result<(), Error> {
-        if cfg!(unix) {
+        if cfg!(unix) && !self.key.os().is_windows() {
             if self.key.os().is_emscripten() {
                 // Emscripten's stdlib is a zip file so we can't update the
                 // sysconfig directly
@@ -713,11 +690,13 @@ impl ManagedPythonInstallation {
         true
     }
 
-    pub fn url(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn url(&self) -> Option<&str> {
         self.url.as_deref()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    #[cfg(windows)]
+    pub(crate) fn sha256(&self) -> Option<&str> {
         self.sha256.as_deref()
     }
 }
@@ -845,14 +824,17 @@ impl PythonMinorVersionLink {
     /// may exist but point to a different installation (e.g., after an upgrade), in which
     /// case we should not use the link for the current installation.
     pub fn exists(&self) -> bool {
+        let points_to_target = || {
+            fs_err::read_link(&self.symlink_directory)
+                .is_ok_and(|target| verbatim_path(&target) == verbatim_path(&self.target_directory))
+        };
+
         #[cfg(unix)]
         {
             self.symlink_directory
                 .symlink_metadata()
                 .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
+                && points_to_target()
         }
         #[cfg(windows)]
         {
@@ -863,24 +845,7 @@ impl PythonMinorVersionLink {
                     // is a symlink or junction.
                     (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
                 })
-                && self
-                    .read_target()
-                    .is_some_and(|target| target == self.target_directory)
-        }
-    }
-
-    /// Read the target of the minor version link.
-    ///
-    /// On Unix, this reads the symlink target. On Windows, this reads the directory link
-    /// target, whether uv created it as a junction or as a directory symlink under Wine.
-    fn read_target(&self) -> Option<PathBuf> {
-        #[cfg(unix)]
-        {
-            self.symlink_directory.read_link().ok()
-        }
-        #[cfg(windows)]
-        {
-            uv_fs::read_link(&self.symlink_directory).ok()
+                && points_to_target()
         }
     }
 }

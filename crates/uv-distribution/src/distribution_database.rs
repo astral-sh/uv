@@ -24,17 +24,18 @@ use uv_distribution_types::{
 };
 use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
+use uv_git::{GIT_LFS, GitError};
 use uv_install_wheel::validate_and_heal_record;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml};
+use uv_python::PythonVariant;
 use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 use uv_warnings::warn_user_once;
 
 use crate::archive::Archive;
-use uv_python::PythonVariant;
-
 use crate::error::PythonVersion;
+use crate::hash::http_hash_algorithms;
 use crate::metadata::{ArchiveMetadata, Metadata};
 use crate::source::SourceDistributionBuilder;
 use crate::{Error, LocalWheel, Reporter, RequiresDist};
@@ -366,12 +367,24 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .git()
                     .fetch(
                         &wheel.git,
-                        self.client.unmanaged.disable_ssl(wheel.git.url()),
-                        self.client.unmanaged.connectivity() == Connectivity::Offline,
+                        self.client.unmanaged.git_http_settings(wheel.git.url()),
                         self.build_context.cache().bucket(CacheBucket::Git),
                         self.reporter.clone().map(<dyn Reporter>::into_git_reporter),
                     )
                     .await?;
+
+                if wheel.git.lfs().enabled() && !fetch.lfs_ready() {
+                    if GIT_LFS.is_err() {
+                        return Err(Error::MissingWheelGitLfsArtifacts(
+                            wheel.url.to_url(),
+                            GitError::GitLfsNotFound,
+                        ));
+                    }
+                    return Err(Error::MissingWheelGitLfsArtifacts(
+                        wheel.url.to_url(),
+                        GitError::GitLfsNotConfigured,
+                    ));
+                }
 
                 let git_sha = fetch.git().precise().expect("Exact commit after checkout");
                 let cache_entry = self.build_context.cache().entry(
@@ -718,7 +731,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .into_async_read();
 
                 // Create a hasher for each hash algorithm.
-                let algorithms = hashes.algorithms();
+                let algorithms = http_hash_algorithms(hashes);
                 let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
                 let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
@@ -755,10 +768,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         }
                     },
                 };
-                // If necessary, exhaust the reader to compute the hash.
-                if !hashes.is_none() {
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                }
+                // Exhaust the reader to compute the hashes.
+                hasher.finish().await.map_err(Error::HashExhaustion)?;
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -878,8 +889,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // Create an entry for the HTTP cache.
         let http_entry = wheel_entry.with_file(format!("{}.http", filename.cache_key()));
 
-        let query_url = &url.clone();
-
         let download = |response: reqwest::Response| {
             async {
                 let size = size.or_else(|| content_length(&response));
@@ -893,6 +902,9 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .bytes_stream()
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
+                let algorithms = http_hash_algorithms(hashes);
+                let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
+                let mut hasher = uv_extract::hash::HashReader::new(reader.compat(), &mut hashers);
 
                 // Download the wheel to a temporary file.
                 let temp_file = tempfile::tempfile_in(self.build_context.cache().root())
@@ -904,18 +916,16 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 match progress {
                     Some((reporter, progress)) => {
-                        // Wrap the reader in a progress reporter. This will report 100% progress
-                        // after the download is complete, even if we still have to unzip and hash
-                        // part of the file.
-                        let mut reader =
-                            ProgressReader::new(reader.compat(), progress, &**reporter);
+                        // Wrap the reader in a progress reporter. This will report 100% progress once
+                        // the download is complete, before the wheel is unzipped.
+                        let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
 
                         tokio::io::copy(&mut reader, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
                     None => {
-                        tokio::io::copy(&mut reader.compat(), &mut writer)
+                        tokio::io::copy(&mut hasher, &mut writer)
                             .await
                             .map_err(Error::CacheWrite)?;
                     }
@@ -929,47 +939,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .await
                     .map_err(Error::CacheWrite)?;
 
-                // If no hashes are required, extract the wheel without hashing.
-                let (files, hashes) = if hashes.is_none() {
-                    let target = temp_dir.path().to_owned();
-                    let files = match extension {
-                        WheelExtension::Whl => {
-                            let file = file.into_std().await;
-                            tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
-                                .await?
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(file, &target).await
-                        }
+                let target = temp_dir.path().to_owned();
+                let files = match extension {
+                    WheelExtension::Whl => {
+                        let file = file.into_std().await;
+                        tokio::task::spawn_blocking(move || uv_extract::unzip(file, &target))
+                            .await?
                     }
-                    .map_err(|err| Error::Extract(filename.to_string(), err))?;
-
-                    (files, HashDigests::empty())
-                } else {
-                    // Create a hasher for each hash algorithm.
-                    let algorithms = hashes.algorithms();
-                    let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
-                    let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
-
-                    let files = match extension {
-                        WheelExtension::Whl => {
-                            uv_extract::stream::unzip(query_url, &mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?
-                        }
-                        WheelExtension::WhlZst => {
-                            uv_extract::stream::untar_zst(&mut hasher, temp_dir.path())
-                                .await
-                                .map_err(|err| Error::Extract(filename.to_string(), err))?
-                        }
-                    };
-
-                    // If necessary, exhaust the reader to compute the hash.
-                    hasher.finish().await.map_err(Error::HashExhaustion)?;
-                    let hashes = hashers.into_iter().map(HashDigest::from).collect();
-
-                    (files, hashes)
-                };
+                    WheelExtension::WhlZst => uv_extract::stream::untar_zst(file, &target).await,
+                }
+                .map_err(|err| Error::Extract(filename.to_string(), err))?;
+                let hashes = hashers.into_iter().map(HashDigest::from).collect();
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
@@ -1407,7 +1387,7 @@ impl PathArchivePointer {
     }
 
     /// Write an [`PathArchivePointer`] to the cache.
-    pub(crate) async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
+    async fn write_to(&self, entry: &CacheEntry) -> Result<(), Error> {
         write_atomic(entry.path(), rmp_serde::to_vec(&self)?)
             .await
             .map_err(Error::CacheWrite)

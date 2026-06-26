@@ -69,9 +69,13 @@ pub(crate) async fn tree(
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace =
-            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
-                .await?;
+        workspace = Workspace::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            &workspace_cache,
+        )
+        .await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -99,7 +103,6 @@ pub(crate) async fn tree(
                 Some(false),
                 cache,
                 printer,
-                preview,
             )
             .await?
             .into_interpreter(),
@@ -124,7 +127,6 @@ pub(crate) async fn tree(
                     Some(false),
                     cache,
                     printer,
-                    preview,
                 )
                 .await?
                 .into_interpreter()
@@ -224,6 +226,8 @@ pub(crate) async fn tree(
                 build_options: _,
                 sources: _,
                 torch_backend: _,
+                cuda_driver_version: _,
+                amd_gpu_architecture: _,
             } = &settings;
 
             let capabilities = IndexCapabilities::default();

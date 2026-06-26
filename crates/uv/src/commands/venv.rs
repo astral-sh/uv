@@ -6,6 +6,7 @@ use std::vec;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use thiserror::Error;
+use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -21,7 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -33,12 +34,17 @@ use uv_types::{
 };
 use uv_virtualenv::OnExisting;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
+use uv_workspace::{
+    DiscoveryOptions, ProjectEnvironmentSelection, VirtualProject, WorkspaceCache,
+    WorkspaceErrorKind,
+};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
-use crate::commands::project::{WorkspacePython, validate_project_requires_python};
+use crate::commands::project::{
+    WorkspacePython, lock_project_environment, validate_project_requires_python,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -91,41 +97,66 @@ pub(crate) async fn venv(
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), workspace_cache)
-            .await
+        match VirtualProject::discover(
+            project_dir,
+            &DiscoveryOptions::default(),
+            cache,
+            workspace_cache,
+        )
+        .await
         {
             Ok(project) => Some(project),
-            Err(WorkspaceError::MissingProject(_)) => None,
-            Err(WorkspaceError::MissingPyprojectToml) => None,
-            Err(WorkspaceError::NonWorkspace(_)) => None,
-            Err(WorkspaceError::Toml(path, err)) => {
-                warn_user!(
-                    "Failed to parse `{}` during environment creation:\n{}",
-                    path.user_display().cyan(),
-                    textwrap::indent(&err.to_string(), "  ")
-                );
-                None
-            }
             Err(err) => {
-                warn_user!("{err}");
+                match err.as_ref() {
+                    WorkspaceErrorKind::MissingProject(_)
+                    | WorkspaceErrorKind::MissingPyprojectToml
+                    | WorkspaceErrorKind::NonWorkspace(_) => {}
+                    WorkspaceErrorKind::Toml(path, err) => {
+                        warn_user!(
+                            "Failed to parse `{}` during environment creation:\n{}",
+                            path.user_display().cyan(),
+                            textwrap::indent(&err.to_string(), "  ")
+                        );
+                    }
+                    _ => warn_user!("{err}"),
+                }
                 None
             }
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
-            .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+    // Only use the project environment path if we're invoked from the root with no explicit path.
+    // This isn't strictly necessary and we may want to change it later, but this avoids a breaking
+    // change when adding project environment support to `uv venv`.
+    let project_environment = project
+        .as_ref()
+        .map(VirtualProject::workspace)
+        .filter(|workspace| path.is_none() && workspace.install_path() == project_dir);
+
+    let project_environment_selection =
+        project_environment.map(|workspace| workspace.environment_selection(Some(false)));
+
+    if project_environment_selection
+        .as_ref()
+        .is_some_and(ProjectEnvironmentSelection::is_default)
+        && preview.is_enabled(PreviewFeature::CentralizedProjectEnvs)
+    {
+        warn_user!(
+            "The `centralized-project-envs` preview feature currently has no effect on `uv venv`"
+        );
+    }
+
+    // Determine the default path; either the virtual environment for the project or `.venv`.
+    let path = path.unwrap_or_else(|| {
+        project_environment_selection.map_or_else(
+            || PathBuf::from(".venv"),
+            |selection| {
+                selection
+                    .explicit_path()
+                    .map_or_else(|| project_dir.join(".venv"), Path::to_path_buf)
+            },
+        )
+    });
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -162,7 +193,6 @@ pub(crate) async fn venv(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
-            preview,
         )
         .await?;
         report_interpreter(&python, false, printer)?;
@@ -195,6 +225,18 @@ pub(crate) async fn venv(
     let upgradeable = python_request
         .as_ref()
         .is_none_or(|request| !request.includes_patch());
+
+    // Lock the project environment to avoid synchronization issues.
+    let _lock = if let Some(workspace) = project_environment {
+        lock_project_environment(workspace)
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire project environment lock: {err}");
+            })
+            .ok()
+    } else {
+        None
+    };
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(

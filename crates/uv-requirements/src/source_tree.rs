@@ -29,7 +29,7 @@ pub enum SourceTree {
 
 impl SourceTree {
     /// Return the [`Path`] to the file representing the source tree (e.g., the `pyproject.toml`).
-    pub fn path(&self) -> &Path {
+    fn path(&self) -> &Path {
         match self {
             Self::PyProjectToml(path, ..) => path,
             Self::SetupPy(path) => path,
@@ -38,7 +38,7 @@ impl SourceTree {
     }
 
     /// Return the [`PyProjectToml`] if this is a `pyproject.toml`-based source tree.
-    pub fn pyproject_toml(&self) -> Option<&PyProjectToml> {
+    fn pyproject_toml(&self) -> Option<&PyProjectToml> {
         match self {
             Self::PyProjectToml(.., toml) => Some(toml),
             _ => None,

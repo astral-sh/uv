@@ -26,8 +26,8 @@ use url::Url;
 use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive, RegistryClientBuilder,
-    RequestBuilder, RetryParsingError, RetryState,
+    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
+    RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -78,6 +78,8 @@ pub enum PublishError {
     MixedCredentials(String),
     #[error("Failed to query check URL")]
     CheckUrlIndex(#[source] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] ClientBuildError),
     #[error(
         "Local file and index file do not match for {filename}. \
         Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
@@ -962,7 +964,7 @@ pub async fn check_url(
     let registry_client = registry_client_builder
         .clone()
         .cache(cache_refresh)
-        .wrap_existing(client);
+        .wrap_existing(client)?;
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
@@ -1179,6 +1181,22 @@ impl FormMetadata {
             .find(|hash| hash.algorithm == HashAlgorithm::Blake2b)
             .unwrap();
 
+        let metadata = metadata(file, filename).await?;
+
+        Ok(Self::from_metadata(
+            metadata,
+            filename,
+            sha256_hash,
+            blake2b_hash,
+        ))
+    }
+
+    fn from_metadata(
+        metadata: Metadata23,
+        filename: &DistFilename,
+        sha256_hash: &HashDigest,
+        blake2b_hash: &HashDigest,
+    ) -> Self {
         let Metadata23 {
             metadata_version,
             name,
@@ -1207,8 +1225,10 @@ impl FormMetadata {
             requires_external,
             project_urls,
             provides_extra,
+            import_names,
+            import_namespaces,
             dynamic,
-        } = metadata(file, filename).await?;
+        } = metadata;
 
         let mut form_metadata = vec![
             (":action", "file_upload".to_string()),
@@ -1269,10 +1289,12 @@ impl FormMetadata {
         add_vec("project_urls", project_urls.to_vec_str());
         add_vec("provides_dist", provides_dist);
         add_vec("provides_extra", provides_extra);
+        add_vec("import_names", import_names);
+        add_vec("import_namespaces", import_namespaces);
         add_vec("requires_dist", requires_dist);
         add_vec("requires_external", requires_external);
 
-        Ok(Self(form_metadata))
+        Self(form_metadata)
     }
 
     /// Returns an iterator over the metadata fields.
@@ -1512,6 +1534,7 @@ mod tests {
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
+    use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
@@ -1519,8 +1542,7 @@ mod tests {
         group_files, upload,
     };
     use tokio::sync::Semaphore;
-    use uv_warnings::owo_colors::AnsiColors;
-    use uv_warnings::write_error_chain;
+    use uv_errors::{ErrorOptions, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -1565,7 +1587,7 @@ mod tests {
             .expect("failed to build base client");
 
         let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri())).unwrap();
         upload(
             &group,
             &form_metadata,
@@ -1857,6 +1879,45 @@ mod tests {
             ]
             "#);
         }
+    }
+
+    #[test]
+    fn form_metadata_import_names() {
+        let filename = DistFilename::try_from_normalized_filename("pkg-1.0.0.tar.gz").unwrap();
+        let sha256_hash: HashDigest = "sha256:0123".parse().unwrap();
+        let blake2b_hash: HashDigest = "blake2b:4567".parse().unwrap();
+        let metadata = Metadata23 {
+            metadata_version: "2.5".to_string(),
+            name: "pkg".to_string(),
+            version: "1.0.0".to_string(),
+            requires_python: Some(">=3.12".to_string()),
+            import_names: vec!["spam".to_string(), "spam.eggs; private".to_string()],
+            import_namespaces: vec!["zope".to_string()],
+            ..Default::default()
+        };
+
+        let form_metadata =
+            FormMetadata::from_metadata(metadata, &filename, &sha256_hash, &blake2b_hash);
+        let formatted_metadata = form_metadata
+            .iter()
+            .map(|(key, value)| format!("{key}: {value}"))
+            .join("\n");
+
+        assert_snapshot!(formatted_metadata, @r###"
+        :action: file_upload
+        sha256_digest: 0123
+        blake2_256_digest: 4567
+        protocol_version: 1
+        metadata_version: 2.5
+        name: pkg
+        version: 1.0.0
+        filetype: sdist
+        pyversion: source
+        requires_python: >=3.12
+        import_names: spam
+        import_names: spam.eggs; private
+        import_namespaces: zope
+        "###);
     }
 
     /// Snapshot the data we send for an upload request for a source distribution.
@@ -2154,7 +2215,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2174,7 +2235,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2182,7 +2243,7 @@ mod tests {
             .and(path("/final/"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2190,7 +2251,8 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
+            .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2218,7 +2280,8 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
+            .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2251,7 +2314,8 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
+            .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2287,7 +2351,8 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain(&err, &mut capture, "error", AnsiColors::Red).unwrap();
+        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
+            .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);

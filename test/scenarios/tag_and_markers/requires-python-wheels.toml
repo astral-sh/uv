@@ -1,0 +1,19 @@
+name = "requires-python-wheels"
+description = "Check that we only include wheels that match the required Python version"
+
+[root]
+requires_python = ">=3.10"
+requires = ["a==1.0.0"]
+
+[expected]
+satisfiable = true
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.10"
+wheel_tags = ["cp311-cp311-any", "cp310-cp310-any", "cp39-cp39-any"]
+
+[resolver_options]
+universal = true
+
+[environment]
+python = "3.12"
