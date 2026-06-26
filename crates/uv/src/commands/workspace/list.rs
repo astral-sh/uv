@@ -65,6 +65,9 @@ pub(crate) async fn list(
 }
 
 /// Find PEP 723 scripts under a workspace root.
+///
+/// Respects ignore files and excludes repository internals, virtual environments, and the uv cache
+/// from traversal.
 fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     // Avoid descending into the cache when it is inside the workspace. If the workspace itself is
     // inside the cache, it is still the requested search root and must not be excluded.
@@ -143,7 +146,12 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     Ok(scripts)
 }
 
-/// Return whether a path can represent a Python script.
+/// Return whether a path uses a conventional Python script filename.
+///
+/// PEP 723 does not require a specific filename, and uv can run explicitly requested scripts with
+/// arbitrary extensions. For discovery, restrict the search to Python extensions and extensionless
+/// files to avoid treating metadata examples embedded in documentation as scripts. This could be
+/// expanded if arbitrary script filenames can be distinguished without introducing false positives.
 fn is_python_script_path(path: &Path) -> bool {
     path.extension().is_none_or(|extension| {
         extension.to_str().is_some_and(|extension| {
