@@ -882,11 +882,13 @@ pub(crate) fn write_record(
 ///
 /// This function is given both the location of the unpacked wheel and the list of files from the
 /// wheel that were unpacked to avoid a walkdir for this check.
+///
+/// Returns `true` if the `RECORD` file was rewritten.
 pub fn validate_and_heal_record<'a>(
     wheel_dir: &Path,
     unpacked_wheel: impl IntoIterator<Item = &'a (PathBuf, u64)>,
     dist: impl Display,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     // On the filesystem: The unpacked files of the wheel.
     let mut files: BTreeMap<&Path, u64> = unpacked_wheel
         .into_iter()
@@ -943,7 +945,8 @@ pub fn validate_and_heal_record<'a>(
                 .join("`, `")
         );
     }
-    if !extra_record_entries.is_empty() || !files.is_empty() {
+    let healed = !extra_record_entries.is_empty() || !files.is_empty();
+    if healed {
         debug!("Rewriting RECORD to match actual wheel contents for {dist}");
         // We already removed RECORD entries with no matching unpacked file, now add files that
         // were unpacked but not listed in the archive.
@@ -962,7 +965,7 @@ pub fn validate_and_heal_record<'a>(
         write_record(wheel_dir, &dist_info_prefix, record)?;
     }
 
-    Ok(())
+    Ok(healed)
 }
 
 /// Parse a file with email message format such as WHEEL and METADATA
