@@ -1,6 +1,6 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -231,4 +231,114 @@ fn workspace_list_no_project() {
     error: No `pyproject.toml` found in current directory or any parent directory
     "
     );
+}
+
+/// Test recursively listing PEP 723 scripts while respecting ignore rules and environment
+/// boundaries.
+#[test]
+fn workspace_list_scripts() -> Result<()> {
+    let mut context = uv_test::test_context!("3.12");
+
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+
+    let script = r"# /// script
+# dependencies = []
+# ///
+";
+
+    project.child("script.py").write_str(script)?;
+    project.child("scripts/nested.py").write_str(script)?;
+    project.child(".github/hidden.py").write_str(script)?;
+
+    // Extensionless scripts are not discovered.
+    project.child("tool").write_str(script)?;
+
+    // PEP 723 examples in documentation are not Python scripts.
+    project
+        .child("docs/example.md")
+        .write_str(&format!("# Example\n\n{script}\n{script}"))?;
+
+    // Regular Python modules are not scripts.
+    project
+        .child("src/project/module.py")
+        .write_str("VALUE = 1\n")?;
+
+    project.child(".gitignore").write_str("ignored/\n")?;
+    project.child("ignored/script.py").write_str(script)?;
+    project
+        .child(".ignore")
+        .write_str("ignored-by-dot-ignore.py\n")?;
+    project
+        .child("ignored-by-dot-ignore.py")
+        .write_str(script)?;
+
+    project.child(".git/script.py").write_str(script)?;
+    project.child(".venv/script.py").write_str(script)?;
+    project.child("environment/pyvenv.cfg").write_str("")?;
+    project.child("environment/script.py").write_str(script)?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--paths")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    // The configured cache is excluded even when it has not been initialized with ignore files.
+    let cache = project.child("cache");
+    cache.child("script.py").write_str(script)?;
+    context.cache_dir = cache;
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    Ok(())
 }
