@@ -1268,6 +1268,20 @@ impl MarkerTree {
         )
     }
 
+    /// Restrict this marker by assuming that `assumption` is true.
+    ///
+    /// The returned marker is equivalent to this marker wherever `assumption` is true, but may
+    /// have a different value outside of that context. Before evaluating the simplified marker,
+    /// callers should conjoin `assumption` to restore its standalone meaning.
+    ///
+    /// For example, restricting
+    /// `sys_platform == 'linux' and python_version < '3.11'` under the assumption
+    /// `sys_platform == 'linux'` produces `python_version < '3.11'`.
+    #[must_use]
+    pub fn restrict(self, assumption: Self) -> Self {
+        Self(INTERNER.lock().restrict(self.0, assumption.0))
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided extras will be removed.
@@ -1402,14 +1416,14 @@ impl MarkerTree {
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
-        Self(INTERNER.lock().restrict(self.0, &|var| match var {
+        Self(INTERNER.lock().restrict_by(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
             _ => None,
         }))
     }
 
     fn simplify_not_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
-        Self(INTERNER.lock().restrict(self.0, &|var| match var {
+        Self(INTERNER.lock().restrict_by(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(false),
             _ => None,
         }))
@@ -1946,6 +1960,57 @@ mod test {
                 .unwrap(),
             "python_full_version <= '3.12.1'"
         );
+    }
+
+    #[test]
+    fn restrict() {
+        let environment = m(
+            "(platform_machine == 'x86_64' and sys_platform == 'darwin') or \
+             (platform_machine == 'x86_64' and sys_platform == 'linux') or \
+             (platform_machine == 'AMD64' and sys_platform == 'win32')",
+        );
+        let marker = m(
+            "((platform_machine == 'x86_64' and sys_platform == 'darwin') or \
+             (platform_machine == 'x86_64' and sys_platform == 'linux') or \
+             (platform_machine == 'AMD64' and sys_platform == 'win32')) and \
+             python_version < '3.11'",
+        );
+
+        let simplified = marker.restrict(environment);
+        assert_eq!(simplified, m("python_version < '3.11'"));
+
+        let mut reconstructed = simplified;
+        reconstructed.and(environment);
+        assert_eq!(reconstructed, marker);
+        assert_eq!(environment.restrict(environment), MarkerTree::TRUE);
+
+        let marker = m("python_version >= '3.12'");
+        let assumption = m("sys_platform == 'linux' or python_version >= '3.12'");
+        assert_eq!(marker.restrict(assumption), marker);
+
+        for (marker, assumption) in [
+            ("python_version < '3.11'", "sys_platform == 'linux'"),
+            ("sys_platform == 'linux'", "python_version < '3.11'"),
+            (
+                "sys_platform == 'linux' or python_version < '3.11'",
+                "sys_platform == 'darwin' or python_version >= '3.10'",
+            ),
+            (
+                "extra == 'foo' and sys_platform == 'linux'",
+                "extra == 'foo' or sys_platform == 'darwin'",
+            ),
+            ("python_version < '3.11'", "python_version >= '3.12'"),
+        ] {
+            let marker = m(marker);
+            let assumption = m(assumption);
+            let simplified = marker.restrict(assumption);
+
+            let mut expected = marker;
+            expected.and(assumption);
+            let mut reconstructed = simplified;
+            reconstructed.and(assumption);
+            assert_eq!(reconstructed, expected);
+        }
     }
 
     #[test]

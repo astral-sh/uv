@@ -612,6 +612,11 @@ impl SimplifiedMarkerTree {
     pub fn as_simplified_marker_tree(self) -> MarkerTree {
         self.0
     }
+
+    /// Combine this simplified marker with another via a conjunction.
+    pub fn and(&mut self, marker: Self) {
+        self.0.and(marker.0);
+    }
 }
 
 #[cfg(test)]

@@ -1195,14 +1195,7 @@ impl Lock {
 
     /// The marker describing the universe of this resolution.
     fn fork_markers_union(&self) -> MarkerTree {
-        if self.fork_markers.is_empty() {
-            return self.requires_python.to_marker_tree();
-        }
-        let mut fork_markers_union = MarkerTree::FALSE;
-        for fork_marker in &self.fork_markers {
-            fork_markers_union.or(fork_marker.pep508());
-        }
-        fork_markers_union
+        fork_markers_union(&self.fork_markers, &self.requires_python)
     }
 
     /// Checks whether the fork markers cover the entire supported marker space.
@@ -2901,10 +2894,20 @@ impl TryFrom<LockWire> for Lock {
             unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
         }
 
+        let fork_markers = wire
+            .fork_markers
+            .into_iter()
+            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
+            .map(UniversalMarker::from_combined)
+            .collect::<Vec<_>>();
+        let environment = SimplifiedMarkerTree::new(
+            &wire.requires_python,
+            fork_markers_union(&fork_markers, &wire.requires_python),
+        );
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| dist.unwire(&wire.requires_python, &unambiguous_package_ids))
+            .map(|dist| dist.unwire(&wire.requires_python, environment, &unambiguous_package_ids))
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -2915,12 +2918,6 @@ impl TryFrom<LockWire> for Lock {
             .required_environments
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            .collect();
-        let fork_markers = wire
-            .fork_markers
-            .into_iter()
-            .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
-            .map(UniversalMarker::from_combined)
             .collect();
         let mut options = wire.options;
         if options.exclude_newer.exclude_newer_span.is_some() {
@@ -3999,6 +3996,7 @@ impl PackageWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
+        environment: SimplifiedMarkerTree,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
@@ -4022,7 +4020,7 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
+                .map(|dep| dep.unwire(requires_python, environment, unambiguous_package_ids))
                 .collect()
         };
 
@@ -5730,13 +5728,12 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        // Avoid writing edge markers that are always fulfilled.
-        if !self
+        // Avoid restating the resolution's environment on every dependency edge.
+        if let Some(marker) = self
             .simplified_marker
             .as_simplified_marker_tree()
-            .negate()
-            .is_disjoint(simplified_environment)
-            && let Some(marker) = self.simplified_marker.try_to_string()
+            .restrict(simplified_environment)
+            .try_to_string()
         {
             table.insert("marker", value(marker));
         }
@@ -5793,13 +5790,16 @@ impl DependencyWire {
     fn unwire(
         self,
         requires_python: &RequiresPython,
+        environment: SimplifiedMarkerTree,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let complexified_marker = self.marker.into_marker(requires_python);
+        let mut simplified_marker = self.marker;
+        simplified_marker.and(environment);
+        let complexified_marker = simplified_marker.into_marker(requires_python);
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
-            simplified_marker: self.marker,
+            simplified_marker,
             complexified_marker: UniversalMarker::from_combined(complexified_marker),
         })
     }
@@ -6946,6 +6946,21 @@ fn each_element_on_its_line_array(elements: impl Iterator<Item = impl Into<Value
     // The line break between the last element's comma and the closing square bracket.
     array.set_trailing("\n");
     array
+}
+
+/// Return the PEP 508 marker space covered by the resolution.
+fn fork_markers_union(
+    fork_markers: &[UniversalMarker],
+    requires_python: &RequiresPython,
+) -> MarkerTree {
+    if fork_markers.is_empty() {
+        return requires_python.to_marker_tree();
+    }
+    let mut environment = MarkerTree::FALSE;
+    for fork_marker in fork_markers {
+        environment.or(fork_marker.pep508());
+    }
+    environment
 }
 
 /// Returns the simplified string-ified version of each marker given.
