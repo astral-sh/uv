@@ -42,12 +42,23 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           version: "0.11.25"
-      - run: |
-          uvx ty check python/uv
-          uvx \
-            --directory crates/uv-python \
-            --with-requirements fetch-download-metadata.py \
-            ty check --python-version 3.13 fetch-download-metadata.py
+      # `uv check` checks the entire repository; keep this scoped to the Python package.
+      - run: uvx ty check python/uv
+      - name: "Check scrolls"
+        env:
+          # Let ty infer the Python version from each script environment instead of the root project.
+          TY_CONFIG_FILE: /dev/null
+        run: |
+          # TODO: Replace this with `uv workspace list-scripts` once available.
+          mapfile -t scripts < <(git grep -l '^# /// script$' -- '*.py')
+          for script in "${scripts[@]}"; do
+            echo "Checking ${script}"
+            check_args=(--script "${script}")
+            if [[ -f "${script}.lock" ]]; then
+              check_args+=(--locked)
+            fi
+            uv --preview-features check-command check "${check_args[@]}"
+          done
 
   shellcheck:
     timeout-minutes: 10
