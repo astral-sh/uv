@@ -23,8 +23,15 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
+[[bench]]
+name = "invocation"
+path = "benches/invocation.rs"
+harness = false
+
 [dev-dependencies]
+uv = { path = "../uv", default-features = false, features = ["benchmark"] }
 uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
@@ -47,6 +54,7 @@ uv-workspace = { workspace = true }
 anyhow = { workspace = true }
 async_zip = { workspace = true }
 astral-tokio-tar = { workspace = true }
+clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
