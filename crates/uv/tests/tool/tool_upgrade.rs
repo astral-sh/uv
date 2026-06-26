@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -610,7 +610,7 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -686,7 +686,8 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -702,7 +703,7 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 }
 
 #[test]
-fn tool_upgrade_migrates_lockless_receipt_with_installed_preferences() -> Result<()> {
+fn tool_upgrade_migrates_missing_lock_with_installed_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -722,12 +723,7 @@ fn tool_upgrade_migrates_lockless_receipt_with_installed_preferences() -> Result
         .assert()
         .success();
 
-    let receipt_path = tool_dir.child("black").child("uv-receipt.toml");
-    let receipt = fs_err::read_to_string(&receipt_path)?;
-    let (_, tool_receipt) = receipt
-        .split_once("\n[tool]\n")
-        .context("expected the tool receipt to contain a tool section")?;
-    receipt_path.write_str(&format!("[tool]\n{tool_receipt}"))?;
+    fs_err::remove_file(tool_dir.child("black").child("uv.lock"))?;
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("black")
@@ -1776,7 +1772,7 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     }, {
         // Verify the receipt has `authenticate = "always"` (promoted from "auto" because the
         // original URL had embedded credentials).
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -1795,7 +1791,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         wheels = [
             { url = "http://[LOCALHOST]/basic-auth/files/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [

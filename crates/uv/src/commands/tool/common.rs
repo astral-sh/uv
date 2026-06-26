@@ -295,8 +295,8 @@ pub(crate) fn normalize_tool_local_requirements(
         .collect()
 }
 
-/// Build the lock manifest for a tool receipt.
-pub(crate) fn tool_receipt_manifest(
+/// Build the lock manifest for a tool environment.
+pub(crate) fn tool_lock_manifest(
     requirements: &[Requirement],
     constraints: &[Requirement],
     overrides: &[Requirement],
@@ -315,8 +315,8 @@ pub(crate) fn tool_receipt_manifest(
     )
 }
 
-/// Build the receipt lock for a tool environment.
-pub(crate) fn tool_receipt_lock(
+/// Build the lock for a tool environment.
+pub(crate) fn tool_lock(
     root: &Path,
     resolution: &ResolverOutput,
     manifest: &ResolverManifest,
@@ -325,19 +325,19 @@ pub(crate) fn tool_receipt_lock(
         Ok(lock) => match manifest.clone().relative_to(root) {
             Ok(manifest) => Some(lock.with_manifest(manifest)),
             Err(err) => {
-                debug!("Failed to relativize tool receipt lock manifest: {err}");
+                debug!("Failed to relativize tool lock manifest: {err}");
                 None
             }
         },
         Err(err) => {
-            debug!("Failed to build tool receipt lock: {err}");
+            debug!("Failed to build tool lock: {err}");
             None
         }
     }
 }
 
-/// Build an environment specification for a tool, preferring versions from the existing receipt
-/// lock when available, then falling back to the installed environment.
+/// Build an environment specification for a tool, preferring versions from its existing lock when
+/// available, then falling back to the installed environment.
 pub(crate) fn tool_environment_spec<'lock>(
     requirements: RequirementsSpecification,
     tool: Option<&'lock Tool>,

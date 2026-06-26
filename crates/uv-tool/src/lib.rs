@@ -16,6 +16,7 @@ use uv_installer::SitePackages;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
+use uv_resolver::Lock;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 
@@ -70,6 +71,8 @@ pub enum Error {
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
     ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
+    #[error("Failed to update `uv.lock` at {0}")]
+    LockWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
@@ -98,6 +101,7 @@ impl Error {
             Self::VirtualEnvError(uv_virtualenv::Error::Io(err)) => Some(err),
             Self::ReceiptWrite(_, _)
             | Self::ReceiptRead(_, _)
+            | Self::LockWrite(_, _)
             | Self::VirtualEnvError(_)
             | Self::EntrypointRead(_)
             | Self::NoExecutableDirectory
@@ -146,6 +150,32 @@ impl InstalledTools {
         self.root.join(name.to_string())
     }
 
+    /// Read the lock for a tool, if it has been generated and still matches its receipt.
+    fn read_lock(directory: &Path, tool: &Tool) -> Result<Option<Lock>, Error> {
+        let path = directory.join("uv.lock");
+        match fs_err::read_to_string(&path) {
+            Ok(contents) => match toml::from_str::<Lock>(&contents) {
+                Ok(lock) if tool.matches_lock(&lock, directory) => Ok(Some(lock)),
+                Ok(_) => {
+                    debug!(
+                        "Ignoring tool lock at `{}` because it does not match its receipt",
+                        path.user_display()
+                    );
+                    Ok(None)
+                }
+                Err(err) => {
+                    debug!(
+                        "Ignoring invalid tool lock at `{}`: {err}",
+                        path.user_display()
+                    );
+                    Ok(None)
+                }
+            },
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Return the metadata for all installed tools.
     ///
     /// If a tool is present, but is missing a receipt or the receipt is invalid, the tool will be
@@ -174,7 +204,13 @@ impl InstalledTools {
                 Err(err) => return Err(err.into()),
             };
             match ToolReceipt::from_string(contents) {
-                Ok(tool_receipt) => tools.push((name, Ok(tool_receipt.tool))),
+                Ok(tool_receipt) => {
+                    let tool = tool_receipt.tool;
+                    tools.push((
+                        name,
+                        Self::read_lock(&directory, &tool).map(|lock| tool.with_lock(lock)),
+                    ));
+                }
                 Err(err) => {
                     let err = Error::ReceiptRead(path, Box::new(err));
                     tools.push((name, Err(err)));
@@ -191,9 +227,14 @@ impl InstalledTools {
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
-        let path = self.tool_dir(name).join("uv-receipt.toml");
+        let directory = self.tool_dir(name);
+        let path = directory.join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
-            Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
+            Ok(tool_receipt) => {
+                let tool = tool_receipt.tool;
+                let lock = Self::read_lock(&directory, &tool)?;
+                Ok(Some(tool.with_lock(lock)))
+            }
             Err(Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(err) => Err(err),
         }
@@ -215,6 +256,12 @@ impl InstalledTools {
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
+        let lock_path = self.tool_dir(name).join("uv.lock");
+        let lock = tool
+            .lock()
+            .map(Lock::to_toml)
+            .transpose()
+            .map_err(|err| Error::LockWrite(lock_path.clone(), Box::new(err)))?;
         let tool_receipt = ToolReceipt::from(tool);
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
@@ -227,8 +274,17 @@ impl InstalledTools {
             .to_toml()
             .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
-        // Save the modified `uv-receipt.toml`.
-        fs_err::write(&path, doc)?;
+        // Store the derived lock before making its authoritative receipt visible.
+        match lock {
+            Some(lock) => uv_fs::write_atomic_sync(&lock_path, lock)?,
+            None => match fs_err::remove_file(&lock_path) {
+                Ok(()) => (),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err.into()),
+            },
+        }
+
+        uv_fs::write_atomic_sync(&path, doc)?;
 
         Ok(())
     }

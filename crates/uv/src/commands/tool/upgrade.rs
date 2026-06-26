@@ -34,8 +34,8 @@ use crate::commands::pip::{operations::Modifications, resolution_tags};
 use crate::commands::project::{PlatformState, resolve_environment, sync_environment};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
-    normalize_tool_local_requirements, remove_entrypoints, tool_environment_spec,
-    tool_receipt_lock, tool_receipt_manifest,
+    normalize_tool_local_requirements, remove_entrypoints, tool_environment_spec, tool_lock,
+    tool_lock_manifest,
 };
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
@@ -329,7 +329,7 @@ async fn upgrade_tool(
         )
         .into_iter(),
     );
-    let receipt_manifest = tool_receipt_manifest(
+    let lock_manifest = tool_lock_manifest(
         existing_tool_receipt.requirements(),
         existing_tool_receipt.constraints(),
         existing_tool_receipt.overrides(),
@@ -358,7 +358,7 @@ async fn upgrade_tool(
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
-    let (environment, outcome, receipt_lock) = if let Some(interpreter) =
+    let (environment, outcome, tool_lock) = if let Some(interpreter) =
         interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
     {
         // If we're using a new interpreter, re-create the environment for each tool.
@@ -386,11 +386,7 @@ async fn upgrade_tool(
         .await?;
 
         let environment = installed_tools.create_environment(name, interpreter.clone())?;
-        let receipt_lock = tool_receipt_lock(
-            &installed_tools.tool_dir(name),
-            &resolution,
-            &receipt_manifest,
-        );
+        let tool_lock = tool_lock(&installed_tools.tool_dir(name), &resolution, &lock_manifest);
 
         let environment = sync_environment(
             environment,
@@ -410,11 +406,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        (
-            environment,
-            UpgradeOutcome::UpgradeEnvironment,
-            receipt_lock,
-        )
+        (environment, UpgradeOutcome::UpgradeEnvironment, tool_lock)
     } else {
         let resolution = resolve_environment(
             tool_environment_spec(
@@ -439,11 +431,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let receipt_lock = tool_receipt_lock(
-            &installed_tools.tool_dir(name),
-            &resolution,
-            &receipt_manifest,
-        );
+        let tool_lock = tool_lock(&installed_tools.tool_dir(name), &resolution, &lock_manifest);
         let resolution = Resolution::from(resolution);
 
         let ResolverInstallerSettings {
@@ -515,7 +503,7 @@ async fn upgrade_tool(
             .await?
         };
 
-        (environment, outcome, receipt_lock)
+        (environment, outcome, tool_lock)
     };
 
     if matches!(
@@ -546,7 +534,7 @@ async fn upgrade_tool(
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
-            receipt_lock,
+            tool_lock,
             printer,
         )?;
     } else {
@@ -555,7 +543,7 @@ async fn upgrade_tool(
             existing_tool_receipt
                 .clone()
                 .with_options(ToolOptions::from(options))
-                .with_lock(receipt_lock),
+                .with_lock(tool_lock),
         )?;
     }
 

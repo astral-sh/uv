@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 #[cfg(feature = "test-git")]
 use assert_fs::fixture::ChildPath;
@@ -85,6 +85,10 @@ fn tool_install() {
         .child("black")
         .child("uv-receipt.toml")
         .assert(predicate::path::exists());
+    tool_dir
+        .child("black")
+        .child("uv.lock")
+        .assert(predicate::path::exists());
 
     let executable = bin_dir.child(format!("black{}", std::env::consts::EXE_SUFFIX));
     assert!(executable.exists());
@@ -113,8 +117,8 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -189,7 +193,8 @@ fn tool_install() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -277,7 +282,7 @@ fn tool_install() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -372,7 +377,8 @@ fn tool_install() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669, upload-time = "2023-10-24T20:57:47.326Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "flask" }]
         entrypoints = [
@@ -409,7 +415,7 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -485,7 +491,8 @@ fn tool_install_relative_exclude_newer_receipt_preserves_span() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -2018,8 +2025,8 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.9.[X]"
@@ -2136,7 +2143,8 @@ fn tool_install_with_compatible_build_constraints() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/01/f3/936e209267d6ef7510322191003885de524fc48d1b43269810cd589ceaf5/typing_extensions-4.11.0-py3-none-any.whl", hash = "sha256:c1f94d72897edaf4ce775bb7558d5b79d8126906a14ea5ed1635921406c0387a", size = 34698, upload-time = "2024-04-05T12:35:44.388Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -2327,8 +2335,8 @@ fn tool_install_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2403,7 +2411,8 @@ fn tool_install_version() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -2488,8 +2497,8 @@ fn tool_install_editable() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2517,7 +2526,8 @@ fn tool_install_editable() {
             { name = "uvloop", marker = "extra == 'uvloop'", specifier = ">=0.15.2" },
         ]
         provides-extras = ["colorama", "uvloop", "d", "jupyter", "dev"]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
@@ -2559,8 +2569,8 @@ fn tool_install_editable() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2635,7 +2645,8 @@ fn tool_install_editable() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -2679,8 +2690,8 @@ fn tool_install_editable() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -2755,7 +2766,8 @@ fn tool_install_editable() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.2.0" }]
         entrypoints = [
@@ -3162,8 +3174,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3182,7 +3194,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "pyflakes" }]
         entrypoints = [
@@ -3261,8 +3274,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3281,7 +3294,8 @@ fn tool_install_remove_on_empty() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "pyflakes" }]
         entrypoints = [
@@ -3357,8 +3371,8 @@ fn tool_install_editable_from() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3386,7 +3400,8 @@ fn tool_install_editable_from() {
             { name = "uvloop", marker = "extra == 'uvloop'", specifier = ">=0.15.2" },
         ]
         provides-extras = ["colorama", "uvloop", "d", "jupyter", "dev"]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", editable = "[WORKSPACE]/test/packages/black_editable" }]
         entrypoints = [
@@ -3539,8 +3554,8 @@ fn tool_install_already_installed() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3615,7 +3630,8 @@ fn tool_install_already_installed() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -3652,8 +3668,8 @@ fn tool_install_already_installed() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should not have an additional tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should not have an additional tool lock or receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3728,7 +3744,8 @@ fn tool_install_already_installed() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -3742,9 +3759,9 @@ fn tool_install_already_installed() {
     });
 }
 
-/// Test installing a tool with a valid legacy receipt that lacks a lock.
+/// Test installing over a valid tool installation with an invalid lock.
 #[test]
-fn tool_install_migrates_lockless_receipt() -> Result<()> {
+fn tool_install_migrates_invalid_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -3763,17 +3780,13 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
         .success();
 
     let receipt_path = tool_dir.child("black").child("uv-receipt.toml");
+    fs_err::write(tool_dir.child("black").child("uv.lock"), "[invalid")?;
     let receipt = fs_err::read_to_string(&receipt_path)?;
-    let (_, tool_receipt) = receipt
-        .split_once("\n[tool]\n")
-        .context("expected the tool receipt to contain a tool section")?;
-    receipt_path.write_str(&format!("[tool]\n{tool_receipt}"))?;
-    let lockless_receipt = fs_err::read_to_string(&receipt_path)?;
 
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(lockless_receipt, @r#"
+        assert_snapshot!(receipt, @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -3785,6 +3798,19 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
         "#);
     });
+
+    uv_snapshot!(context.filters(), context.tool_list()
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.3.0
+    - black
+    - blackd
+
+    ----- stderr -----
+    ");
 
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("--python-platform")
@@ -3803,11 +3829,10 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
     Installed 2 executables: black, blackd
     ");
 
-    let receipt = fs_err::read_to_string(&receipt_path)?;
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(receipt, @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -3882,7 +3907,8 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -3898,9 +3924,74 @@ fn tool_install_migrates_lockless_receipt() -> Result<()> {
     Ok(())
 }
 
-/// Test migrating a legacy receipt without upgrading dependencies beyond the installed environment.
+/// Test installing over a tool whose lock belongs to a different receipt.
 #[test]
-fn tool_install_migrates_lockless_receipt_with_installed_preferences() -> Result<()> {
+fn tool_install_regenerates_mismatched_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("black").child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    let mismatched_lock = lock.replacen(
+        r#"requirements = [{ name = "black" }]"#,
+        r#"requirements = [{ name = "flask" }]"#,
+        1,
+    );
+    assert_ne!(lock, mismatched_lock);
+    fs_err::write(&lock_path, mismatched_lock)?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Checked [N] packages in [TIME]
+    Installed 2 executables: black, blackd
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("black")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `black` is already installed
+    ");
+
+    Ok(())
+}
+
+/// Test migrating a legacy tool installation without upgrading installed dependencies.
+#[test]
+fn tool_install_migrates_missing_lock_with_installed_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -3920,12 +4011,7 @@ fn tool_install_migrates_lockless_receipt_with_installed_preferences() -> Result
         .assert()
         .success();
 
-    let receipt_path = tool_dir.child("black").child("uv-receipt.toml");
-    let receipt = fs_err::read_to_string(&receipt_path)?;
-    let (_, tool_receipt) = receipt
-        .split_once("\n[tool]\n")
-        .context("expected the tool receipt to contain a tool section")?;
-    receipt_path.write_str(&format!("[tool]\n{tool_receipt}"))?;
+    fs_err::remove_file(tool_dir.child("black").child("uv.lock"))?;
 
     context
         .tool_install()
@@ -4247,8 +4333,8 @@ fn tool_install_force() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -4267,7 +4353,8 @@ fn tool_install_force() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d4/d7/f1b7db88d8e4417c5d47adad627a93547f44bdc9028372dbd2313f34a855/pyflakes-3.2.0-py2.py3-none-any.whl", hash = "sha256:84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a", size = 62725, upload-time = "2024-01-05T00:28:45.903Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("pyflakes").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "pyflakes" }]
         entrypoints = [
@@ -4934,8 +5021,8 @@ fn tool_install_git_lfs() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.13.[X]"
@@ -4950,7 +5037,8 @@ fn tool_install_git_lfs() {
         name = "test-lfs-repo"
         version = "0.1.0"
         source = { git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=e282f5be233e3f1d44934164895a043fc534b8aa#e282f5be233e3f1d44934164895a043fc534b8aa" }
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("test-lfs-repo").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "test-lfs-repo", git = "https://github.com/astral-sh/test-lfs-repo?lfs=true&rev=e282f5be233e3f1d44934164895a043fc534b8aa" }]
         entrypoints = [
@@ -5334,8 +5422,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -5444,7 +5532,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -5498,8 +5587,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -5618,7 +5707,8 @@ fn tool_install_with_dependencies_from_script() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -5681,8 +5771,8 @@ fn tool_install_requirements_txt() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -5769,7 +5859,8 @@ fn tool_install_requirements_txt() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -5815,8 +5906,8 @@ fn tool_install_requirements_txt() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -5903,7 +5994,8 @@ fn tool_install_requirements_txt() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -5968,8 +6060,8 @@ fn tool_install_requirements_txt_arguments() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -6056,7 +6148,8 @@ fn tool_install_requirements_txt_arguments() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "black" },
@@ -6178,8 +6271,8 @@ fn tool_install_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -6254,7 +6347,8 @@ fn tool_install_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
@@ -6289,8 +6383,8 @@ fn tool_install_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -6365,7 +6459,8 @@ fn tool_install_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -6448,8 +6543,8 @@ fn tool_install_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -6524,7 +6619,8 @@ fn tool_install_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -6992,8 +7088,8 @@ fn tool_install_malformed_dist_info() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7012,7 +7108,8 @@ fn tool_install_malformed_dist_info() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -7093,8 +7190,8 @@ fn tool_install_settings() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7190,7 +7287,8 @@ fn tool_install_settings() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669, upload-time = "2023-10-24T20:57:47.326Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -7224,8 +7322,8 @@ fn tool_install_settings() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7321,7 +7419,8 @@ fn tool_install_settings() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669, upload-time = "2023-10-24T20:57:47.326Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -7362,8 +7461,8 @@ fn tool_install_settings() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7458,7 +7557,8 @@ fn tool_install_settings() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl", hash = "sha256:90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10", size = 226669, upload-time = "2023-10-24T20:57:47.326Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("flask").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "flask", specifier = ">=3" }]
         entrypoints = [
@@ -7509,7 +7609,7 @@ fn tool_install_at_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7584,7 +7684,8 @@ fn tool_install_at_version() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.0" }]
         entrypoints = [
@@ -7654,7 +7755,7 @@ fn tool_install_at_latest() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7729,7 +7830,8 @@ fn tool_install_at_latest() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -7775,7 +7877,7 @@ fn tool_install_from_at_latest() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7794,7 +7896,8 @@ fn tool_install_from_at_latest() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -7839,7 +7942,7 @@ fn tool_install_from_at_version() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7858,7 +7961,8 @@ fn tool_install_from_at_version() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b7/d6/d9e5e20e5fd52a2ff02c4dcd351a2a2fb1e1a159c5de355aded16bccadef/executable_application-0.2.0-py3-none-any.whl", hash = "sha256:2b26f00eb59ebe606697535aee0bfcf1f7ae0dfa7223703cd40cf1c31959d149", size = 1718, upload-time = "2025-01-17T23:21:08.354Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application", specifier = "==0.2.0" }]
         entrypoints = [
@@ -7908,8 +8012,8 @@ fn tool_install_at_latest_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -7984,7 +8088,8 @@ fn tool_install_at_latest_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black", specifier = "==24.1.1" }]
         entrypoints = [
@@ -8019,8 +8124,8 @@ fn tool_install_at_latest_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8095,7 +8200,8 @@ fn tool_install_at_latest_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -8133,8 +8239,8 @@ fn tool_install_at_latest_upgrade() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8209,7 +8315,8 @@ fn tool_install_at_latest_upgrade() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         entrypoints = [
@@ -8268,8 +8375,8 @@ fn tool_install_constraints() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8345,7 +8452,8 @@ fn tool_install_constraints() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         constraints = [
@@ -8455,8 +8563,8 @@ fn tool_install_overrides() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8535,7 +8643,8 @@ fn tool_install_overrides() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
         overrides = [
@@ -8713,8 +8822,8 @@ async fn tool_install_credentials() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8733,7 +8842,8 @@ async fn tool_install_credentials() {
         wheels = [
             { url = "http://[LOCALHOST]/basic-auth/files/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -8824,8 +8934,8 @@ async fn tool_install_default_credentials() -> Result<()> {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        // We should have a tool receipt
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
+        // We should have a tool lock and receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -8844,7 +8954,8 @@ async fn tool_install_default_credentials() -> Result<()> {
         wheels = [
             { url = "http://[LOCALHOST]/basic-auth/files/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
         entrypoints = [
@@ -8941,7 +9052,7 @@ fn tool_install_with_executables_from() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r#"
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
         requires-python = ">=3.12.[X]"
@@ -9166,7 +9277,8 @@ fn tool_install_with_executables_from() {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d2/fc/e9ccf0521607bcd244aa0b3fbd574f71b65e9ce6a112c83af988bbbe2e23/resolvelib-1.0.1-py2.py3-none-any.whl", hash = "sha256:d2da45d1a8dfee81bdd591647783e340ef3bcb104b54c383f70d422ef5cc7dbf", size = 17194, upload-time = "2023-03-09T05:10:36.214Z" },
         ]
-
+        "#);
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("ansible").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [
             { name = "ansible", specifier = "==9.3.0" },
