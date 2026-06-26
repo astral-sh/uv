@@ -146,18 +146,6 @@ pub(crate) async fn venv(
         );
     }
 
-    // Determine the default path; either the virtual environment for the project or `.venv`.
-    let path = path.unwrap_or_else(|| {
-        project_environment_selection.map_or_else(
-            || PathBuf::from(".venv"),
-            |selection| {
-                selection
-                    .explicit_path()
-                    .map_or_else(|| project_dir.join(".venv"), Path::to_path_buf)
-            },
-        )
-    });
-
     let reporter = PythonDownloadReporter::single(printer);
 
     // If the default dependency-groups demand a higher requires-python
@@ -199,6 +187,22 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
+    let upgradeable = python_request
+        .as_ref()
+        .is_none_or(|request| !request.includes_patch());
+
+    // Determine the default path; either the virtual environment for the project or `.venv`.
+    let path = path.unwrap_or_else(|| {
+        project_environment_selection.map_or_else(
+            || PathBuf::from(".venv"),
+            |selection| {
+                selection
+                    .explicit_path()
+                    .map_or_else(|| project_dir.join(".venv"), Path::to_path_buf)
+            },
+        )
+    });
+
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
         match validate_project_requires_python(
@@ -221,10 +225,6 @@ pub(crate) async fn venv(
         if seed { "with seed packages " } else { "" },
         path.user_display().cyan()
     )?;
-
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
 
     // Lock the project environment to avoid synchronization issues.
     let _lock = if let Some(workspace) = project_environment {
