@@ -23,6 +23,11 @@ name = "uv"
 path = "benches/uv.rs"
 harness = false
 
+[[bench]]
+name = "workspace_discovery"
+path = "benches/workspace_discovery.rs"
+harness = false
+
 [dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
@@ -55,6 +60,7 @@ jiff = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+toml = { workspace = true }
 
 [features]
 static = ["uv-extract/static"]
