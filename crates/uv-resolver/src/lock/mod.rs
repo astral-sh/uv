@@ -7012,7 +7012,7 @@ fn simplify_dependency_marker(
         SimplifiedMarkerTree::new(requires_python, parent.combined()).as_simplified_marker_tree();
     let marker =
         SimplifiedMarkerTree::new(requires_python, marker.combined()).as_simplified_marker_tree();
-    let marker = marker.simplify_with_assumption(parent);
+    let marker = marker.restrict(parent);
 
     // Retain the resolution environment internally. The lockfile writer removes it from the wire
     // marker, and the reader restores it, keeping freshly resolved and deserialized locks equal.
