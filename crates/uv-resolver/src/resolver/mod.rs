@@ -107,6 +107,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
+    preprocessed_requirements_start: usize,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -228,17 +229,25 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         provider: Provider,
         installed_packages: InstalledPackages,
     ) -> Self {
+        let selector = CandidateSelector::for_resolution(&options, &manifest, &env);
+        let urls = Urls::from_manifest(&manifest, &env, git, options.dependency_mode);
+        let indexes = Indexes::from_manifest(&manifest, &env, options.dependency_mode);
+        let preprocessed_requirements_start = manifest.requirements.len();
+        let mut requirements = manifest.requirements;
+        requirements.extend(manifest.preprocessed_requirements);
+
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
-            selector: CandidateSelector::for_resolution(&options, &manifest, &env),
+            selector,
             dependency_mode: options.dependency_mode,
-            urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
-            indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
+            urls,
+            indexes,
             project: manifest.project,
             workspace_members: manifest.workspace_members,
-            requirements: manifest.requirements,
+            requirements,
+            preprocessed_requirements_start,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
             excludes: manifest.excludes,
@@ -734,6 +743,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolverOutput::from_state(
             &resolutions,
             &self.requirements,
+            self.preprocessed_requirements_start,
             &self.constraints,
             &self.overrides,
             &self.preferences,
@@ -1780,16 +1790,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
-                let requirements = self.flatten_requirements(
-                    &self.requirements,
-                    &no_dev_deps,
-                    None,
-                    None,
-                    None,
-                    None,
-                    env,
-                    python_requirement,
-                );
+                let (requirements, preprocessed_requirements) = self
+                    .requirements
+                    .split_at(self.preprocessed_requirements_start);
+                let requirements = self
+                    .flatten_requirements(
+                        requirements,
+                        &no_dev_deps,
+                        None,
+                        None,
+                        None,
+                        None,
+                        env,
+                        python_requirement,
+                    )
+                    .chain(self.preprocessed_requirements_for_extra(
+                        preprocessed_requirements,
+                        env,
+                        python_requirement.to_marker_tree(),
+                        python_requirement,
+                    ));
 
                 requirements
                     .flat_map(move |requirement| {
@@ -2186,6 +2206,41 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     extra,
+                    env,
+                    python_marker,
+                    python_requirement,
+                ))
+            })
+    }
+
+    /// Requirements that have already had overrides and exclusions applied, filtered by Python
+    /// version and the markers of this fork.
+    fn preprocessed_requirements_for_extra<'data, 'parameters>(
+        &'data self,
+        dependencies: &'data [Requirement],
+        env: &'parameters ResolverEnvironment,
+        python_marker: MarkerTree,
+        python_requirement: &'parameters PythonRequirement,
+    ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
+    where
+        'data: 'parameters,
+    {
+        dependencies
+            .iter()
+            .filter(move |requirement| {
+                Self::is_requirement_applicable(
+                    requirement,
+                    None,
+                    env,
+                    python_marker,
+                    python_requirement,
+                )
+            })
+            .map(Cow::Borrowed)
+            .flat_map(move |requirement| {
+                iter::once(requirement.clone()).chain(self.constraints_for_requirement(
+                    requirement,
+                    None,
                     env,
                     python_marker,
                     python_requirement,

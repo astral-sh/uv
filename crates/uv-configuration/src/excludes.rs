@@ -72,6 +72,23 @@ struct ScopedExclusions {
 }
 
 impl Excludes {
+    /// Get the exclusions for a package with an optional version.
+    fn scoped_for(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<&ScopedExclusions> {
+        self.scoped.get(package).and_then(|entries| {
+            version
+                .and_then(|version| {
+                    entries
+                        .iter()
+                        .find(|entry| entry.version.as_ref() == Some(version))
+                })
+                .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
+        })
+    }
+
     /// Create an indexed set of exclusions.
     pub fn from_entries(entries: impl IntoIterator<Item = ExcludeDependency>) -> Self {
         let mut excludes = Self::default();
@@ -158,14 +175,22 @@ impl Excludes {
     ) -> bool {
         self.contains(dependency)
             || package.is_some_and(|(package, version)| {
-                self.scoped.get(package).is_some_and(|entries| {
-                    entries
-                        .iter()
-                        .find(|entry| entry.version.as_ref() == Some(version))
-                        .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
-                        .is_some_and(|entry| entry.excludes.contains(dependency))
-                })
+                self.scoped_for(package, Some(version))
+                    .is_some_and(|entry| entry.excludes.contains(dependency))
             })
+    }
+
+    /// Check if a dependency is excluded from a package with an optional version.
+    pub fn contains_for_package_scope(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+        dependency: &PackageName,
+    ) -> bool {
+        self.contains(dependency)
+            || self
+                .scoped_for(package, version)
+                .is_some_and(|entry| entry.excludes.contains(dependency))
     }
 }
 

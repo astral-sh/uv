@@ -6,6 +6,7 @@ use uv_cache::Cache;
 use uv_configuration::NoSources;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
+use uv_pep440::Version;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
 use uv_workspace::{
@@ -48,6 +49,7 @@ use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 #[derive(Debug, Clone)]
 pub struct SourcedDependencyGroups {
     pub name: Option<PackageName>,
+    pub version: Option<Version>,
     pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
 }
 
@@ -96,11 +98,17 @@ impl SourcedDependencyGroups {
         // Collect the dependency groups.
         let dependency_groups =
             FlatDependencyGroups::from_pyproject_toml(project.root(), project.pyproject_toml())?;
+        let version = project
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.version().cloned());
 
         // Early return if all sources are disabled
         if matches!(no_sources, NoSources::All) {
             return Ok(Self {
                 name: project.project_name().cloned(),
+                version,
                 dependency_groups: dependency_groups
                     .into_iter()
                     .map(|(name, group)| {
@@ -189,6 +197,7 @@ impl SourcedDependencyGroups {
 
         Ok(Self {
             name: project.project_name().cloned(),
+            version,
             dependency_groups,
         })
     }

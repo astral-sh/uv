@@ -128,6 +128,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
     let start = std::time::Instant::now();
 
+    let mut source_tree_resolutions = Vec::new();
+    let mut dependency_group_resolutions = Vec::new();
+
     // Resolve the requirements from the provided sources.
     let requirements = {
         // Partition the requirements into named and unnamed requirements.
@@ -206,12 +209,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 .into());
             }
 
-            // Extend the requirements with the resolved source trees.
-            requirements.extend(
-                resolutions
-                    .into_iter()
-                    .flat_map(SourceTreeResolution::into_requirements),
-            );
+            source_tree_resolutions = resolutions;
         }
 
         for (pyproject_path, groups) in groups {
@@ -241,28 +239,33 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     ))?;
                 }
             }
-            // Apply dependency-groups
-            for (group_name, group) in &metadata.dependency_groups {
-                if groups.contains(group_name) {
-                    requirements.extend(group.iter().cloned().map(|group| Requirement {
-                        origin: Some(RequirementOrigin::Group(
-                            pyproject_path.clone(),
-                            metadata.name.clone(),
-                            group_name.clone(),
-                        )),
-                        ..group
-                    }));
-                }
-            }
+            dependency_group_resolutions.push((pyproject_path.clone(), groups.clone(), metadata));
         }
 
         requirements
     };
 
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
-    let mut hasher = hasher
-        .clone()
-        .augment_with_requirements(requirements.iter())?;
+    let mut hasher = hasher.clone().augment_with_requirements(
+        requirements
+            .iter()
+            .chain(
+                source_tree_resolutions
+                    .iter()
+                    .flat_map(SourceTreeResolution::requirements),
+            )
+            .chain(
+                dependency_group_resolutions
+                    .iter()
+                    .flat_map(|(_, groups, metadata)| {
+                        metadata
+                            .dependency_groups
+                            .iter()
+                            .filter(|(group_name, _)| groups.contains(group_name))
+                            .flat_map(|(_, requirements)| requirements.iter())
+                    }),
+            ),
+    )?;
 
     // Resolve the overrides from the provided sources.
     let overrides = {
@@ -317,10 +320,67 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
+    // Source-tree dependencies must retain their package context until after scoped overrides and
+    // exclusions are applied. In particular, exclusions need to run before recursive extras are
+    // flattened. Keep these requirements separate so root-level overrides are not applied again.
+    let mut preprocessed_requirements = source_tree_resolutions
+        .into_iter()
+        .flat_map(|resolution| resolution.into_requirements(&overrides, &excludes))
+        .collect::<Vec<_>>();
+
+    // Dependency groups also belong to their declaring project for scoped overrides and
+    // exclusions, even though they are otherwise treated as direct requirements by the pip
+    // interface.
+    for (pyproject_path, groups, metadata) in dependency_group_resolutions {
+        let SourcedDependencyGroups {
+            name,
+            version,
+            dependency_groups,
+        } = metadata;
+        let group_requirements = dependency_groups
+            .into_iter()
+            .filter(|(group_name, _)| groups.contains(group_name))
+            .flat_map(|(group_name, group)| {
+                let pyproject_path = pyproject_path.clone();
+                let name = name.clone();
+                group.into_iter().map(move |group| Requirement {
+                    origin: Some(RequirementOrigin::Group(
+                        pyproject_path.clone(),
+                        name.clone(),
+                        group_name.clone(),
+                    )),
+                    ..group
+                })
+            })
+            .collect::<Vec<_>>();
+
+        if let Some(package) = name.as_ref() {
+            preprocessed_requirements.extend(
+                overrides
+                    .apply_for_scope(package, version.as_ref(), &group_requirements)
+                    .filter(|requirement| {
+                        !excludes.contains_for_package_scope(
+                            package,
+                            version.as_ref(),
+                            &requirement.name,
+                        )
+                    })
+                    .map(std::borrow::Cow::into_owned),
+            );
+        } else {
+            preprocessed_requirements.extend(
+                overrides
+                    .apply(&group_requirements)
+                    .filter(|requirement| !excludes.contains(&requirement.name))
+                    .map(std::borrow::Cow::into_owned),
+            );
+        }
+    }
+
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
-            let (lookaheads, updated_hasher) = LookaheadResolver::new(
+            let (mut lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -337,6 +397,29 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .resolve(&resolver_env)
             .await?;
             hasher = updated_hasher;
+
+            if !preprocessed_requirements.is_empty() {
+                let (preprocessed_lookaheads, updated_hasher) = LookaheadResolver::new(
+                    &preprocessed_requirements,
+                    &constraints,
+                    &overrides,
+                    &excludes,
+                    &hasher,
+                    index,
+                    DistributionDatabase::new(
+                        client,
+                        build_dispatch,
+                        concurrency.downloads_semaphore.clone(),
+                    ),
+                )
+                .with_preprocessed_requirements()
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
+                .resolve(&resolver_env)
+                .await?;
+                hasher = updated_hasher;
+                lookaheads.extend(preprocessed_lookaheads);
+            }
+
             lookaheads
         }
         DependencyMode::Direct => Vec::new(),
@@ -348,6 +431,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
+        preprocessed_requirements,
         constraints,
         overrides,
         excludes,

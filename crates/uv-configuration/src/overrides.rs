@@ -242,10 +242,22 @@ impl Overrides {
 
     /// Get the overrides for a specific package version.
     fn scoped_for(&self, package: &PackageName, version: &Version) -> Option<&ScopedOverrides> {
+        self.scoped_for_package(package, Some(version))
+    }
+
+    /// Get the overrides for a package with an optional version.
+    fn scoped_for_package(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+    ) -> Option<&ScopedOverrides> {
         self.scoped.get(package).and_then(|entries| {
-            entries
-                .iter()
-                .find(|entry| entry.version.as_ref() == Some(version))
+            version
+                .and_then(|version| {
+                    entries
+                        .iter()
+                        .find(|entry| entry.version.as_ref() == Some(version))
+                })
                 .or_else(|| entries.iter().find(|entry| entry.version.is_none()))
         })
     }
@@ -273,7 +285,7 @@ impl Overrides {
     where
         I: IntoIterator<Item = &'a Requirement>,
     {
-        self.apply_inner(requirements, Some((package, version)))
+        self.apply_inner(requirements, Some((package, Some(version))))
     }
 
     /// Apply overrides with optional package-version context.
@@ -285,18 +297,35 @@ impl Overrides {
     where
         I: IntoIterator<Item = &'a Requirement>,
     {
-        self.apply_inner(requirements, package)
+        self.apply_inner(
+            requirements,
+            package.map(|(package, version)| (package, Some(version))),
+        )
+    }
+
+    /// Apply overrides to a package with an optional version.
+    pub fn apply_for_scope<'a, I>(
+        &'a self,
+        package: &PackageName,
+        version: Option<&Version>,
+        requirements: I,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
+    where
+        I: IntoIterator<Item = &'a Requirement>,
+    {
+        self.apply_inner(requirements, Some((package, version)))
     }
 
     fn apply_inner<'a, I>(
         &'a self,
         requirements: I,
-        package: Option<(&PackageName, &Version)>,
+        package: Option<(&PackageName, Option<&Version>)>,
     ) -> impl Iterator<Item = Cow<'a, Requirement>> + use<'a, I>
     where
         I: IntoIterator<Item = &'a Requirement>,
     {
-        let scoped = package.and_then(|(package, version)| self.scoped_for(package, version));
+        let scoped =
+            package.and_then(|(package, version)| self.scoped_for_package(package, version));
         if let Some(scoped) = scoped {
             let requirements = requirements.into_iter().collect::<Vec<_>>();
             let names = requirements

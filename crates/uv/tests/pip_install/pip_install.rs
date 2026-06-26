@@ -116,6 +116,42 @@ fn missing_pyproject_toml() {
     );
 }
 
+/// Check that scoped source-tree exclusions are shared by the pip install path.
+#[test]
+fn scoped_exclude_dependency_from_dynamic_pyproject_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "project" }, dependencies = ["anyio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+            .arg("-r")
+            .arg("pyproject.toml")
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn missing_find_links() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();

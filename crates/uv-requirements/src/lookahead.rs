@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{borrow::Cow, collections::VecDeque, sync::Arc};
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
@@ -38,6 +38,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     overrides: &'a Overrides,
     /// The dependency exclusions for the project.
     excludes: &'a Excludes,
+    /// Whether the direct requirements have already had overrides and exclusions applied.
+    preprocessed_requirements: bool,
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -62,6 +64,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             excludes,
+            preprocessed_requirements: false,
             hasher,
             index,
             database,
@@ -73,6 +76,15 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
     pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             database: self.database.with_reporter(reporter),
+            ..self
+        }
+    }
+
+    /// Mark the direct requirements as having already had overrides and exclusions applied.
+    #[must_use]
+    pub fn with_preprocessed_requirements(self) -> Self {
+        Self {
+            preprocessed_requirements: true,
             ..self
         }
     }
@@ -93,13 +105,20 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut hasher = self.hasher.clone();
 
         // Queue up the initial requirements.
-        let mut queue: VecDeque<_> = self
-            .constraints
-            .apply(self.overrides.apply(self.requirements))
-            .filter(|requirement| !self.excludes.contains(&requirement.name))
-            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-            .map(|requirement| (*requirement).clone())
-            .collect();
+        let mut queue: VecDeque<_> = if self.preprocessed_requirements {
+            self.constraints
+                .apply(self.requirements.iter().map(Cow::Borrowed))
+                .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+                .map(|requirement| (*requirement).clone())
+                .collect()
+        } else {
+            self.constraints
+                .apply(self.overrides.apply(self.requirements))
+                .filter(|requirement| !self.excludes.contains(&requirement.name))
+                .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+                .map(|requirement| (*requirement).clone())
+                .collect()
+        };
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {

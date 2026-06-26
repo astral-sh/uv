@@ -205,6 +205,13 @@ pub struct Project {
     scripts: Option<serde::de::IgnoredAny>,
 }
 
+impl Project {
+    /// Return the statically declared project version, if present.
+    pub fn version(&self) -> Option<&Version> {
+        self.version.as_ref()
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 struct ProjectWire {

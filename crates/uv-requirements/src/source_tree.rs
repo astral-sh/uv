@@ -6,7 +6,7 @@ use futures::TryStreamExt;
 use futures::stream::FuturesOrdered;
 use url::Url;
 
-use uv_configuration::ExtrasSpecification;
+use uv_configuration::{Excludes, ExtrasSpecification, Overrides};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
@@ -14,6 +14,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::Version;
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
@@ -48,12 +49,18 @@ impl SourceTree {
 
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
-    /// The requirements sourced from the source trees.
+    /// The unflattened requirements sourced from the source tree.
     requirements: Box<[Requirement]>,
-    /// The names of the projects that were resolved.
+    /// The name of the project that was resolved.
     project: PackageName,
-    /// The extras used when resolving the requirements.
-    extras: Box<[ExtraName]>,
+    /// The version of the project that was resolved, if known.
+    version: Option<Version>,
+    /// The extras provided by the project.
+    provided_extras: Box<[ExtraName]>,
+    /// The extras selected when resolving the requirements.
+    selected_extras: Box<[ExtraName]>,
+    /// The origin of the project requirements.
+    origin: RequirementOrigin,
 }
 
 impl SourceTreeResolution {
@@ -62,14 +69,46 @@ impl SourceTreeResolution {
         &self.project
     }
 
-    /// Return the extras used when resolving the requirements.
-    pub fn extras(&self) -> &[ExtraName] {
-        &self.extras
+    /// Return the unflattened requirements sourced from the source tree.
+    pub fn requirements(&self) -> &[Requirement] {
+        &self.requirements
     }
 
-    /// Return the requirements sourced from the source tree.
-    pub fn into_requirements(self) -> Box<[Requirement]> {
-        self.requirements
+    /// Return the extras provided by the project.
+    pub fn extras(&self) -> &[ExtraName] {
+        &self.provided_extras
+    }
+
+    /// Apply scoped rules and return the flattened requirements sourced from the source tree.
+    pub fn into_requirements(
+        self,
+        overrides: &Overrides,
+        excludes: &Excludes,
+    ) -> Box<[Requirement]> {
+        let requirements = overrides
+            .apply_for_scope(
+                &self.project,
+                self.version.as_ref(),
+                self.requirements.iter(),
+            )
+            .filter(|requirement| {
+                !excludes.contains_for_package_scope(
+                    &self.project,
+                    self.version.as_ref(),
+                    &requirement.name,
+                )
+            })
+            .map(std::borrow::Cow::into_owned)
+            .collect();
+
+        FlatRequiresDist::from_requirements(requirements, &self.project)
+            .into_iter()
+            .map(|requirement| Requirement {
+                origin: requirement.origin.or_else(|| Some(self.origin.clone())),
+                marker: requirement.marker.simplify_extras(&self.selected_extras),
+                ..requirement
+            })
+            .collect()
     }
 }
 
@@ -128,39 +167,28 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, source_tree: &SourceTree) -> Result<SourceTreeResolution> {
-        let metadata = self.resolve_requires_dist(source_tree).await?;
+        let (metadata, version) = self.resolve_requires_dist(source_tree).await?;
         let origin =
             RequirementOrigin::Project(source_tree.path().to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
-        let extras = self
+        let selected_extras = self
             .extras
             .extra_names(metadata.provides_extra.iter())
             .cloned()
             .collect::<Vec<_>>();
 
-        let mut requirements = Vec::new();
-
-        // Flatten any transitive extras and include dependencies
-        // (unless something like --only-group was passed)
-        requirements.extend(
-            FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
-                .into_iter()
-                .map(|requirement| Requirement {
-                    origin: Some(origin.clone()),
-                    marker: requirement.marker.simplify_extras(&extras),
-                    ..requirement
-                }),
-        );
-
-        let requirements = requirements.into_boxed_slice();
+        let requirements = metadata.requires_dist;
         let project = metadata.name;
-        let extras = metadata.provides_extra;
+        let provided_extras = metadata.provides_extra;
 
         Ok(SourceTreeResolution {
             requirements,
             project,
-            extras,
+            version,
+            provided_extras,
+            selected_extras: selected_extras.into_boxed_slice(),
+            origin,
         })
     }
 
@@ -168,7 +196,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// requirements without building the distribution, even if the project contains (e.g.) a
     /// dynamic version since, critically, we don't need to install the package itself; only its
     /// dependencies.
-    async fn resolve_requires_dist(&self, source_tree: &SourceTree) -> Result<RequiresDist> {
+    async fn resolve_requires_dist(
+        &self,
+        source_tree: &SourceTree,
+    ) -> Result<(RequiresDist, Option<Version>)> {
         // Convert to a buildable source.
         let path = fs_err::canonicalize(source_tree.path()).with_context(|| {
             format!(
@@ -190,7 +221,11 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // we typically construct a "complete" metadata object.
         if let Some(pyproject_toml) = source_tree.pyproject_toml() {
             if let Some(metadata) = self.database.requires_dist(path, pyproject_toml).await? {
-                return Ok(metadata);
+                let version = pyproject_toml
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.version.clone());
+                return Ok((metadata, version));
             }
         }
 
@@ -241,6 +276,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         };
 
-        Ok(RequiresDist::from(metadata))
+        let version = metadata.version.clone();
+        Ok((RequiresDist::from(metadata), Some(version)))
     }
 }

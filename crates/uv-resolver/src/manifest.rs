@@ -17,6 +17,9 @@ pub struct Manifest {
     /// The direct requirements for the project.
     pub(crate) requirements: Vec<Requirement>,
 
+    /// Direct requirements that have already had overrides and exclusions applied.
+    pub(crate) preprocessed_requirements: Vec<Requirement>,
+
     /// The constraints for the project.
     pub(crate) constraints: Constraints,
 
@@ -56,6 +59,7 @@ pub struct Manifest {
 impl Manifest {
     pub fn new(
         requirements: Vec<Requirement>,
+        preprocessed_requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
         excludes: Excludes,
@@ -67,6 +71,7 @@ impl Manifest {
     ) -> Self {
         Self {
             requirements,
+            preprocessed_requirements,
             constraints,
             overrides,
             excludes,
@@ -81,6 +86,7 @@ impl Manifest {
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
+            preprocessed_requirements: Vec::new(),
             constraints: Constraints::default(),
             overrides: Overrides::default(),
             excludes: Excludes::default(),
@@ -187,6 +193,14 @@ impl Manifest {
                             }),
                     )
                     .chain(
+                        self.preprocessed_requirements
+                            .iter()
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            })
+                            .map(Cow::Borrowed),
+                    )
+                    .chain(
                         self.constraints
                             .requirements()
                             .filter(|requirement| !self.excludes.contains(&requirement.name))
@@ -200,6 +214,7 @@ impl Manifest {
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(&self.requirements)
+                    .chain(self.preprocessed_requirements.iter().map(Cow::Borrowed))
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
@@ -286,20 +301,31 @@ impl Manifest {
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             }),
+                    )
+                    .chain(
+                        self.preprocessed_requirements
+                            .iter()
+                            .filter(move |requirement| {
+                                requirement.evaluate_markers(env.marker_environment(), &[])
+                            })
+                            .map(Cow::Borrowed),
                     ),
             ),
 
             // Restrict to the direct requirements.
-            DependencyMode::Direct => {
-                Either::Right(self.overrides.apply(self.requirements.iter()).filter(
-                    move |requirement| requirement.evaluate_markers(env.marker_environment(), &[]),
-                ))
-            }
+            DependencyMode::Direct => Either::Right(
+                self.overrides
+                    .apply(self.requirements.iter())
+                    .chain(self.preprocessed_requirements.iter().map(Cow::Borrowed))
+                    .filter(move |requirement| {
+                        requirement.evaluate_markers(env.marker_environment(), &[])
+                    }),
+            ),
         }
     }
 
     /// Returns the number of input requirements.
     pub fn num_requirements(&self) -> usize {
-        self.requirements.len()
+        self.requirements.len() + self.preprocessed_requirements.len()
     }
 }

@@ -51,6 +51,8 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
+    /// The index of the first requirement that already had overrides and exclusions applied.
+    pub(crate) preprocessed_requirements_start: usize,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
@@ -126,6 +128,7 @@ impl ResolverOutput {
     pub(crate) fn from_state(
         resolutions: &[Resolution],
         requirements: &[Requirement],
+        preprocessed_requirements_start: usize,
         constraints: &Constraints,
         overrides: &Overrides,
         preferences: &Preferences,
@@ -234,6 +237,7 @@ impl ResolverOutput {
             requires_python,
             diagnostics,
             requirements: requirements.to_vec(),
+            preprocessed_requirements_start,
             constraints: constraints.clone(),
             overrides: overrides.clone(),
             options,
@@ -729,10 +733,14 @@ impl ResolverOutput {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        for direct_req in self
-            .constraints
-            .apply(self.overrides.apply(self.requirements.iter()))
-        {
+        let (requirements, preprocessed_requirements) = self
+            .requirements
+            .split_at(self.preprocessed_requirements_start);
+        for direct_req in self.constraints.apply(
+            self.overrides
+                .apply(requirements)
+                .chain(preprocessed_requirements.iter().map(Cow::Borrowed)),
+        ) {
             add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
 

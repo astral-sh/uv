@@ -4403,6 +4403,224 @@ fn scoped_exclude_dependency_from_script() -> Result<()> {
     Ok(())
 }
 
+/// Check that versionless scoped exclusions apply to projects with dynamic versions.
+#[test]
+fn scoped_exclude_dependency_from_dynamic_pyproject_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "project" }, dependencies = ["anyio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that scoped exclusions run before recursive source-tree extras are flattened.
+#[test]
+fn scoped_exclude_dependency_from_pyproject_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["project[foo]"]
+
+        [project.optional-dependencies]
+        foo = ["anyio==3.7.0"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["project"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that scoped overrides and exclusions apply to selected dependency groups.
+#[test]
+fn scoped_rules_from_pyproject_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("replacement")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("1.0.0")?,
+                PackageMetadata {
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["replacement==1.0.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["anyio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("--group")
+            .arg("dev")
+            .arg("--no-header")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replacement==1.0.0
+        # via (workspace)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that scoped overrides apply to source-tree roots and take precedence over global ones.
+#[test]
+fn scoped_override_dependency_from_pyproject_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("replacement")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("1.0.0")?,
+                PackageMetadata {
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    scenario.packages.insert(
+        PackageName::from_str("target")?,
+        Package {
+            versions: BTreeMap::from([
+                (
+                    Version::from_str("1.0.0")?,
+                    PackageMetadata {
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+                (
+                    Version::from_str("2.0.0")?,
+                    PackageMetadata {
+                        wheel: true,
+                        ..PackageMetadata::default()
+                    },
+                ),
+            ]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["removed==1.0.0", "target>=1"]
+
+        [tool.uv]
+        override-dependencies = [
+            "target==1.0.0",
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["replacement==1.0.0", "target==2.0.0"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["removed"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    replacement==1.0.0
+        # via (workspace)
+    target==2.0.0
+        # via
+        #   --override (workspace)
+        #   (workspace)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn constraint_dependency_from_pyproject() -> Result<()> {
