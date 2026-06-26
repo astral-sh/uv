@@ -697,24 +697,6 @@ impl Lock {
         self
     }
 
-    /// Return whether this lock was generated with the given [`ResolverManifest`], normalizing
-    /// requirements relative to the given root before comparison.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a manifest requirement cannot be normalized.
-    pub fn matches_manifest_at(
-        &self,
-        manifest: &ResolverManifest,
-        root: &Path,
-    ) -> Result<bool, LockError> {
-        Ok(self
-            .manifest
-            .clone()
-            .normalize(root, &self.requires_python)?
-            == manifest.clone().normalize(root, &self.requires_python)?)
-    }
-
     /// Record the conflicting groups that were used to generate this lock.
     #[must_use]
     pub fn with_conflicts(mut self, conflicts: Conflicts) -> Self {
@@ -2899,31 +2881,6 @@ impl ResolverManifest {
                     ))
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
-            dependency_metadata: self.dependency_metadata,
-        })
-    }
-
-    /// Normalize all requirements in the manifest relative to the given root.
-    fn normalize(self, root: &Path, requires_python: &RequiresPython) -> Result<Self, LockError> {
-        let normalize = |requirements: BTreeSet<Requirement>| {
-            requirements
-                .into_iter()
-                .map(|requirement| normalize_requirement(requirement, root, requires_python))
-                .collect::<Result<BTreeSet<_>, _>>()
-        };
-
-        Ok(Self {
-            members: self.members,
-            requirements: normalize(self.requirements)?,
-            constraints: normalize(self.constraints)?,
-            overrides: normalize(self.overrides)?,
-            excludes: self.excludes,
-            build_constraints: normalize(self.build_constraints)?,
-            dependency_groups: self
-                .dependency_groups
-                .into_iter()
-                .map(|(group, requirements)| Ok((group, normalize(requirements)?)))
-                .collect::<Result<BTreeMap<_, _>, LockError>>()?,
             dependency_metadata: self.dependency_metadata,
         })
     }

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, Bound},
+    collections::{BTreeMap, BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
     io,
@@ -11,16 +11,19 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
+use uv_cache::{Cache, Refresh};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExcludeDependency, ExtrasSpecification,
-    GitLfsSetting, InstallOptions, TargetTriple,
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, TargetTriple,
 };
-use uv_distribution::StaticMetadataDatabase;
+use uv_dispatch::BuildDispatch;
+use uv_distribution::{
+    DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
+};
 use uv_distribution_types::{
-    DependencyMetadata, InstalledDist, Name, Requirement, RequiresPython, Resolution,
-    UnresolvedRequirement,
+    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
+    Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -30,17 +33,23 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_preview::Preview;
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::{Installable, Lock, Preference, ResolverManifest, ResolverOutput};
+use uv_resolver::{
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip;
 
@@ -103,7 +112,8 @@ impl Hint for NoExecutablesError {
     }
 }
 use crate::commands::project::{
-    EnvironmentSpecification, PreferenceLocation, ProjectError, PythonRequestSource,
+    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    lock::ValidatedLock,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -270,6 +280,30 @@ pub(crate) struct ToolLock {
     lock: Lock,
 }
 
+/// A tool lock validated against the current resolution inputs.
+pub(crate) struct ValidatedToolLock {
+    lock: ToolLock,
+    satisfied: bool,
+    usable: bool,
+}
+
+impl ValidatedToolLock {
+    /// Return whether the existing lock satisfies the current resolution inputs.
+    pub(crate) fn is_satisfied(&self) -> bool {
+        self.satisfied
+    }
+
+    /// Return the lock as a resolver preference if its versions remain usable.
+    pub(crate) fn preference(&self) -> Option<&ToolLock> {
+        self.usable.then_some(&self.lock)
+    }
+
+    /// Return the validated lock.
+    pub(crate) fn into_lock(self) -> ToolLock {
+        self.lock
+    }
+}
+
 impl ToolLock {
     /// Build the lock manifest for a tool environment.
     pub(crate) fn manifest(
@@ -349,25 +383,169 @@ impl ToolLock {
         Ok(())
     }
 
-    /// Return whether the lock matches all inputs that determine a universal resolution.
-    pub(crate) fn is_fresh(
-        &self,
-        manifest: &ResolverManifest,
-        resolver_settings: &ResolverSettings,
-    ) -> bool {
-        match self.lock.matches_manifest_at(manifest, &self.root) {
-            Ok(true) => {}
-            Ok(false) => return false,
-            Err(err) => {
-                debug!("Failed to compare tool lock manifest: {err}");
-                return false;
-            }
-        }
+    /// Validate the lock against the current resolution inputs.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) async fn validate(
+        self,
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        excludes: &[PackageName],
+        build_constraints: &[Requirement],
+        refresh: &Refresh,
+        interpreter: &Interpreter,
+        settings: &ResolverSettings,
+        client_builder: &BaseClientBuilder<'_>,
+        state: &PlatformState,
+        concurrency: &Concurrency,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        printer: Printer,
+        preview: Preview,
+    ) -> Result<ValidatedToolLock, ProjectError> {
+        let ResolverSettings {
+            index_locations,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            fork_strategy,
+            dependency_metadata,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            extra_build_dependencies,
+            extra_build_variables,
+            exclude_newer,
+            link_mode,
+            upgrade,
+            build_options,
+            sources,
+            torch_backend: _,
+            cuda_driver_version: _,
+            amd_gpu_architecture: _,
+        } = settings;
 
-        self.lock.resolution_mode() == resolver_settings.resolution
-            && self.lock.prerelease_mode() == resolver_settings.prerelease
-            && self.lock.fork_strategy() == resolver_settings.fork_strategy
-            && self.lock.exclude_newer() == resolver_settings.exclude_newer
+        let client = RegistryClientBuilder::new(
+            client_builder.clone().keyring(*keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(index_locations.clone())
+        .index_strategy(*index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build()?;
+
+        let environment;
+        let build_isolation = match build_isolation {
+            uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+            uv_configuration::BuildIsolation::Shared => {
+                environment = PythonEnvironment::from_interpreter(interpreter.clone());
+                BuildIsolation::Shared(&environment)
+            }
+            uv_configuration::BuildIsolation::SharedPackage(packages) => {
+                environment = PythonEnvironment::from_interpreter(interpreter.clone());
+                BuildIsolation::SharedPackage(&environment, packages)
+            }
+        };
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(*resolution)
+            .prerelease_mode(*prerelease)
+            .fork_strategy(*fork_strategy)
+            .exclude_newer(exclude_newer.clone())
+            .index_strategy(*index_strategy)
+            .build_options(build_options.clone())
+            .build();
+        let hasher = HashStrategy::Generate(HashGeneration::Url);
+        let build_hasher = HashStrategy::default();
+
+        let flat_index = {
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+            let entries = client
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
+                .await?;
+            FlatIndex::from_entries(entries, None, &hasher, build_options)
+        };
+
+        let extra_build_requires =
+            LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+                .into_inner();
+        let dispatch_constraints =
+            Constraints::from_requirements(build_constraints.iter().cloned());
+        let build_dispatch = BuildDispatch::new(
+            &client,
+            cache,
+            &dispatch_constraints,
+            interpreter,
+            index_locations,
+            &flat_index,
+            dependency_metadata,
+            state.clone().into_inner(),
+            *index_strategy,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            &extra_build_requires,
+            extra_build_variables,
+            *link_mode,
+            build_options,
+            &build_hasher,
+            exclude_newer.clone(),
+            sources.clone(),
+            SourceTreeEditablePolicy::Tool,
+            workspace_cache.clone(),
+            concurrency.clone(),
+            preview,
+        );
+        let database = DistributionDatabase::new(
+            &client,
+            &build_dispatch,
+            concurrency.downloads_semaphore.clone(),
+        );
+
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+        let Self { root, lock } = self;
+        let validated = ValidatedLock::validate(
+            lock,
+            &root,
+            &BTreeMap::new(),
+            &[],
+            &BTreeMap::new(),
+            requirements,
+            &BTreeMap::new(),
+            constraints,
+            overrides,
+            excludes,
+            build_constraints,
+            &Conflicts::empty(),
+            None,
+            None,
+            dependency_metadata,
+            interpreter,
+            &requires_python,
+            index_locations,
+            upgrade,
+            Some(refresh),
+            &options,
+            &hasher,
+            state.index(),
+            &database,
+            printer,
+        )
+        .await?;
+        let satisfied = validated.is_satisfied();
+        let usable = validated.is_usable();
+
+        Ok(ValidatedToolLock {
+            lock: Self {
+                root,
+                lock: validated.into_lock(),
+            },
+            satisfied,
+            usable,
+        })
     }
 
     /// Project the universal lock into a specific environment.

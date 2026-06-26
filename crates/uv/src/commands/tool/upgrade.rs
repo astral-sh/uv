@@ -363,11 +363,9 @@ async fn upgrade_tool(
     let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
-        let existing_lock = ToolLock::read(&tool_dir)
-            .filter(|lock| lock.is_fresh(&lock_manifest, &settings.resolver));
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let universal_resolution = resolve_environment(
-            tool_environment_spec(spec, existing_lock.as_ref(), Some(&site_packages)),
+            tool_environment_spec(spec, None, Some(&site_packages)),
             EnvironmentResolution::Universal,
             target_interpreter,
             python_platform,

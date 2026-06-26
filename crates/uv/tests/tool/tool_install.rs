@@ -6533,7 +6533,7 @@ fn tool_install_lock_supports_local_wheel() {
 }
 
 #[test]
-fn tool_install_lock_normalizes_local_directory_constraint() -> Result<()> {
+fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
@@ -6589,6 +6589,41 @@ fn tool_install_lock_normalizes_local_directory_constraint() -> Result<()> {
 
     ----- stderr -----
     `simple-launcher` is already installed
+    ");
+
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = "2.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        simple-launcher = "simple_launcher:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - simple-launcher==1.0.0 (from file://[TEMP_DIR]/simple-launcher)
+     + simple-launcher==2.0.0 (from file://[TEMP_DIR]/simple-launcher)
+    Installed 1 executable: simple-launcher
     ");
 
     Ok(())
