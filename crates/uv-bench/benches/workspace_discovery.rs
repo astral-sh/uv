@@ -1,13 +1,22 @@
-//! Run workspace discovery in large synthetic workspace with many non-trivial to parse
-//! `pyproject.toml` files.
+//! Benchmarks over a large synthetic workspace with many non-trivial to parse `pyproject.toml`
+//! files.
+
+// Don't optimize the alloc crate away due to it being otherwise unused.
+// https://github.com/rust-lang/rust/issues/64402
+extern crate uv_performance_memory_allocator;
 
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
+use clap::Parser;
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 
+use uv::commands::ExitStatus;
 use uv_cache::Cache;
+use uv_cli::Cli;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+
+const EXCLUDE_NEWER: &str = "2024-08-08";
 
 /// Mirroring the airflow workspace size at time of writing.
 const MEMBER_COUNT: usize = 127;
@@ -24,8 +33,8 @@ fn provider_requirement(member_index: usize) -> String {
     format!("{}>=0.0.0", provider_name(member_index))
 }
 
-/// Create a synthetic workspace with a root and [`MEMBER_COUNT`] members, returning the
-/// directories to run discovery from.
+/// Create a synthetic workspace with a root and many members, returning the directories to run
+/// discovery from.
 fn create_workspace(root: &Path) -> Vec<PathBuf> {
     let mut discovery_roots = Vec::with_capacity(MEMBER_COUNT + 1);
     discovery_roots.push(root.to_path_buf());
@@ -156,6 +165,7 @@ fn root_pyproject() -> String {
         finalize = "workspace_discovery.hooks:finalize"
 
         [tool.uv]
+        package = false
         sources = (sources)
 
         [tool.uv.workspace]
@@ -174,7 +184,7 @@ fn member_pyproject(member_index: usize) -> String {
         .map(provider_requirement)
         .collect();
     // That's a real, usable PyPI dependency.
-    dependencies.push("anyio>=4,<5".to_string());
+    dependencies.push("sniffio>=1,<2".to_string());
 
     let entry_points: toml::Table = [(
         format!("provider-{member_index:03}"),
@@ -226,8 +236,8 @@ fn member_pyproject(member_index: usize) -> String {
         integrations = ["httpx>=0.27", "platformdirs>=4"]
 
         [dependency-groups]
-        test = ["pytest>=8", "pytest-asyncio>=0.24"]
-        lint = ["tqdm", "mypy>=1.15"]
+        test = ["pytest>=8", "pytest-asyncio>=0.23,<0.24"]
+        lint = ["tqdm", "anyio>=4,<5"]
 
         [project.urls]
         Documentation = "https://example.com/providers"
@@ -235,6 +245,9 @@ fn member_pyproject(member_index: usize) -> String {
 
         [project.entry-points]
         "workspace_discovery.providers" = (entry_points)
+
+        [tool.uv]
+        package = false
 
         [tool.linter]
         generated = (generated)
@@ -271,5 +284,81 @@ fn discover_workspace_from_all_members(c: &mut Criterion<WallTime>) {
     });
 }
 
-criterion_group!(workspace_discovery, discover_workspace_from_all_members);
+fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
+    let workspace_dir = tempfile::tempdir().expect("Failed to create temporary directory");
+    create_workspace(workspace_dir.path());
+
+    let cache_dir = workspace_dir.path().join(".uv-cache");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+
+    let workspace_dir = workspace_dir.path().to_string_lossy().to_string();
+    let cache_dir = cache_dir.to_string_lossy().to_string();
+
+    // Prime cache with PyPI packages.
+    run_cli(
+        &runtime,
+        run_python_version_cli(&workspace_dir, &cache_dir, false),
+        true,
+        "Failed to warm synthetic workspace run benchmark",
+    );
+    // Warm cache reading
+    run_cli(
+        &runtime,
+        run_python_version_cli(&workspace_dir, &cache_dir, true),
+        false,
+        "Failed to warm offline synthetic workspace run benchmark",
+    );
+
+    c.bench_function("run_python_version_synthetic_workspace", |b| {
+        b.iter(|| {
+            let cli =
+                run_python_version_cli(black_box(&workspace_dir), black_box(&cache_dir), true);
+            run_cli(
+                &runtime,
+                cli,
+                false,
+                "Failed to run synthetic workspace benchmark",
+            );
+        });
+    });
+}
+
+fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -> Cli {
+    let mut args = vec![
+        "uv",
+        "run",
+        "--directory",
+        workspace_dir,
+        "--cache-dir",
+        cache_dir,
+        "--exclude-newer",
+        EXCLUDE_NEWER,
+        "--quiet",
+    ];
+    if offline {
+        args.push("--offline");
+    }
+    args.extend(["python", "-V"]);
+
+    Cli::try_parse_from(args).expect("Failed to parse synthetic workspace run benchmark arguments")
+}
+
+fn run_cli(runtime: &tokio::runtime::Runtime, cli: Cli, initialize_globals: bool, message: &str) {
+    let status = runtime
+        .block_on(uv::run(cli, initialize_globals))
+        .expect(message);
+    assert!(
+        matches!(status, ExitStatus::Success | ExitStatus::External(0)),
+        "{message}"
+    );
+}
+
+criterion_group!(
+    workspace_discovery,
+    discover_workspace_from_all_members,
+    run_python_version_synthetic_workspace
+);
 criterion_main!(workspace_discovery);

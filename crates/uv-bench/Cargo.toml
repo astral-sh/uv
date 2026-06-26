@@ -29,7 +29,9 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [dev-dependencies]
+uv = { workspace = true }
 uv-cache = { workspace = true }
+uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-dispatch = { workspace = true }
@@ -52,6 +54,7 @@ uv-workspace = { workspace = true }
 anyhow = { workspace = true }
 async_zip = { workspace = true }
 astral-tokio-tar = { workspace = true }
+clap = { workspace = true }
 criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true }

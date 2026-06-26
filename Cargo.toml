@@ -16,6 +16,7 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+uv = { version = "0.11.24", path = "crates/uv", default-features = false }
 uv-audit = { version = "0.0.57", path = "crates/uv-audit" }
 uv-auth = { version = "0.0.57", path = "crates/uv-auth" }
 uv-bin-install = { version = "0.0.57", path = "crates/uv-bin-install" }
