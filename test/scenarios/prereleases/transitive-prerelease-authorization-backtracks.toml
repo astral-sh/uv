@@ -21,6 +21,8 @@ requires = ["c>=2.0.0b1"]
 
 [packages.c.versions."1.0.0"]
 
+[packages.c.versions."1.5.0a1"]
+
 [packages.c.versions."2.0.0b1"]
 requires = ["d==2.0.0"]
 
