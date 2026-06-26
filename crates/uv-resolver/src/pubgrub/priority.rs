@@ -118,7 +118,7 @@ impl PubGrubPriorities {
         &self,
         package: &PubGrubPackage,
     ) -> <UvDependencyProvider as DependencyProvider>::Priority {
-        match &**package {
+        let name = match &**package {
             // There is only a single root package despite the value. The priorities on root don't
             // matter for the resolution output, since the Pythons don't have dependencies
             // themselves and are only used when the package is incompatible.
@@ -134,16 +134,14 @@ impl PubGrubPriorities {
             PubGrubPackageInner::System(_) => {
                 return (PubGrubPriority::Root, PubGrubTiebreaker::from(3));
             }
-            PubGrubPackageInner::Prerelease { .. }
-            | PubGrubPackageInner::Marker { .. }
-            | PubGrubPackageInner::Extra { .. }
-            | PubGrubPackageInner::Group { .. }
-            | PubGrubPackageInner::Package { .. } => {}
-        }
-
-        let name = package
-            .name_no_root()
-            .expect("non-root package should have a name");
+            PubGrubPackageInner::Prerelease { package } => package
+                .name_no_root()
+                .expect("pre-release proxy should wrap a registry package"),
+            PubGrubPackageInner::Marker { name, .. }
+            | PubGrubPackageInner::Extra { name, .. }
+            | PubGrubPackageInner::Group { name, .. }
+            | PubGrubPackageInner::Package { name, .. } => name,
+        };
         // To ensure deterministic resolution, each (virtual) package needs to be registered on
         // discovery (as dependency of another package), before we query it for prioritization.
         let package_priority = match self.package_priority.get(name) {

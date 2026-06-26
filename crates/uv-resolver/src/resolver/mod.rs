@@ -3076,6 +3076,9 @@ impl ForkState {
 
     /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
     fn has_active_prerelease_proxy(&self, package: &PubGrubPackage) -> bool {
+        if self.prerelease_proxies.is_empty() {
+            return false;
+        }
         let Some(name) = package.name_no_root() else {
             return false;
         };
