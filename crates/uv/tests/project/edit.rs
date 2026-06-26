@@ -3070,7 +3070,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [tool.uv.sources]
-        dependency = { path = "../dependency" }
+        dependency = { path = "[TEMP_DIR]/dependency" }
         "#
         );
     });
@@ -3093,7 +3093,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         [[package]]
         name = "dependency"
         version = "0.1.0"
-        source = { directory = "../dependency" }
+        source = { directory = "[TEMP_DIR]/dependency" }
 
         [[package]]
         name = "project"
@@ -3104,7 +3104,7 @@ fn add_path_adjacent_directory() -> Result<()> {
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "dependency", directory = "../dependency" }]
+        requires-dist = [{ name = "dependency", directory = "[TEMP_DIR]/dependency" }]
         "#
         );
     });
@@ -3114,8 +3114,10 @@ fn add_path_adjacent_directory() -> Result<()> {
 
 /// Check relative and absolute path handling with `uv add`.
 ///
-/// TODO(tk): Currently `uv add` always relativizes paths in `pyproject.toml`,
-/// this is a bug.
+/// When a user provides an absolute path or `file://` URL, it should be preserved as absolute
+/// in pyproject.toml and uv.lock. Relative paths should remain relative.
+///
+/// See: <https://github.com/astral-sh/uv/issues/17307>
 #[test]
 fn add_relative_and_absolute_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3186,6 +3188,25 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
+    // Create a dependency that will be added via a file:// URL containing an expanded variable.
+    let expanded_dep = context.temp_dir.child("expanded_dep");
+    expanded_dep.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "expanded-dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    expanded_dep
+        .child("src")
+        .child("expanded_dep")
+        .child("__init__.py")
+        .touch()?;
+
     // Add the relative dependency using a relative path.
     uv_snapshot!(context.filters(), context.add().arg("../relative_dep").current_dir(project.path()), @"
     success: true
@@ -3228,7 +3249,21 @@ fn add_relative_and_absolute_paths() -> Result<()> {
      + file-url-dep==0.1.0 (from file://[TEMP_DIR]/file_url_dep)
     ");
 
-    // Check pyproject.toml.
+    // Expanded variables retain the portability behavior from #18680 and stay relative.
+    uv_snapshot!(context.filters(), context.add().arg("file:///${PROJECT_ROOT}/../expanded_dep").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + expanded-dep==0.1.0 (from file://[TEMP_DIR]/expanded_dep)
+    ");
+
+    // Check pyproject.toml - relative paths stay relative, absolute paths and file:// URLs
+    // stay absolute.
     let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
 
     insta::with_settings!({
@@ -3242,19 +3277,21 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         requires-python = ">=3.12"
         dependencies = [
             "absolute-dep",
+            "expanded-dep",
             "file-url-dep",
             "relative-dep",
         ]
 
         [tool.uv.sources]
         relative-dep = { path = "../relative_dep" }
-        absolute-dep = { path = "../absolute_dep" }
-        file-url-dep = { path = "../file_url_dep" }
+        absolute-dep = { path = "[TEMP_DIR]/absolute_dep" }
+        file-url-dep = { path = "[TEMP_DIR]/file_url_dep" }
+        expanded-dep = { path = "../expanded_dep" }
         "#
         );
     });
 
-    // Check uv.lock.
+    // Check uv.lock - relative paths stay relative, absolute paths stay absolute.
     let lock = fs_err::read_to_string(project.join("uv.lock"))?;
 
     insta::with_settings!({
@@ -3272,12 +3309,17 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         [[package]]
         name = "absolute-dep"
         version = "0.1.0"
-        source = { directory = "../absolute_dep" }
+        source = { directory = "[TEMP_DIR]/absolute_dep" }
+
+        [[package]]
+        name = "expanded-dep"
+        version = "0.1.0"
+        source = { directory = "../expanded_dep" }
 
         [[package]]
         name = "file-url-dep"
         version = "0.1.0"
-        source = { directory = "../file_url_dep" }
+        source = { directory = "[TEMP_DIR]/file_url_dep" }
 
         [[package]]
         name = "project"
@@ -3285,14 +3327,16 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         source = { virtual = "." }
         dependencies = [
             { name = "absolute-dep" },
+            { name = "expanded-dep" },
             { name = "file-url-dep" },
             { name = "relative-dep" },
         ]
 
         [package.metadata]
         requires-dist = [
-            { name = "absolute-dep", directory = "../absolute_dep" },
-            { name = "file-url-dep", directory = "../file_url_dep" },
+            { name = "absolute-dep", directory = "[TEMP_DIR]/absolute_dep" },
+            { name = "expanded-dep", directory = "../expanded_dep" },
+            { name = "file-url-dep", directory = "[TEMP_DIR]/file_url_dep" },
             { name = "relative-dep", directory = "../relative_dep" },
         ]
 
@@ -3300,6 +3344,86 @@ fn add_relative_and_absolute_paths() -> Result<()> {
         name = "relative-dep"
         version = "0.1.0"
         source = { directory = "../relative_dep" }
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Check relative and absolute archive path handling with `uv add`.
+#[test]
+fn add_relative_and_absolute_archives() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let relative_archives = context.temp_dir.child("relative_archives");
+    relative_archives.create_dir_all()?;
+    let relative_archive = relative_archives.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        relative_archive.path(),
+    )?;
+
+    let absolute_archives = context.temp_dir.child("absolute_archives");
+    absolute_archives.create_dir_all()?;
+    let absolute_archive = absolute_archives.child("tqdm-1000.0.0-py3-none-any.whl");
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/tqdm-1000.0.0-py3-none-any.whl"),
+        absolute_archive.path(),
+    )?;
+
+    uv_snapshot!(context.filters(), context.add().arg("../relative_archives/ok-1.0.0-py3-none-any.whl").arg("--no-sync").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg(absolute_archive.path()).arg("--no-sync").current_dir(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "ok",
+            "tqdm",
+        ]
+
+        [tool.uv.sources]
+        ok = { path = "../relative_archives/ok-1.0.0-py3-none-any.whl" }
+        tqdm = { path = "[TEMP_DIR]/absolute_archives/tqdm-1000.0.0-py3-none-any.whl" }
         "#
         );
     });
