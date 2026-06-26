@@ -1,4 +1,8 @@
+use anyhow::Result;
 use insta::assert_snapshot;
+
+use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::Scenario;
 use uv_test::{diff_snapshot, uv_snapshot};
 
 #[test]
@@ -207,6 +211,57 @@ fn packse_add_remove_one_package() {
     }, {
         assert_snapshot!(diff, @"");
     });
+}
+
+/// An add/remove round trip should preserve the canonical dependency markers in the lockfile.
+#[test]
+fn marker_reachability_add_remove_round_trip() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = Scenario::load("workspace/marker-reachability.toml")?;
+    scenario.materialize_workspace(&context.temp_dir)?;
+    let server = PackseServer::from_scenario(&scenario);
+
+    let mut lock = context.lock();
+    server.configure(&mut lock);
+    uv_snapshot!(context.filters(), lock, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    let initial_lock = context.read("uv.lock");
+
+    let mut add = context.add();
+    add.arg("--no-sync").arg("unrelated");
+    server.configure(&mut add);
+    uv_snapshot!(context.filters(), add, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    let mut remove = context.remove();
+    remove.arg("--no-sync").arg("unrelated");
+    server.configure(&mut remove);
+    uv_snapshot!(context.filters(), remove, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    ");
+
+    let final_lock = context.read("uv.lock");
+    assert_snapshot!(diff_snapshot(&initial_lock, &final_lock, 10), @"");
+
+    Ok(())
 }
 
 #[test]
