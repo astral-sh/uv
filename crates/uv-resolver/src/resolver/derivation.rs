@@ -1,4 +1,4 @@
-use pubgrub::{Id, Kind, State, VersionSet};
+use pubgrub::{Id, Kind, State};
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{DerivationChain, DerivationStep};
@@ -24,7 +24,7 @@ impl DerivationChainBuilder {
         /// Find a path from the current package to the root package.
         fn find_path(
             id: Id<PubGrubPackage>,
-            version: &PubGrubVersion<Version>,
+            version: &Version,
             state: &State<UvDependencyProvider>,
             solution: &FxHashMap<Id<PubGrubPackage>, PubGrubVersion<Version>>,
             path: &mut Vec<DerivationStep>,
@@ -38,14 +38,20 @@ impl DerivationChainBuilder {
 
                 // Find a dependency from a package to the current package.
                 if let Kind::FromDependencyOf(id1, _, id2, v2) = &incompat.kind {
-                    if id == *id2 && v2.contains(version) {
-                        if let Some(version) = solution.get(id1) {
+                    if id == *id2 && v2.versions().contains(version) {
+                        if let Some(selected_version) = solution.get(id1) {
                             let p1 = &state.package_store[*id1];
                             let p2 = &state.package_store[*id2];
 
                             if p1.name_no_root() == p2.name_no_root() {
                                 // Skip proxied dependencies.
-                                if find_path(*id1, version, state, solution, path) {
+                                if find_path(
+                                    *id1,
+                                    selected_version.version(),
+                                    state,
+                                    solution,
+                                    path,
+                                ) {
                                     return true;
                                 }
                             } else if let Some(name) = p1.name_no_root() {
@@ -54,12 +60,18 @@ impl DerivationChainBuilder {
                                     name.clone(),
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
-                                    Some(version.version().clone()),
+                                    Some(selected_version.version().clone()),
                                     v2.versions(),
                                 ));
 
                                 // Recursively search the next package.
-                                if find_path(*id1, version, state, solution, path) {
+                                if find_path(
+                                    *id1,
+                                    selected_version.version(),
+                                    state,
+                                    solution,
+                                    path,
+                                ) {
                                     return true;
                                 }
 
@@ -79,10 +91,7 @@ impl DerivationChainBuilder {
         let solution: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
         let path = {
             let mut path = vec![];
-            let solver_version = solution.get(&id)?;
-            if solver_version.version() != version
-                || !find_path(id, solver_version, state, &solution, &mut path)
-            {
+            if !find_path(id, version, state, &solution, &mut path) {
                 return None;
             }
             path.reverse();
