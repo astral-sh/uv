@@ -1761,7 +1761,8 @@
             "check-command",
             "packaged-init",
             "centralized-project-envs",
-            "tool-install-locks"
+            "tool-install-locks",
+            "workspace-list-scripts"
           ]
         },
         {
