@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
@@ -1680,4 +1681,58 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     ");
 
     Ok(())
+}
+
+#[test]
+fn tool_upgrade_writes_preview_lock() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    lock_path.assert(predicate::path::missing());
+    context
+        .tool_upgrade()
+        .arg("simple-launcher")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher" }]
+        constraints = [{ name = "simple-launcher" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" },
+        ]
+        "#);
+    });
 }

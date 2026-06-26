@@ -9,40 +9,44 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, GitLfsSetting, Reinstall, TargetTriple, Upgrade,
+    Concurrency, Constraints, DryRun, Excludes, GitLfsSetting, HashCheckingMode, Overrides,
+    Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
     RequirementSource, UnresolvedRequirementSpecification,
 };
-use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
+use uv_installer::{InstallationStrategy, Planner, SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, Tool};
 use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::loggers::{
+    DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
+};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::pip::{resolution_markers, resolution_tags};
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
+    tool_environment_spec,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -80,6 +84,7 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let tool_locks = preview.is_enabled(PreviewFeature::ToolInstallLocks);
     if settings.resolver.torch_backend.is_some() {
         warn_user_once!(
             "The `--torch-backend` option is experimental and may change without warning."
@@ -406,7 +411,7 @@ pub(crate) async fn install(
                 reinstall.with_package(package_name)
             })
             .combine(settings.reinstall);
-        let cache = cache.with_refresh(refresh.combine(Refresh::from(reinstall.clone())));
+        let cache = cache.with_refresh(refresh.clone().combine(Refresh::from(reinstall.clone())));
         (
             ResolverInstallerSettings {
                 reinstall,
@@ -417,14 +422,14 @@ pub(crate) async fn install(
     };
 
     // Resolve the constraints.
-    let constraints: Vec<_> = spec
+    let receipt_constraints = spec
         .constraints
         .into_iter()
         .map(|constraint| constraint.requirement)
-        .collect();
+        .collect::<Vec<_>>();
 
     // Resolve the overrides.
-    let overrides = resolve_names(
+    let receipt_overrides = resolve_names(
         spec.overrides,
         &interpreter,
         &settings,
@@ -440,21 +445,30 @@ pub(crate) async fn install(
     .await?;
 
     // Resolve the excludes.
-    let excludes = spec.excludes.clone();
+    let receipt_excludes = spec.excludes.clone();
 
     // Resolve the build constraints.
-    let build_constraints: Vec<Requirement> =
+    let receipt_build_constraints =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
             .into_iter()
             .map(|constraint| constraint.requirement)
-            .collect();
+            .collect::<Vec<_>>();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
+    let lock_manifest = ToolLock::manifest(
+        &requirements,
+        &receipt_constraints,
+        &receipt_overrides,
+        &receipt_excludes,
+        &receipt_build_constraints,
+        &settings.resolver.dependency_metadata,
+    );
 
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
+    let tool_dir = installed_tools.tool_dir(package_name);
 
     // Find the existing receipt, if it exists. If the receipt is present but malformed, we'll
     // remove the environment and continue with the install.
@@ -507,17 +521,60 @@ pub(crate) async fn install(
             })
     };
 
+    let validation_interpreter = existing_environment
+        .as_ref()
+        .map_or(&interpreter, |environment| {
+            environment.environment().interpreter()
+        });
+    let mut existing_tool_lock = if tool_locks {
+        if let Some(lock) = ToolLock::read(&tool_dir) {
+            match Box::pin(lock.validate(
+                &requirements,
+                &receipt_constraints,
+                &receipt_overrides,
+                &receipt_excludes,
+                &receipt_build_constraints,
+                &refresh,
+                validation_interpreter,
+                &settings.resolver,
+                &client_builder,
+                &state,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
+            ))
+            .await
+            {
+                Ok(lock) => Some(lock),
+                Err(ProjectError::Lock(err)) if err.is_resolution() || err.is_no_build() => {
+                    return Err(ProjectError::Lock(err).into());
+                }
+                Err(err) => {
+                    warn_user!("Failed to validate existing tool lock: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // If the requested and receipt requirements are the same...
     if let Some(environment) = existing_environment.as_ref().filter(|_| {
         // And the user didn't request a reinstall or upgrade...
         !request.is_latest() && settings.reinstall.is_none() && settings.resolver.upgrade.is_none()
     }) {
         if let Some(tool_receipt) = existing_tool_receipt.as_ref() {
-            if requirements == tool_receipt.requirements()
-                && constraints == tool_receipt.constraints()
-                && overrides == tool_receipt.overrides()
-                && excludes == tool_receipt.excludes()
-                && build_constraints == tool_receipt.build_constraints()
+            if !tool_locks
+                && requirements == tool_receipt.requirements()
+                && receipt_constraints == tool_receipt.constraints()
+                && receipt_overrides == tool_receipt.overrides()
+                && receipt_excludes == tool_receipt.excludes()
+                && receipt_build_constraints == tool_receipt.build_constraints()
             {
                 let ResolverInstallerSettings {
                     resolver:
@@ -553,15 +610,14 @@ pub(crate) async fn install(
 
                 // Check if the installed packages meet the requirements.
                 let site_packages = SitePackages::from_environment(environment.environment())?;
-                let exclusions = uv_configuration::Excludes::from_entries(excludes.iter().cloned());
-                // TODO(charlie): This fast path only validates the explicit requested
-                // requirements. It can miss editable-mode drift for implicit workspace members.
-                if matches!(
+                // This fast path only validates the explicitly requested requirements. It can miss
+                // editable-mode drift for implicit workspace members.
+                let already_installed = matches!(
                     site_packages.satisfies_requirements(
                         requirements.iter(),
-                        constraints.iter().chain(latest.iter()),
-                        &uv_configuration::Overrides::from_requirements(overrides.clone()),
-                        &exclusions,
+                        receipt_constraints.iter().chain(latest.iter()),
+                        &Overrides::from_requirements(receipt_overrides.clone()),
+                        &Excludes::from_entries(receipt_excludes.iter().cloned()),
                         InstallationStrategy::Permissive,
                         &markers,
                         &tags,
@@ -571,7 +627,8 @@ pub(crate) async fn install(
                         extra_build_variables,
                     ),
                     Ok(SatisfiesResult::Fresh { .. })
-                ) {
+                );
+                if already_installed {
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
                         installed_tools.add_tool_receipt(
@@ -599,160 +656,371 @@ pub(crate) async fn install(
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
-        constraints: constraints
+        constraints: receipt_constraints
             .iter()
             .cloned()
             .chain(latest)
             .map(NameRequirementSpecification::from)
             .collect(),
-        overrides: overrides
+        overrides: receipt_overrides
             .iter()
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
+        excludes: receipt_excludes.clone(),
         ..spec
+    };
+
+    let resolution_scope = if tool_locks {
+        EnvironmentResolution::Universal
+    } else {
+        EnvironmentResolution::Specific
     };
 
     // TODO(zanieb): Build the environment in the cache directory then copy into the tool directory.
     // This lets us confirm the environment is valid before removing an existing install. However,
     // entrypoints always contain an absolute path to the relevant Python interpreter, which would
     // be invalidated by moving the environment.
-    let environment = if let Some(environment) = existing_environment {
-        let environment = match update_environment(
-            environment.into_environment(),
-            spec,
-            Modifications::Exact,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            ExtraBuildRequires::default(),
-            &settings,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            Box::new(DefaultInstallLogger),
-            installer_metadata,
-            &concurrency,
-            &cache,
-            workspace_cache,
-            DryRun::Disabled,
-            printer,
-            preview,
-        )
-        .await
-        {
-            Ok(update) => update.into_environment(),
-            Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
+    let (environment, tool_lock) = if let Some(environment) = existing_environment {
+        let environment = environment.into_environment();
+        let (environment, tool_lock) = if tool_locks {
+            let site_packages = SitePackages::from_environment(&environment)?;
+            let satisfied_tool_lock = match existing_tool_lock.take() {
+                Some(lock) if lock.is_satisfied() => Some(lock.into_lock()),
+                lock => {
+                    existing_tool_lock = lock;
+                    None
+                }
+            };
+            let (resolution, tool_lock) = if let Some(tool_lock) = satisfied_tool_lock {
+                let resolution = tool_lock.to_resolution(
+                    Some(package_name),
+                    environment.interpreter(),
+                    python_platform.as_ref(),
+                    &settings.resolver.build_options,
+                )?;
+                (resolution, tool_lock)
+            } else {
+                let resolution = match resolve_environment(
+                    tool_environment_spec(
+                        spec.clone(),
+                        existing_tool_lock
+                            .as_ref()
+                            .and_then(|lock| lock.preference()),
+                        Some(&site_packages),
+                    ),
+                    resolution_scope,
+                    environment.interpreter(),
+                    python_platform.as_ref(),
+                    SourceTreeEditablePolicy::Tool,
+                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    &settings.resolver,
+                    &client_builder,
+                    &state,
+                    Box::new(SummaryResolveLogger),
+                    &concurrency,
+                    &cache,
+                    workspace_cache,
+                    printer,
+                    preview,
                 )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        // At this point, we updated the existing environment, so we should remove any of its
-        // existing executables.
-        if let Some(existing_receipt) = existing_tool_receipt {
-            remove_entrypoints(&existing_receipt);
-        }
-
-        environment
-    } else {
-        let spec = EnvironmentSpecification::from(spec);
-
-        // If we're creating a new environment, ensure that we can resolve the requirements prior
-        // to removing any existing tools.
-        let resolution = resolve_environment(
-            spec.clone(),
-            &interpreter,
-            python_platform.as_ref(),
-            SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
-            &settings.resolver,
-            &client_builder,
-            &state,
-            Box::new(DefaultResolveLogger),
-            &concurrency,
-            &cache,
-            workspace_cache,
-            printer,
-            preview,
-        )
-        .await;
-
-        // If the resolution failed, retry with the inferred `requires-python` constraint.
-        let (resolution, interpreter) = match resolution {
-            Ok(resolution) => (resolution, interpreter),
-            Err(err) => match err {
-                ProjectError::Operation(err) => {
-                    // If the resolution failed due to the discovered interpreter not satisfying the
-                    // `requires-python` constraint, we can try to refine the interpreter.
-                    //
-                    // For example, if we discovered a Python 3.8 interpreter on the user's machine,
-                    // but the tool requires Python 3.10 or later, we can try to download a
-                    // Python 3.10 interpreter and re-resolve.
-                    let Some(interpreter) = refine_interpreter(
-                        &interpreter,
-                        python_request.as_ref(),
-                        &err,
-                        &client_builder,
-                        &reporter,
-                        &install_mirrors,
-                        python_preference,
-                        python_downloads,
-                        &cache,
-                    )
-                    .await
-                    .ok()
-                    .flatten() else {
+                .await
+                {
+                    Ok(resolution) => resolution,
+                    Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::with_system_certs(
                             client_builder.system_certs(),
                         )
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                    };
+                    }
+                    Err(err) => return Err(err.into()),
+                };
+                let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+                let resolution = tool_lock.to_resolution(
+                    Some(package_name),
+                    environment.interpreter(),
+                    python_platform.as_ref(),
+                    &settings.resolver.build_options,
+                )?;
+                (resolution, tool_lock)
+            };
 
-                    debug!(
-                        "Re-resolving with Python {} (`{}`)",
-                        interpreter.python_version(),
-                        interpreter.sys_executable().display()
-                    );
-
-                    match resolve_environment(
-                        spec,
-                        &interpreter,
-                        python_platform.as_ref(),
-                        SourceTreeEditablePolicy::Tool,
-                        Constraints::from_requirements(build_constraints.iter().cloned()),
-                        &settings.resolver,
-                        &client_builder,
-                        &state,
-                        Box::new(DefaultResolveLogger),
-                        &concurrency,
-                        &cache,
-                        workspace_cache,
-                        printer,
-                        preview,
+            let ResolverInstallerSettings {
+                resolver:
+                    ResolverSettings {
+                        config_setting,
+                        config_settings_package,
+                        extra_build_dependencies,
+                        extra_build_variables,
+                        ..
+                    },
+                ..
+            } = &settings;
+            let extra_build_requires =
+                LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+                    .into_inner();
+            let tags = resolution_tags(None, python_platform.as_ref(), environment.interpreter())?;
+            let hash_strategy =
+                HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+            let plan = Planner::new(&resolution).build(
+                site_packages,
+                InstallationStrategy::Permissive,
+                &settings.reinstall,
+                &settings.resolver.build_options,
+                &hash_strategy,
+                &settings.resolver.index_locations,
+                config_setting,
+                config_settings_package,
+                &extra_build_requires,
+                extra_build_variables,
+                &cache,
+                &environment,
+                &tags,
+            )?;
+            if plan.is_empty()
+                && !settings.compile_bytecode
+                && !request.is_latest()
+                && settings.reinstall.is_none()
+                && settings.resolver.upgrade.is_none()
+            {
+                let Some(existing_tool_receipt) = existing_tool_receipt.as_ref() else {
+                    bail!("Expected an existing tool receipt");
+                };
+                let python = if explicit_python_request {
+                    python_request.clone()
+                } else {
+                    existing_tool_receipt.python().clone()
+                };
+                ToolLock::write(&tool_dir, Some(&tool_lock))?;
+                installed_tools.add_tool_receipt(
+                    package_name,
+                    Tool::new(
+                        requirements.clone(),
+                        receipt_constraints.clone(),
+                        receipt_overrides.clone(),
+                        receipt_excludes.clone(),
+                        receipt_build_constraints.clone(),
+                        python,
+                        existing_tool_receipt.entrypoints().iter().cloned(),
+                        options.clone(),
+                    ),
+                )?;
+                writeln!(
+                    printer.stderr(),
+                    "`{}` is already installed",
+                    requirement.cyan()
+                )?;
+                return Ok(ExitStatus::Success);
+            }
+            let environment = if plan.is_empty() && !settings.compile_bytecode {
+                environment
+            } else {
+                sync_environment(
+                    environment,
+                    &resolution,
+                    hash_strategy,
+                    Modifications::Exact,
+                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                    (&settings).into(),
+                    &client_builder,
+                    &state,
+                    Box::new(DefaultInstallLogger),
+                    installer_metadata,
+                    &concurrency,
+                    &cache,
+                    printer,
+                    preview,
+                )
+                .await?
+            };
+            (environment, Some(tool_lock))
+        } else {
+            let update = match update_environment(
+                environment,
+                spec,
+                Modifications::Exact,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                ExtraBuildRequires::default(),
+                &settings,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                &concurrency,
+                &cache,
+                workspace_cache,
+                DryRun::Disabled,
+                printer,
+                preview,
+            )
+            .await
+            {
+                Ok(update) => update,
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::with_system_certs(
+                        client_builder.system_certs(),
                     )
-                    .await
-                    {
-                        Ok(resolution) => (resolution, interpreter),
-                        Err(ProjectError::Operation(err)) => {
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                }
+                Err(err) => return Err(err.into()),
+            };
+            (update.environment, None)
+        };
+
+        // At this point, we updated the existing environment, so we should remove any of its
+        // existing executables.
+        if let Some(existing_receipt) = existing_tool_receipt.as_ref() {
+            remove_entrypoints(existing_receipt);
+        }
+
+        (environment, tool_lock)
+    } else {
+        let satisfied_tool_lock = match existing_tool_lock.take() {
+            Some(lock) if lock.is_satisfied() => Some(lock.into_lock()),
+            lock => {
+                existing_tool_lock = lock;
+                None
+            }
+        };
+        let (resolution, interpreter, tool_lock) = if let Some(tool_lock) = satisfied_tool_lock {
+            let resolution = tool_lock.to_resolution(
+                Some(package_name),
+                &interpreter,
+                python_platform.as_ref(),
+                &settings.resolver.build_options,
+            )?;
+            (resolution, interpreter, Some(tool_lock))
+        } else {
+            let spec = if tool_locks {
+                tool_environment_spec(
+                    spec,
+                    existing_tool_lock
+                        .as_ref()
+                        .and_then(|lock| lock.preference()),
+                    None,
+                )
+            } else {
+                EnvironmentSpecification::from(spec)
+            };
+
+            // If we're creating a new environment, ensure that we can resolve the requirements prior
+            // to removing any existing tools.
+            let resolution = resolve_environment(
+                spec.clone(),
+                resolution_scope,
+                &interpreter,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await;
+
+            // If the resolution failed, retry with the inferred `requires-python` constraint.
+            let (resolution, interpreter) = match resolution {
+                Ok(resolution) => (resolution, interpreter),
+                Err(err) => match err {
+                    ProjectError::Operation(err) => {
+                        // If the resolution failed due to the discovered interpreter not satisfying the
+                        // `requires-python` constraint, we can try to refine the interpreter.
+                        //
+                        // For example, if we discovered a Python 3.8 interpreter on the user's machine,
+                        // but the tool requires Python 3.10 or later, we can try to download a
+                        // Python 3.10 interpreter and re-resolve.
+                        let Some(interpreter) = refine_interpreter(
+                            &interpreter,
+                            python_request.as_ref(),
+                            &err,
+                            &client_builder,
+                            &reporter,
+                            &install_mirrors,
+                            python_preference,
+                            python_downloads,
+                            &cache,
+                        )
+                        .await
+                        .ok()
+                        .flatten() else {
                             return diagnostics::OperationDiagnostic::with_system_certs(
                                 client_builder.system_certs(),
                             )
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
-                        }
-                        Err(err) => return Err(err.into()),
-                    }
-                }
-                err => return Err(err.into()),
-            },
-        };
+                        };
 
+                        debug!(
+                            "Re-resolving with Python {} (`{}`)",
+                            interpreter.python_version(),
+                            interpreter.sys_executable().display()
+                        );
+
+                        match resolve_environment(
+                            spec.clone(),
+                            resolution_scope,
+                            &interpreter,
+                            python_platform.as_ref(),
+                            SourceTreeEditablePolicy::Tool,
+                            Constraints::from_requirements(
+                                receipt_build_constraints.iter().cloned(),
+                            ),
+                            &settings.resolver,
+                            &client_builder,
+                            &state,
+                            Box::new(DefaultResolveLogger),
+                            &concurrency,
+                            &cache,
+                            workspace_cache,
+                            printer,
+                            preview,
+                        )
+                        .await
+                        {
+                            Ok(resolution) => (resolution, interpreter),
+                            Err(ProjectError::Operation(err)) => {
+                                return diagnostics::OperationDiagnostic::with_system_certs(
+                                    client_builder.system_certs(),
+                                )
+                                .report(err)
+                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            }
+                            Err(err) => return Err(err.into()),
+                        }
+                    }
+                    err => return Err(err.into()),
+                },
+            };
+
+            if tool_locks {
+                let tool_lock = ToolLock::from_resolution(&tool_dir, &resolution, &lock_manifest)?;
+                let resolution = tool_lock.to_resolution(
+                    Some(package_name),
+                    &interpreter,
+                    python_platform.as_ref(),
+                    &settings.resolver.build_options,
+                )?;
+                (resolution, interpreter, Some(tool_lock))
+            } else {
+                (resolution.into(), interpreter, None)
+            }
+        };
+        let hash_strategy = if tool_lock.is_some() {
+            HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?
+        } else {
+            HashStrategy::default()
+        };
         let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
@@ -764,10 +1032,10 @@ pub(crate) async fn install(
         // Sync the environment with the resolved requirements.
         match sync_environment(
             environment,
-            &resolution.into(),
-            HashStrategy::default(),
+            &resolution,
+            hash_strategy,
             Modifications::Exact,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
+            Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
             (&settings).into(),
             &client_builder,
             &state,
@@ -784,7 +1052,7 @@ pub(crate) async fn install(
             debug!("Failed to sync environment; removing `{}`", package_name);
             let _ = installed_tools.remove_environment(package_name);
         }) {
-            Ok(environment) => environment,
+            Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
@@ -810,10 +1078,11 @@ pub(crate) async fn install(
             None
         },
         requirements,
-        constraints,
-        overrides,
-        excludes,
-        build_constraints,
+        receipt_constraints,
+        receipt_overrides,
+        receipt_excludes,
+        receipt_build_constraints,
+        tool_lock.as_ref(),
         printer,
     )?;
 

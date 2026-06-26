@@ -8,13 +8,15 @@ use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
-use uv_distribution_types::{ExtraBuildRequires, Requirement, RequirementSource};
+use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
+use uv_distribution::LoweredExtraBuildDependencies;
+use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::CWD;
+use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,
@@ -28,12 +30,13 @@ use uv_workspace::WorkspaceCache;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
 };
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::{operations::Modifications, resolution_tags};
 use crate::commands::project::{
-    EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
+    EnvironmentResolution, EnvironmentUpdate, PlatformState, resolve_environment, sync_environment,
+    update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::remove_entrypoints;
+use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -272,6 +275,7 @@ async fn upgrade_tool(
     concurrency: &Concurrency,
     preview: Preview,
 ) -> Result<UpgradeReport> {
+    let tool_locks = preview.is_enabled(PreviewFeature::ToolInstallLocks);
     // Ensure the tool is installed.
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
@@ -320,32 +324,174 @@ async fn upgrade_tool(
     );
     let settings = ResolverInstallerSettings::from(options.clone());
 
+    let build_constraint_requirements = existing_tool_receipt.build_constraints().to_vec();
     let build_constraints =
-        Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
+        Constraints::from_requirements(build_constraint_requirements.iter().cloned());
+    let manifest_constraints = existing_tool_receipt
+        .constraints()
+        .iter()
+        .chain(constraints)
+        .cloned()
+        .collect::<Vec<_>>();
+    let manifest_overrides = existing_tool_receipt.overrides().to_vec();
+    let manifest_excludes = existing_tool_receipt.excludes().to_vec();
+    let lock_manifest = ToolLock::manifest(
+        existing_tool_receipt.requirements(),
+        &manifest_constraints,
+        &manifest_overrides,
+        &manifest_excludes,
+        &build_constraint_requirements,
+        &settings.resolver.dependency_metadata,
+    );
 
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_excludes(
         existing_tool_receipt.requirements().to_vec(),
-        existing_tool_receipt
-            .constraints()
-            .iter()
-            .chain(constraints)
-            .cloned()
-            .collect(),
-        existing_tool_receipt.overrides().to_vec(),
-        existing_tool_receipt.excludes().to_vec(),
+        manifest_constraints,
+        manifest_overrides,
+        manifest_excludes,
     );
     // Initialize any shared state.
     let state = PlatformState::default();
+    // Check if we need to create a new environment — if so, resolve it first, then install the
+    // requested tool.
+    let requested_interpreter =
+        interpreter.filter(|interpreter| !environment.environment().uses(interpreter));
+    let tool_dir = installed_tools.tool_dir(name);
+    // TODO(zanieb): When updating an existing environment, build it in the cache directory then
+    // copy it into the tool directory.
+    let (environment, outcome, tool_lock) = if tool_locks {
+        let target_interpreter =
+            requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
+        let site_packages = SitePackages::from_environment(environment.environment())?;
+        let universal_resolution = resolve_environment(
+            tool_environment_spec(spec, None, Some(&site_packages)),
+            EnvironmentResolution::Universal,
+            target_interpreter,
+            python_platform,
+            SourceTreeEditablePolicy::Tool,
+            build_constraints.clone(),
+            &settings.resolver,
+            client_builder,
+            &state,
+            Box::new(SummaryResolveLogger),
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await?;
+        let tool_lock =
+            ToolLock::from_resolution(&tool_dir, &universal_resolution, &lock_manifest)?;
+        let resolution = tool_lock.to_resolution(
+            Some(name),
+            target_interpreter,
+            python_platform,
+            &settings.resolver.build_options,
+        )?;
+        let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
-    // Check if we need to create a new environment — if so, resolve it first, then
-    // install the requested tool
-    let (environment, outcome) = if let Some(interpreter) =
-        interpreter.filter(|interpreter| !environment.environment().uses(interpreter))
-    {
-        // If we're using a new interpreter, re-create the environment for each tool.
+        if requested_interpreter.is_some() {
+            let environment =
+                installed_tools.create_environment(name, target_interpreter.clone())?;
+            let environment = sync_environment(
+                environment,
+                &resolution,
+                hash_strategy,
+                Modifications::Exact,
+                build_constraints,
+                (&settings).into(),
+                client_builder,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                concurrency,
+                cache,
+                printer,
+                preview,
+            )
+            .await?;
+            (
+                environment,
+                UpgradeOutcome::UpgradeEnvironment,
+                Some(tool_lock),
+            )
+        } else {
+            // Otherwise, upgrade the existing environment.
+            let ResolverInstallerSettings {
+                resolver:
+                    crate::settings::ResolverSettings {
+                        config_setting,
+                        config_settings_package,
+                        extra_build_dependencies,
+                        extra_build_variables,
+                        ..
+                    },
+                ..
+            } = &settings;
+            let extra_build_requires =
+                LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+                    .into_inner();
+            let tags = resolution_tags(
+                None,
+                python_platform,
+                environment.environment().interpreter(),
+            )?;
+            let plan = Planner::new(&resolution).build(
+                site_packages,
+                InstallationStrategy::Permissive,
+                &settings.reinstall,
+                &settings.resolver.build_options,
+                &hash_strategy,
+                &settings.resolver.index_locations,
+                config_setting,
+                config_settings_package,
+                &extra_build_requires,
+                extra_build_variables,
+                cache,
+                environment.environment(),
+                &tags,
+            )?;
+            let plan_is_empty = plan.is_empty();
+            let changes_tool = plan.cached.iter().any(|dist| dist.name() == name)
+                || plan.remote.iter().any(|dist| dist.name() == name)
+                || plan.reinstalls.iter().any(|dist| dist.name() == name)
+                || plan.extraneous.iter().any(|dist| dist.name() == name);
+            let outcome = if plan_is_empty {
+                UpgradeOutcome::NoOp
+            } else if changes_tool {
+                UpgradeOutcome::UpgradeTool
+            } else {
+                UpgradeOutcome::UpgradeDependencies
+            };
+            let environment = if plan_is_empty && !settings.compile_bytecode {
+                environment.into_environment()
+            } else {
+                sync_environment(
+                    environment.into_environment(),
+                    &resolution,
+                    hash_strategy,
+                    Modifications::Exact,
+                    build_constraints,
+                    (&settings).into(),
+                    client_builder,
+                    &state,
+                    Box::new(UpgradeInstallLogger::new(name.clone())),
+                    installer_metadata,
+                    concurrency,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+            };
+            (environment, outcome, Some(tool_lock))
+        }
+    } else if let Some(interpreter) = requested_interpreter {
         let resolution = resolve_environment(
             spec.into(),
+            EnvironmentResolution::Specific,
             interpreter,
             python_platform,
             SourceTreeEditablePolicy::Tool,
@@ -361,9 +507,7 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-
         let environment = installed_tools.create_environment(name, interpreter.clone())?;
-
         let environment = sync_environment(
             environment,
             &resolution.into(),
@@ -381,12 +525,9 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-
-        (environment, UpgradeOutcome::UpgradeEnvironment)
+        (environment, UpgradeOutcome::UpgradeEnvironment, None)
     } else {
         // Otherwise, upgrade the existing environment.
-        // TODO(zanieb): Build the environment in the cache directory then copy into the tool
-        // directory.
         let EnvironmentUpdate {
             environment,
             changelog,
@@ -421,7 +562,7 @@ async fn upgrade_tool(
             UpgradeOutcome::UpgradeDependencies
         };
 
-        (environment, outcome)
+        (environment, outcome, None)
     };
 
     if matches!(
@@ -452,7 +593,16 @@ async fn upgrade_tool(
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
+            tool_lock.as_ref(),
             printer,
+        )?;
+    } else if tool_locks {
+        ToolLock::write(&tool_dir, tool_lock.as_ref())?;
+        installed_tools.add_tool_receipt(
+            name,
+            existing_tool_receipt
+                .clone()
+                .with_options(ToolOptions::from(options)),
         )?;
     }
 

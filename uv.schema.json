@@ -1760,7 +1760,8 @@
             "venv-safe-clear",
             "check-command",
             "packaged-init",
-            "centralized-project-envs"
+            "centralized-project-envs",
+            "tool-install-locks"
           ]
         },
         {
