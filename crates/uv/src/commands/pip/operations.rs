@@ -41,7 +41,8 @@ use uv_requirements::{
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
+    Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput,
+    ScopedRequirements, UpgradePackages,
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
@@ -132,7 +133,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let mut dependency_group_resolutions = Vec::new();
 
     // Resolve the requirements from the provided sources.
-    let requirements = {
+    let mut requirements = {
         // Partition the requirements into named and unnamed requirements.
         let (mut requirements, unnamed): (Vec<_>, Vec<_>) =
             requirements
@@ -320,12 +321,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
-    // Source-tree dependencies must retain their package context until after scoped overrides and
-    // exclusions are applied. In particular, exclusions need to run before recursive extras are
-    // flattened. Keep these requirements separate so root-level overrides are not applied again.
-    let mut preprocessed_requirements = source_tree_resolutions
+    // Preserve the declaring package for source-tree and dependency-group roots so scoped rules
+    // can be applied before recursive extras are flattened.
+    let mut scoped_requirements = source_tree_resolutions
         .into_iter()
-        .flat_map(|resolution| resolution.into_requirements(&overrides, &excludes))
+        .map(SourceTreeResolution::into_scoped_requirements)
         .collect::<Vec<_>>();
 
     // Dependency groups also belong to their declaring project for scoped overrides and
@@ -355,32 +355,20 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .collect::<Vec<_>>();
 
         if let Some(package) = name.as_ref() {
-            preprocessed_requirements.extend(
-                overrides
-                    .apply_for_scope(package, version.as_ref(), &group_requirements)
-                    .filter(|requirement| {
-                        !excludes.contains_for_package_scope(
-                            package,
-                            version.as_ref(),
-                            &requirement.name,
-                        )
-                    })
-                    .map(std::borrow::Cow::into_owned),
-            );
+            scoped_requirements.push(ScopedRequirements::dependency_group(
+                package.clone(),
+                version,
+                group_requirements.into_boxed_slice(),
+            ));
         } else {
-            preprocessed_requirements.extend(
-                overrides
-                    .apply(&group_requirements)
-                    .filter(|requirement| !excludes.contains(&requirement.name))
-                    .map(std::borrow::Cow::into_owned),
-            );
+            requirements.extend(group_requirements);
         }
     }
 
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
-            let (mut lookaheads, updated_hasher) = LookaheadResolver::new(
+            let (lookaheads, updated_hasher) = LookaheadResolver::new(
                 &requirements,
                 &constraints,
                 &overrides,
@@ -393,33 +381,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     concurrency.downloads_semaphore.clone(),
                 ),
             )
+            .with_scoped_requirements(&scoped_requirements)
             .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
             .await?;
             hasher = updated_hasher;
-
-            if !preprocessed_requirements.is_empty() {
-                let (preprocessed_lookaheads, updated_hasher) = LookaheadResolver::new(
-                    &preprocessed_requirements,
-                    &constraints,
-                    &overrides,
-                    &excludes,
-                    &hasher,
-                    index,
-                    DistributionDatabase::new(
-                        client,
-                        build_dispatch,
-                        concurrency.downloads_semaphore.clone(),
-                    ),
-                )
-                .with_preprocessed_requirements()
-                .with_reporter(Arc::new(ResolverReporter::from(printer)))
-                .resolve(&resolver_env)
-                .await?;
-                hasher = updated_hasher;
-                lookaheads.extend(preprocessed_lookaheads);
-            }
-
             lookaheads
         }
         DependencyMode::Direct => Vec::new(),
@@ -431,7 +397,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
         requirements,
-        preprocessed_requirements,
+        scoped_requirements,
         constraints,
         overrides,
         excludes,

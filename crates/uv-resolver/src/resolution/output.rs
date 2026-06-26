@@ -10,7 +10,7 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
     Dist, DistributionId, Edge, Identifier, IndexUrl, Name, Node, Requirement, RequiresPython,
@@ -31,7 +31,8 @@ use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
+    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, ScopedRequirements,
+    VersionsResponse,
 };
 
 /// The output of a successful resolution.
@@ -51,12 +52,14 @@ pub struct ResolverOutput {
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
     pub(crate) requirements: Vec<Requirement>,
-    /// The index of the first requirement that already had overrides and exclusions applied.
-    pub(crate) preprocessed_requirements_start: usize,
+    /// Requirements that retain the scope of their declaring package.
+    pub(crate) scoped_requirements: Vec<ScopedRequirements>,
     /// The constraints that were used to build the graph.
     pub(crate) constraints: Constraints,
     /// The overrides that were used to build the graph.
     pub(crate) overrides: Overrides,
+    /// The exclusions that were used to build the graph.
+    pub(crate) excludes: Excludes,
     /// The options that were used to build the graph.
     pub(crate) options: Options,
 }
@@ -124,13 +127,29 @@ struct PackageRef<'a> {
 }
 
 impl ResolverOutput {
+    /// Return the effective requirements from package-scoped roots.
+    fn effective_scoped_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.scoped_requirements
+            .iter()
+            .flat_map(|requirements| requirements.effective(&self.overrides, &self.excludes))
+    }
+
+    /// Return the requirements supplied directly by the user, including package-scoped roots.
+    pub(crate) fn root_requirements(&self) -> impl Iterator<Item = Cow<'_, Requirement>> {
+        self.requirements
+            .iter()
+            .map(Cow::Borrowed)
+            .chain(self.effective_scoped_requirements().map(Cow::Owned))
+    }
+
     /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
         requirements: &[Requirement],
-        preprocessed_requirements_start: usize,
+        scoped_requirements: &[ScopedRequirements],
         constraints: &Constraints,
         overrides: &Overrides,
+        excludes: &Excludes,
         preferences: &Preferences,
         index: &InMemoryIndex,
         git: &GitResolver,
@@ -237,9 +256,10 @@ impl ResolverOutput {
             requires_python,
             diagnostics,
             requirements: requirements.to_vec(),
-            preprocessed_requirements_start,
+            scoped_requirements: scoped_requirements.to_vec(),
             constraints: constraints.clone(),
             overrides: overrides.clone(),
+            excludes: excludes.clone(),
             options,
             fork_markers,
         };
@@ -733,13 +753,10 @@ impl ResolverOutput {
         }
 
         // Ensure that we consider markers from direct dependencies.
-        let (requirements, preprocessed_requirements) = self
-            .requirements
-            .split_at(self.preprocessed_requirements_start);
         for direct_req in self.constraints.apply(
             self.overrides
-                .apply(requirements)
-                .chain(preprocessed_requirements.iter().map(Cow::Borrowed)),
+                .apply(&self.requirements)
+                .chain(self.effective_scoped_requirements().map(Cow::Owned)),
         ) {
             add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }

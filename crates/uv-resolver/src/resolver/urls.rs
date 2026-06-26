@@ -25,14 +25,14 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
     /// URL requirements in overrides. An override URL replaces all requirements and constraints
-    /// URLs unless a preprocessed requirement has already selected a scoped override. There can be
+    /// URLs unless a package-scoped requirement has selected a scoped override. There can be
     /// multiple URLs for the same package as long as they are in different forks.
     overrides: ForkMap<VerbatimParsedUrl>,
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
     regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
-    /// Registry requirements that already selected a scoped override before reaching the
-    /// resolver. Global URL overrides must not replace these requirements.
+    /// Registry requirements that selected a scoped override. Global URL overrides must not
+    /// replace these requirements.
     shadowed_overrides: ForkMap<()>,
 }
 
@@ -93,14 +93,15 @@ impl Urls {
             overrides.add(requirement.as_ref(), url);
         }
 
-        // Source-tree and dependency-group requirements are preprocessed with their package scope.
-        // A remaining registry requirement therefore shadows any global URL override for the same
-        // dependency in that fork.
-        for requirement in &manifest.preprocessed_requirements {
-            if overrides.contains_key(&requirement.name)
-                && matches!(&requirement.source, RequirementSource::Registry { .. })
-            {
-                shadowed_overrides.add(requirement, ());
+        // A registry requirement selected by a source-tree or dependency-group scope shadows any
+        // global URL override for the same dependency in that fork.
+        for scoped in &manifest.scoped_requirements {
+            for requirement in scoped.effective(&manifest.overrides, &manifest.excludes) {
+                if overrides.contains_key(&requirement.name)
+                    && matches!(&requirement.source, RequirementSource::Registry { .. })
+                {
+                    shadowed_overrides.add(&requirement, ());
+                }
             }
         }
 

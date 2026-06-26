@@ -13,7 +13,7 @@ pub use lock::{
     PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult,
     TreeDisplay, VERSION, cyclonedx_json,
 };
-pub use manifest::Manifest;
+pub use manifest::{Manifest, ScopedRequirements};
 pub use options::{Flexibility, Options, OptionsBuilder};
 pub use preferences::{Preference, PreferenceError, Preferences};
 pub use prerelease::PrereleaseMode;

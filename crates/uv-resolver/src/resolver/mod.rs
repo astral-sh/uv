@@ -47,7 +47,7 @@ use crate::error::{NoSolutionError, ResolveError, derivation_tree_packages};
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_strategy::ForkStrategy;
 use crate::fork_urls::ForkUrls;
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, ScopedRequirements};
 use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
@@ -107,7 +107,7 @@ pub struct Resolver<Provider: ResolverProvider, InstalledPackages: InstalledPack
 struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     project: Option<PackageName>,
     requirements: Vec<Requirement>,
-    preprocessed_requirements_start: usize,
+    scoped_requirements: Vec<ScopedRequirements>,
     constraints: Constraints,
     overrides: Overrides,
     excludes: Excludes,
@@ -232,9 +232,6 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         let selector = CandidateSelector::for_resolution(&options, &manifest, &env);
         let urls = Urls::from_manifest(&manifest, &env, git, options.dependency_mode);
         let indexes = Indexes::from_manifest(&manifest, &env, options.dependency_mode);
-        let preprocessed_requirements_start = manifest.requirements.len();
-        let mut requirements = manifest.requirements;
-        requirements.extend(manifest.preprocessed_requirements);
 
         let state = ResolverState {
             index: index.clone(),
@@ -246,8 +243,8 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             indexes,
             project: manifest.project,
             workspace_members: manifest.workspace_members,
-            requirements,
-            preprocessed_requirements_start,
+            requirements: manifest.requirements,
+            scoped_requirements: manifest.scoped_requirements,
             constraints: manifest.constraints,
             overrides: manifest.overrides,
             excludes: manifest.excludes,
@@ -743,9 +740,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         ResolverOutput::from_state(
             &resolutions,
             &self.requirements,
-            self.preprocessed_requirements_start,
+            &self.scoped_requirements,
             &self.constraints,
             &self.overrides,
+            &self.excludes,
             &self.preferences,
             &self.index,
             &self.git,
@@ -1790,12 +1788,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
                 let no_dev_deps = BTreeMap::default();
-                let (requirements, preprocessed_requirements) = self
-                    .requirements
-                    .split_at(self.preprocessed_requirements_start);
                 let requirements = self
                     .flatten_requirements(
-                        requirements,
+                        &self.requirements,
                         &no_dev_deps,
                         None,
                         None,
@@ -1804,12 +1799,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         env,
                         python_requirement,
                     )
-                    .chain(self.preprocessed_requirements_for_extra(
-                        preprocessed_requirements,
-                        env,
-                        python_requirement.to_marker_tree(),
-                        python_requirement,
-                    ));
+                    .chain(self.scoped_requirements.iter().flat_map(|requirements| {
+                        self.scoped_root_requirements(requirements, env, python_requirement)
+                            .into_iter()
+                            .map(Cow::Owned)
+                    }));
 
                 requirements
                     .flat_map(move |requirement| {
@@ -2213,21 +2207,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             })
     }
 
-    /// Requirements that have already had overrides and exclusions applied, filtered by Python
-    /// version and the markers of this fork.
-    fn preprocessed_requirements_for_extra<'data, 'parameters>(
-        &'data self,
-        dependencies: &'data [Requirement],
-        env: &'parameters ResolverEnvironment,
-        python_marker: MarkerTree,
-        python_requirement: &'parameters PythonRequirement,
-    ) -> impl Iterator<Item = Cow<'data, Requirement>> + 'parameters
-    where
-        'data: 'parameters,
-    {
-        dependencies
-            .iter()
-            .filter(move |requirement| {
+    /// Apply a package-scoped pip root and filter it for the current fork.
+    fn scoped_root_requirements(
+        &self,
+        requirements: &ScopedRequirements,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Vec<Requirement> {
+        let python_marker = python_requirement.to_marker_tree();
+        requirements
+            .effective(&self.overrides, &self.excludes)
+            .into_iter()
+            .filter(|requirement| {
                 Self::is_requirement_applicable(
                     requirement,
                     None,
@@ -2236,8 +2227,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 )
             })
-            .map(Cow::Borrowed)
-            .flat_map(move |requirement| {
+            .flat_map(|requirement| {
+                let requirement = Cow::<Requirement>::Owned(requirement);
                 iter::once(requirement.clone()).chain(self.constraints_for_requirement(
                     requirement,
                     None,
@@ -2246,6 +2237,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 ))
             })
+            .map(Cow::into_owned)
+            .collect()
     }
 
     /// Whether a requirement is applicable for the Python version, the markers of this fork and the

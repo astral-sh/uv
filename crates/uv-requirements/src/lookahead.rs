@@ -8,7 +8,7 @@ use tracing::trace;
 use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
-use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
+use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment, ScopedRequirements};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
 use crate::{Error, required_dist};
@@ -38,8 +38,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     overrides: &'a Overrides,
     /// The dependency exclusions for the project.
     excludes: &'a Excludes,
-    /// Whether the direct requirements have already had overrides and exclusions applied.
-    preprocessed_requirements: bool,
+    /// Direct requirements that retain the scope of their declaring package.
+    scoped_requirements: &'a [ScopedRequirements],
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -64,7 +64,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             constraints,
             overrides,
             excludes,
-            preprocessed_requirements: false,
+            scoped_requirements: &[],
             hasher,
             index,
             database,
@@ -80,11 +80,11 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         }
     }
 
-    /// Mark the direct requirements as having already had overrides and exclusions applied.
+    /// Include direct requirements that retain the scope of their declaring package.
     #[must_use]
-    pub fn with_preprocessed_requirements(self) -> Self {
+    pub fn with_scoped_requirements(self, scoped_requirements: &'a [ScopedRequirements]) -> Self {
         Self {
-            preprocessed_requirements: true,
+            scoped_requirements,
             ..self
         }
     }
@@ -105,20 +105,23 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut hasher = self.hasher.clone();
 
         // Queue up the initial requirements.
-        let mut queue: VecDeque<_> = if self.preprocessed_requirements {
-            self.constraints
-                .apply(self.requirements.iter().map(Cow::Borrowed))
-                .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-                .map(|requirement| (*requirement).clone())
-                .collect()
-        } else {
-            self.constraints
-                .apply(self.overrides.apply(self.requirements))
-                .filter(|requirement| !self.excludes.contains(&requirement.name))
-                .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
-                .map(|requirement| (*requirement).clone())
-                .collect()
-        };
+        let requirements = self
+            .overrides
+            .apply(self.requirements)
+            .filter(|requirement| !self.excludes.contains(&requirement.name))
+            .map(Cow::into_owned)
+            .chain(
+                self.scoped_requirements
+                    .iter()
+                    .flat_map(|requirements| requirements.effective(self.overrides, self.excludes)),
+            )
+            .collect::<Vec<_>>();
+        let mut queue: VecDeque<_> = self
+            .constraints
+            .apply(requirements.iter().map(Cow::Borrowed))
+            .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
+            .map(Cow::into_owned)
+            .collect();
 
         while !queue.is_empty() || !futures.is_empty() {
             while let Some(requirement) = queue.pop_front() {

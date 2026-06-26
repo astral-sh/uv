@@ -6,8 +6,8 @@ use futures::TryStreamExt;
 use futures::stream::FuturesOrdered;
 use url::Url;
 
-use uv_configuration::{Excludes, ExtrasSpecification, Overrides};
-use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
+use uv_configuration::ExtrasSpecification;
+use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, Identifier, SourceUrl,
@@ -18,7 +18,7 @@ use uv_pep440::Version;
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{InMemoryIndex, MetadataResponse};
+use uv_resolver::{InMemoryIndex, MetadataResponse, ScopedRequirements};
 use uv_types::{BuildContext, HashStrategy};
 
 #[derive(Debug, Clone)]
@@ -59,8 +59,6 @@ pub struct SourceTreeResolution {
     provided_extras: Box<[ExtraName]>,
     /// The extras selected when resolving the requirements.
     selected_extras: Box<[ExtraName]>,
-    /// The origin of the project requirements.
-    origin: RequirementOrigin,
 }
 
 impl SourceTreeResolution {
@@ -79,36 +77,14 @@ impl SourceTreeResolution {
         &self.provided_extras
     }
 
-    /// Apply scoped rules and return the flattened requirements sourced from the source tree.
-    pub fn into_requirements(
-        self,
-        overrides: &Overrides,
-        excludes: &Excludes,
-    ) -> Box<[Requirement]> {
-        let requirements = overrides
-            .apply_for_scope(
-                &self.project,
-                self.version.as_ref(),
-                self.requirements.iter(),
-            )
-            .filter(|requirement| {
-                !excludes.contains_for_package_scope(
-                    &self.project,
-                    self.version.as_ref(),
-                    &requirement.name,
-                )
-            })
-            .map(std::borrow::Cow::into_owned)
-            .collect();
-
-        FlatRequiresDist::from_requirements(requirements, &self.project)
-            .into_iter()
-            .map(|requirement| Requirement {
-                origin: requirement.origin.or_else(|| Some(self.origin.clone())),
-                marker: requirement.marker.simplify_extras(&self.selected_extras),
-                ..requirement
-            })
-            .collect()
+    /// Preserve the project scope for resolution.
+    pub fn into_scoped_requirements(self) -> ScopedRequirements {
+        ScopedRequirements::source_tree(
+            self.project,
+            self.version,
+            self.requirements,
+            self.selected_extras,
+        )
     }
 }
 
@@ -178,7 +154,14 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .cloned()
             .collect::<Vec<_>>();
 
-        let requirements = metadata.requires_dist;
+        let requirements = metadata
+            .requires_dist
+            .into_iter()
+            .map(|requirement| Requirement {
+                origin: Some(origin.clone()),
+                ..requirement
+            })
+            .collect();
         let project = metadata.name;
         let provided_extras = metadata.provides_extra;
 
@@ -188,7 +171,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             version,
             provided_extras,
             selected_extras: selected_extras.into_boxed_slice(),
-            origin,
         })
     }
 

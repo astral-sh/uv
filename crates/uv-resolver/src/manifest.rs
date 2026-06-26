@@ -4,12 +4,95 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_distribution::FlatRequiresDist;
 use uv_distribution_types::Requirement;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::Version;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
 use crate::{DependencyMode, Exclusions, ResolverEnvironment};
+
+/// Requirements from a pip root that retain the scope of their declaring package.
+#[derive(Clone, Debug)]
+pub struct ScopedRequirements {
+    package: PackageName,
+    version: Option<Version>,
+    requirements: Box<[Requirement]>,
+    kind: ScopedRequirementsKind,
+}
+
+/// How to interpret the requirements in a [`ScopedRequirements`] root.
+#[derive(Clone, Debug)]
+enum ScopedRequirementsKind {
+    /// Project metadata can contain recursive self-extras that need to be flattened.
+    SourceTree { extras: Box<[ExtraName]> },
+    /// Dependency groups are already flattened and can include the project itself.
+    DependencyGroup,
+}
+
+impl ScopedRequirements {
+    /// Create scoped requirements from source-tree project metadata.
+    pub fn source_tree(
+        package: PackageName,
+        version: Option<Version>,
+        requirements: Box<[Requirement]>,
+        extras: Box<[ExtraName]>,
+    ) -> Self {
+        Self {
+            package,
+            version,
+            requirements,
+            kind: ScopedRequirementsKind::SourceTree { extras },
+        }
+    }
+
+    /// Create scoped requirements from selected dependency groups.
+    pub fn dependency_group(
+        package: PackageName,
+        version: Option<Version>,
+        requirements: Box<[Requirement]>,
+    ) -> Self {
+        Self {
+            package,
+            version,
+            requirements,
+            kind: ScopedRequirementsKind::DependencyGroup,
+        }
+    }
+
+    /// Apply the package scope and return the effective root requirements.
+    pub fn effective(&self, overrides: &Overrides, excludes: &Excludes) -> Vec<Requirement> {
+        let requirements = overrides
+            .apply_for_scope(
+                &self.package,
+                self.version.as_ref(),
+                self.requirements.iter(),
+            )
+            .filter(|requirement| {
+                !excludes.contains_for_package_scope(
+                    &self.package,
+                    self.version.as_ref(),
+                    &requirement.name,
+                )
+            })
+            .map(Cow::into_owned)
+            .collect::<Box<_>>();
+
+        match &self.kind {
+            ScopedRequirementsKind::SourceTree { extras } => {
+                FlatRequiresDist::from_requirements(requirements, &self.package)
+                    .into_iter()
+                    .map(|requirement| Requirement {
+                        marker: requirement.marker.simplify_extras(extras),
+                        ..requirement
+                    })
+                    .collect()
+            }
+            ScopedRequirementsKind::DependencyGroup => requirements.into_vec(),
+        }
+    }
+}
 
 /// A manifest of requirements, constraints, and preferences.
 #[derive(Clone, Debug)]
@@ -17,8 +100,8 @@ pub struct Manifest {
     /// The direct requirements for the project.
     pub(crate) requirements: Vec<Requirement>,
 
-    /// Direct requirements that have already had overrides and exclusions applied.
-    pub(crate) preprocessed_requirements: Vec<Requirement>,
+    /// Direct requirements that retain the scope of their declaring package.
+    pub(crate) scoped_requirements: Vec<ScopedRequirements>,
 
     /// The constraints for the project.
     pub(crate) constraints: Constraints,
@@ -59,7 +142,7 @@ pub struct Manifest {
 impl Manifest {
     pub fn new(
         requirements: Vec<Requirement>,
-        preprocessed_requirements: Vec<Requirement>,
+        scoped_requirements: Vec<ScopedRequirements>,
         constraints: Constraints,
         overrides: Overrides,
         excludes: Excludes,
@@ -71,7 +154,7 @@ impl Manifest {
     ) -> Self {
         Self {
             requirements,
-            preprocessed_requirements,
+            scoped_requirements,
             constraints,
             overrides,
             excludes,
@@ -86,7 +169,7 @@ impl Manifest {
     pub fn simple(requirements: Vec<Requirement>) -> Self {
         Self {
             requirements,
-            preprocessed_requirements: Vec::new(),
+            scoped_requirements: Vec::new(),
             constraints: Constraints::default(),
             overrides: Overrides::default(),
             excludes: Excludes::default(),
@@ -108,6 +191,13 @@ impl Manifest {
     pub fn with_lookaheads(mut self, lookaheads: Vec<RequestedRequirements>) -> Self {
         self.lookaheads = lookaheads;
         self
+    }
+
+    /// Return the effective requirements from package-scoped roots.
+    pub(crate) fn effective_scoped_requirements(&self) -> impl Iterator<Item = Requirement> + '_ {
+        self.scoped_requirements
+            .iter()
+            .flat_map(|requirements| requirements.effective(&self.overrides, &self.excludes))
     }
 
     /// Return an iterator over all requirements, constraints, and overrides, in priority order,
@@ -193,12 +283,11 @@ impl Manifest {
                             }),
                     )
                     .chain(
-                        self.preprocessed_requirements
-                            .iter()
+                        self.effective_scoped_requirements()
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             })
-                            .map(Cow::Borrowed),
+                            .map(Cow::Owned),
                     )
                     .chain(
                         self.constraints
@@ -214,7 +303,7 @@ impl Manifest {
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(&self.requirements)
-                    .chain(self.preprocessed_requirements.iter().map(Cow::Borrowed))
+                    .chain(self.effective_scoped_requirements().map(Cow::Owned))
                     .chain(self.constraints.requirements().map(Cow::Borrowed))
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
@@ -303,12 +392,11 @@ impl Manifest {
                             }),
                     )
                     .chain(
-                        self.preprocessed_requirements
-                            .iter()
+                        self.effective_scoped_requirements()
                             .filter(move |requirement| {
                                 requirement.evaluate_markers(env.marker_environment(), &[])
                             })
-                            .map(Cow::Borrowed),
+                            .map(Cow::Owned),
                     ),
             ),
 
@@ -316,7 +404,7 @@ impl Manifest {
             DependencyMode::Direct => Either::Right(
                 self.overrides
                     .apply(self.requirements.iter())
-                    .chain(self.preprocessed_requirements.iter().map(Cow::Borrowed))
+                    .chain(self.effective_scoped_requirements().map(Cow::Owned))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
                     }),
@@ -326,6 +414,6 @@ impl Manifest {
 
     /// Returns the number of input requirements.
     pub fn num_requirements(&self) -> usize {
-        self.requirements.len() + self.preprocessed_requirements.len()
+        self.requirements.len() + self.effective_scoped_requirements().count()
     }
 }
