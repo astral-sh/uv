@@ -69,6 +69,8 @@ discover it. Switching interpreters selects separate cached environments and can
 Explicit project environment paths, including `UV_PROJECT_ENVIRONMENT` and environments selected
 with `--active`, are not centralized. The feature has no effect when `--no-cache` is enabled.
 
+The feature also applies to pathless `uv venv` invocations from a project or workspace root.
+
 ## The lockfile
 
 uv creates a `uv.lock` file next to the `pyproject.toml`.
