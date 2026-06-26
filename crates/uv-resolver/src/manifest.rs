@@ -265,6 +265,13 @@ impl Manifest {
                                 lookahead.version(),
                                 lookahead.requirements(),
                             )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
