@@ -5697,6 +5697,22 @@ fn run_groups_requires_python_environment() -> Result<()> {
         .assert()
         .success();
 
+    // TMP: Attempt to catch this flake with verbose output
+    // See https://github.com/astral-sh/uv/issues/14160
+    let output = context
+        .run()
+        .arg("-vv")
+        .arg("--no-default-groups")
+        .arg("python")
+        .arg("--version")
+        .output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("Removed virtual environment"),
+        "{}",
+        stderr
+    );
+
     // Disabling the default group shouldn't churn a compatible environment.
     uv_snapshot!(context.filters(), context.run()
         .arg("--no-default-groups")
