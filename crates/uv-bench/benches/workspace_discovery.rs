@@ -350,7 +350,10 @@ fn run_cli(runtime: &tokio::runtime::Runtime, cli: Cli, initialize_globals: bool
     let status = runtime
         .block_on(uv::run(cli, initialize_globals))
         .expect(message);
-    assert!(matches!(status, ExitStatus::Success), "{message}");
+    assert!(
+        matches!(status, ExitStatus::Success | ExitStatus::External(0)),
+        "{message}"
+    );
 }
 
 criterion_group!(
