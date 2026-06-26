@@ -1,11 +1,16 @@
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+use serde_json::json;
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
+};
 
 use uv_static::EnvVars;
 
@@ -1735,4 +1740,191 @@ fn tool_upgrade_writes_preview_lock() {
         ]
         "#);
     });
+}
+
+/// Mount a minimal package index for `simple-launcher` with a caller-provided wheel hash.
+///
+/// Serving the metadata separately lets the resolver record the advertised hash without
+/// downloading the wheel that the installer will later verify.
+async fn mount_simple_launcher_index(server: &MockServer, hash: &str, wheel: &[u8]) {
+    let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
+    let simple_index = json!({
+        "meta": {
+            "api-version": "1.1"
+        },
+        "name": "simple-launcher",
+        "files": [{
+            "filename": wheel_filename,
+            "url": format!("{}/files/{wheel_filename}", server.uri()),
+            "hashes": {
+                "sha256": hash
+            },
+            "core-metadata": true,
+            "upload-time": "2024-03-24T00:00:00Z"
+        }]
+    });
+    Mock::given(method("GET"))
+        .and(path("/simple/simple-launcher/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            simple_index.to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{wheel_filename}.metadata")))
+        .respond_with(ResponseTemplate::new(200).set_body_string(indoc! {"
+            Metadata-Version: 2.1
+            Name: simple-launcher
+            Version: 0.1.0
+            Requires-Python: >=3.8
+        "}))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{wheel_filename}")))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel.to_vec()))
+        .mount(server)
+        .await;
+}
+
+/// Ensure that `tool upgrade` verifies distributions against its newly generated tool lock.
+///
+/// The initial install and upgrade use the same index URL so that the installed distribution's
+/// source preference remains valid, while the index changes the advertised hash before upgrade.
+#[tokio::test]
+async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel_filename = "simple_launcher-0.1.0-py3-none-any.whl";
+    let wheel = fs_err::read(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )?;
+    let server = MockServer::start().await;
+    mount_simple_launcher_index(
+        &server,
+        "5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        &wheel,
+    )
+    .await;
+    let index_url = format!("{}/simple", server.uri());
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--index-url")
+        .arg(&index_url)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    server.reset().await;
+    mount_simple_launcher_index(
+        &server,
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        &wheel,
+    )
+    .await;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--index-url")
+        .arg(&index_url)
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade simple-launcher
+      Caused by: Failed to prepare distributions
+      Caused by: Failed to download `simple-launcher==0.1.0`
+      Caused by: Hash mismatch for `simple-launcher==0.1.0`
+
+    Expected:
+      sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+    Computed:
+      sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+    "#);
+
+    Ok(())
+}
+
+/// Ensure that a lock-backed upgrade recreates the environment for a requested Python version.
+#[test]
+fn tool_upgrade_lock_uses_requested_python() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("simple-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+
+        [project.scripts]
+        simple-launcher = "simple_launcher:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let local_package_src = local_package.child("src").child("simple_launcher");
+    local_package_src.create_dir_all()?;
+    local_package_src
+        .child("__init__.py")
+        .write_str("def main(): pass\n")?;
+
+    context
+        .tool_install()
+        .arg(local_package.path())
+        .arg("--python")
+        .arg("3.11")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    context
+        .tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--python")
+        .arg("3.12")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let pyvenv = fs_err::read_to_string(tool_dir.join("simple-launcher").join("pyvenv.cfg"))?;
+    let Some(version_info) = pyvenv
+        .lines()
+        .find(|line| line.starts_with("version_info = "))
+    else {
+        bail!("Missing `version_info` in tool environment")
+    };
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(version_info, @"version_info = 3.12.[X]");
+    });
+
+    Ok(())
 }
