@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Display;
 use std::path::Path;
 
@@ -7,12 +7,13 @@ use uv_distribution_types::{Name, Requirement, RequiresPython, ResolvedDist, Url
 use uv_fs::PortablePathBuf;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, ModuleName};
 use uv_workspace::Workspace;
 
 use crate::lock::{
-    Dependency, DirectSource, PackageId, RegistrySource, Source, SourceDist, SourceDistMetadata,
-    Wheel, WheelWireSource, ZstdWheel,
+    Dependency, DirectSource, Package, PackageId, RegistrySource, Source, SourceDist,
+    SourceDistMetadata, Wheel, WheelWireSource, ZstdWheel,
 };
 use crate::{Lock, LockError};
 
@@ -274,7 +275,15 @@ impl MetadataNode {
         node
     }
 
-    fn add_dependency(&mut self, workspace_root: &PortablePathBuf, dependency: &Dependency) {
+    fn add_dependency(
+        &mut self,
+        workspace_root: &PortablePathBuf,
+        dependency: &Dependency,
+        parent_reachability: MarkerTree,
+    ) {
+        let mut marker = dependency.simplified_marker.as_simplified_marker_tree();
+        marker.and(parent_reachability);
+        let marker = marker.try_to_string();
         let extras = dependency.extra();
         if extras.is_empty() {
             let id = MetadataNodeId::from_package_id(
@@ -284,7 +293,7 @@ impl MetadataNode {
             );
             self.dependencies.push(MetadataDependency {
                 id: id.to_flat(),
-                marker: dependency.simplified_marker.try_to_string(),
+                marker,
             });
             return;
         }
@@ -296,7 +305,7 @@ impl MetadataNode {
             );
             self.dependencies.push(MetadataDependency {
                 id: id.to_flat(),
-                marker: dependency.simplified_marker.try_to_string(),
+                marker: marker.clone(),
             });
         }
     }
@@ -372,6 +381,183 @@ fn root_dependencies<'lock>(
     }
 
     dependencies
+}
+
+/// Determine the standalone reachability marker for every package-derived metadata node.
+///
+/// Dependency markers in the lock are simplified under the conditions required to reach their
+/// parent. Metadata consumers evaluate each edge marker independently, so restore those conditions
+/// by propagating markers from the metadata graph's entry points.
+fn metadata_reachability(
+    workspace_root: &PortablePathBuf,
+    workspace: Option<&Workspace>,
+    lock: &Lock,
+) -> BTreeMap<MetadataNodeIdFlat, MarkerTree> {
+    let mut reachability = BTreeMap::new();
+    let mut queue = VecDeque::new();
+    let always = MarkerTree::TRUE;
+
+    if let Some(workspace) = workspace {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| workspace.packages().contains_key(package.name()))
+        {
+            add_metadata_reachability(
+                workspace_root,
+                &mut reachability,
+                &mut queue,
+                package,
+                MetadataNodeKind::Package,
+                always,
+            );
+            for extra in package.optional_dependencies.keys() {
+                add_metadata_reachability(
+                    workspace_root,
+                    &mut reachability,
+                    &mut queue,
+                    package,
+                    MetadataNodeKind::Extra(extra.clone()),
+                    always,
+                );
+            }
+            for group in package.dependency_groups.keys() {
+                add_metadata_reachability(
+                    workspace_root,
+                    &mut reachability,
+                    &mut queue,
+                    package,
+                    MetadataNodeKind::Group(group.clone()),
+                    always,
+                );
+            }
+        }
+    }
+
+    for requirement in lock
+        .requirements()
+        .iter()
+        .chain(lock.dependency_groups().values().flatten())
+    {
+        for package in lock
+            .packages()
+            .iter()
+            .filter(|package| package.name() == &requirement.name)
+        {
+            let Some(marker) = lock.root_requirement_marker(requirement, package) else {
+                continue;
+            };
+            let mut has_extra_node = false;
+            for extra in requirement
+                .extras
+                .iter()
+                .filter(|extra| package.optional_dependencies.contains_key(*extra))
+            {
+                add_metadata_reachability(
+                    workspace_root,
+                    &mut reachability,
+                    &mut queue,
+                    package,
+                    MetadataNodeKind::Extra(extra.clone()),
+                    marker,
+                );
+                has_extra_node = true;
+            }
+            if !has_extra_node {
+                add_metadata_reachability(
+                    workspace_root,
+                    &mut reachability,
+                    &mut queue,
+                    package,
+                    MetadataNodeKind::Package,
+                    marker,
+                );
+            }
+        }
+    }
+
+    while let Some((package, kind)) = queue.pop_front() {
+        let id =
+            MetadataNodeId::from_package_id(workspace_root, &package.id, kind.clone()).to_flat();
+        let Some(parent_reachability) = reachability.get(&id).copied() else {
+            continue;
+        };
+
+        if matches!(kind, MetadataNodeKind::Extra(_)) {
+            add_metadata_reachability(
+                workspace_root,
+                &mut reachability,
+                &mut queue,
+                package,
+                MetadataNodeKind::Package,
+                parent_reachability,
+            );
+        }
+
+        let dependencies: &[Dependency] = match &kind {
+            MetadataNodeKind::Package => package.dependencies.as_slice(),
+            MetadataNodeKind::Extra(extra) => package
+                .optional_dependencies
+                .get(extra)
+                .map_or(&[], Vec::as_slice),
+            MetadataNodeKind::Group(group) => package
+                .dependency_groups
+                .get(group)
+                .map_or(&[], Vec::as_slice),
+            MetadataNodeKind::Build => &[],
+        };
+        for dependency in dependencies {
+            let mut dependency_reachability =
+                dependency.simplified_marker.as_simplified_marker_tree();
+            dependency_reachability.and(parent_reachability);
+            let dependency_package = lock.find_by_id(&dependency.package_id);
+            if dependency.extra.is_empty() {
+                add_metadata_reachability(
+                    workspace_root,
+                    &mut reachability,
+                    &mut queue,
+                    dependency_package,
+                    MetadataNodeKind::Package,
+                    dependency_reachability,
+                );
+            } else {
+                for extra in &dependency.extra {
+                    add_metadata_reachability(
+                        workspace_root,
+                        &mut reachability,
+                        &mut queue,
+                        dependency_package,
+                        MetadataNodeKind::Extra(extra.clone()),
+                        dependency_reachability,
+                    );
+                }
+            }
+        }
+    }
+
+    reachability
+}
+
+fn add_metadata_reachability<'lock>(
+    workspace_root: &PortablePathBuf,
+    reachability: &mut BTreeMap<MetadataNodeIdFlat, MarkerTree>,
+    queue: &mut VecDeque<(&'lock Package, MetadataNodeKind)>,
+    package: &'lock Package,
+    kind: MetadataNodeKind,
+    marker: MarkerTree,
+) {
+    let id = MetadataNodeId::from_package_id(workspace_root, &package.id, kind.clone()).to_flat();
+    let changed = if let Some(existing) = reachability.get_mut(&id) {
+        let previous = *existing;
+        existing.or(marker);
+        *existing != previous
+    } else {
+        reachability.insert(id, marker);
+        true
+    };
+    if changed {
+        queue.push_back((package, kind));
+    }
 }
 
 /// The unique key for every node in the graph.
@@ -956,6 +1142,7 @@ impl Metadata {
         let mut resolve = BTreeMap::new();
         let mut members = Vec::new();
         let workspace_root = PortablePathBuf::from(workspace_root);
+        let reachability = metadata_reachability(&workspace_root, workspace, lock);
 
         for lock_package in lock.packages() {
             let mut meta_package = MetadataNode::from_package_id(
@@ -963,10 +1150,14 @@ impl Metadata {
                 &lock_package.id,
                 MetadataNodeKind::Package,
             );
+            let package_reachability = reachability
+                .get(&meta_package.id.to_flat())
+                .copied()
+                .unwrap_or(MarkerTree::FALSE);
 
             // Direct dependencies go on the package node
             for dependency in &lock_package.dependencies {
-                meta_package.add_dependency(&workspace_root, dependency);
+                meta_package.add_dependency(&workspace_root, dependency, package_reachability);
             }
 
             // Extras get their own nodes
@@ -976,13 +1167,17 @@ impl Metadata {
                     &lock_package.id,
                     MetadataNodeKind::Extra(extra.clone()),
                 );
+                let extra_reachability = reachability
+                    .get(&meta_extra.id.to_flat())
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE);
                 // Extras always depend on the base package
                 meta_extra.dependencies.push(MetadataDependency {
                     id: meta_package.id.to_flat(),
                     marker: None,
                 });
                 for dependency in dependencies {
-                    meta_extra.add_dependency(&workspace_root, dependency);
+                    meta_extra.add_dependency(&workspace_root, dependency, extra_reachability);
                 }
 
                 meta_package.optional_dependencies.push(MetadataExtra {
@@ -1000,9 +1195,13 @@ impl Metadata {
                     &lock_package.id,
                     MetadataNodeKind::Group(group.clone()),
                 );
+                let group_reachability = reachability
+                    .get(&meta_group.id.to_flat())
+                    .copied()
+                    .unwrap_or(MarkerTree::FALSE);
                 // Groups *do not* depend on the base package, so don't add that
                 for dependency in dependencies {
-                    meta_group.add_dependency(&workspace_root, dependency);
+                    meta_group.add_dependency(&workspace_root, dependency, group_reachability);
                 }
 
                 meta_package.dependency_groups.push(MetadataGroup {
