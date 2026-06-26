@@ -3746,7 +3746,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-project'" },
         ]
 
         [package.dev-dependencies]
@@ -3934,7 +3934,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
         ]
 
         [package.metadata]
@@ -3963,7 +3963,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
         ]
 
         [package.metadata]
@@ -4202,7 +4202,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-example-foo' or extra == 'project-7-example'" },
         ]
 
         [package.metadata]
@@ -4235,7 +4235,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample' or (extra == 'extra-7-example-foo' and extra == 'project-7-example')" },
         ]
 
         [package.metadata]
@@ -4520,8 +4520,8 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "indirection", extra = ["foo"] },
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "indirection", extra = ["foo"], marker = "extra == 'project-7-example'" },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
         ]
 
         [package.metadata]
@@ -4567,7 +4567,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
         version = "0.1.0"
         source = { editable = "subexample" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-10-subexample'" },
         ]
 
         [package.metadata]
@@ -4704,8 +4704,8 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
+            { name = "idna", marker = "extra == 'project-7-example'" },
+            { name = "sniffio", marker = "extra == 'project-7-example'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
@@ -4717,7 +4717,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
         version = "0.1.0"
         source = { editable = "." }
         dependencies = [
-            { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "anyio", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-7-example'" },
         ]
 
         [package.dev-dependencies]
@@ -5526,10 +5526,10 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
 
         [package.optional-dependencies]
         non-prod = [
-            { name = "package-a", extra = ["non-prod"], marker = "extra == 'extra-14-workspace-demo-prod' or extra == 'extra-9-package-a-non-prod' or extra != 'extra-14-workspace-demo-non-prod'" },
+            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
         ]
         prod = [
-            { name = "package-a", extra = ["prod"], marker = "extra == 'extra-14-workspace-demo-non-prod' or extra != 'extra-14-workspace-demo-prod' or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod')" },
+            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
         ]
 
         [package.metadata]
@@ -19852,7 +19852,7 @@ fn lock_non_project_member_conflicts() -> Result<()> {
         version = "0.1.0"
         source = { editable = "member-a" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-a'" },
         ]
 
         [package.metadata]
@@ -19863,7 +19863,7 @@ fn lock_non_project_member_conflicts() -> Result<()> {
         version = "0.1.0"
         source = { editable = "member-b" }
         dependencies = [
-            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" } },
+            { name = "sortedcontainers", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-8-member-b'" },
         ]
 
         [package.metadata]

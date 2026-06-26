@@ -5690,8 +5690,9 @@ pub struct Dependency {
     package_id: PackageId,
     extra: BTreeSet<ExtraName>,
     /// A marker simplified from the PEP 508 marker in `complexified_marker`
-    /// by assuming `requires-python` and the parent package's reachability marker are satisfied.
-    /// So if
+    /// by assuming `requires-python` and the PEP 508 portion of the parent package's reachability
+    /// marker are satisfied. The parent's conflict predicates are retained for compatibility with
+    /// older lockfile readers. So if
     /// `requires-python = '>=3.8'`, then
     /// `python_version >= '3.8' and python_version < '3.12'`
     /// gets simplified to `python_version < '3.12'`.
@@ -5710,8 +5711,8 @@ pub struct Dependency {
     /// acceptable to do comparisons on the simplified form.
     simplified_marker: SimplifiedMarkerTree,
     /// The "complexified" marker is independent of `requires-python`, but remains contextual to
-    /// the reachability of its parent package. It can be evaluated while traversing dependencies
-    /// from that package.
+    /// the PEP 508 reachability of its parent package. It can be evaluated while traversing
+    /// dependencies from that package.
     complexified_marker: UniversalMarker,
 }
 
@@ -7001,7 +7002,9 @@ fn fork_markers_union(
     environment
 }
 
-/// Simplify an edge marker using the conditions that must already hold to reach its parent node.
+/// Simplify an edge marker using the PEP 508 conditions that must already hold to reach its parent
+/// node. Parent conflict predicates remain on the edge for compatibility with older lockfile
+/// readers that evaluate dependency markers independently during conflict discovery.
 fn simplify_dependency_marker(
     requires_python: &RequiresPython,
     environment: SimplifiedMarkerTree,
@@ -7009,7 +7012,7 @@ fn simplify_dependency_marker(
     marker: UniversalMarker,
 ) -> UniversalMarker {
     let parent =
-        SimplifiedMarkerTree::new(requires_python, parent.combined()).as_simplified_marker_tree();
+        SimplifiedMarkerTree::new(requires_python, parent.pep508()).as_simplified_marker_tree();
     let marker =
         SimplifiedMarkerTree::new(requires_python, marker.combined()).as_simplified_marker_tree();
     let marker = marker.restrict(parent);
@@ -7306,6 +7309,7 @@ pub(crate) fn is_wheel_unreachable(
 
 #[cfg(test)]
 mod tests {
+    use uv_pep440::VersionSpecifiers;
     use uv_pep508::MarkerEnvironmentBuilder;
     use uv_warnings::anstream;
 
@@ -7335,6 +7339,27 @@ mod tests {
             sys_platform: "darwin",
         })
         .expect("valid marker environment")
+    }
+
+    #[test]
+    fn dependency_marker_preserves_parent_conflicts() {
+        let requires_python = RequiresPython::from_specifiers(
+            &VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
+        );
+        let parent = UniversalMarker::from_combined(
+            MarkerTree::from_str(
+                "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-1-x-foo'",
+            )
+            .expect("valid parent marker"),
+        );
+        let environment = SimplifiedMarkerTree::new(&requires_python, MarkerTree::TRUE);
+
+        let marker = simplify_dependency_marker(&requires_python, environment, parent, parent);
+
+        assert_eq!(
+            marker.combined().try_to_string().as_deref(),
+            Some("python_full_version >= '3.12' and extra != 'extra-1-x-foo'")
+        );
     }
 
     #[test]
