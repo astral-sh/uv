@@ -27,8 +27,8 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
 use crate::pubgrub::{
-    PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter,
-    report_derivation_tree,
+    PrereleasePreference, PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter,
+    Range as SolverRange, report_derivation_tree,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
@@ -171,6 +171,9 @@ pub type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableR
 type ErrorExternal = External<PubGrubPackage, Range<Version>, UnavailableReason>;
 type ErrorDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 type ErrorTerms = Map<PubGrubPackage, Term<Range<Version>>>;
+type SolverErrorTree = DerivationTree<PubGrubPackage, SolverRange<Version>, UnavailableReason>;
+type SolverErrorExternal = External<PubGrubPackage, SolverRange<Version>, UnavailableReason>;
+type SolverErrorDerived = Derived<PubGrubPackage, SolverRange<Version>, UnavailableReason>;
 
 /// Visit each distinct package in a derivation tree without recursive calls.
 ///
@@ -263,6 +266,38 @@ impl Drop for StackSafeErrorTree {
 impl Debug for StackSafeErrorTree {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         debug_derivation_tree(self, f)
+    }
+}
+
+/// Own a solver derivation tree whose destruction must not recurse through the process stack.
+struct StackSafeSolverErrorTree(Option<SolverErrorTree>);
+
+impl StackSafeSolverErrorTree {
+    fn new(derivation_tree: SolverErrorTree) -> Self {
+        Self(Some(derivation_tree))
+    }
+
+    fn into_inner(mut self) -> SolverErrorTree {
+        self.0.take().expect("derivation tree is only taken once")
+    }
+}
+
+impl Drop for StackSafeSolverErrorTree {
+    fn drop(&mut self) {
+        let Some(derivation_tree) = self.0.take() else {
+            return;
+        };
+        let mut trees = vec![derivation_tree];
+        while let Some(tree) = trees.pop() {
+            if let DerivationTree::Derived(derived) = tree {
+                if let Ok(cause1) = Arc::try_unwrap(derived.cause1) {
+                    trees.push(cause1);
+                }
+                if let Ok(cause2) = Arc::try_unwrap(derived.cause2) {
+                    trees.push(cause2);
+                }
+            }
+        }
     }
 }
 
@@ -396,6 +431,102 @@ fn derived_tree(metadata: DerivedMetadata, cause1: ErrorTree, cause2: ErrorTree)
     })
 }
 
+/// Collapse PubGrub's pre-release preference dimensions into ordinary version ranges for
+/// user-facing diagnostics.
+pub(crate) fn collapse_prerelease_preferences(
+    derivation_tree: pubgrub::NoSolutionError<UvDependencyProvider>,
+) -> ErrorTree {
+    enum Task {
+        Visit(StackSafeSolverErrorTree),
+        Rebuild(DerivedMetadata),
+    }
+
+    fn normalize_external(external: SolverErrorExternal) -> ErrorExternal {
+        match external {
+            External::NotRoot(package, version) => {
+                External::NotRoot(package, version.into_version())
+            }
+            External::NoVersions(package, versions) => {
+                External::NoVersions(package, versions.versions())
+            }
+            External::FromDependencyOf(package, versions, dependency, dependency_versions) => {
+                External::FromDependencyOf(
+                    package,
+                    versions.versions(),
+                    dependency,
+                    dependency_versions.versions(),
+                )
+            }
+            External::Custom(package, versions, reason) => {
+                External::Custom(package, versions.versions(), reason)
+            }
+        }
+    }
+
+    fn normalize_derived(
+        derived: SolverErrorDerived,
+    ) -> (DerivedMetadata, Arc<SolverErrorTree>, Arc<SolverErrorTree>) {
+        let Derived {
+            terms,
+            shared_id,
+            cause1,
+            cause2,
+        } = derived;
+        let terms = terms
+            .into_iter()
+            .map(|(package, term)| {
+                let term = match term {
+                    Term::Positive(versions) => Term::Positive(versions.versions()),
+                    Term::Negative(versions) => Term::Negative(versions.versions()),
+                };
+                (package, term)
+            })
+            .collect();
+        (DerivedMetadata { terms, shared_id }, cause1, cause2)
+    }
+
+    let mut tasks = vec![Task::Visit(StackSafeSolverErrorTree::new(derivation_tree))];
+    let mut results = Vec::new();
+
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::Visit(tree) => match tree.into_inner() {
+                DerivationTree::External(external) => results.push(StackSafeErrorTree::new(
+                    DerivationTree::External(normalize_external(external)),
+                )),
+                DerivationTree::Derived(derived) => {
+                    let (metadata, cause1, cause2) = normalize_derived(derived);
+                    tasks.push(Task::Rebuild(metadata));
+                    tasks.push(Task::Visit(StackSafeSolverErrorTree::new(
+                        Arc::unwrap_or_clone(cause2),
+                    )));
+                    tasks.push(Task::Visit(StackSafeSolverErrorTree::new(
+                        Arc::unwrap_or_clone(cause1),
+                    )));
+                }
+            },
+            Task::Rebuild(metadata) => {
+                let cause2 = results
+                    .pop()
+                    .expect("every derived tree has a second cause")
+                    .into_inner();
+                let cause1 = results
+                    .pop()
+                    .expect("every derived tree has a first cause")
+                    .into_inner();
+                results.push(StackSafeErrorTree::new(derived_tree(
+                    metadata, cause1, cause2,
+                )));
+            }
+        }
+    }
+
+    results
+        .pop()
+        .expect("the root derivation tree produces one result")
+        .into_inner()
+}
+
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
 pub struct NoSolutionError {
     error: StackSafeErrorTree,
@@ -431,9 +562,9 @@ pub struct NoSolutionError {
 }
 
 impl NoSolutionError {
-    /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
+    /// Create a new [`NoSolutionError`] from a normalized derivation tree.
     pub(crate) fn new(
-        error: pubgrub::NoSolutionError<UvDependencyProvider>,
+        error: ErrorTree,
         index: InMemoryIndex,
         included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
@@ -655,12 +786,7 @@ impl NoSolutionError {
         tree = collapse_unavailable_versions(tree);
         tree = collapse_redundant_depends_on_no_versions(tree);
 
-        tree = simplify_derivation_tree_ranges(
-            tree,
-            &self.included_versions,
-            &self.selector,
-            &self.env,
-        );
+        tree = simplify_derivation_tree_ranges(tree, &self.included_versions, &self.selector);
 
         // This needs to be applied _after_ simplification of the ranges
         tree = collapse_redundant_no_versions(tree);
@@ -1506,51 +1632,34 @@ fn simplify_derivation_tree_ranges(
     tree: ErrorTree,
     included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
-    resolver_environment: &ResolverEnvironment,
 ) -> ErrorTree {
     map_derivation_tree(
         tree,
         |mut external| {
             match &mut external {
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                    if let Some(simplified) = simplify_range(
-                        versions1,
-                        package1,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions1, package1, included_versions, candidate_selector)
+                    {
                         *versions1 = simplified;
                     }
-                    if let Some(simplified) = simplify_range(
-                        versions2,
-                        package2,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions2, package2, included_versions, candidate_selector)
+                    {
                         *versions2 = simplified;
                     }
                 }
                 External::NoVersions(package, versions) => {
-                    if let Some(simplified) = simplify_range(
-                        versions,
-                        package,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions, package, included_versions, candidate_selector)
+                    {
                         *versions = simplified;
                     }
                 }
                 External::Custom(package, versions, _) => {
-                    if let Some(simplified) = simplify_range(
-                        versions,
-                        package,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions, package, included_versions, candidate_selector)
+                    {
                         *versions = simplified;
                     }
                 }
@@ -1570,7 +1679,6 @@ fn simplify_derivation_tree_ranges(
                                 &package,
                                 included_versions,
                                 candidate_selector,
-                                resolver_environment,
                             )
                             .unwrap_or(versions),
                         ),
@@ -1580,7 +1688,6 @@ fn simplify_derivation_tree_ranges(
                                 &package,
                                 included_versions,
                                 candidate_selector,
-                                resolver_environment,
                             )
                             .unwrap_or(versions),
                         ),
@@ -1601,7 +1708,6 @@ fn simplify_range(
     package: &PubGrubPackage,
     included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
-    resolver_environment: &ResolverEnvironment,
 ) -> Option<Range<Version>> {
     // If there's not a package name or included versions, we can't simplify anything
     let name = package.name()?;
@@ -1620,11 +1726,10 @@ fn simplify_range(
     }
 
     // Check if pre-releases are allowed
-    let prereleases_not_allowed =
-        candidate_selector
-            .prerelease_strategy()
-            .selection(name, resolver_environment, false)
-            == PrereleaseSelection::Disallow;
+    let prereleases_not_allowed = candidate_selector
+        .prerelease_mode()
+        .selection(PrereleasePreference::PreferStable)
+        == PrereleaseSelection::Disallow;
 
     let any_prerelease = range.iter().any(|(start, end)| {
         let is_pre1 = match start {
@@ -1660,6 +1765,7 @@ fn simplify_range(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pubgrub::PubGrubVersion;
 
     fn deep_derivation_tree() -> ErrorTree {
         let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
@@ -1668,6 +1774,26 @@ mod tests {
 
         for _ in 0..100_000 {
             tree = ErrorTree::Derived(Derived {
+                terms: pubgrub::Map::default(),
+                shared_id: None,
+                cause1: Arc::new(tree),
+                cause2: Arc::new(leaf.clone()),
+            });
+        }
+
+        tree
+    }
+
+    fn deep_solver_derivation_tree() -> SolverErrorTree {
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let leaf = SolverErrorTree::External(External::NotRoot(
+            package,
+            PubGrubVersion::new(PrereleasePreference::PreferStable, Version::new([1_u64])),
+        ));
+        let mut tree = leaf.clone();
+
+        for _ in 0..100_000 {
+            tree = SolverErrorTree::Derived(Derived {
                 terms: pubgrub::Map::default(),
                 shared_id: None,
                 cause1: Arc::new(tree),
@@ -1715,6 +1841,35 @@ mod tests {
             .stack_size(256 * 1024)
             .spawn(|| {
                 let tree = NoSolutionError::collapse_local_version_segments(deep_derivation_tree());
+                drop_derivation_tree(tree);
+            })?;
+
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn collapse_prerelease_preferences_normalizes_ranges() {
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let versions = Ranges::between(Version::new([1_u64]), Version::new([3_u64]));
+        let tree = SolverErrorTree::External(External::NoVersions(
+            package,
+            SolverRange::both(versions.clone()),
+        ));
+
+        assert!(matches!(
+            collapse_prerelease_preferences(tree),
+            ErrorTree::External(External::NoVersions(_, normalized)) if normalized == versions
+        ));
+    }
+
+    #[test]
+    fn collapse_prerelease_preferences_drops_source_tree_without_recursion() -> std::io::Result<()>
+    {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let tree = collapse_prerelease_preferences(deep_solver_derivation_tree());
                 drop_derivation_tree(tree);
             })?;
 

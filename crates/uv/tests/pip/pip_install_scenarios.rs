@@ -3165,7 +3165,7 @@ fn transitive_prerelease_authorization_after_decision() {
      + d==1.0.0
     ");
 
-    // The pre-release proxy introduced through `d` unifies with the previously selected `c` package and moves it to the required pre-release.
+    // The pre-release requirement introduced through `d` invalidates the stable-preferring `c` variant and moves it to the required pre-release.
     context.assert_installed("a", "1.0.0");
     context.assert_installed("b", "1.0.0");
     context.assert_installed("c", "2.0.0a1");

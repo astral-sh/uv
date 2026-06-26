@@ -1,9 +1,8 @@
-use uv_distribution_types::RequirementSource;
-use uv_normalize::PackageName;
 use uv_pep440::{Operator, VersionSpecifiers};
 
-use crate::resolver::ForkSet;
-use crate::{DependencyMode, Manifest, ResolverEnvironment};
+use pubgrub::Ranges;
+
+use crate::pubgrub::{PrereleasePreference, Range};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -19,10 +18,6 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions when an active direct or transitive requirement contains an
-    /// explicit pre-release marker.
-    Explicit,
-
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active direct or transitive requirement contains an explicit pre-release marker.
     #[default]
@@ -35,98 +30,34 @@ impl std::fmt::Display for PrereleaseMode {
             Self::Disallow => write!(f, "disallow"),
             Self::Allow => write!(f, "allow"),
             Self::IfNecessary => write!(f, "if-necessary"),
-            Self::Explicit => write!(f, "explicit"),
             Self::IfNecessaryOrExplicit => write!(f, "if-necessary-or-explicit"),
         }
     }
 }
 
-/// Like [`PrereleaseMode`], but with any additional information required to select a candidate,
-/// like the set of direct dependencies.
-#[derive(Debug, Clone)]
-pub(crate) enum PrereleaseStrategy {
-    /// Disallow all pre-release versions.
-    Disallow,
-
-    /// Allow all pre-release versions.
-    Allow,
-
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints.
-    IfNecessary,
-
-    /// Allow pre-release versions when an active requirement contains an explicit pre-release
-    /// marker.
-    Explicit(ForkSet),
-
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active requirement contains an explicit pre-release marker.
-    IfNecessaryOrExplicit(ForkSet),
-}
-
-impl PrereleaseStrategy {
-    pub(crate) fn from_mode(
-        mode: PrereleaseMode,
-        manifest: &Manifest,
-        env: &ResolverEnvironment,
-        dependencies: DependencyMode,
-    ) -> Self {
-        let mut packages = ForkSet::default();
-
-        match mode {
-            PrereleaseMode::Disallow => Self::Disallow,
-            PrereleaseMode::Allow => Self::Allow,
-            PrereleaseMode::IfNecessary => Self::IfNecessary,
-            _ => {
-                for requirement in manifest.candidate_selection_requirements(env, dependencies) {
-                    let RequirementSource::Registry { specifier, .. } = &requirement.source else {
-                        continue;
-                    };
-
-                    if contains_prerelease(specifier) {
-                        packages.add(&requirement, ());
-                    }
-                }
-
-                match mode {
-                    PrereleaseMode::Explicit => Self::Explicit(packages),
-                    PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(packages),
-                    _ => unreachable!(),
-                }
-            }
+impl PrereleaseMode {
+    /// Expand a structural version range into PubGrub's pre-release preference dimensions.
+    pub(crate) fn range<T: Clone>(
+        self,
+        versions: Ranges<T>,
+        explicit_prerelease: bool,
+    ) -> Range<T> {
+        match (self, explicit_prerelease) {
+            (Self::Disallow | Self::IfNecessary, _) => Range::prefer_stable(versions),
+            (Self::Allow, _) | (Self::IfNecessaryOrExplicit, true) => Range::allow(versions),
+            (Self::IfNecessaryOrExplicit, false) => Range::both(versions),
         }
     }
 
-    /// Returns the pre-release candidate selection policy for a package.
-    ///
-    /// An explicit transitive dependency is represented by a PubGrub package, so its
-    /// authorization is part of the partial solution and follows normal backtracking. When no
-    /// explicit authorization is active, pre-releases remain in the candidate universe but are
-    /// considered only after stable candidates. Keeping the candidate universe fixed is required
-    /// for PubGrub's learned incompatibilities to remain valid.
-    pub(crate) fn selection(
-        &self,
-        package_name: &PackageName,
-        env: &ResolverEnvironment,
-        explicit_prerelease: bool,
-    ) -> PrereleaseSelection {
-        match self {
-            Self::Disallow => PrereleaseSelection::Disallow,
-            Self::Allow => PrereleaseSelection::Allow,
-            Self::IfNecessary => PrereleaseSelection::PreferStable,
-            Self::Explicit(packages) => {
-                if explicit_prerelease || packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
-                } else {
-                    PrereleaseSelection::Disallow
-                }
-            }
-            Self::IfNecessaryOrExplicit(packages) => {
-                if explicit_prerelease || packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
-                } else {
-                    PrereleaseSelection::PreferStable
-                }
-            }
+    /// Return the candidate ordering for one preference dimension.
+    pub(crate) fn selection(self, preference: PrereleasePreference) -> PrereleaseSelection {
+        match (self, preference) {
+            (Self::Disallow, _) => PrereleaseSelection::Disallow,
+            (Self::Allow, _) | (_, PrereleasePreference::Allow) => PrereleaseSelection::Allow,
+            (
+                Self::IfNecessary | Self::IfNecessaryOrExplicit,
+                PrereleasePreference::PreferStable,
+            ) => PrereleaseSelection::PreferStable,
         }
     }
 }
@@ -157,4 +88,36 @@ pub(crate) enum PrereleaseSelection {
     /// Prefer stable candidates, falling back to pre-releases only after stable candidates are
     /// exhausted.
     PreferStable,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use pubgrub::{Ranges, VersionSet};
+    use uv_pep440::VersionSpecifiers;
+
+    use super::{PrereleaseMode, contains_prerelease};
+    use crate::pubgrub::{PrereleasePreference, PubGrubVersion};
+
+    #[test]
+    fn default_range_uses_preference_dimensions() {
+        let ordinary = PrereleaseMode::default().range(Ranges::singleton(1), false);
+        assert!(ordinary.contains(&PubGrubVersion::new(PrereleasePreference::PreferStable, 1,)));
+        assert!(ordinary.contains(&PubGrubVersion::new(PrereleasePreference::Allow, 1,)));
+
+        let explicit = PrereleaseMode::default().range(Ranges::singleton(1), true);
+        assert!(!explicit.contains(&PubGrubVersion::new(PrereleasePreference::PreferStable, 1,)));
+        assert!(explicit.contains(&PubGrubVersion::new(PrereleasePreference::Allow, 1,)));
+    }
+
+    #[test]
+    fn exclusion_does_not_enable_prereleases() {
+        assert!(!contains_prerelease(
+            &VersionSpecifiers::from_str("!=2.0a1").expect("valid version specifier")
+        ));
+        assert!(contains_prerelease(
+            &VersionSpecifiers::from_str(">=2.0a1").expect("valid version specifier")
+        ));
+    }
 }

@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use either::Either;
 use itertools::Itertools;
-use pubgrub::Range;
+use pubgrub::Ranges;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -15,16 +15,16 @@ use uv_platform_tags::Tags;
 use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
-use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
+use crate::prerelease::{PrereleaseMode, PrereleaseSelection};
+use crate::pubgrub::{PrereleasePreference, PubGrubVersion, Range};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
-#[expect(clippy::struct_field_names)]
 pub(crate) struct CandidateSelector {
     resolution_strategy: ResolutionStrategy,
-    prerelease_strategy: PrereleaseStrategy,
+    prerelease_mode: PrereleaseMode,
     index_strategy: IndexStrategy,
 }
 
@@ -42,12 +42,7 @@ impl CandidateSelector {
                 env,
                 options.dependency_mode,
             ),
-            prerelease_strategy: PrereleaseStrategy::from_mode(
-                options.prerelease_mode,
-                manifest,
-                env,
-                options.dependency_mode,
-            ),
+            prerelease_mode: options.prerelease_mode,
             index_strategy: options.index_strategy,
         }
     }
@@ -60,8 +55,8 @@ impl CandidateSelector {
 
     #[inline]
     #[allow(dead_code)]
-    pub(crate) fn prerelease_strategy(&self) -> &PrereleaseStrategy {
-        &self.prerelease_strategy
+    pub(crate) fn prerelease_mode(&self) -> PrereleaseMode {
+        self.prerelease_mode
     }
 
     #[inline]
@@ -84,15 +79,50 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
-        explicit_prerelease: bool,
+        env: &ResolverEnvironment,
+        tags: Option<&'a Tags>,
+    ) -> Option<Candidate<'a>> {
+        for preference in [
+            PrereleasePreference::PreferStable,
+            PrereleasePreference::Allow,
+        ] {
+            let versions = range.preference(preference);
+            if versions.is_empty() {
+                continue;
+            }
+            if let Some(candidate) = self.select_from_range(
+                package_name,
+                versions,
+                version_maps,
+                preferences,
+                installed_packages,
+                exclusions,
+                index,
+                self.prerelease_mode.selection(preference),
+                env,
+                tags,
+            ) {
+                return Some(candidate.with_preference(preference));
+            }
+        }
+        None
+    }
+
+    fn select_from_range<'a, InstalledPackages: InstalledPackagesProvider>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Ranges<Version>,
+        version_maps: &'a [VersionMap],
+        preferences: &'a Preferences,
+        installed_packages: &'a InstalledPackages,
+        exclusions: &'a Exclusions,
+        index: Option<&'a IndexUrl>,
+        prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
-        let prerelease_selection =
-            self.prerelease_strategy
-                .selection(package_name, env, explicit_prerelease);
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -181,7 +211,7 @@ impl CandidateSelector {
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
@@ -253,7 +283,7 @@ impl CandidateSelector {
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
         preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
         reinstall: bool,
@@ -296,6 +326,7 @@ impl CandidateSelector {
                                     dist,
                                 )),
                                 choice_kind: VersionChoiceKind::Preference,
+                                preference: PrereleasePreference::PreferStable,
                             });
                         }
                     }
@@ -375,7 +406,7 @@ impl CandidateSelector {
     /// Check for an installed distribution that satisfies the current range and is allowed.
     fn get_installed<'a, InstalledPackages: InstalledPackagesProvider>(
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         installed_packages: &'a InstalledPackages,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
@@ -406,6 +437,7 @@ impl CandidateSelector {
                     version,
                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     choice_kind: VersionChoiceKind::Installed,
+                    preference: PrereleasePreference::PreferStable,
                 });
             }
             // We do not consider installed distributions with multiple versions because
@@ -424,7 +456,7 @@ impl CandidateSelector {
     pub(crate) fn select_no_preference<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
@@ -432,7 +464,8 @@ impl CandidateSelector {
             package_name,
             range,
             version_maps,
-            self.prerelease_strategy.selection(package_name, env, false),
+            self.prerelease_mode
+                .selection(PrereleasePreference::PreferStable),
             env,
         )
     }
@@ -440,7 +473,7 @@ impl CandidateSelector {
     fn select_no_preference_with<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
@@ -483,7 +516,7 @@ impl CandidateSelector {
     fn select_no_preference_from<'a>(
         &'a self,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         version_maps: &'a [VersionMap],
         prerelease_candidates: PrereleaseCandidates,
         env: &ResolverEnvironment,
@@ -591,7 +624,7 @@ impl CandidateSelector {
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
-        range: &Range<Version>,
+        range: &Ranges<Version>,
         prerelease_candidates: PrereleaseCandidates,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
@@ -782,6 +815,8 @@ pub(crate) struct Candidate<'a> {
     dist: CandidateDist<'a>,
     /// Whether this candidate was selected from a preference.
     choice_kind: VersionChoiceKind,
+    /// The pre-release preference dimension selected by PubGrub.
+    preference: PrereleasePreference,
 }
 
 impl<'a> Candidate<'a> {
@@ -796,7 +831,13 @@ impl<'a> Candidate<'a> {
             version,
             dist: CandidateDist::from(dist),
             choice_kind,
+            preference: PrereleasePreference::PreferStable,
         }
+    }
+
+    fn with_preference(mut self, preference: PrereleasePreference) -> Self {
+        self.preference = preference;
+        self
     }
 
     /// Return the name of the package.
@@ -807,6 +848,11 @@ impl<'a> Candidate<'a> {
     /// Return the version of the package.
     pub(crate) fn version(&self) -> &Version {
         self.version
+    }
+
+    /// Return the candidate as a version in PubGrub's expanded version universe.
+    pub(crate) fn pubgrub_version(&self) -> PubGrubVersion<Version> {
+        PubGrubVersion::new(self.preference, self.version.clone())
     }
 
     /// Return the distribution for the package, if compatible.

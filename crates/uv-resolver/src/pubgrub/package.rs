@@ -46,14 +46,6 @@ pub enum PubGrubPackageInner {
     Python(PubGrubPython),
     /// A system package, which is used to represent a non-Python package.
     System(PackageName),
-    /// A proxy package that enables pre-release candidates for another package.
-    ///
-    /// The proxy selects from stable and pre-release candidates, then depends on the wrapped
-    /// package at exactly the selected version. Modeling the authorization this way makes it part
-    /// of the PubGrub solution: discovering the proxy after the wrapped package was already
-    /// decided forces their versions to unify, while backtracking the parent that introduced the
-    /// proxy removes the authorization automatically.
-    Prerelease { package: PubGrubPackage },
     /// A Python package.
     ///
     /// Note that it is guaranteed that `extra` and `dev` are never both
@@ -141,27 +133,15 @@ impl PubGrubPackage {
         }
     }
 
-    /// Create a proxy that enables pre-release candidates for a package.
-    pub(crate) fn prerelease(package: Self) -> Self {
-        Self(Arc::new(PubGrubPackageInner::Prerelease { package }))
-    }
-
     /// If this package is a proxy package, return the base package it depends on.
     ///
     /// While dependency groups may be attached to a package, we don't consider them here as
     /// there is no (mandatory) dependency from a dependency group to the package.
-    ///
-    /// Pre-release proxies are also omitted intentionally. The generic proxy optimization assumes
-    /// an existing base-package decision should constrain the proxy. A pre-release proxy has the
-    /// opposite purpose: when it is discovered later, its selected version must be allowed to
-    /// invalidate an earlier stable decision. Its exact dependency is added when the proxy version
-    /// is selected instead.
     pub(crate) fn base_package(&self) -> Option<Self> {
         match &**self {
             PubGrubPackageInner::Root(_)
             | PubGrubPackageInner::Python(_)
             | PubGrubPackageInner::System(_)
-            | PubGrubPackageInner::Prerelease { .. }
             | PubGrubPackageInner::Package { .. } => None,
             PubGrubPackageInner::Group { .. } => {
                 // The dependency groups of a package do not by themselves require the package
@@ -191,7 +171,6 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Marker { name, .. } => Some(name),
-            PubGrubPackageInner::Prerelease { package } => package.name(),
         }
     }
 
@@ -206,19 +185,6 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Group { name, .. }
             | PubGrubPackageInner::Marker { name, .. } => Some(name),
-            PubGrubPackageInner::Prerelease { package } => package.name_no_root(),
-        }
-    }
-
-    /// Returns the package name to use for registry availability diagnostics.
-    ///
-    /// Pre-release proxies delegate availability to their wrapped registry package. Other proxy
-    /// packages retain their existing handling through the base package selected by PubGrub.
-    pub(crate) fn name_for_availability(&self) -> Option<&PackageName> {
-        match &**self {
-            PubGrubPackageInner::Package { name, .. } => Some(name),
-            PubGrubPackageInner::Prerelease { package } => package.name_no_root(),
-            _ => None,
         }
     }
 
@@ -235,7 +201,6 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Extra { marker, .. }
             | PubGrubPackageInner::Group { marker, .. } => *marker,
             PubGrubPackageInner::Marker { marker, .. } => *marker,
-            PubGrubPackageInner::Prerelease { package } => package.marker(),
         }
     }
 
@@ -257,7 +222,6 @@ impl PubGrubPackage {
                 extra: Some(extra), ..
             }
             | PubGrubPackageInner::Extra { extra, .. } => Some(extra),
-            PubGrubPackageInner::Prerelease { package } => package.extra(),
         }
     }
 
@@ -279,7 +243,6 @@ impl PubGrubPackage {
                 group: Some(group), ..
             }
             | PubGrubPackageInner::Group { group, .. } => Some(group),
-            PubGrubPackageInner::Prerelease { package } => package.group(),
         }
     }
 
@@ -315,7 +278,6 @@ impl PubGrubPackage {
             PubGrubPackageInner::Extra { .. }
                 | PubGrubPackageInner::Group { .. }
                 | PubGrubPackageInner::Marker { .. }
-                | PubGrubPackageInner::Prerelease { .. }
         )
     }
 
@@ -341,9 +303,6 @@ impl PubGrubPackage {
             | PubGrubPackageInner::Marker { ref mut marker, .. } => {
                 *marker = python_requirement.simplify_markers(*marker);
             }
-            PubGrubPackageInner::Prerelease { ref mut package } => {
-                package.simplify_markers(python_requirement);
-            }
         }
     }
 
@@ -354,7 +313,6 @@ impl PubGrubPackage {
             PubGrubPackageInner::Root(_) => "root",
             PubGrubPackageInner::Python(_) => "python",
             PubGrubPackageInner::System(_) => "system",
-            PubGrubPackageInner::Prerelease { .. } => "prerelease",
             PubGrubPackageInner::Package { .. } => "package",
             PubGrubPackageInner::Extra { .. } => "extra",
             PubGrubPackageInner::Group { .. } => "group",
@@ -388,7 +346,6 @@ impl std::fmt::Display for PubGrubPackageInner {
             }
             Self::Python(_) => write!(f, "Python"),
             Self::System(name) => write!(f, "system:{name}"),
-            Self::Prerelease { package } => write!(f, "{package}"),
             Self::Package {
                 name,
                 extra: None,

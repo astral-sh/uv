@@ -13,8 +13,10 @@ use uv_pypi_types::{
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
-use crate::prerelease::contains_prerelease;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::prerelease::{PrereleaseMode, contains_prerelease};
+use crate::pubgrub::{
+    PrereleasePreference, PubGrubPackage, PubGrubPackageInner, PubGrubVersion, Range,
+};
 
 /// The source constraint carried by a single dependency edge.
 ///
@@ -84,7 +86,7 @@ impl DependencySource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Ranges<Version>,
+    pub(crate) version: Range<Version>,
 
     /// When the parent that created this dependency is a "normal" package
     /// (non-extra non-group), this corresponds to its name.
@@ -110,11 +112,38 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
+    /// Create the dependencies that keep a virtual package on the same release as its real
+    /// package.
+    ///
+    /// Release equality is independent of pre-release preference. The additional dependency for
+    /// an [`PrereleasePreference::Allow`] virtual version carries explicit pre-release
+    /// authorization to the real package.
+    pub(crate) fn from_virtual_package(
+        package: PubGrubPackage,
+        version: &PubGrubVersion<Version>,
+    ) -> impl Iterator<Item = Self> {
+        let versions = Ranges::singleton(version.version().clone());
+        let dependency = Self {
+            package: package.clone(),
+            version: Range::both(versions.clone()),
+            parent: None,
+            source: DependencySource::Unspecified,
+        };
+        let authorization = (version.preference() == PrereleasePreference::Allow).then(|| Self {
+            package,
+            version: Range::allow(versions),
+            parent: None,
+            source: DependencySource::Unspecified,
+        });
+        [Some(dependency), authorization].into_iter().flatten()
+    }
+
     pub(crate) fn from_requirement<'a>(
         conflicts: &Conflicts,
         requirement: Cow<'a, Requirement>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
+        prerelease_mode: PrereleaseMode,
     ) -> impl Iterator<Item = Self> + 'a {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
@@ -178,7 +207,8 @@ impl PubGrubDependency {
                 version,
                 source,
             } = pubgrub_requirement;
-            let dependency = match &*package {
+            let version = prerelease_mode.range(version, explicit_prerelease);
+            match &*package {
                 PubGrubPackageInner::Package { .. } => Self {
                     package,
                     version,
@@ -234,20 +264,6 @@ impl PubGrubDependency {
                 PubGrubPackageInner::System(_) => {
                     unreachable!("System package in dependencies")
                 }
-                PubGrubPackageInner::Prerelease { .. } => {
-                    unreachable!("Pre-release package in requirements")
-                }
-            };
-            if explicit_prerelease {
-                // Route explicit pre-release requirements through a proxy package. The proxy uses
-                // pre-release-aware candidate ordering and pins this wrapped package to its
-                // selected version, making authorization part of PubGrub's dependency graph.
-                Self {
-                    package: PubGrubPackage::prerelease(dependency.package),
-                    ..dependency
-                }
-            } else {
-                dependency
             }
         })
     }

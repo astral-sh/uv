@@ -325,14 +325,15 @@ By default, uv prefers stable versions. A pre-release is considered when no stab
 satisfies the active constraints, or when an active direct or transitive requirement contains a
 pre-release specifier (e.g., `flask>=2.0.0rc1`).
 
-Explicit pre-release authorization is represented in the resolver as part of the dependency graph.
-The authorizing edge targets a proxy package that selects with pre-releases enabled, then pins the
-real package to the same version. PubGrub can therefore reconsider an earlier stable decision
-without restarting resolution. If the parent version that introduced the requirement is rejected
-during backtracking, its authorization is rejected with it.
+Pre-release preference is represented as part of the PubGrub solution. Every candidate version has a
+stable-preferring solver variant and a pre-release-enabled variant. Ordinary requirements admit
+both, while a requirement with a pre-release specifier admits only the pre-release-enabled variant.
+This fixed universe lets PubGrub reconsider an earlier stable decision through normal backtracking,
+without restarting resolution or globally enabling pre-releases for an abandoned dependency path.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
-candidates first, or `--prerelease disallow` to exclude them entirely.
+candidates first, `--prerelease if-necessary` to ignore pre-release specifiers as an ordering
+signal, or `--prerelease disallow` to exclude them entirely.
 
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).

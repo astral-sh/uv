@@ -6,6 +6,7 @@ use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 
+use crate::pubgrub::PubGrubVersion;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
@@ -210,12 +211,10 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
 
 #[derive(Debug, Clone)]
 pub(crate) enum ResolverVersion {
-    /// A pre-release candidate exists, but requires authorization from another package.
-    DeferredPrerelease,
     /// A version that is not usable for some reason
-    Unavailable(Version, UnavailableVersion),
+    Unavailable(PubGrubVersion<Version>, UnavailableVersion),
     /// A usable version
-    Unforked(Version),
+    Unforked(PubGrubVersion<Version>),
     /// A set of forks, optionally with resolved versions
     Forked(Vec<VersionFork>),
 }

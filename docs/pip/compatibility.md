@@ -44,14 +44,21 @@ By default, uv prefers stable versions. A pre-release is considered when no stab
 satisfies the active constraints, or when an active direct or transitive requirement contains a
 pre-release specifier (e.g., `flask>=2.0.0rc1`).
 
-Pre-release authorization is part of the PubGrub solution. An explicit requirement targets a proxy
-package that selects with pre-releases enabled, then pins the real package to the same version. This
-lets PubGrub reconsider an earlier stable decision without restarting resolution. If the parent
-version that introduced the requirement is rejected during backtracking, that authorization is
-removed as well, avoiding global enablement from an abandoned dependency path.
+Pre-release authorization is part of the PubGrub solution. Internally, every published version has
+two solver variants with identical metadata: one that prefers stable candidates and one that allows
+pre-releases in normal version order. Ordinary requirements admit both variants, while a requirement
+with a pre-release specifier admits only the pre-release-enabled variant. The candidate ordering
+tries the stable-preferring variant first.
+
+This creates a fixed candidate universe for the entire solve. If a transitive pre-release
+requirement becomes active after a stable version was selected, its range conflicts with the
+stable-preferring variant and PubGrub backtracks to the pre-release-enabled variant through its
+normal conflict resolution. No resolver restart or mutable package-level authorization is needed,
+and authorization introduced by a rejected parent disappears with that dependency edge.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
-candidates first, or `--prerelease disallow` to exclude them entirely.
+candidates first, `--prerelease if-necessary` to ignore pre-release specifiers as an ordering
+signal, or `--prerelease disallow` to exclude pre-releases entirely.
 
 !!! note
 
@@ -59,9 +66,9 @@ candidates first, or `--prerelease disallow` to exclude them entirely.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.pages.dev/limitations/prerelease_versions) to model
-because candidate availability must remain stable while PubGrub learns incompatibilities. uv keeps
-pre-releases in the candidate universe and expresses explicit authorization as a virtual solver
-package, so learned incompatibilities remain valid across backtracking.
+because candidate availability must remain stable while PubGrub learns incompatibilities. uv's
+expanded version universe preserves that invariant, so learned incompatibilities remain valid across
+backtracking.
 
 ## Packages that exist on multiple indexes
 

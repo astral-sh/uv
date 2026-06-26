@@ -1,11 +1,11 @@
-use pubgrub::{Id, Kind, State};
+use pubgrub::{Id, Kind, State, VersionSet};
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PubGrubPackage, PubGrubVersion};
 
 /// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
 /// in `uv-distribution-types`.
@@ -24,9 +24,9 @@ impl DerivationChainBuilder {
         /// Find a path from the current package to the root package.
         fn find_path(
             id: Id<PubGrubPackage>,
-            version: &Version,
+            version: &PubGrubVersion<Version>,
             state: &State<UvDependencyProvider>,
-            solution: &FxHashMap<Id<PubGrubPackage>, Version>,
+            solution: &FxHashMap<Id<PubGrubPackage>, PubGrubVersion<Version>>,
             path: &mut Vec<DerivationStep>,
         ) -> bool {
             // Retrieve the incompatibilities for the current package.
@@ -54,8 +54,8 @@ impl DerivationChainBuilder {
                                     name.clone(),
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
-                                    Some(version.clone()),
-                                    v2.clone(),
+                                    Some(version.version().clone()),
+                                    v2.versions(),
                                 ));
 
                                 // Recursively search the next package.
@@ -79,7 +79,10 @@ impl DerivationChainBuilder {
         let solution: FxHashMap<_, _> = state.partial_solution.extract_solution().collect();
         let path = {
             let mut path = vec![];
-            if !find_path(id, version, state, &solution, &mut path) {
+            let solver_version = solution.get(&id)?;
+            if solver_version.version() != version
+                || !find_path(id, solver_version, state, &solution, &mut path)
+            {
                 return None;
             }
             path.reverse();
