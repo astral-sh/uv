@@ -51,7 +51,7 @@ use crate::commands::tool::common::{
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ResolverSettings, ToolLockSettings};
+use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -72,7 +72,6 @@ pub(crate) async fn install(
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
-    lock_settings: ToolLockSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -460,38 +459,14 @@ pub(crate) async fn install(
             .collect::<Vec<_>>(),
     );
 
-    let constraints = normalize_tool_local_requirements(
-        receipt_constraints
-            .iter()
-            .chain(&lock_settings.constraints)
-            .cloned(),
-    );
-    let overrides = normalize_tool_local_requirements(
-        receipt_overrides
-            .iter()
-            .chain(&lock_settings.overrides)
-            .cloned(),
-    );
-    let excludes = receipt_excludes
-        .iter()
-        .chain(&lock_settings.excludes)
-        .cloned()
-        .collect::<Vec<_>>();
-    let build_constraints = normalize_tool_local_requirements(
-        receipt_build_constraints
-            .iter()
-            .chain(&lock_settings.build_constraints)
-            .cloned(),
-    );
-
     // Convert to tool options.
     let options = ToolOptions::from(options);
     let lock_manifest = tool_lock_manifest(
         &requirements,
-        &constraints,
-        &overrides,
-        &excludes,
-        &build_constraints,
+        &receipt_constraints,
+        &receipt_overrides,
+        &receipt_excludes,
+        &receipt_build_constraints,
         &settings.resolver.dependency_metadata,
     );
 
@@ -551,15 +526,8 @@ pub(crate) async fn install(
     };
 
     let existing_tool_lock = if tool_locks {
-        read_tool_lock(&tool_dir).filter(|lock| {
-            tool_lock_is_fresh(
-                &tool_dir,
-                lock,
-                &lock_manifest,
-                &lock_settings,
-                &settings.resolver,
-            )
-        })
+        read_tool_lock(&tool_dir)
+            .filter(|lock| tool_lock_is_fresh(&tool_dir, lock, &lock_manifest, &settings.resolver))
     } else {
         None
     };
@@ -640,14 +608,14 @@ pub(crate) async fn install(
                     }
                 } else {
                     let site_packages = SitePackages::from_environment(environment.environment())?;
-                    let excludes_satisfied = excludes
+                    let excludes_satisfied = receipt_excludes
                         .iter()
                         .all(|exclude| site_packages.get_packages(exclude).is_empty());
                     matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
-                            constraints.iter().chain(latest.iter()),
-                            overrides.iter(),
+                            receipt_constraints.iter().chain(latest.iter()),
+                            receipt_overrides.iter(),
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,
@@ -688,26 +656,23 @@ pub(crate) async fn install(
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
-        constraints: constraints
+        constraints: receipt_constraints
             .iter()
             .cloned()
             .chain(latest)
             .map(NameRequirementSpecification::from)
             .collect(),
-        overrides: overrides
+        overrides: receipt_overrides
             .iter()
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
-        excludes: excludes.clone(),
+        excludes: receipt_excludes.clone(),
         ..spec
     };
 
     let resolution_scope = if tool_locks {
-        EnvironmentResolution::Universal {
-            environments: &lock_settings.environments,
-            required_environments: &lock_settings.required_environments,
-        }
+        EnvironmentResolution::Universal
     } else {
         EnvironmentResolution::Specific
     };
@@ -731,7 +696,7 @@ pub(crate) async fn install(
                 environment.interpreter(),
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(build_constraints.iter().cloned()),
+                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                 &settings.resolver,
                 &client_builder,
                 &state,
@@ -755,7 +720,7 @@ pub(crate) async fn install(
                 Err(err) => return Err(err.into()),
             };
 
-            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest, &lock_settings)?;
+            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest)?;
             let resolution = tool_lock_to_resolution(
                 &tool_dir,
                 &tool_lock,
@@ -802,7 +767,7 @@ pub(crate) async fn install(
                     environment,
                     &resolution,
                     Modifications::Exact,
-                    Constraints::from_requirements(build_constraints.iter().cloned()),
+                    Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                     (&settings).into(),
                     &client_builder,
                     &state,
@@ -823,7 +788,7 @@ pub(crate) async fn install(
                 Modifications::Exact,
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
-                Constraints::from_requirements(build_constraints.iter().cloned()),
+                Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                 ExtraBuildRequires::default(),
                 &settings,
                 &client_builder,
@@ -870,7 +835,7 @@ pub(crate) async fn install(
             &interpreter,
             python_platform.as_ref(),
             SourceTreeEditablePolicy::Tool,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
+            Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
             &settings.resolver,
             &client_builder,
             &state,
@@ -927,7 +892,7 @@ pub(crate) async fn install(
                         &interpreter,
                         python_platform.as_ref(),
                         SourceTreeEditablePolicy::Tool,
-                        Constraints::from_requirements(build_constraints.iter().cloned()),
+                        Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                         &settings.resolver,
                         &client_builder,
                         &state,
@@ -956,7 +921,7 @@ pub(crate) async fn install(
         };
 
         let (resolution, tool_lock) = if tool_locks {
-            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest, &lock_settings)?;
+            let tool_lock = tool_lock(&tool_dir, &resolution, &lock_manifest)?;
             let resolution = tool_lock_to_resolution(
                 &tool_dir,
                 &tool_lock,
@@ -983,7 +948,7 @@ pub(crate) async fn install(
             &resolution,
             HashStrategy::default(),
             Modifications::Exact,
-            Constraints::from_requirements(build_constraints.iter().cloned()),
+            Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
             (&settings).into(),
             &client_builder,
             &state,

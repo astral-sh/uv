@@ -42,7 +42,7 @@ use crate::commands::tool::common::{
 };
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
-use crate::settings::{ResolverInstallerSettings, ToolLockSettings};
+use crate::settings::ResolverInstallerSettings;
 
 /// Upgrade a tool.
 pub(crate) async fn upgrade(
@@ -52,7 +52,6 @@ pub(crate) async fn upgrade(
     install_mirrors: PythonInstallMirrors,
     args: ResolverInstallerOptions,
     filesystem: ResolverInstallerOptions,
-    lock_settings: ToolLockSettings,
     client_builder: BaseClientBuilder<'_>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -141,7 +140,6 @@ pub(crate) async fn upgrade(
             cache,
             workspace_cache,
             &filesystem,
-            &lock_settings,
             installer_metadata,
             &concurrency,
             preview,
@@ -276,7 +274,6 @@ async fn upgrade_tool(
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     filesystem: &ResolverInstallerOptions,
-    lock_settings: &ToolLockSettings,
     installer_metadata: bool,
     concurrency: &Concurrency,
     preview: Preview,
@@ -331,11 +328,7 @@ async fn upgrade_tool(
     let settings = ResolverInstallerSettings::from(options.clone());
 
     let build_constraint_requirements = normalize_tool_local_requirements(
-        existing_tool_receipt
-            .build_constraints()
-            .iter()
-            .chain(&lock_settings.build_constraints)
-            .cloned(),
+        existing_tool_receipt.build_constraints().iter().cloned(),
     );
     let build_constraints =
         Constraints::from_requirements(build_constraint_requirements.iter().cloned());
@@ -344,22 +337,11 @@ async fn upgrade_tool(
             .constraints()
             .iter()
             .chain(constraints)
-            .chain(&lock_settings.constraints)
             .cloned(),
     );
-    let manifest_overrides = normalize_tool_local_requirements(
-        existing_tool_receipt
-            .overrides()
-            .iter()
-            .chain(&lock_settings.overrides)
-            .cloned(),
-    );
-    let manifest_excludes = existing_tool_receipt
-        .excludes()
-        .iter()
-        .chain(&lock_settings.excludes)
-        .cloned()
-        .collect::<Vec<_>>();
+    let manifest_overrides =
+        normalize_tool_local_requirements(existing_tool_receipt.overrides().iter().cloned());
+    let manifest_excludes = existing_tool_receipt.excludes().to_vec();
     let lock_manifest = tool_lock_manifest(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
@@ -386,15 +368,8 @@ async fn upgrade_tool(
     let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
-        let existing_lock = read_tool_lock(&tool_dir).filter(|lock| {
-            tool_lock_is_fresh(
-                &tool_dir,
-                lock,
-                &lock_manifest,
-                lock_settings,
-                &settings.resolver,
-            )
-        });
+        let existing_lock = read_tool_lock(&tool_dir)
+            .filter(|lock| tool_lock_is_fresh(&tool_dir, lock, &lock_manifest, &settings.resolver));
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let universal_resolution = resolve_environment(
             tool_environment_spec(
@@ -403,10 +378,7 @@ async fn upgrade_tool(
                 &tool_dir,
                 Some(&site_packages),
             ),
-            EnvironmentResolution::Universal {
-                environments: &lock_settings.environments,
-                required_environments: &lock_settings.required_environments,
-            },
+            EnvironmentResolution::Universal,
             target_interpreter,
             python_platform,
             SourceTreeEditablePolicy::Tool,
@@ -422,12 +394,7 @@ async fn upgrade_tool(
             preview,
         )
         .await?;
-        let tool_lock = tool_lock(
-            &tool_dir,
-            &universal_resolution,
-            &lock_manifest,
-            lock_settings,
-        )?;
+        let tool_lock = tool_lock(&tool_dir, &universal_resolution, &lock_manifest)?;
         let resolution = tool_lock_to_resolution(
             &tool_dir,
             &tool_lock,

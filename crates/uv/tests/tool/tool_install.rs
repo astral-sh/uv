@@ -6471,6 +6471,9 @@ fn tool_install_locks_are_preview() -> Result<()> {
     revision = 3
     requires-python = ">=3.12"
     "#);
+    let lock: toml::Value = toml::from_str(&lock)?;
+    assert!(lock.get("supported-markers").is_none());
+    assert!(lock.get("required-markers").is_none());
 
     Ok(())
 }
@@ -6502,129 +6505,6 @@ fn tool_install_lock_supports_local_wheel() -> Result<()> {
         lock["manifest"]["requirements"][0]["name"].as_str(),
         Some("simple-launcher")
     );
-
-    Ok(())
-}
-
-#[test]
-fn tool_install_lock_respects_global_configuration() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-    let links = context.workspace_root.join("test/links");
-    let user_config = context.user_config_dir.child("uv");
-    user_config.create_dir_all()?;
-    let user_config = user_config.child("uv.toml");
-    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
-    for (version, required_environment) in [
-        ("1.0.0", "sys_platform == 'win32'"),
-        ("2.0.0", "sys_platform == 'darwin'"),
-    ] {
-        user_config.write_str(&format!(
-            r#"preview-features = ["tool-install-locks"]
-constraint-dependencies = ["ok=={version}"]
-override-dependencies = ["tqdm==1000.0.0"]
-exclude-dependencies = ["validation"]
-build-constraint-dependencies = ["basic-package==0.1.0"]
-environments = ["sys_platform == 'win32'", "sys_platform != 'win32'"]
-required-environments = ["{required_environment}"]
-"#
-        ))?;
-
-        context
-            .tool_install()
-            .arg("simple-launcher")
-            .arg("--with")
-            .arg("ok")
-            .arg("--with")
-            .arg("tqdm")
-            .arg("--no-index")
-            .arg("--find-links")
-            .arg(&links)
-            .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-            .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-            .env(EnvVars::PATH, bin_dir.as_os_str())
-            .assert()
-            .success();
-
-        let lock: toml::Value = toml::from_str(&fs_err::read_to_string(&lock_path)?)?;
-        let constraint = format!("=={version}");
-        assert_eq!(
-            lock["required-markers"][0].as_str(),
-            Some(required_environment)
-        );
-        assert_eq!(
-            lock["supported-markers"][0].as_str(),
-            Some("sys_platform == 'win32'")
-        );
-        assert_eq!(
-            lock["supported-markers"][1].as_str(),
-            Some("sys_platform != 'win32'")
-        );
-        assert_eq!(
-            lock["manifest"]["constraints"][0]["name"].as_str(),
-            Some("ok")
-        );
-        assert_eq!(
-            lock["manifest"]["constraints"][0]["specifier"].as_str(),
-            Some(constraint.as_str())
-        );
-        assert_eq!(
-            lock["manifest"]["overrides"][0]["specifier"].as_str(),
-            Some("==1000.0.0")
-        );
-        assert_eq!(lock["manifest"]["excludes"][0].as_str(), Some("validation"));
-        assert_eq!(
-            lock["manifest"]["build-constraints"][0]["name"].as_str(),
-            Some("basic-package")
-        );
-        assert!(lock["package"].as_array().is_some_and(|packages| {
-            packages.iter().any(|package| {
-                package["name"].as_str() == Some("ok")
-                    && package["version"].as_str() == Some(version)
-            })
-        }));
-        assert!(lock["package"].as_array().is_some_and(|packages| {
-            packages.iter().any(|package| {
-                package["name"].as_str() == Some("tqdm")
-                    && package["version"].as_str() == Some("1000.0.0")
-            })
-        }));
-    }
-
-    Ok(())
-}
-
-#[test]
-fn tool_install_lock_requires_artifacts_for_global_environments() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-    let user_config = context.user_config_dir.child("uv");
-    user_config.create_dir_all()?;
-    user_config.child("uv.toml").write_str(indoc! {r#"
-        preview-features = ["tool-install-locks"]
-        required-environments = ["sys_platform == 'win32'"]
-    "#})?;
-
-    uv_snapshot!(context.filters(), context.tool_install()
-        .arg("maturin==2.0.0")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
-
-    ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: sys_platform == 'win32'):
-      ╰─▶ Because maturin==2.0.0 has no Windows-compatible wheels and you require maturin==2.0.0, we can conclude that your requirements are unsatisfiable.
-
-    hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
-    ");
 
     Ok(())
 }

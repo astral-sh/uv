@@ -48,7 +48,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerTree, RequirementOrigin};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
@@ -1015,54 +1015,6 @@ impl ToolRunSettings {
     }
 }
 
-/// Global dependency and environment settings used to create universal tool locks.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct ToolLockSettings {
-    pub(crate) constraints: Vec<Requirement>,
-    pub(crate) overrides: Vec<Requirement>,
-    pub(crate) excludes: Vec<PackageName>,
-    pub(crate) build_constraints: Vec<Requirement>,
-    pub(crate) environments: SupportedEnvironments,
-    pub(crate) required_environments: SupportedEnvironments,
-}
-
-impl ToolLockSettings {
-    fn from_filesystem(filesystem: Option<&FilesystemOptions>) -> Self {
-        let Some(configuration) = filesystem else {
-            return Self::default();
-        };
-
-        let workspace_requirements =
-            |requirements: Option<&[uv_pep508::Requirement<VerbatimParsedUrl>]>| {
-                requirements
-                    .into_iter()
-                    .flatten()
-                    .cloned()
-                    .map(|requirement| {
-                        Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
-                    })
-                    .collect()
-            };
-
-        Self {
-            constraints: workspace_requirements(configuration.constraint_dependencies.as_deref()),
-            overrides: workspace_requirements(configuration.override_dependencies.as_deref()),
-            excludes: configuration
-                .exclude_dependencies
-                .clone()
-                .unwrap_or_default(),
-            build_constraints: workspace_requirements(
-                configuration.build_constraint_dependencies.as_deref(),
-            ),
-            environments: configuration.environments.clone().unwrap_or_default(),
-            required_environments: configuration
-                .required_environments
-                .clone()
-                .unwrap_or_default(),
-        }
-    }
-}
-
 /// The resolved settings to use for a `tool install` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolInstallSettings {
@@ -1082,7 +1034,6 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
-    pub(crate) lock_settings: ToolLockSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1117,7 +1068,6 @@ impl ToolInstallSettings {
             torch_backend,
         } = args;
 
-        let lock_settings = ToolLockSettings::from_filesystem(filesystem.as_ref());
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options = resolver_installer_options_with_environment(
@@ -1184,7 +1134,6 @@ impl ToolInstallSettings {
             refresh: Refresh::from(refresh),
             options,
             settings,
-            lock_settings,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1201,7 +1150,6 @@ pub(crate) struct ToolUpgradeSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
-    pub(crate) lock_settings: ToolLockSettings,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
@@ -1284,7 +1232,6 @@ impl ToolUpgradeSettings {
             resolver_installer_options(installer, build),
             environment,
         );
-        let lock_settings = ToolLockSettings::from_filesystem(filesystem.as_ref());
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -1302,7 +1249,6 @@ impl ToolUpgradeSettings {
             python_platform,
             args,
             filesystem: top_level,
-            lock_settings,
             install_mirrors: environment
                 .install_mirrors
                 .clone()

@@ -55,7 +55,7 @@ impl FilesystemOptions {
         match read_file(&file) {
             Ok(options) => {
                 tracing::debug!("Found user configuration in: `{}`", file.display());
-                validate_uv_toml(&file, &options, UvTomlKind::Global)?;
+                validate_uv_toml(&file, &options)?;
                 Ok(Some(Self(options.with_origin(Origin::User))))
             }
             Err(Error::Io(err))
@@ -83,7 +83,7 @@ impl FilesystemOptions {
 
         tracing::debug!("Found system configuration in: `{}`", file.display());
         let options = read_file(&file)?;
-        validate_uv_toml(&file, &options, UvTomlKind::Global)?;
+        validate_uv_toml(&file, &options)?;
         Ok(Some(Self(options.with_origin(Origin::System))))
     }
 
@@ -150,7 +150,7 @@ impl FilesystemOptions {
                 }
 
                 tracing::debug!("Found workspace configuration at `{}`", path.display());
-                validate_uv_toml(&path, &options, UvTomlKind::Project)?;
+                validate_uv_toml(&path, &options)?;
                 return Ok(Some(Self(options.with_origin(Origin::Project))));
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -201,7 +201,7 @@ impl FilesystemOptions {
         tracing::debug!("Reading user configuration from: `{}`", path.display());
 
         let options = read_file(path)?;
-        validate_uv_toml(path, &options, UvTomlKind::Global)?;
+        validate_uv_toml(path, &options)?;
         Ok(Self(options))
     }
 }
@@ -280,16 +280,8 @@ fn check_uv_toml_required_version(path: &Path, content: &str, source: Error) -> 
     required_version_mismatch(uv_toml.required_version).unwrap_or(source)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum UvTomlKind {
-    /// A user, system, or explicitly provided configuration file.
-    Global,
-    /// A configuration file discovered in a project directory.
-    Project,
-}
-
 /// Validate that an [`Options`] schema is compatible with `uv.toml`.
-fn validate_uv_toml(path: &Path, options: &Options, kind: UvTomlKind) -> Result<(), Error> {
+fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
     // A `required-version` mismatch takes precedence over a schema error.
     if let Some(err) = required_version_mismatch(options.globals.required_version.clone()) {
         return Err(err);
@@ -361,13 +353,13 @@ fn validate_uv_toml(path: &Path, options: &Options, kind: UvTomlKind) -> Result<
             "build-backend",
         ));
     }
-    if kind == UvTomlKind::Project && environments.is_some() {
+    if environments.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "environments",
         ));
     }
-    if kind == UvTomlKind::Project && required_environments.is_some() {
+    if required_environments.is_some() {
         return Err(Error::PyprojectOnlyField(
             path.to_path_buf(),
             "required-environments",

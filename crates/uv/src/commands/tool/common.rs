@@ -107,7 +107,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ToolLockSettings};
+use crate::settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -326,17 +326,10 @@ pub(crate) fn tool_lock(
     root: &Path,
     resolution: &ResolverOutput,
     manifest: &ResolverManifest,
-    lock_settings: &ToolLockSettings,
 ) -> anyhow::Result<Lock> {
-    let lock = Lock::from_resolution(
-        resolution,
-        root,
-        lock_settings.environments.clone().into_markers(),
-    )?;
+    let lock = Lock::from_resolution(resolution, root, Vec::new())?;
     let manifest = manifest.clone().relative_to(root)?;
-    Ok(lock
-        .with_manifest(manifest)
-        .with_required_environments(lock_settings.required_environments.clone().into_markers()))
+    Ok(lock.with_manifest(manifest))
 }
 
 /// Read the lock for a tool, if one has been generated.
@@ -384,30 +377,9 @@ pub(crate) fn tool_lock_is_fresh(
     root: &Path,
     lock: &Lock,
     manifest: &ResolverManifest,
-    lock_settings: &ToolLockSettings,
     resolver_settings: &ResolverSettings,
 ) -> bool {
     if !lock.matches_manifest_at(manifest, root) {
-        return false;
-    }
-
-    let supported_environments = lock_settings
-        .environments
-        .iter()
-        .copied()
-        .map(|marker| lock.simplify_environment(marker))
-        .collect::<Vec<_>>();
-    if lock.simplified_supported_environments() != supported_environments {
-        return false;
-    }
-
-    let required_environments = lock_settings
-        .required_environments
-        .iter()
-        .copied()
-        .map(|marker| lock.simplify_environment(marker))
-        .collect::<Vec<_>>();
-    if lock.simplified_required_environments() != required_environments {
         return false;
     }
 
