@@ -21,7 +21,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::{GitLfsSetting, Override};
+use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -499,26 +499,28 @@ pub struct ToolUv {
     /// it's requested by transitive dependencies. This can be useful for removing optional
     /// dependencies or working around packages with broken dependencies.
     ///
+    /// Exclusions can be limited to the dependencies declared by a specific package version by
+    /// using a table with `package` and `dependencies`. The `package` table identifies the package
+    /// whose dependencies will be excluded by `name` and, optionally, `version`. If `version` is
+    /// omitted, the exclusions apply to all versions of that package. A version-specific entry
+    /// takes precedence over an all-versions entry.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
-        )
-    )]
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Exclude Werkzeug from being installed, even if transitive dependencies request it.
-            exclude-dependencies = ["werkzeug"]
+            exclude-dependencies = [
+                "werkzeug",
+                { package = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous"] },
+            ]
         "#
     )]
-    pub(crate) exclude_dependencies: Option<Vec<PackageName>>,
+    pub(crate) exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///

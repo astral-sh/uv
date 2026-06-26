@@ -7339,6 +7339,7 @@ dependencies = [
  "toml_edit",
  "tracing",
  "uv-cache",
+ "uv-configuration",
  "uv-dirs",
  "uv-distribution-types",
  "uv-fs",

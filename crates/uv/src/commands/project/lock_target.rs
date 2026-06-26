@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::info_span;
 
 use uv_auth::CredentialsCache;
-use uv_configuration::{DependencyGroupsWithDefaults, NoSources};
+use uv_configuration::{DependencyGroupsWithDefaults, ExcludeDependency, NoSources};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
@@ -65,7 +65,7 @@ impl<'lock> LockTarget<'lock> {
     }
 
     /// Returns the set of dependency exclusions for the [`LockTarget`].
-    pub(crate) fn exclude_dependencies(self) -> Vec<uv_normalize::PackageName> {
+    pub(crate) fn exclude_dependencies(self) -> Vec<ExcludeDependency> {
         match self {
             Self::Workspace(workspace) => workspace.exclude_dependencies(),
             Self::Script(script) => script

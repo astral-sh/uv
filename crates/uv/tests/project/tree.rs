@@ -369,6 +369,88 @@ fn outdated_exclude_newer_relative() -> Result<()> {
     Ok(())
 }
 
+/// Exclude a dependency only when it is declared by a matching package version.
+#[test]
+fn scoped_exclude_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "sniffio==1.3.1"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "anyio" }, dependencies = ["idna"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["sniffio"] },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // The structured exclusion is persisted in the lockfile manifest.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The exact-version entry takes precedence over the all-versions entry, removing AnyIO's edge
+    // to Sniffio without removing the direct requirement while retaining the edge to IDNA.
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v3.7.0
+    │   └── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The version-gated exclusion is ignored when the parent version does not match.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "sniffio==1.3.1"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["sniffio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v3.7.0
+    │   ├── idna v3.6
+    │   └── sniffio v1.3.1
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");

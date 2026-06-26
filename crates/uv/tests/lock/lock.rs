@@ -2398,6 +2398,49 @@ fn lock_project_with_scoped_override_prerelease() -> Result<()> {
     Ok(())
 }
 
+/// Do not allow an excluded scoped override to opt a direct dependency into pre-releases.
+#[test]
+fn lock_project_with_excluded_scoped_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["numpy>=2.3", "pandas==2.2.3"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pandas" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "pandas" }, dependencies = ["numpy"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── numpy v2.3.5
+    └── pandas v2.2.3
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with an explicitly pinned yanked release from a scoped override.
 #[test]
 fn lock_project_with_scoped_override_yank() -> Result<()> {

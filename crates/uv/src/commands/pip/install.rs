@@ -12,7 +12,8 @@ use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildIsolation, BuildOptions, Concurrency, Constraints, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override, Reinstall, Upgrade,
+    ExcludeDependency, ExtrasSpecification, HashCheckingMode, IndexStrategy, NoSources, Override,
+    Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -24,7 +25,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups};
 use uv_pep440::Version;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
@@ -83,7 +84,7 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
-    excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<Requirement>,
     editable: Option<EditableMode>,
     extras: &ExtrasSpecification,
@@ -186,7 +187,7 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    let excludes: Vec<PackageName> = excludes
+    let excludes: Vec<ExcludeDependency> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();
@@ -325,6 +326,7 @@ pub(crate) async fn pip_install(
             &constraints,
             &overrides,
             &override_dependencies,
+            &excludes,
             InstallationStrategy::Permissive,
             &marker_env,
             &tags,

@@ -12,7 +12,7 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::GitLfsSetting;
+use uv_configuration::{ExcludeDependency, GitLfsSetting};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
     InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
@@ -365,7 +365,7 @@ pub(crate) fn finalize_tool_install(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<()> {

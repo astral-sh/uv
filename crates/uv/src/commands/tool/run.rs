@@ -951,6 +951,7 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
+    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -1054,6 +1055,7 @@ async fn get_or_create_environment(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
                             &uv_configuration::Overrides::from_requirements(overrides.clone()),
+                            &exclusions,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,

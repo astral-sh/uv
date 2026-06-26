@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
-    RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
@@ -149,7 +149,7 @@ pub struct Options {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+    pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -2524,7 +2524,7 @@ struct OptionsWire {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     override_dependencies: Option<Vec<OverrideDependency>>,
-    exclude_dependencies: Option<Vec<PackageName>>,
+    exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,

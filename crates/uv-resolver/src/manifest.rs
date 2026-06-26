@@ -133,8 +133,15 @@ impl Manifest {
         self.requirements(env, mode).chain(
             self.overrides
                 .scoped_requirements()
+                .filter(|(package, version, requirement)| {
+                    !self.excludes.contains_for_scope(
+                        &self.overrides,
+                        package,
+                        *version,
+                        &requirement.name,
+                    )
+                })
                 .map(|(_, _, requirement)| Cow::Borrowed(requirement))
-                .filter(|requirement| !self.excludes.contains(&requirement.name))
                 .filter(move |requirement| {
                     requirement.evaluate_markers(env.marker_environment(), &[])
                 }),
@@ -159,7 +166,13 @@ impl Manifest {
                                 lookahead.version(),
                                 lookahead.requirements(),
                             )
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -255,6 +268,13 @@ impl Manifest {
                                 lookahead.version(),
                                 lookahead.requirements(),
                             )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())

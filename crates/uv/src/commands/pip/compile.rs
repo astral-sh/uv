@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
+    IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -69,7 +69,7 @@ pub(crate) async fn pip_compile(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Override<Requirement>>,
-    excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
@@ -245,7 +245,7 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    let excludes: Vec<PackageName> = excludes
+    let excludes: Vec<ExcludeDependency> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();

@@ -20,8 +20,8 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults,
-    InstallTarget, Override, PackageOverride,
+    BuildOptions, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
+    ExtrasSpecificationWithDefaults, InstallTarget, Override, PackageOverride,
 };
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, RequiresDist};
 use uv_distribution_filename::{
@@ -1814,7 +1814,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Override<Requirement>],
-        excludes: &[PackageName],
+        excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
@@ -2660,7 +2660,7 @@ pub enum SatisfiesResult<'lock> {
         BTreeSet<Override<Requirement>>,
     ),
     /// The lockfile uses a different set of excludes.
-    MismatchedExcludes(BTreeSet<PackageName>, BTreeSet<PackageName>),
+    MismatchedExcludes(BTreeSet<ExcludeDependency>, BTreeSet<ExcludeDependency>),
     /// The lockfile uses a different set of build constraints.
     MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
@@ -2790,7 +2790,7 @@ pub struct ResolverManifest {
     overrides: BTreeSet<Override<Requirement>>,
     /// The excludes provided to the resolver.
     #[serde(default)]
-    excludes: BTreeSet<PackageName>,
+    excludes: BTreeSet<ExcludeDependency>,
     /// The build constraints provided to the resolver.
     #[serde(default)]
     build_constraints: BTreeSet<Requirement>,
@@ -2807,7 +2807,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Override<Requirement>>,
-        excludes: impl IntoIterator<Item = PackageName>,
+        excludes: impl IntoIterator<Item = ExcludeDependency>,
         build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,

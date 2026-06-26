@@ -19,7 +19,7 @@ use uv_client::RegistryClient;
 use uv_configuration::{
     BuildKind, BuildOptions, Constraints, IndexStrategy, NoSources, Overrides, Reinstall,
 };
-use uv_configuration::{BuildOutput, Concurrency};
+use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -294,10 +294,12 @@ impl BuildContext for BuildDispatch<'_> {
             .augment_with_requirements(requirements.iter())
             .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
+        let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
             &overrides,
+            &excludes,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
