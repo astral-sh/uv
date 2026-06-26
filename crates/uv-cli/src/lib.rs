@@ -8373,8 +8373,15 @@ pub struct WorkspaceDirArgs {
 #[derive(Args, Debug)]
 pub struct WorkspaceListArgs {
     /// Show paths instead of names.
+    ///
+    /// When used with `--scripts`, display absolute paths instead of paths relative to the
+    /// workspace root.
     #[arg(long)]
     pub paths: bool,
+
+    /// List PEP 723 scripts instead of workspace members.
+    #[arg(long)]
+    pub scripts: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
