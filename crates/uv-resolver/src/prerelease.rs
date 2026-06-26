@@ -19,13 +19,11 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions when an active direct or transitive requirement contains an
-    /// explicit pre-release marker.
-    Explicit,
-
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active direct or transitive requirement contains an explicit pre-release marker.
     #[default]
+    #[serde(alias = "explicit")]
+    #[cfg_attr(feature = "clap", value(alias("explicit")))]
     IfNecessaryOrExplicit,
 }
 
@@ -35,7 +33,6 @@ impl std::fmt::Display for PrereleaseMode {
             Self::Disallow => write!(f, "disallow"),
             Self::Allow => write!(f, "allow"),
             Self::IfNecessary => write!(f, "if-necessary"),
-            Self::Explicit => write!(f, "explicit"),
             Self::IfNecessaryOrExplicit => write!(f, "if-necessary-or-explicit"),
         }
     }
@@ -54,10 +51,6 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions when an active requirement contains an explicit pre-release
-    /// marker.
-    Explicit(ForkSet),
-
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active requirement contains an explicit pre-release marker.
     IfNecessaryOrExplicit(ForkSet),
@@ -70,13 +63,12 @@ impl PrereleaseStrategy {
         env: &ResolverEnvironment,
         dependencies: DependencyMode,
     ) -> Self {
-        let mut packages = ForkSet::default();
-
         match mode {
             PrereleaseMode::Disallow => Self::Disallow,
             PrereleaseMode::Allow => Self::Allow,
             PrereleaseMode::IfNecessary => Self::IfNecessary,
-            _ => {
+            PrereleaseMode::IfNecessaryOrExplicit => {
+                let mut packages = ForkSet::default();
                 for requirement in manifest.candidate_selection_requirements(env, dependencies) {
                     let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                         continue;
@@ -86,12 +78,7 @@ impl PrereleaseStrategy {
                         packages.add(&requirement, ());
                     }
                 }
-
-                match mode {
-                    PrereleaseMode::Explicit => Self::Explicit(packages),
-                    PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(packages),
-                    _ => unreachable!(),
-                }
+                Self::IfNecessaryOrExplicit(packages)
             }
         }
     }
@@ -113,13 +100,6 @@ impl PrereleaseStrategy {
             Self::Disallow => PrereleaseSelection::Disallow,
             Self::Allow => PrereleaseSelection::Allow,
             Self::IfNecessary => PrereleaseSelection::PreferStable,
-            Self::Explicit(packages) => {
-                if explicit_prerelease || packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
-                } else {
-                    PrereleaseSelection::Disallow
-                }
-            }
             Self::IfNecessaryOrExplicit(packages) => {
                 if explicit_prerelease || packages.contains(package_name, env) {
                     PrereleaseSelection::Allow
@@ -157,4 +137,32 @@ pub(crate) enum PrereleaseSelection {
     /// Prefer stable candidates, falling back to pre-releases only after stable candidates are
     /// exhausted.
     PreferStable,
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "clap")]
+    use clap::ValueEnum;
+
+    use super::PrereleaseMode;
+
+    #[test]
+    fn legacy_explicit_mode_deserializes_to_default() {
+        let mode = serde_json::from_str::<PrereleaseMode>(r#""explicit""#)
+            .expect("legacy pre-release mode should deserialize");
+        assert_eq!(mode, PrereleaseMode::IfNecessaryOrExplicit);
+        assert_eq!(
+            serde_json::to_string(&mode).expect("pre-release mode should serialize"),
+            r#""if-necessary-or-explicit""#
+        );
+    }
+
+    #[cfg(feature = "clap")]
+    #[test]
+    fn legacy_explicit_mode_is_a_cli_alias_for_default() {
+        assert_eq!(
+            PrereleaseMode::from_str("explicit", false).expect("legacy CLI value should parse"),
+            PrereleaseMode::IfNecessaryOrExplicit
+        );
+    }
 }
