@@ -296,14 +296,14 @@ fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
     let workspace_dir = workspace_dir.path().to_string_lossy().to_string();
     let cache_dir = cache_dir.to_string_lossy().to_string();
 
-    // First warmup initializes globals and primes package metadata; second warmup verifies the
-    // measured path can run from the cache without network access.
+    // Prime cache with PyPI packages.
     runtime
         .block_on(uv::run(
             run_python_version_cli(&workspace_dir, &cache_dir, false),
             true,
         ))
         .expect("Failed to warm synthetic workspace run benchmark");
+    // Warm cache reading
     runtime
         .block_on(uv::run(
             run_python_version_cli(&workspace_dir, &cache_dir, true),
