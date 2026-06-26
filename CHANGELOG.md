@@ -3,6 +3,43 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.25
+
+Released on 2026-06-26.
+
+### Security
+
+This release updates our tar library, [astral-tokio-tar](https://github.com/astral-sh/tokio-tar), to v0.6.3, which includes over 20 changes that harden our tar handling against [parser differentials](https://www.brainonfire.net/blog/2022/04/11/what-is-parser-mismatch/). uv may reject source distributions with malformed or ambiguous content that were previously accepted.
+
+See the [upstream commits](https://github.com/astral-sh/tokio-tar/compare/v0.6.2...v0.6.3) for a full list of changes.
+
+### Enhancements
+
+- Add a full "lockfile" to tool receipts ([#18937](https://github.com/astral-sh/uv/pull/18937))
+- Allow scoped overrides to add dependencies ([#19974](https://github.com/astral-sh/uv/pull/19974))
+- Avoid writing redundant lockfile markers with `tool.uv.environments` ([#19933](https://github.com/astral-sh/uv/pull/19933))
+- Factor supported environments out of lockfile markers ([#19969](https://github.com/astral-sh/uv/pull/19969))
+- Recommend our own build backend in the build frontend ([#19994](https://github.com/astral-sh/uv/pull/19994))
+- Reject wheels with multiple .dist-info directories ([#19986](https://github.com/astral-sh/uv/pull/19986))
+- Simplify dependency markers under parent reachability ([#19971](https://github.com/astral-sh/uv/pull/19971))
+- Support scoped dependency exclusions ([#19977](https://github.com/astral-sh/uv/pull/19977))
+- Support scoped dependency overrides ([#19970](https://github.com/astral-sh/uv/pull/19970))
+- Explain why files are skipped in registry index parsing ([#19983](https://github.com/astral-sh/uv/pull/19983))
+
+### Preview features
+
+- Add `uv workspace list --scripts` ([#20009](https://github.com/astral-sh/uv/pull/20009))
+- Support centralised environments in `uv venv` ([#19912](https://github.com/astral-sh/uv/pull/19912))
+- Use locked ty versions in `uv check` ([#19884](https://github.com/astral-sh/uv/pull/19884))
+- Add centralized storage of project environments ([#18214](https://github.com/astral-sh/uv/pull/18214))
+- Verify lockfile hashes before reusing a cached ty in `uv check` ([#19995](https://github.com/astral-sh/uv/pull/19995))
+- Use locked dependency selection for `uv check --script` ([#19989](https://github.com/astral-sh/uv/pull/19989))
+
+### Bug fixes
+
+- Preserve standalone markers in workspace metadata ([#20011](https://github.com/astral-sh/uv/pull/20011))
+- Reject `uv build` if the cache dir is enclosed ([#19991](https://github.com/astral-sh/uv/pull/19991))
+
 ## 0.11.24
 
 Released on 2026-06-23.
@@ -26,7 +63,6 @@ Released on 2026-06-23.
 - Reapply "Fix transparent Python upgrades in project environments" ([#19928](https://github.com/astral-sh/uv/pull/19928))
 - Clean up partial tool entrypoint installs ([#19966](https://github.com/astral-sh/uv/pull/19966))
 - Fix relocatable `activate.fish` and broaden Fish version support ([#19856](https://github.com/astral-sh/uv/pull/19856))
-
 
 ## 0.11.23
 
