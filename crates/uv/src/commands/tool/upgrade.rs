@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, DryRun, TargetTriple};
+use uv_configuration::{Concurrency, Constraints, DryRun, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{ExtraBuildRequires, Name, Requirement, RequirementSource};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
@@ -390,6 +390,7 @@ async fn upgrade_tool(
             python_platform,
             &settings.resolver.build_options,
         )?;
+        let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {
             let environment =
@@ -397,7 +398,7 @@ async fn upgrade_tool(
             let environment = sync_environment(
                 environment,
                 &resolution,
-                HashStrategy::default(),
+                hash_strategy,
                 Modifications::Exact,
                 build_constraints,
                 (&settings).into(),
@@ -442,7 +443,7 @@ async fn upgrade_tool(
                 InstallationStrategy::Permissive,
                 &settings.reinstall,
                 &settings.resolver.build_options,
-                &HashStrategy::default(),
+                &hash_strategy,
                 &settings.resolver.index_locations,
                 config_setting,
                 config_settings_package,
@@ -470,7 +471,7 @@ async fn upgrade_tool(
                 sync_environment(
                     environment.into_environment(),
                     &resolution,
-                    HashStrategy::default(),
+                    hash_strategy,
                     Modifications::Exact,
                     build_constraints,
                     (&settings).into(),

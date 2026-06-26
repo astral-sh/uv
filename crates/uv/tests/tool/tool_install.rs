@@ -6533,6 +6533,57 @@ fn tool_install_lock_supports_local_wheel() {
 }
 
 #[test]
+fn tool_install_lock_verifies_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    lock_path.write_str(&lock.replace(
+        "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(&wheel)
+        .arg("--force")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_counts();
     let tool_dir = context.temp_dir.child("tools");

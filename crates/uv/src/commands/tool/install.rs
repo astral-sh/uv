@@ -9,8 +9,8 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, Excludes, GitLfsSetting, Overrides, Reinstall, TargetTriple,
-    Upgrade,
+    Concurrency, Constraints, DryRun, Excludes, GitLfsSetting, HashCheckingMode, Overrides,
+    Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -761,12 +761,14 @@ pub(crate) async fn install(
                 LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
                     .into_inner();
             let tags = resolution_tags(None, python_platform.as_ref(), environment.interpreter())?;
+            let hash_strategy =
+                HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
             let plan = Planner::new(&resolution).build(
                 site_packages,
                 InstallationStrategy::Permissive,
                 &settings.reinstall,
                 &settings.resolver.build_options,
-                &HashStrategy::default(),
+                &hash_strategy,
                 &settings.resolver.index_locations,
                 config_setting,
                 config_settings_package,
@@ -817,7 +819,7 @@ pub(crate) async fn install(
                 sync_environment(
                     environment,
                     &resolution,
-                    HashStrategy::default(),
+                    hash_strategy,
                     Modifications::Exact,
                     Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
                     (&settings).into(),
@@ -1014,6 +1016,11 @@ pub(crate) async fn install(
                 (resolution.into(), interpreter, None)
             }
         };
+        let hash_strategy = if tool_lock.is_some() {
+            HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?
+        } else {
+            HashStrategy::default()
+        };
         let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
@@ -1026,7 +1033,7 @@ pub(crate) async fn install(
         match sync_environment(
             environment,
             &resolution,
-            HashStrategy::default(),
+            hash_strategy,
             Modifications::Exact,
             Constraints::from_requirements(receipt_build_constraints.iter().cloned()),
             (&settings).into(),
