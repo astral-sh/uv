@@ -120,7 +120,9 @@ async fn do_uninstall(
         .iter()
         .map(PythonRequest::includes_patch)
         .collect::<Vec<_>>();
-    let report_outdated = outdated && specific_patch_requests.iter().any(|specific| !specific);
+    let has_outdated_requests =
+        outdated && specific_patch_requests.iter().any(|specific| !specific);
+    let report_outdated = outdated && specific_patch_requests.iter().all(|specific| !specific);
 
     let mut matching_installations = BTreeSet::default();
     let mut missing_required = false;
@@ -194,7 +196,7 @@ async fn do_uninstall(
         } else {
             " matching the requests"
         };
-        if report_outdated && !missing_required {
+        if has_outdated_requests && !missing_required {
             writeln!(
                 printer.stderr(),
                 "No outdated Python installations found{matching}"

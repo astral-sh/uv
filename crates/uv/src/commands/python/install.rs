@@ -1029,6 +1029,36 @@ async fn delete_old_patches_in_group(
         return Ok(());
     }
 
+    // Remove registry entries first, so we don't have dangling entries between file removal
+    // and registry cleanup.
+    #[cfg(windows)]
+    let to_delete = {
+        let mut to_delete = to_delete;
+        let mut registry_errors = Vec::new();
+        uv_python::windows_registry::remove_registry_entry(&to_delete, false, &mut registry_errors);
+
+        if !registry_errors.is_empty() {
+            let failed_keys = registry_errors
+                .iter()
+                .map(|(key, _)| key.clone())
+                .collect::<FxHashSet<_>>();
+
+            for (key, err) in registry_errors {
+                warn_user!(
+                    "Failed to clean up registry entries for {}: {}",
+                    key.green(),
+                    err.to_string().trim()
+                );
+            }
+
+            to_delete.retain(|installation| !failed_keys.contains(installation.key()));
+            if to_delete.is_empty() {
+                return Ok(());
+            }
+        }
+        to_delete
+    };
+
     let bin_dir = python_executable_dir().ok();
     let mut deleted = Vec::new();
 
@@ -1040,7 +1070,7 @@ async fn delete_old_patches_in_group(
             .unwrap_or_default();
 
         if let Err(err) = fs_err::tokio::remove_dir_all(&path).await {
-            warn!("Failed to remove {}: {err}", path.display());
+            warn_user!("Failed to remove {}: {err}", path.simplified_display());
             continue;
         }
 
@@ -1048,7 +1078,7 @@ async fn delete_old_patches_in_group(
 
         for bin_link in bin_links {
             if let Err(err) = fs_err::remove_file(&bin_link) {
-                warn!("Failed to remove {}: {err}", bin_link.display());
+                warn_user!("Failed to remove {}: {err}", bin_link.simplified_display());
             }
         }
     }
@@ -1061,7 +1091,7 @@ async fn delete_old_patches_in_group(
 
     if let Some(first) = remaining.first() {
         if let Err(err) = first.ensure_minor_version_link() {
-            warn!("Failed to update minor version symlink: {err}");
+            warn_user!("Failed to update minor version symlink: {err}");
         }
     } else if let Some(installation) = to_delete.first() {
         if let Some(link) = PythonMinorVersionLink::from_installation(installation) {
@@ -1072,7 +1102,7 @@ async fn delete_old_patches_in_group(
                     fs_err::remove_file(link.symlink_directory.as_path())
                 };
                 if let Err(err) = result {
-                    warn!("Failed to remove symlink: {err}");
+                    warn_user!("Failed to remove symlink: {err}");
                 }
             }
         }

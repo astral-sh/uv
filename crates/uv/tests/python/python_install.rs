@@ -4875,6 +4875,66 @@ fn python_uninstall_outdated_with_exact_target() {
 }
 
 #[test]
+fn python_uninstall_outdated_with_mixed_targets() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        .with_python_download_cache();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11.8"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.8 in [TIME]
+     + cpython-3.11.8-[PLATFORM] (python3.11)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.1"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.1 in [TIME]
+     + cpython-3.12.1-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.5"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.5 in [TIME]
+     + cpython-3.12.5-[PLATFORM] (python3.12)
+    ");
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .python_uninstall()
+            .arg("3.11.8")
+            .arg("3.12")
+            .arg("--outdated"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.11.8
+    Searching for Python versions matching: Python 3.12
+    Uninstalled 2 versions in [TIME]
+     - cpython-3.11.8-[PLATFORM] (python3.11)
+     - cpython-3.12.1-[PLATFORM]
+    "
+    );
+}
+
+#[test]
 fn python_uninstall_outdated_without_installs() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
