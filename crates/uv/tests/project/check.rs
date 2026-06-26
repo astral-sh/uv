@@ -574,6 +574,75 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that the cached environment for a locked tool rejects invalid lockfile hashes.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
+    let context =
+        uv_test::test_context!("3.12").with_filter((r"sha256:[0-9a-f]{64}", "sha256:[HASH]"));
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    let mut lock = context.read("uv.lock");
+    let hash_indices = lock
+        .match_indices("sha256:")
+        .map(|(index, _)| index + "sha256:".len())
+        .collect::<Vec<_>>();
+    assert!(!hash_indices.is_empty());
+    for index in hash_indices.into_iter().rev() {
+        let replacement = if lock.as_bytes()[index] == b'0' {
+            "1"
+        } else {
+            "0"
+        };
+        lock.replace_range(index..=index, replacement);
+    }
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--no-sync").arg("--frozen"),
+        @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+      × Failed to download `ty==0.0.17`
+      ╰─▶ Hash mismatch for `ty==0.0.17`
+
+          Expected:
+            sha256:[HASH]
+
+          Computed:
+            sha256:[HASH]
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_uses_ty_version_from_production_dependency() -> Result<()> {
