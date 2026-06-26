@@ -371,6 +371,20 @@ async fn build_impl(
         vec![AnnotatedSource::from(src)]
     };
 
+    // Build backends can include arbitrary files from the source directory in the distribution.
+    // Reject an active cache within the source to avoid including cache contents in the build.
+    for source in &packages {
+        if let Source::Directory(source_dir) = &source.source
+            && is_path_within(cache.root(), source_dir)
+        {
+            return Err(anyhow::anyhow!(
+                "The cache directory `{}` is inside the build source directory `{}`",
+                cache.root().user_display(),
+                source_dir.user_display()
+            ));
+        }
+    }
+
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
             source.clone(),
@@ -1252,6 +1266,21 @@ impl Source<'_> {
             Self::File(path) => path.parent().unwrap(),
             Self::Directory(path) => path,
         }
+    }
+}
+
+/// Return `true` if `path` is within `directory`, resolving symlinks when possible.
+fn is_path_within(path: &Path, directory: &Path) -> bool {
+    if path.starts_with(directory) {
+        return true;
+    }
+
+    if let Ok(path) = fs_err::canonicalize(path)
+        && let Ok(directory) = fs_err::canonicalize(directory)
+    {
+        path.starts_with(directory)
+    } else {
+        false
     }
 }
 

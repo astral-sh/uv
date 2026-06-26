@@ -1,10 +1,149 @@
 use anyhow::Result;
 use assert_fs::prelude::*;
+use predicates::prelude::predicate;
 use std::process::Command;
 
 #[cfg(unix)]
 use uv_fs::create_symlink;
 use uv_test::{get_bin, uv_snapshot};
+
+/// When the active cache directory is inside an explicit build source, we should error before
+/// invoking the build backend or creating the output directory.
+#[test]
+fn build_rejects_cache_inside_source() -> Result<()> {
+    let mut context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    project.child("src/project/__init__.py").touch()?;
+
+    context.cache_dir = project.child(".uv-cache");
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("project"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The cache directory `project/.uv-cache` is inside the build source directory `project`
+    ");
+
+    project.child("dist").assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// When the canonical cache directory is inside an explicit build source, we should error even if
+/// the configured cache path itself is outside the source.
+#[test]
+#[cfg(unix)]
+fn build_rejects_symlinked_cache_inside_source() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    project.child("src/project/__init__.py").touch()?;
+
+    let cache_dir = project.child(".uv-cache");
+    cache_dir.create_dir_all()?;
+    let cache_link = context.temp_dir.child("cache-link");
+    create_symlink(cache_dir.path(), cache_link.path())?;
+
+    let mut command = Command::new(get_bin!());
+    command
+        .arg("build")
+        .arg("--sdist")
+        .arg("project")
+        .arg("--cache-dir")
+        .arg(cache_link.path());
+    context.add_shared_env(&mut command, false);
+    command.current_dir(context.temp_dir.path());
+
+    uv_snapshot!(context.filters(), command, @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The cache directory `cache-link` is inside the build source directory `project`
+    ");
+
+    project.child("dist").assert(predicate::path::missing());
+
+    Ok(())
+}
+
+/// A cache in the workspace root is allowed when building a member that does not contain it.
+#[test]
+fn build_allows_cache_outside_selected_source() -> Result<()> {
+    let mut context = uv_test::test_context!("3.12");
+    let workspace = context.temp_dir.child("workspace");
+    let member = workspace.child("member");
+
+    workspace.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["member"]
+        "#,
+    )?;
+    member.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.5.15,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    member.child("src/member/__init__.py").touch()?;
+
+    context.cache_dir = workspace.child(".uv-cache");
+
+    uv_snapshot!(context.filters(), context.build()
+        .arg("--sdist")
+        .arg("--package")
+        .arg("member")
+        .current_dir(&workspace), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution (uv build backend)...
+    Successfully built dist/member-0.1.0.tar.gz
+    ");
+
+    workspace
+        .child("dist/member-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+
+    Ok(())
+}
 
 /// When the project directory defaults to a current directory inside the cache directory, we should
 /// error before using the cache.
