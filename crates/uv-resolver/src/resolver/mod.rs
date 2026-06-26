@@ -536,7 +536,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         request_sink,
                     )?;
 
-                    let decision = match decision {
+                    let (decision, contextual_no_versions) = match decision {
                         Some(ResolverVersion::DeferredPrerelease)
                             if state.has_undecided_package() =>
                         {
@@ -547,8 +547,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             }
                             continue;
                         }
-                        Some(ResolverVersion::DeferredPrerelease) => None,
-                        decision => decision,
+                        Some(ResolverVersion::DeferredPrerelease) => (None, true),
+                        decision => (decision, false),
                     };
 
                     // Pick the next compatible version.
@@ -575,12 +575,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             continue;
                         }
 
-                        state
-                            .pubgrub
-                            .add_incompatibility(Incompatibility::no_versions(
+                        let incompatibility = if contextual_no_versions {
+                            let context = state
+                                .pubgrub
+                                .partial_solution
+                                .extract_solution()
+                                .filter(|(package, _)| *package != state.pubgrub.root_package)
+                                .collect::<Vec<_>>();
+                            Incompatibility::no_versions_with_context(
                                 next_id,
                                 term_intersection.clone(),
-                            ));
+                                context,
+                            )
+                        } else {
+                            Incompatibility::no_versions(next_id, term_intersection.clone())
+                        };
+                        state.pubgrub.add_incompatibility(incompatibility);
                         continue;
                     };
 

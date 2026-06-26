@@ -3172,7 +3172,7 @@ fn transitive_prerelease_authorization_after_decision() {
     context.assert_installed("d", "1.0.0");
 }
 
-/// A pre-release authorization introduced by a rejected parent version does not leak into the selected parent version.
+/// A pre-release authorization introduced by a rejected parent version does not leak to another pre-release.
 ///
 /// ```text
 /// transitive-prerelease-authorization-backtracks
@@ -3188,12 +3188,14 @@ fn transitive_prerelease_authorization_after_decision() {
 /// │   ├── a-1.0.0
 /// │   │   └── requires c>=1.0.0
 /// │   │       ├── satisfied by c-1.0.0
+/// │   │       ├── satisfied by c-1.5.0a1
 /// │   │       └── satisfied by c-2.0.0b1
 /// │   └── a-2.0.0
 /// │       └── requires c>=2.0.0b1
 /// │           └── satisfied by c-2.0.0b1
 /// ├── c
 /// │   ├── c-1.0.0
+/// │   ├── c-1.5.0a1
 /// │   └── c-2.0.0b1
 /// │       └── requires d==2.0.0
 /// │           └── satisfied by d-2.0.0
@@ -3224,7 +3226,7 @@ fn transitive_prerelease_authorization_backtracks() {
      + d==1.0.0
     ");
 
-    // The latest version of `a` is rejected, so its explicit pre-release dependency no longer authorizes pre-releases of `c`.
+    // The latest version of `a` is rejected, so its explicit pre-release dependency no longer authorizes `c==1.5.0a1`; the stable `c==1.0.0` remains preferred.
     context.assert_installed("a", "1.0.0");
     context.assert_installed("c", "1.0.0");
     context.assert_installed("d", "1.0.0");
