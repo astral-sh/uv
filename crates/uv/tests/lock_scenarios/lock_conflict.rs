@@ -4105,7 +4105,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo' or extra != 'extra-7-project-bar'" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
             { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-bar'" },
             { name = "sniffio" },
         ]
@@ -4246,7 +4246,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         version = "4.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-foo' or extra != 'group-7-project-bar'" },
+            { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-foo'" },
             { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar'" },
             { name = "sniffio" },
         ]
@@ -4393,7 +4393,7 @@ fn shared_optional_dependency_mixed2() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "idna", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-7-project-foo'" },
-            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar' or extra != 'extra-7-project-foo'" },
+            { name = "idna", version = "3.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-7-project-bar'" },
             { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
