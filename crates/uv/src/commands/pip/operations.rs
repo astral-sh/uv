@@ -541,18 +541,6 @@ impl Changelog {
     pub(crate) fn from_installed(installed: Vec<CachedDist>) -> Self {
         Self::from_local(installed, Vec::new())
     }
-
-    /// Returns `true` if the changelog includes a distribution with the given name, either via
-    /// an installation or uninstallation.
-    pub(crate) fn includes(&self, name: &PackageName) -> bool {
-        self.installed.iter().any(|dist| dist.name() == name)
-            || self.uninstalled.iter().any(|dist| dist.name() == name)
-    }
-
-    /// Returns `true` if the changelog is empty.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.installed.is_empty() && self.uninstalled.is_empty()
-    }
 }
 
 /// Install a set of requirements into the current environment.

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde::Deserialize;
+use uv_resolver::Lock;
 
 use crate::Tool;
 
@@ -18,8 +19,14 @@ pub struct ToolReceipt {
 impl ToolReceipt {
     /// Parse a [`ToolReceipt`] from a raw TOML string.
     pub(crate) fn from_string(raw: String) -> Result<Self, toml::de::Error> {
-        let tool = toml::from_str(&raw)?;
-        Ok(Self { raw, ..tool })
+        let mut receipt: Self = toml::from_str(&raw)?;
+        let document: toml::Table = toml::from_str(&raw)?;
+        if document.contains_key("version") {
+            let lock: Lock = toml::from_str(&raw)?;
+            receipt.tool = receipt.tool.with_lock(Some(lock));
+        }
+        receipt.raw = raw;
+        Ok(receipt)
     }
 
     ///  Read a [`ToolReceipt`] from the given path.
@@ -35,7 +42,17 @@ impl ToolReceipt {
     pub(crate) fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
-        let mut doc = toml_edit::DocumentMut::new();
+        let mut doc = if let Some(lock) = self.tool.lock() {
+            lock.to_toml()?
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|err| {
+                    toml_edit::ser::Error::Custom(format!(
+                        "Failed to parse embedded tool lock: {err}"
+                    ))
+                })?
+        } else {
+            toml_edit::DocumentMut::new()
+        };
         doc.insert("tool", toml_edit::Item::Table(self.tool.to_toml()?));
 
         Ok(doc.to_string())
