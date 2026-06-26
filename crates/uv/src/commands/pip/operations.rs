@@ -37,7 +37,7 @@ use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{PythonEnvironment, PythonInstallation};
 use uv_requirements::{
     GroupsSpecification, LookaheadResolver, NamedRequirementsResolver, RequirementsSource,
-    RequirementsSpecification, SourceTree, SourceTreeResolver,
+    RequirementsSpecification, SourceTree, SourceTreeResolution, SourceTreeResolver,
 };
 use uv_resolver::{
     DependencyMode, Exclusions, FlatIndex, InMemoryIndex, Manifest, Options, Preference,
@@ -127,7 +127,6 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     printer: Printer,
 ) -> Result<(ResolverOutput, HashStrategy), Error> {
     let start = std::time::Instant::now();
-    let excludes = Excludes::from_entries(excludes);
 
     // Resolve the requirements from the provided sources.
     let requirements = {
@@ -208,16 +207,11 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             }
 
             // Extend the requirements with the resolved source trees.
-            for resolution in resolutions {
-                let project = resolution.project().clone();
-                let version = resolution.version().cloned();
-                let package = version.as_ref().map(|version| (&project, version));
-                for requirement in resolution.into_requirements() {
-                    if !excludes.contains_for_package(package, &requirement.name) {
-                        requirements.push(requirement);
-                    }
-                }
-            }
+            requirements.extend(
+                resolutions
+                    .into_iter()
+                    .flat_map(SourceTreeResolution::into_requirements),
+            );
         }
 
         for (pyproject_path, groups) in groups {
@@ -306,7 +300,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         overrides
     };
 
-    // Collect constraints and overrides.
+    // Collect constraints, overrides, and excludes.
     let constraints = Constraints::from_requirements(
         constraints
             .into_iter()
@@ -320,6 +314,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .collect(),
     )
     .map_err(anyhow::Error::from)?;
+    let excludes = Excludes::from_entries(excludes);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
     // Determine any lookahead requirements.

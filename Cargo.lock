@@ -7055,7 +7055,6 @@ dependencies = [
  "uv-fs",
  "uv-git",
  "uv-normalize",
- "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
  "uv-redacted",
