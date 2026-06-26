@@ -19,8 +19,9 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies, LoweredRequirement};
 use uv_distribution_types::{
-    ExtraBuildRequirement, ExtraBuildRequires, Index, IndexCredentialsError, Requirement,
-    RequiresPython, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    ExtraBuildRequirement, ExtraBuildRequires, HashGeneration, Index, IndexCredentialsError,
+    Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, LockedFileError, LockedFileMode, Simplified, verbatim_path};
 use uv_git::ResolvedRepositoryReference;
@@ -29,7 +30,7 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, Packag
 use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
+use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts, SupportedEnvironments};
 use uv_python::managed::{ManagedPythonInstallation, PythonMinorVersionLink};
 use uv_python::{
     BrokenLink, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
@@ -49,7 +50,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, HashStrategy, InstalledPackagesProvider, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -2314,16 +2315,18 @@ impl<'lock> EnvironmentSpecification<'lock> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum EnvironmentResolution {
+pub(crate) enum EnvironmentResolution<'settings> {
     Specific,
-    Universal,
+    Universal {
+        environments: &'settings SupportedEnvironments,
+        required_environments: &'settings SupportedEnvironments,
+    },
 }
 
 /// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
-pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProvider>(
+pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
-    installed_packages: InstalledPackages,
-    resolution_scope: EnvironmentResolution,
+    resolution_scope: EnvironmentResolution<'_>,
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
@@ -2375,6 +2378,32 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
         ..
     } = spec.requirements;
 
+    if let EnvironmentResolution::Universal {
+        environments,
+        required_environments,
+    } = resolution_scope
+    {
+        for environments in [environments, required_environments] {
+            for [lhs, rhs] in environments.as_markers().array_windows() {
+                if !lhs.is_disjoint(*rhs) {
+                    let mut hint = lhs.negate();
+                    hint.and(*rhs);
+                    return Err(ProjectError::OverlappingMarkers(
+                        lhs.contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string()),
+                        rhs.contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string()),
+                        hint.contents()
+                            .map(|contents| contents.to_string())
+                            .unwrap_or_else(|| "true".to_string()),
+                    ));
+                }
+            }
+        }
+    }
+
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     // Determine the tags and marker environment to use for resolution.
@@ -2387,11 +2416,14 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
                 ResolverEnvironment::specific(marker_environment),
             )
         }
-        EnvironmentResolution::Universal => (None, ResolverEnvironment::universal(vec![])),
+        EnvironmentResolution::Universal { environments, .. } => (
+            None,
+            ResolverEnvironment::universal(environments.clone().into_markers()),
+        ),
     };
     let python_requirement = match resolution_scope {
         EnvironmentResolution::Specific => PythonRequirement::from_interpreter(interpreter),
-        EnvironmentResolution::Universal => PythonRequirement::from_requires_python(
+        EnvironmentResolution::Universal { .. } => PythonRequirement::from_requires_python(
             interpreter,
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version()),
         ),
@@ -2399,7 +2431,7 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
 
     let python_platform = match resolution_scope {
         EnvironmentResolution::Specific => python_platform,
-        EnvironmentResolution::Universal => None,
+        EnvironmentResolution::Universal { .. } => None,
     };
 
     // Determine the PyTorch backend.
@@ -2449,6 +2481,20 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
         }
     };
 
+    let artifact_environments = match resolution_scope {
+        EnvironmentResolution::Specific => SupportedEnvironments::default(),
+        EnvironmentResolution::Universal {
+            environments,
+            required_environments,
+        } => SupportedEnvironments::from_markers(
+            environments
+                .iter()
+                .chain(required_environments.iter())
+                .copied()
+                .collect(),
+        ),
+    };
+
     let options = OptionsBuilder::new()
         .resolution_mode(*resolution)
         .prerelease_mode(*prerelease)
@@ -2456,19 +2502,27 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
         .exclude_newer(exclude_newer.clone())
         .index_strategy(*index_strategy)
         .build_options(build_options.clone())
+        .artifact_environments(artifact_environments)
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();
-    let hasher = HashStrategy::default();
+    let hasher = match resolution_scope {
+        EnvironmentResolution::Specific => HashStrategy::default(),
+        EnvironmentResolution::Universal { .. } => HashStrategy::Generate(HashGeneration::Url),
+    };
     let build_hasher = HashStrategy::default();
 
     // When resolving from an interpreter, we assume an empty environment, so reinstalls aren't
-    // relevant.
+    // relevant. Upgrades are only relevant for universal resolutions that use an existing lock as
+    // a preference source.
     let reinstall = Reinstall::default();
-    let upgrade = upgrade.clone();
+    let upgrade = match resolution_scope {
+        EnvironmentResolution::Specific => Upgrade::default(),
+        EnvironmentResolution::Universal { .. } => upgrade.clone(),
+    };
 
     // If an existing lockfile exists, build up a set of preferences.
     let preferences = match spec.preferences {
@@ -2542,7 +2596,7 @@ pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProv
         &extras,
         &groups,
         preferences,
-        installed_packages,
+        EmptyInstalledPackages,
         &hasher,
         &reinstall,
         &upgrade,

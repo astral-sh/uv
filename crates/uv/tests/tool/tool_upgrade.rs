@@ -5,11 +5,10 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
-use predicates::prelude::predicate;
 
 use uv_static::EnvVars;
 
-use uv_test::{site_packages_path, uv_snapshot};
+use uv_test::uv_snapshot;
 
 #[test]
 fn tool_upgrade_empty() {
@@ -573,8 +572,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 
     context
         .tool_install()
-        .arg("--python-platform")
-        .arg("linux")
         .arg("black")
         .arg("--exclude-newer")
         .arg("3 weeks")
@@ -587,8 +584,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         .success();
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("--python-platform")
-        .arg("linux")
         .arg("black")
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
@@ -611,96 +606,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
     insta::with_settings!({
         filters => context.filters(),
     }, {
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-        tool-lock-version = 1
-
-        [options]
-        exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
-        exclude-newer-span = "P3W"
-
-        [manifest]
-        requirements = [{ name = "black" }]
-
-        [[package]]
-        name = "black"
-        version = "24.3.0"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "click" },
-            { name = "mypy-extensions" },
-            { name = "packaging" },
-            { name = "pathspec" },
-            { name = "platformdirs" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f", size = 1600822, upload-time = "2024-03-15T19:45:20.337Z" },
-            { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
-            { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
-            { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5", size = 1385180, upload-time = "2024-03-15T19:39:37.014Z" },
-            { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
-        ]
-
-        [[package]]
-        name = "click"
-        version = "8.1.7"
-        source = { registry = "https://pypi.org/simple" }
-        dependencies = [
-            { name = "colorama", marker = "sys_platform == 'win32'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
-        ]
-
-        [[package]]
-        name = "colorama"
-        version = "0.4.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
-        ]
-
-        [[package]]
-        name = "mypy-extensions"
-        version = "1.0.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", hash = "sha256:75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782", size = 4433, upload-time = "2023-02-04T12:11:27.157Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", hash = "sha256:4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d", size = 4695, upload-time = "2023-02-04T12:11:25.002Z" },
-        ]
-
-        [[package]]
-        name = "packaging"
-        version = "24.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", hash = "sha256:eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9", size = 147882, upload-time = "2024-03-10T09:39:28.33Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", hash = "sha256:2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5", size = 53488, upload-time = "2024-03-10T09:39:25.947Z" },
-        ]
-
-        [[package]]
-        name = "pathspec"
-        version = "0.12.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712", size = 51043, upload-time = "2023-12-10T22:30:45Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08", size = 31191, upload-time = "2023-12-10T22:30:43.14Z" },
-        ]
-
-        [[package]]
-        name = "platformdirs"
-        version = "4.2.0"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", hash = "sha256:ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768", size = 20055, upload-time = "2024-01-31T01:00:36.02Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", hash = "sha256:0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068", size = 17717, upload-time = "2024-01-31T01:00:34.019Z" },
-        ]
-        "#);
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "black" }]
@@ -714,49 +619,6 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         exclude-newer-span = "P3W"
         "#);
     });
-}
-
-#[test]
-fn tool_upgrade_migrates_missing_lock_with_installed_preferences() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-
-    context
-        .tool_install()
-        .arg("black==24.2.0")
-        .arg("--exclude-newer")
-        .arg("3 weeks")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    fs_err::remove_file(tool_dir.child("black").child("uv.lock"))?;
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("black")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Nothing to upgrade
-
-    hint: `black` is pinned to `24.2.0` (installed with an exact version pin); reinstall with `uv tool install black@latest` to upgrade to a new version.
-    ");
-
-    Ok(())
 }
 
 #[test]
@@ -1211,7 +1073,7 @@ fn tool_upgrade_no_binary_package_env_var() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==23.1.0
@@ -1468,68 +1330,6 @@ fn tool_upgrade_with() {
 }
 
 #[test]
-fn tool_upgrade_package_preserves_unrelated_installed_candidates() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-    let links = context.temp_dir.child("links");
-    links.create_dir_all()?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
-        links.child("simple_launcher-0.1.0-py3-none-any.whl"),
-    )?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-1.0.0-py3-none-any.whl"),
-        links.child("ok-1.0.0-py3-none-any.whl"),
-    )?;
-
-    context
-        .tool_install()
-        .arg("simple-launcher")
-        .arg("--with")
-        .arg("ok")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(links.as_os_str())
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    fs_err::remove_file(links.child("ok-1.0.0-py3-none-any.whl"))?;
-    fs_err::copy(
-        context
-            .workspace_root
-            .join("test/links/ok-2.0.0-py3-none-any.whl"),
-        links.child("ok-2.0.0-py3-none-any.whl"),
-    )?;
-
-    context
-        .tool_upgrade()
-        .arg("simple-launcher")
-        .arg("--upgrade-package")
-        .arg("simple-launcher")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    let site_packages = site_packages_path(&tool_dir.join("simple-launcher"), "python3.12");
-    assert!(site_packages.join("ok-1.0.0.dist-info").is_dir());
-    assert!(!site_packages.join("ok-2.0.0.dist-info").exists());
-
-    Ok(())
-}
-
-#[test]
 fn tool_upgrade_python() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
         .with_filtered_counts()
@@ -1586,149 +1386,6 @@ fn tool_upgrade_python() {
         let lines: Vec<&str> = content.split('\n').collect();
         assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
-}
-
-#[test]
-fn tool_upgrade_python_replaces_malformed_environment() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12", "3.13"])
-        .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-
-    context
-        .tool_install()
-        .arg("simple-launcher")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .arg("--python")
-        .arg("3.12")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    fs_err::create_dir(
-        site_packages_path(&tool_dir.join("simple-launcher"), "python3.12")
-            .join("malformed.dist-info"),
-    )?;
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("simple-launcher")
-        .arg("--python")
-        .arg("3.13")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + simple-launcher==0.1.0
-    Installed 1 executable: simple_launcher
-    Upgraded tool environment for `simple-launcher` to Python 3.13
-    ");
-
-    Ok(())
-}
-
-#[test]
-fn tool_upgrade_compile_bytecode_on_noop() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
-        .with_filtered_counts()
-        .with_filtered_exe_suffix()
-        .with_filtered_compiled_file_count();
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-
-    context
-        .tool_install()
-        .arg("simple-launcher")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    let bytecode = site_packages_path(&tool_dir.join("simple-launcher"), "python3.12")
-        .join("simple_launcher")
-        .join("__pycache__");
-    if bytecode.exists() {
-        fs_err::remove_dir_all(&bytecode)?;
-    }
-
-    uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("simple-launcher")
-        .arg("--compile-bytecode")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Bytecode compiled [COUNT] files in [TIME]
-    Modified simple-launcher environment
-    ");
-
-    assert!(bytecode.is_dir());
-
-    Ok(())
-}
-
-#[test]
-fn tool_upgrade_removes_entrypoint_when_target_becomes_inactive() {
-    let context = uv_test::test_context!("3.13")
-        .with_filtered_counts()
-        .with_filtered_exe_suffix();
-    let tool_dir = context.temp_dir.child("tools");
-    let bin_dir = context.temp_dir.child("bin");
-
-    context
-        .tool_install()
-        .arg("simple-launcher; sys_platform == 'linux'")
-        .arg("--with-executables-from")
-        .arg("basic-app")
-        .arg("--python-platform")
-        .arg("linux")
-        .arg("--no-index")
-        .arg("--find-links")
-        .arg(context.workspace_root.join("test/links"))
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .success();
-
-    context
-        .tool_upgrade()
-        .arg("simple-launcher")
-        .arg("--python-platform")
-        .arg("windows")
-        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str())
-        .assert()
-        .failure();
-
-    bin_dir
-        .child(format!("simple_launcher{}", std::env::consts::EXE_SUFFIX))
-        .assert(predicate::path::missing());
-    bin_dir
-        .child(format!("basic-app{}", std::env::consts::EXE_SUFFIX))
-        .assert(predicate::path::missing());
-    tool_dir
-        .child("simple-launcher")
-        .assert(predicate::path::missing());
 }
 
 #[test]
@@ -1991,27 +1648,6 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
     }, {
         // Verify the receipt has `authenticate = "always"` (promoted from "auto" because the
         // original URL had embedded credentials).
-        assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-        tool-lock-version = 1
-
-        [options]
-        exclude-newer = "2025-01-18T00:00:00Z"
-
-        [manifest]
-        requirements = [{ name = "executable-application" }]
-
-        [[package]]
-        name = "executable-application"
-        version = "0.3.0"
-        source = { registry = "http://[LOCALHOST]/basic-auth/simple" }
-        sdist = { url = "http://[LOCALHOST]/basic-auth/files/packages/9a/36/e803315469274d62f2dab543e3916c0b5b65730074d295f7d48711aa9e36/executable_application-0.3.0.tar.gz", hash = "sha256:0ef8c5ddd28649503c6e4a9f55be17e5b3bd0685df7b83ff7c260b481025f261", size = 914, upload-time = "2025-01-17T23:21:24.559Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/basic-auth/files/packages/32/97/8ab6fa1bbcb0a888f460c0a19c301f4cc4180573564ad7dd98b5ceca2ab6/executable_application-0.3.0-py3-none-any.whl", hash = "sha256:ca272aee7332e9d266663bc70037cd3ef1d74ffae40030eaf9ca46462dc8dcc6", size = 1719, upload-time = "2025-01-17T23:21:22.716Z" },
-        ]
-        "#);
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv-receipt.toml")).unwrap(), @r#"
         [tool]
         requirements = [{ name = "executable-application" }]
@@ -2042,6 +1678,42 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
       Caused by: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/executable-application/`
       Caused by: Missing credentials for http://[LOCALHOST]/basic-auth/simple/executable-application/
     ");
+
+    Ok(())
+}
+
+#[test]
+fn tool_upgrade_writes_preview_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    context
+        .tool_upgrade()
+        .arg("simple-launcher")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
+    assert_eq!(lock["tool-lock-version"].as_integer(), Some(1));
 
     Ok(())
 }

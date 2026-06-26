@@ -1015,6 +1015,64 @@ impl ToolRunSettings {
     }
 }
 
+/// Global dependency and environment settings used to create universal tool locks.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ToolLockSettings {
+    pub(crate) constraints: Vec<Requirement>,
+    pub(crate) overrides: Vec<Requirement>,
+    pub(crate) excludes: Vec<PackageName>,
+    pub(crate) build_constraints: Vec<Requirement>,
+    pub(crate) environments: SupportedEnvironments,
+    pub(crate) required_environments: SupportedEnvironments,
+}
+
+impl ToolLockSettings {
+    fn from_filesystem(filesystem: Option<&FilesystemOptions>) -> Self {
+        let Some(configuration) = filesystem else {
+            return Self::default();
+        };
+
+        Self {
+            constraints: configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect(),
+            overrides: configuration
+                .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect(),
+            excludes: configuration
+                .exclude_dependencies
+                .clone()
+                .unwrap_or_default(),
+            build_constraints: configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect(),
+            environments: configuration.environments.clone().unwrap_or_default(),
+            required_environments: configuration
+                .required_environments
+                .clone()
+                .unwrap_or_default(),
+        }
+    }
+}
+
 /// The resolved settings to use for a `tool install` invocation.
 #[derive(Debug, Clone)]
 pub(crate) struct ToolInstallSettings {
@@ -1034,6 +1092,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) lock_settings: ToolLockSettings,
     pub(crate) force: bool,
     pub(crate) editable: bool,
     pub(crate) install_mirrors: PythonInstallMirrors,
@@ -1068,6 +1127,7 @@ impl ToolInstallSettings {
             torch_backend,
         } = args;
 
+        let lock_settings = ToolLockSettings::from_filesystem(filesystem.as_ref());
         let filesystem_options = filesystem.map(FilesystemOptions::into_options);
 
         let options = resolver_installer_options_with_environment(
@@ -1134,6 +1194,7 @@ impl ToolInstallSettings {
             refresh: Refresh::from(refresh),
             options,
             settings,
+            lock_settings,
             install_mirrors: environment
                 .install_mirrors
                 .combine(filesystem_install_mirrors),
@@ -1150,6 +1211,7 @@ pub(crate) struct ToolUpgradeSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) args: ResolverInstallerOptions,
     pub(crate) filesystem: ResolverInstallerOptions,
+    pub(crate) lock_settings: ToolLockSettings,
 }
 impl ToolUpgradeSettings {
     /// Resolve the [`ToolUpgradeSettings`] from the CLI and filesystem configuration.
@@ -1232,6 +1294,7 @@ impl ToolUpgradeSettings {
             resolver_installer_options(installer, build),
             environment,
         );
+        let lock_settings = ToolLockSettings::from_filesystem(filesystem.as_ref());
         let filesystem = filesystem.map(FilesystemOptions::into_options);
         let filesystem_install_mirrors = filesystem
             .clone()
@@ -1249,6 +1312,7 @@ impl ToolUpgradeSettings {
             python_platform,
             args,
             filesystem: top_level,
+            lock_settings,
             install_mirrors: environment
                 .install_mirrors
                 .clone()

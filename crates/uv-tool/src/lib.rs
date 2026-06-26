@@ -150,19 +150,15 @@ impl InstalledTools {
         self.root.join(name.to_string())
     }
 
-    /// Read the lock for a tool, if it has been generated and still matches its receipt.
-    fn read_lock(directory: &Path, tool: &Tool) -> Option<Lock> {
+    /// Read the lock for a tool, if one has been generated.
+    ///
+    /// Validating the lock requires the active command configuration and is performed by the tool
+    /// install and upgrade commands.
+    fn read_lock(directory: &Path) -> Option<Lock> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
             Ok(contents) => match toml::from_str::<Lock>(&contents) {
-                Ok(lock) if tool.matches_lock(&lock, directory) => Some(lock),
-                Ok(_) => {
-                    debug!(
-                        "Ignoring tool lock at `{}` because it does not match its receipt",
-                        path.user_display()
-                    );
-                    None
-                }
+                Ok(lock) => Some(lock),
                 Err(err) => {
                     debug!(
                         "Ignoring invalid tool lock at `{}`: {err}",
@@ -212,7 +208,7 @@ impl InstalledTools {
             match ToolReceipt::from_string(contents) {
                 Ok(tool_receipt) => {
                     let tool = tool_receipt.tool;
-                    let lock = Self::read_lock(&directory, &tool);
+                    let lock = Self::read_lock(&directory);
                     tools.push((name, Ok(tool.with_lock(lock))));
                 }
                 Err(err) => {
@@ -236,7 +232,7 @@ impl InstalledTools {
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => {
                 let tool = tool_receipt.tool;
-                let lock = Self::read_lock(&directory, &tool);
+                let lock = Self::read_lock(&directory);
                 Ok(Some(tool.with_lock(lock)))
             }
             Err(Error::Io(err)) if err.kind() == io::ErrorKind::NotFound => Ok(None),

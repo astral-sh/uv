@@ -15,8 +15,8 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{BuildOptions, ExcludeDependency, GitLfsSetting, TargetTriple};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
-    InstalledDist, Name, Requirement, RequirementSource, RequiresPython, Resolution,
-    StaticMetadata, UnresolvedRequirement,
+    DependencyMetadata, InstalledDist, Name, Requirement, RequirementSource, RequiresPython,
+    Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -103,6 +103,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+use crate::settings::{ResolverSettings, ToolLockSettings};
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -302,6 +303,7 @@ pub(crate) fn tool_lock_manifest(
     overrides: &[Requirement],
     excludes: &[PackageName],
     build_constraints: &[Requirement],
+    dependency_metadata: &DependencyMetadata,
 ) -> ResolverManifest {
     ResolverManifest::new(
         std::iter::empty::<PackageName>(),
@@ -311,7 +313,7 @@ pub(crate) fn tool_lock_manifest(
         excludes.iter().cloned(),
         build_constraints.iter().cloned(),
         std::iter::empty::<(GroupName, Vec<Requirement>)>(),
-        std::iter::empty::<StaticMetadata>(),
+        dependency_metadata.values().cloned(),
     )
 }
 
@@ -320,23 +322,56 @@ pub(crate) fn tool_lock(
     root: &Path,
     resolution: &ResolverOutput,
     manifest: &ResolverManifest,
-) -> Option<Lock> {
-    match Lock::from_resolution(resolution, root, vec![]) {
-        Ok(lock) => match manifest.clone().relative_to(root) {
-            Ok(manifest) => Some(
-                lock.with_manifest(manifest)
-                    .with_universal_tool_resolution(),
-            ),
-            Err(err) => {
-                debug!("Failed to relativize tool lock manifest: {err}");
-                None
-            }
-        },
-        Err(err) => {
-            debug!("Failed to build tool lock: {err}");
-            None
-        }
+    lock_settings: &ToolLockSettings,
+) -> anyhow::Result<Lock> {
+    let lock = Lock::from_resolution(
+        resolution,
+        root,
+        lock_settings.environments.clone().into_markers(),
+    )?;
+    let manifest = manifest.clone().relative_to(root)?;
+    Ok(lock
+        .with_manifest(manifest)
+        .with_required_environments(lock_settings.required_environments.clone().into_markers())
+        .with_universal_tool_resolution())
+}
+
+/// Return whether a tool lock matches all inputs that determine a universal resolution.
+pub(crate) fn tool_lock_is_fresh(
+    root: &Path,
+    lock: &Lock,
+    manifest: &ResolverManifest,
+    lock_settings: &ToolLockSettings,
+    resolver_settings: &ResolverSettings,
+) -> bool {
+    if !lock.supports_universal_tool_resolution() || !lock.matches_manifest_at(manifest, root) {
+        return false;
     }
+
+    let supported_environments = lock_settings
+        .environments
+        .iter()
+        .copied()
+        .map(|marker| lock.simplify_environment(marker))
+        .collect::<Vec<_>>();
+    if lock.simplified_supported_environments() != supported_environments {
+        return false;
+    }
+
+    let required_environments = lock_settings
+        .required_environments
+        .iter()
+        .copied()
+        .map(|marker| lock.simplify_environment(marker))
+        .collect::<Vec<_>>();
+    if lock.simplified_required_environments() != required_environments {
+        return false;
+    }
+
+    lock.resolution_mode() == resolver_settings.resolution
+        && lock.prerelease_mode() == resolver_settings.prerelease
+        && lock.fork_strategy() == resolver_settings.fork_strategy
+        && lock.exclude_newer() == resolver_settings.exclude_newer
 }
 
 /// Project a universal tool lock into a specific environment.
@@ -386,12 +421,12 @@ pub(crate) fn tool_lock_to_resolution(
 /// available, then falling back to the installed environment.
 pub(crate) fn tool_environment_spec<'lock>(
     requirements: RequirementsSpecification,
-    tool: Option<&'lock Tool>,
+    lock: Option<&'lock Lock>,
     install_path: &'lock Path,
     site_packages: Option<&SitePackages>,
 ) -> EnvironmentSpecification<'lock> {
     let specification = EnvironmentSpecification::from(requirements);
-    if let Some(lock) = tool.and_then(Tool::lock) {
+    if let Some(lock) = lock {
         return specification.with_preferences(PreferenceLocation::Lock { lock, install_path });
     }
 

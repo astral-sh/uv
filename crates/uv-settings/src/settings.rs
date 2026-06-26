@@ -144,7 +144,8 @@ pub struct Options {
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
-    // They're respected in both `pyproject.toml` and `uv.toml` files.
+    // They're respected in `pyproject.toml` and global `uv.toml` files. The environment fields are
+    // rejected in project-local `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub override_dependencies: Option<Vec<OverrideDependency>>,
 

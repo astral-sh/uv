@@ -54,7 +54,7 @@ fn tool_uninstall() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==24.2.0
      + click==8.1.7
