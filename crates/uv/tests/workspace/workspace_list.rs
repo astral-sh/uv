@@ -242,10 +242,10 @@ fn workspace_list_scripts() -> Result<()> {
     context.init().arg("project").assert().success();
     let project = context.temp_dir.child("project");
 
-    let script = r#"# /// script
+    let script = r"# /// script
 # dependencies = []
 # ///
-"#;
+";
 
     project.child("script.py").write_str(script)?;
     project.child("scripts/nested.py").write_str(script)?;
