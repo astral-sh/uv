@@ -101,7 +101,7 @@ mod venv;
 mod workspace;
 
 #[derive(Copy, Clone)]
-pub(crate) enum ExitStatus {
+pub enum ExitStatus {
     /// The command succeeded.
     Success,
 

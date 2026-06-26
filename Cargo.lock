@@ -5738,6 +5738,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "temp-env",
  "tempfile",
  "textwrap",
  "thiserror",
