@@ -4,6 +4,7 @@ use same_file::is_same_file;
 use tracing::debug;
 
 use uv_cache_key::CanonicalUrl;
+use uv_distribution_types::RequirementSource;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
@@ -24,12 +25,15 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
     /// URL requirements in overrides. An override URL replaces all requirements and constraints
-    /// URLs. There can be multiple URLs for the same package as long as they are in different
-    /// forks.
+    /// URLs unless a preprocessed requirement has already selected a scoped override. There can be
+    /// multiple URLs for the same package as long as they are in different forks.
     overrides: ForkMap<VerbatimParsedUrl>,
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
     regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
+    /// Registry requirements that already selected a scoped override before reaching the
+    /// resolver. Global URL overrides must not replace these requirements.
+    shadowed_overrides: ForkMap<()>,
 }
 
 impl Urls {
@@ -41,6 +45,7 @@ impl Urls {
     ) -> Self {
         let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
         let mut overrides = ForkMap::default();
+        let mut shadowed_overrides = ForkMap::default();
 
         // Add all direct regular requirements and constraints URL.
         for requirement in manifest.requirements_no_overrides(env, dependencies) {
@@ -88,14 +93,29 @@ impl Urls {
             overrides.add(requirement.as_ref(), url);
         }
 
-        Self { overrides, regular }
+        // Source-tree and dependency-group requirements are preprocessed with their package scope.
+        // A remaining registry requirement therefore shadows any global URL override for the same
+        // dependency in that fork.
+        for requirement in &manifest.preprocessed_requirements {
+            if overrides.contains_key(&requirement.name)
+                && matches!(&requirement.source, RequirementSource::Registry { .. })
+            {
+                shadowed_overrides.add(requirement, ());
+            }
+        }
+
+        Self {
+            overrides,
+            regular,
+            shadowed_overrides,
+        }
     }
 
     /// Return an iterator over the allowed URLs for the given package.
     ///
-    /// If we have a URL override, apply it unconditionally for registry and URL requirements.
-    /// Otherwise, there are two case: for a URL requirement (`url` isn't `None`), check that the
-    /// URL is allowed and return its canonical form.
+    /// If we have an applicable URL override, use it for registry and URL requirements. Otherwise,
+    /// for a URL requirement (`url` isn't `None`), check that the URL is allowed and return its
+    /// canonical form.
     ///
     /// For registry requirements, we return an empty iterator.
     pub(crate) fn get_url<'a>(
@@ -105,7 +125,9 @@ impl Urls {
         url: Option<&'a VerbatimParsedUrl>,
         git: &'a GitResolver,
     ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
-        if self.overrides.contains_key(name) {
+        if url.is_none() && self.shadowed_overrides.contains(name, env) {
+            Ok(Either::Right(std::iter::empty()))
+        } else if self.overrides.contains_key(name) {
             Ok(Either::Left(Either::Left(
                 self.overrides.get(name, env).into_iter(),
             )))

@@ -4621,6 +4621,140 @@ fn scoped_override_dependency_from_pyproject_root() -> Result<()> {
     Ok(())
 }
 
+/// Check that scoped registry overrides take precedence over global URL overrides for pip roots.
+#[test]
+fn scoped_override_for_pip_roots_shadows_global_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("target")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("1.0.0")?,
+                PackageMetadata {
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario(&scenario);
+
+    let global_target = context.temp_dir.child("global-target");
+    global_target.create_dir_all()?;
+    global_target.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "target"
+        version = "1.0.0"
+        "#,
+    )?;
+    let global_target_url = Url::from_directory_path(global_target.path())
+        .map_err(|()| anyhow::anyhow!("Failed to convert path to URL"))?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target>=1"]
+
+        [tool.uv]
+        override-dependencies = [
+            "target @ {global_target_url}",
+            {{ package = {{ name = "project", version = "0.1.0" }}, dependencies = ["target==1.0.0"] }},
+        ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    target==1.0.0
+        # via
+        #   --override (workspace)
+        #   (workspace)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Selected dependency groups use the same project scope as source-tree requirements.
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["target>=1"]
+
+        [tool.uv]
+        override-dependencies = [
+            "target @ {global_target_url}",
+            {{ package = {{ name = "project", version = "0.1.0" }}, dependencies = ["target==1.0.0"] }},
+        ]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("--group")
+            .arg("dev")
+            .arg("--no-header")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    target==1.0.0
+        # via
+        #   --override (workspace)
+        #   (workspace)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Without a scoped override, the global URL override still applies to the source-tree root.
+    pyproject_toml.write_str(&indoc::formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["target>=1"]
+
+        [tool.uv]
+        override-dependencies = ["target @ {global_target_url}"]
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .arg("--index-url")
+            .arg(server.index_url())
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    target @ file://[TEMP_DIR]/global-target/
+        # via
+        #   --override (workspace)
+        #   (workspace)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn constraint_dependency_from_pyproject() -> Result<()> {
