@@ -44,9 +44,9 @@ use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
-    ToolPython, finalize_tool_install, normalize_tool_local_requirements, refine_interpreter,
-    remove_entrypoints, tool_environment_spec, tool_lock, tool_lock_is_fresh, tool_lock_manifest,
-    tool_lock_to_resolution,
+    ToolPython, finalize_tool_install, normalize_tool_local_requirements, read_tool_lock,
+    refine_interpreter, remove_entrypoints, tool_environment_spec, tool_lock, tool_lock_is_fresh,
+    tool_lock_manifest, tool_lock_to_resolution,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -551,19 +551,15 @@ pub(crate) async fn install(
     };
 
     let existing_tool_lock = if tool_locks {
-        existing_tool_receipt
-            .as_ref()
-            .and_then(uv_tool::Tool::lock)
-            .filter(|lock| {
-                tool_lock_is_fresh(
-                    &tool_dir,
-                    lock,
-                    &lock_manifest,
-                    &lock_settings,
-                    &settings.resolver,
-                )
-            })
-            .cloned()
+        read_tool_lock(&tool_dir).filter(|lock| {
+            tool_lock_is_fresh(
+                &tool_dir,
+                lock,
+                &lock_manifest,
+                &lock_settings,
+                &settings.resolver,
+            )
+        })
     } else {
         None
     };
@@ -1034,7 +1030,7 @@ pub(crate) async fn install(
         receipt_overrides,
         receipt_excludes,
         receipt_build_constraints,
-        tool_lock,
+        tool_lock.as_ref(),
         printer,
     )?;
 

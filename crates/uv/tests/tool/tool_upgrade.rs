@@ -1714,7 +1714,7 @@ fn tool_upgrade_writes_preview_lock() -> Result<()> {
         .success();
 
     let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
-    assert_eq!(lock["tool-lock-version"].as_integer(), Some(1));
+    assert_eq!(lock["version"].as_integer(), Some(1));
 
     Ok(())
 }

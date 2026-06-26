@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
+    io,
     path::Path,
 };
 
@@ -335,8 +336,47 @@ pub(crate) fn tool_lock(
     let manifest = manifest.clone().relative_to(root)?;
     Ok(lock
         .with_manifest(manifest)
-        .with_required_environments(lock_settings.required_environments.clone().into_markers())
-        .with_universal_tool_resolution())
+        .with_required_environments(lock_settings.required_environments.clone().into_markers()))
+}
+
+/// Read the lock for a tool, if one has been generated.
+pub(crate) fn read_tool_lock(directory: &Path) -> Option<Lock> {
+    let path = directory.join("uv.lock");
+    match fs_err::read_to_string(&path) {
+        Ok(contents) => match toml::from_str(&contents) {
+            Ok(lock) => Some(lock),
+            Err(err) => {
+                debug!(
+                    "Ignoring invalid tool lock at `{}`: {err}",
+                    path.user_display()
+                );
+                None
+            }
+        },
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => {
+            debug!(
+                "Ignoring unreadable tool lock at `{}`: {err}",
+                path.user_display()
+            );
+            None
+        }
+    }
+}
+
+/// Write or remove the lock for a tool.
+pub(crate) fn write_tool_lock(directory: &Path, lock: Option<&Lock>) -> anyhow::Result<()> {
+    let path = directory.join("uv.lock");
+    if let Some(lock) = lock {
+        uv_fs::write_atomic_sync(&path, lock.to_toml()?)?;
+    } else {
+        match fs_err::remove_file(path) {
+            Ok(()) => (),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err.into()),
+        }
+    }
+    Ok(())
 }
 
 /// Return whether a tool lock matches all inputs that determine a universal resolution.
@@ -347,7 +387,7 @@ pub(crate) fn tool_lock_is_fresh(
     lock_settings: &ToolLockSettings,
     resolver_settings: &ResolverSettings,
 ) -> bool {
-    if !lock.supports_universal_tool_resolution() || !lock.matches_manifest_at(manifest, root) {
+    if !lock.matches_manifest_at(manifest, root) {
         return false;
     }
 
@@ -558,7 +598,7 @@ pub(crate) fn finalize_tool_install(
     overrides: Vec<Requirement>,
     excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<Requirement>,
-    lock: Option<Lock>,
+    lock: Option<&Lock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let executable_directory = uv_tool::tool_executable_dir()?;
@@ -755,8 +795,8 @@ pub(crate) fn finalize_tool_install(
         python,
         installed_entrypoints,
         options.clone(),
-        lock,
     );
+    write_tool_lock(&installed_tools.tool_dir(name), lock)?;
     installed_tools.add_tool_receipt(name, tool)?;
 
     warn_out_of_path(&executable_directory);

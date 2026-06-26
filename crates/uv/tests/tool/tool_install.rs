@@ -6466,11 +6466,10 @@ fn tool_install_locks_are_preview() -> Result<()> {
         .success();
 
     let lock = fs_err::read_to_string(lock_path)?;
-    assert_snapshot!(lock.lines().take(4).collect::<Vec<_>>().join("\n"), @r#"
+    assert_snapshot!(lock.lines().take(3).collect::<Vec<_>>().join("\n"), @r#"
     version = 1
     revision = 3
     requires-python = ">=3.12"
-    tool-lock-version = 1
     "#);
 
     Ok(())
@@ -6499,7 +6498,6 @@ fn tool_install_lock_supports_local_wheel() -> Result<()> {
 
     let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
     let lock: toml::Value = toml::from_str(&fs_err::read_to_string(lock_path)?)?;
-    assert_eq!(lock["tool-lock-version"].as_integer(), Some(1));
     assert_eq!(
         lock["manifest"]["requirements"][0]["name"].as_str(),
         Some("simple-launcher")

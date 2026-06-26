@@ -37,8 +37,8 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
-    normalize_tool_local_requirements, remove_entrypoints, tool_environment_spec, tool_lock,
-    tool_lock_is_fresh, tool_lock_manifest, tool_lock_to_resolution,
+    normalize_tool_local_requirements, read_tool_lock, remove_entrypoints, tool_environment_spec,
+    tool_lock, tool_lock_is_fresh, tool_lock_manifest, tool_lock_to_resolution, write_tool_lock,
 };
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
@@ -386,7 +386,7 @@ async fn upgrade_tool(
     let (environment, outcome, tool_lock) = if tool_locks {
         let target_interpreter =
             requested_interpreter.unwrap_or_else(|| environment.environment().interpreter());
-        let existing_lock = existing_tool_receipt.lock().filter(|lock| {
+        let existing_lock = read_tool_lock(&tool_dir).filter(|lock| {
             tool_lock_is_fresh(
                 &tool_dir,
                 lock,
@@ -397,7 +397,12 @@ async fn upgrade_tool(
         });
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let universal_resolution = resolve_environment(
-            tool_environment_spec(spec, existing_lock, &tool_dir, Some(&site_packages)),
+            tool_environment_spec(
+                spec,
+                existing_lock.as_ref(),
+                &tool_dir,
+                Some(&site_packages),
+            ),
             EnvironmentResolution::Universal {
                 environments: &lock_settings.environments,
                 required_environments: &lock_settings.required_environments,
@@ -629,16 +634,16 @@ async fn upgrade_tool(
             existing_tool_receipt.overrides().to_vec(),
             existing_tool_receipt.excludes().to_vec(),
             existing_tool_receipt.build_constraints().to_vec(),
-            tool_lock,
+            tool_lock.as_ref(),
             printer,
         )?;
     } else if tool_locks {
+        write_tool_lock(&tool_dir, tool_lock.as_ref())?;
         installed_tools.add_tool_receipt(
             name,
             existing_tool_receipt
                 .clone()
-                .with_options(ToolOptions::from(options))
-                .with_lock(tool_lock),
+                .with_options(ToolOptions::from(options)),
         )?;
     }
 
