@@ -627,31 +627,57 @@ fn sync_centralized_env_replaces_existing_directory_link() -> Result<()> {
 
 #[test]
 fn sync_centralized_env_with_existing_file() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_centralized_environment_hashes();
     write_project(&context, ">=3.12", &[])?;
     let environment = context.temp_dir.child(".venv");
     environment.write_str("user-data")?;
 
-    context
-        .sync()
+    let mut command = context.sync();
+    command
         .arg("--preview-features")
-        .arg("centralized-project-envs")
-        .assert()
-        .success();
+        .arg("centralized-project-envs");
 
-    cfg_select! {
-        unix => {
-            let target = fs_err::read_link(environment.path())?;
-            insta::with_settings!({ filters => context.filters() }, {
-                assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
-            });
-        },
-        windows => {
-            // TODO(tk): This changes once `.venv` can store an environment path.
-            assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
-            assert!(context.cache_dir.child("environments-v2").is_dir());
-        },
-    }
+    uv_snapshot!(context.filters(), command, @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment `project-cp3.12.[X]-[HASH]`
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    "#);
+    let target = fs_err::read_link(environment.path())?;
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+    });
+    Ok(())
+}
+
+#[test]
+fn sync_recovers_from_centralized_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    let environment = context.temp_dir.child(".venv");
+
+    // An arbitrary `.venv` file is preserved.
+    environment.write_str("user-data")?;
+    context.sync().assert().failure();
+    assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
+
+    // A centralized path file can be replaced when returning to a local environment.
+    let target = context
+        .cache_dir
+        .child("environments-v2")
+        .child("project-cp3.12-0123456789abcdef");
+    environment.write_str(&target.path().to_string_lossy())?;
+
+    context.sync().assert().success();
+
+    assert!(uv_fs::is_virtualenv_base(environment.path()));
+    assert!(!context.cache_dir.child("environments-v2").exists());
     Ok(())
 }
 
@@ -679,11 +705,7 @@ fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
 #[test]
 fn run_and_sync_link_failure_reporting() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"])
-        .with_filtered_centralized_environment_hashes()
-        .with_filter((
-            r"(?m)^(warning: Failed to create link to project environment at `[^`]+`): .*$",
-            "$1: [ERR]",
-        ));
+        .with_filtered_centralized_environment_hashes();
     write_project(&context, ">=3.12", &["iniconfig"])?;
     let environment = context.temp_dir.child(".venv");
     environment.create_dir_all()?;
@@ -715,21 +737,39 @@ fn run_and_sync_link_failure_reporting() -> Result<()> {
     assert!(environment.child("keep").is_file());
 
     // `uv sync` reports the same link update failure to the user.
-    uv_snapshot!(context.filters(), context.sync()
+    let mut command = context.sync();
+    command
         .current_dir(&context.home_dir)
         .arg("--project")
         .arg(context.temp_dir.path())
         .arg("--preview-features")
-        .arg("centralized-project-envs"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+        .arg("centralized-project-envs");
+    cfg_select! {
+        unix => {
+            uv_snapshot!(context.filters(), command, @r#"
+            success: true
+            exit_code: 0
+            ----- stdout -----
 
-    ----- stderr -----
-    warning: Failed to create link to project environment at `[VENV]/`: [ERR]
-    Resolved 2 packages in [TIME]
-    Checked 1 package in [TIME]
-    "#);
+            ----- stderr -----
+            warning: Failed to write the environment path: failed to rename file from [TEMP_DIR]/[TMP] to [VENV]/: Is a directory (os error 21)
+            Resolved 2 packages in [TIME]
+            Checked 1 package in [TIME]
+            "#);
+        },
+        windows => {
+            uv_snapshot!(context.filters(), command, @r#"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+
+            ----- stderr -----
+            warning: Failed to create link to project environment: failed to remove directory `[VENV]/`: The directory is not empty. (os error 145)
+            Resolved 2 packages in [TIME]
+            Checked 1 package in [TIME]
+            "#);
+        },
+    }
 
     assert!(environment.child("keep").is_file());
     Ok(())
@@ -758,7 +798,7 @@ fn sync_centralized_env_local_environment_removal_failure_is_not_fatal() -> Resu
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
-    warning: Failed to remove existing local virtual environment at `.venv`: failed to remove file `[VENV]/pyvenv.cfg`: Permission denied (os error 13)
+    warning: Failed to remove existing local virtual environment: failed to remove file `[VENV]/pyvenv.cfg`: Permission denied (os error 13)
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
@@ -794,7 +834,7 @@ fn sync_centralized_env_link_creation_failure_preserves_cached_target() -> Resul
     ----- stdout -----
 
     ----- stderr -----
-    warning: Failed to create link to project environment at `.venv`: Permission denied (os error 13) at path "[TEMP_DIR]/[TMP]"
+    warning: Failed to write the environment path: Permission denied (os error 13) at path "[TEMP_DIR]/[TMP]"
     Resolved 1 package in [TIME]
     Checked in [TIME]
     "#);
