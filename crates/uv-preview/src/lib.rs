@@ -260,6 +260,7 @@ pub enum PreviewFeature {
     PackagedInit = 1 << 34,
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
+    WorkspaceListScripts = 1 << 37,
 }
 
 impl PreviewFeature {
@@ -303,6 +304,7 @@ impl PreviewFeature {
             Self::PackagedInit => "packaged-init",
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
+            Self::WorkspaceListScripts => "workspace-list-scripts",
         }
     }
 }
@@ -359,6 +361,7 @@ impl FromStr for PreviewFeature {
             "packaged-init" => Self::PackagedInit,
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
+            "workspace-list-scripts" => Self::WorkspaceListScripts,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -660,6 +663,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::CentralizedProjectEnvs.as_str(),
             "centralized-project-envs"
+        );
+        assert_eq!(
+            PreviewFeature::WorkspaceListScripts.as_str(),
+            "workspace-list-scripts"
         );
     }
 

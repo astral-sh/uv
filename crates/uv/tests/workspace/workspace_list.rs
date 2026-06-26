@@ -288,24 +288,39 @@ fn workspace_list_scripts() -> Result<()> {
     tool
 
     ----- stderr -----
-    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list` to disable this warning.
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
+    tool
+
+    ----- stderr -----
     ");
 
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .arg("--paths")
-        .arg("--preview-features")
-        .arg("workspace-list")
         .current_dir(&project), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    [TEMP_DIR]/project/.github/hidden.py
-    [TEMP_DIR]/project/script.py
-    [TEMP_DIR]/project/scripts/nested.py
-    [TEMP_DIR]/project/tool
 
     ----- stderr -----
+    error: the argument '--scripts' cannot be used with '--paths'
+
+    Usage: uv workspace list --cache-dir [CACHE_DIR] --scripts
+
+    For more information, try '--help'.
     ");
 
     Ok(())

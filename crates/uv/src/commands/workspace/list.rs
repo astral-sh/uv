@@ -24,10 +24,10 @@ pub(crate) async fn list(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    if scripts && !preview.is_enabled(PreviewFeature::WorkspaceList) {
+    if scripts && !preview.is_enabled(PreviewFeature::WorkspaceListScripts) {
         warn_user!(
             "The `--scripts` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
-            PreviewFeature::WorkspaceList
+            PreviewFeature::WorkspaceListScripts
         );
     }
 
@@ -41,13 +41,9 @@ pub(crate) async fn list(
 
     if scripts {
         for script in find_scripts(workspace.install_path(), cache)? {
-            let script = if paths {
-                script.as_path()
-            } else {
-                script
-                    .strip_prefix(workspace.install_path())
-                    .context("PEP 723 script was discovered outside the workspace root")?
-            };
+            let script = script
+                .strip_prefix(workspace.install_path())
+                .context("PEP 723 script was discovered outside the workspace root")?;
             writeln!(printer.stdout(), "{}", script.simplified_display().cyan())?;
         }
         return Ok(ExitStatus::Success);
