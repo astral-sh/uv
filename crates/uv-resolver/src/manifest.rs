@@ -134,9 +134,12 @@ impl Manifest {
             self.overrides
                 .scoped_requirements()
                 .filter(|(package, version, requirement)| {
-                    !self
-                        .excludes
-                        .contains_for_scope(package, *version, &requirement.name)
+                    !self.excludes.contains_for_scope(
+                        &self.overrides,
+                        package,
+                        *version,
+                        &requirement.name,
+                    )
                 })
                 .map(|(_, _, requirement)| Cow::Borrowed(requirement))
                 .filter(move |requirement| {

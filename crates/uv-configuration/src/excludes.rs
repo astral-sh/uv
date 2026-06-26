@@ -6,6 +6,8 @@ use serde::de::Error;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
+use crate::Overrides;
+
 /// A set of exclusions that applies to the dependencies of a specific package version.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -114,9 +116,11 @@ impl Excludes {
 
     /// Check if a dependency is always excluded from a package scope.
     ///
-    /// A versionless scope remains eligible if any exact-version exclusion allows the dependency.
+    /// A versionless scope remains eligible if any exact-version exclusion allows the dependency
+    /// at a version where the override is not shadowed by an exact override scope.
     pub fn contains_for_scope(
         &self,
+        overrides: &Overrides,
         package: &PackageName,
         version: Option<&Version>,
         dependency: &PackageName,
@@ -137,7 +141,12 @@ impl Excludes {
             .is_some_and(|entry| entry.excludes.contains(dependency))
             && entries
                 .iter()
-                .filter(|entry| entry.version.is_some())
+                .filter(|entry| {
+                    entry
+                        .version
+                        .as_ref()
+                        .is_some_and(|version| !overrides.has_exact_scope(package, version))
+                })
                 .all(|entry| entry.excludes.contains(dependency))
     }
 
