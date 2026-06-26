@@ -1709,11 +1709,6 @@
           "const": "if-necessary"
         },
         {
-          "description": "Allow pre-release versions when an active direct or transitive requirement contains an\nexplicit pre-release marker.",
-          "type": "string",
-          "const": "explicit"
-        },
-        {
           "description": "Allow pre-release versions when no stable candidate satisfies the active constraints, or\nwhen an active direct or transitive requirement contains an explicit pre-release marker.",
           "type": "string",
           "const": "if-necessary-or-explicit"

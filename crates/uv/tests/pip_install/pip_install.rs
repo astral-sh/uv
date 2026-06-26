@@ -4498,10 +4498,9 @@ fn build_transitive_prerelease() -> Result<()> {
     Ok(())
 }
 
-/// `--prerelease=explicit` should reject pre-releases when no active requirement contains a
-/// pre-release marker.
+/// The legacy `--prerelease=explicit` spelling should use the default range-relative fallback.
 #[test]
-fn explicit_prerelease_requires_marker() {
+fn legacy_explicit_prerelease_falls_back_if_necessary() {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("prereleases/package-only-prereleases-in-range.toml");
 
@@ -4510,23 +4509,23 @@ fn explicit_prerelease_requires_marker() {
         .arg(server.index_url())
         .arg("--prerelease=explicit")
         .arg("a>0.1.0"), @"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
-
-    hint: Pre-releases are available for `a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
     ");
 
-    context.assert_not_installed("a");
+    context.assert_installed("a", "1.0.0a1");
 }
 
-/// `--prerelease=explicit` should honor an active transitive pre-release proxy.
+/// The legacy `--prerelease=explicit` spelling should honor an active transitive pre-release proxy.
 #[test]
-fn explicit_prerelease_allows_transitive_marker() {
+fn legacy_explicit_prerelease_allows_transitive_marker() {
     let context = uv_test::test_context!("3.12");
     let server = PackseServer::new("prereleases/transitive-prerelease-and-stable-dependency.toml");
 
