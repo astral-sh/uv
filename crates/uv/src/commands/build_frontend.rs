@@ -26,7 +26,7 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_fs::{Simplified, relative_to};
+use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -1271,17 +1271,15 @@ impl Source<'_> {
 
 /// Return `true` if `path` is within `directory`, resolving symlinks when possible.
 fn is_path_within(path: &Path, directory: &Path) -> bool {
-    if path.starts_with(directory) {
-        return true;
-    }
-
     if let Ok(path) = fs_err::canonicalize(path)
         && let Ok(directory) = fs_err::canonicalize(directory)
     {
-        path.starts_with(directory)
-    } else {
-        false
+        return path.starts_with(directory);
     }
+
+    let path = normalize_path(path);
+    let directory = normalize_path(directory);
+    path.starts_with(directory.as_ref())
 }
 
 /// We run all builds in parallel, so we wait until all builds are done to show the success messages
