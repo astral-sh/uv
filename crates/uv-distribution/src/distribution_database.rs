@@ -720,7 +720,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let temp_dir = tempfile::tempdir_in(self.build_context.cache().root())
                     .map_err(Error::CacheWrite)?;
 
-                let ExtractedWheelManifest { files, digest } = match progress {
+                let ExtractedWheelManifest { files, mut digest } = match progress {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
@@ -771,8 +771,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                    .map_err(Error::InstallWheelError)?;
+                if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                    .map_err(Error::InstallWheelError)?
+                {
+                    digest = None;
+                }
 
                 // Persist the temporary directory to the directory store.
                 let id = self
@@ -967,7 +970,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     .map_err(Error::CacheWrite)?;
 
                 let target = temp_dir.path().to_owned();
-                let ExtractedWheelManifest { files, digest } = match extension {
+                let ExtractedWheelManifest { files, mut digest } = match extension {
                     WheelExtension::Whl => {
                         let file = file.into_std().await;
                         tokio::task::spawn_blocking(move || {
@@ -991,8 +994,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // Before we make the wheel accessible by persisting it, ensure that the RECORD is
                 // valid.
-                validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                    .map_err(Error::InstallWheelError)?;
+                if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                    .map_err(Error::InstallWheelError)?
+                {
+                    digest = None;
+                }
 
                 // Persist the temporary directory to the directory store.
                 let id = self
@@ -1179,7 +1185,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
             // Unzip the wheel to a temporary directory.
-            let ExtractedWheelManifest { files, digest } = match extension {
+            let ExtractedWheelManifest { files, mut digest } = match extension {
                 WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
                     &mut hasher,
                     temp_dir.path(),
@@ -1202,8 +1208,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Before we make the wheel accessible by persisting it, ensure that the RECORD is
             // valid.
-            validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-                .map_err(Error::InstallWheelError)?;
+            if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+                .map_err(Error::InstallWheelError)?
+            {
+                digest = None;
+            }
 
             // Persist the temporary directory to the directory store.
             let id = self
@@ -1261,11 +1270,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         })
         .await??;
-        let ExtractedWheelManifest { files, digest } = extracted;
+        let ExtractedWheelManifest { files, mut digest } = extracted;
 
         // Before we make the wheel accessible by persisting it, ensure that the RECORD is valid.
-        validate_and_heal_record(temp_dir.path(), files.iter(), dist)
-            .map_err(Error::InstallWheelError)?;
+        if validate_and_heal_record(temp_dir.path(), files.iter(), dist)
+            .map_err(Error::InstallWheelError)?
+        {
+            digest = None;
+        }
 
         // Persist the temporary directory to the directory store.
         let id = self
