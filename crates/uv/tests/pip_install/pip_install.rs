@@ -3436,9 +3436,9 @@ fn install_only_binary_all_and_no_binary_all() {
     context.assert_command("import anyio").failure();
 }
 
-/// Binary dependencies in the cache should be reused when the user provides `--no-build`.
+/// Cached registry wheels should respect `--no-build` and `--no-binary`.
 #[test]
-fn install_no_binary_cache() {
+fn install_build_policy_cache() {
     let context = uv_test::test_context!("3.12");
 
     // Install a binary distribution.
@@ -3490,6 +3490,53 @@ fn install_no_binary_cache() {
     ----- stderr -----
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "
+    );
+
+    // Re-create the virtual environment.
+    context.venv().arg("--clear").assert().success();
+
+    // Re-install with `--no-binary`. The locally built wheel should be reused from the source
+    // distribution cache, while the downloaded wheel should remain excluded.
+    uv_snapshot!(
+        context
+            .pip_install()
+            .arg("idna")
+            .arg("--no-binary")
+            .arg(":all:")
+            .arg("--offline"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    "
+    );
+
+    // Re-create the virtual environment.
+    context.venv().arg("--clear").assert().success();
+
+    // Re-install with `--no-build`. The downloaded wheel should be reused from the wheel cache,
+    // while the locally built wheel should remain excluded.
+    uv_snapshot!(
+        context
+            .pip_install()
+            .arg("idna")
+            .arg("--no-build")
+            .arg("--offline"),
+        @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==3.6
     "

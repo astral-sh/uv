@@ -5,13 +5,15 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
 use uv_cache_info::CacheInfo;
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildInfo, BuildVariables, CachedRegistryDist, ConfigSettings, ExtraBuildRequirement,
     ExtraBuildRequires, ExtraBuildVariables, Hashed, Index, IndexLocations, IndexUrl,
-    PackageConfigSettings,
+    PackageConfigSettings, RegistryBuiltDist, RegistrySourceDist,
 };
 use uv_fs::{directories, files};
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
@@ -20,7 +22,7 @@ use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRev
 
 /// An entry in the [`RegistryWheelIndex`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct IndexEntry<'index> {
+struct IndexEntry<'index> {
     /// The cached distribution.
     dist: CachedRegistryDist,
     /// Whether the wheel was built from source (true), or downloaded from the registry directly (false).
@@ -29,20 +31,41 @@ pub struct IndexEntry<'index> {
     index: &'index Index,
 }
 
-impl<'index> IndexEntry<'index> {
-    /// Return the cached distribution.
-    pub fn dist(&self) -> &CachedRegistryDist {
-        &self.dist
+impl IndexEntry<'_> {
+    fn matches_wheel(
+        &self,
+        index: &IndexUrl,
+        filename: &WheelFilename,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        self.matches_index_and_build_policy(index, no_build, no_binary)
+            && self.dist.filename == *filename
     }
 
-    /// Return whether the wheel was built from source.
-    pub fn is_built(&self) -> bool {
-        self.built
+    fn matches_source(
+        &self,
+        index: &IndexUrl,
+        name: &PackageName,
+        version: &Version,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        self.matches_index_and_build_policy(index, no_build, no_binary)
+            && self.dist.filename.name == *name
+            && self.dist.filename.version == *version
     }
 
-    /// Return the index from which the wheel was downloaded.
-    pub fn index(&self) -> &'index Index {
-        self.index
+    fn matches_index_and_build_policy(
+        &self,
+        index: &IndexUrl,
+        no_build: bool,
+        no_binary: bool,
+    ) -> bool {
+        if *self.index.url() != *index {
+            return false;
+        }
+        if self.built { !no_build } else { !no_binary }
     }
 }
 
@@ -85,10 +108,45 @@ impl<'a> RegistryWheelIndex<'a> {
         }
     }
 
+    /// Return a cached wheel that satisfies a registry wheel requirement.
+    pub fn wheel(
+        &mut self,
+        wheel: &'a RegistryBuiltDist,
+        no_build: bool,
+        no_binary: bool,
+    ) -> Option<&CachedRegistryDist> {
+        let wheel = wheel.best_wheel();
+        self.get(&wheel.filename.name).find_map(|entry| {
+            entry
+                .matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary)
+                .then_some(&entry.dist)
+        })
+    }
+
+    /// Return a cached wheel that satisfies a registry source distribution requirement.
+    pub fn source(
+        &mut self,
+        source: &'a RegistrySourceDist,
+        no_build: bool,
+        no_binary: bool,
+    ) -> Option<&CachedRegistryDist> {
+        self.get(&source.name).find_map(|entry| {
+            entry
+                .matches_source(
+                    &source.index,
+                    &source.name,
+                    &source.version,
+                    no_build,
+                    no_binary,
+                )
+                .then_some(&entry.dist)
+        })
+    }
+
     /// Return an iterator over available wheels for a given package.
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
-    pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
+    fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
         self.get_impl(name).iter().rev()
     }
 

@@ -399,21 +399,7 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
-                    if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
-                        if *entry.index().url() != wheel.best_wheel().index {
-                            return None;
-                        }
-                        if entry.dist().filename != wheel.best_wheel().filename {
-                            return None;
-                        }
-                        if entry.is_built() && no_build {
-                            return None;
-                        }
-                        if !entry.is_built() && no_binary {
-                            return None;
-                        }
-                        Some(entry.dist())
-                    }) {
+                    if let Some(distribution) = registry_index.wheel(wheel, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
@@ -607,24 +593,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
-                        if *entry.index().url() != sdist.index {
-                            return None;
-                        }
-                        if entry.dist().filename.name != sdist.name {
-                            return None;
-                        }
-                        if entry.dist().filename.version != sdist.version {
-                            return None;
-                        }
-                        if entry.is_built() && no_build {
-                            return None;
-                        }
-                        if !entry.is_built() && no_binary {
-                            return None;
-                        }
-                        Some(entry.dist())
-                    }) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
