@@ -3371,6 +3371,12 @@ impl Package {
                 else {
                     return Ok(None);
                 };
+                if !ext.is_pep625_compliant() {
+                    return Err(LockErrorKind::NotPep625Filename {
+                        id: self.id.clone(),
+                    }
+                    .into());
+                }
                 let install_path = absolute_path(workspace_root, path)?;
                 let given = path.to_str().expect("lock file paths must be UTF-8");
                 let path_dist = PathSourceDist {
@@ -3486,6 +3492,12 @@ impl Package {
                 else {
                     return Ok(None);
                 };
+                if !ext.is_pep625_compliant() {
+                    return Err(LockErrorKind::NotPep625Filename {
+                        id: self.id.clone(),
+                    }
+                    .into());
+                }
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
                 let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
@@ -6167,6 +6179,12 @@ impl LockError {
             LockErrorKind::NoBuild { .. } | LockErrorKind::NoBinaryNoBuild { .. }
         )
     }
+
+    /// Returns true if the [`LockError`] indicates that the lockfile references a
+    /// non-PEP 625-compliant source distribution.
+    pub fn is_not_pep625(&self) -> bool {
+        matches!(&*self.kind, LockErrorKind::NotPep625Filename { .. })
+    }
 }
 
 impl<E> From<E> for LockError
@@ -6584,6 +6602,16 @@ enum LockErrorKind {
         id: PackageId,
         /// The list of valid extensions that were expected.
         err: ExtensionError,
+    },
+    /// An error that occurs when a locked source distribution has a
+    /// non-PEP 625-compliant filename (e.g., `.tar.bz2`).
+    #[error(
+        "Source distribution for `{id}` has a non-PEP 625-compliant filename; only `.tar.gz` and `.zip` archives are accepted",
+        id = id.cyan()
+    )]
+    NotPep625Filename {
+        /// The ID of the package whose source distribution has a non-PEP 625-compliant filename.
+        id: PackageId,
     },
     /// Failed to parse a Git source URL.
     #[error("Failed to parse Git URL")]

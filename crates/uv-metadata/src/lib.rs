@@ -40,10 +40,23 @@ pub enum Error {
         expected: u32,
     },
     #[error("Failed to read from zip file")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
+    #[error(
+        "Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'"
+    )]
+    UnsupportedCompression,
     // No `#[from]` to enforce manual review of `io::Error` sources.
     #[error(transparent)]
     Io(io::Error),
+}
+
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        match err {
+            async_zip::error::ZipError::CompressionNotSupported(_) => Self::UnsupportedCompression,
+            o => Self::AsyncZip(o),
+        }
+    }
 }
 
 /// Find the `.dist-info` directory in a zipped wheel.
