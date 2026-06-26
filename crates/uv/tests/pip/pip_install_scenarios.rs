@@ -2182,6 +2182,54 @@ fn post_simple() {
     context.assert_not_installed("a");
 }
 
+/// The lowest resolution strategy prefers stable releases, then chooses the lowest pre-release when no stable release is available.
+///
+/// ```text
+/// package-lowest-prereleases
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a>=0
+/// │   │   ├── satisfied by a-1.0.0rc1
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b>=0
+/// │       ├── satisfied by b-1.0.0rc1
+/// │       └── satisfied by b-1.0.0rc2
+/// ├── a
+/// │   ├── a-1.0.0rc1
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// └── b
+///     ├── b-1.0.0rc1
+///     └── b-1.0.0rc2
+/// ```
+#[test]
+fn package_lowest_prereleases() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-lowest-prereleases.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a>=0")
+        .arg("b>=0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==2.0.0
+     + b==1.0.0rc2
+    ");
+
+    // The default resolution strategy selects the latest stable version of `a` and, because `b` has no stable releases, its latest pre-release.
+    context.assert_installed("a", "2.0.0");
+    context.assert_installed("b", "1.0.0rc2");
+}
+
 /// The user requires `a` which has multiple prereleases available with different labels.
 ///
 /// ```text
@@ -2605,6 +2653,61 @@ fn package_prereleases_specifier_boundary() {
 
     // Since the user used a pre-release specifier, pre-releases at the boundary should be selected.
     context.assert_installed("a", "0.2.0a1");
+}
+
+/// A pre-release is selected when PubGrub rejects every stable candidate in the active range.
+///
+/// ```text
+/// prerelease-fallback-after-stable-rejected
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a==1.0.0
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires c>=1.0.0
+/// │       ├── satisfied by c-1.0.0
+/// │       ├── satisfied by c-1.5.0a1
+/// │       └── satisfied by c-2.0.0b1
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   │   └── requires d==2.0.0
+/// │   │       └── satisfied by d-2.0.0
+/// │   ├── c-1.5.0a1
+/// │   └── c-2.0.0b1
+/// │       └── requires a>=2.0.0
+/// │           └── satisfied by a-2.0.0
+/// └── d
+///     └── d-2.0.0
+///         └── requires a>=2.0.0b1
+///             └── satisfied by a-2.0.0
+/// ```
+#[test]
+fn prerelease_fallback_after_stable_rejected() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/prerelease-fallback-after-stable-rejected.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a==1.0.0")
+        .arg("c>=1.0.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + c==1.5.0a1
+    ");
+
+    // The stable version of `c` and its newest pre-release conflict with the root requirement on `a`, so the remaining pre-release is selected.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "1.5.0a1");
 }
 
 /// The user requires a version of package `a` which only matches prerelease versions. They did not include a prerelease specifier for the package, but they opted into prereleases globally.
@@ -3188,12 +3291,14 @@ fn transitive_prerelease_authorization_after_decision() {
 /// │   ├── a-1.0.0
 /// │   │   └── requires c>=1.0.0
 /// │   │       ├── satisfied by c-1.0.0
+/// │   │       ├── satisfied by c-1.5.0a1
 /// │   │       └── satisfied by c-2.0.0b1
 /// │   └── a-2.0.0
 /// │       └── requires c>=2.0.0b1
 /// │           └── satisfied by c-2.0.0b1
 /// ├── c
 /// │   ├── c-1.0.0
+/// │   ├── c-1.5.0a1
 /// │   └── c-2.0.0b1
 /// │       └── requires d==2.0.0
 /// │           └── satisfied by d-2.0.0
