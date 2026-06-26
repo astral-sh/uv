@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 
+use uv::commands::ExitStatus;
 use uv_cache::Cache;
 use uv_cli::Cli;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
@@ -183,7 +184,7 @@ fn member_pyproject(member_index: usize) -> String {
         .map(provider_requirement)
         .collect();
     // That's a real, usable PyPI dependency.
-    dependencies.push("anyio>=4,<5".to_string());
+    dependencies.push("sniffio>=1,<2".to_string());
 
     let entry_points: toml::Table = [(
         format!("provider-{member_index:03}"),
@@ -235,8 +236,8 @@ fn member_pyproject(member_index: usize) -> String {
         integrations = ["httpx>=0.27", "platformdirs>=4"]
 
         [dependency-groups]
-        test = ["pytest>=8", "pytest-asyncio>=0.24"]
-        lint = ["tqdm", "mypy>=1.15"]
+        test = ["pytest>=8", "pytest-asyncio>=0.23,<0.24"]
+        lint = ["tqdm", "anyio>=4,<5"]
 
         [project.urls]
         Documentation = "https://example.com/providers"
@@ -297,27 +298,30 @@ fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
     let cache_dir = cache_dir.to_string_lossy().to_string();
 
     // Prime cache with PyPI packages.
-    runtime
-        .block_on(uv::run(
-            run_python_version_cli(&workspace_dir, &cache_dir, false),
-            true,
-        ))
-        .expect("Failed to warm synthetic workspace run benchmark");
+    run_cli(
+        &runtime,
+        run_python_version_cli(&workspace_dir, &cache_dir, false),
+        true,
+        "Failed to warm synthetic workspace run benchmark",
+    );
     // Warm cache reading
-    runtime
-        .block_on(uv::run(
-            run_python_version_cli(&workspace_dir, &cache_dir, true),
-            false,
-        ))
-        .expect("Failed to warm offline synthetic workspace run benchmark");
+    run_cli(
+        &runtime,
+        run_python_version_cli(&workspace_dir, &cache_dir, true),
+        false,
+        "Failed to warm offline synthetic workspace run benchmark",
+    );
 
     c.bench_function("run_python_version_synthetic_workspace", |b| {
         b.iter(|| {
             let cli =
                 run_python_version_cli(black_box(&workspace_dir), black_box(&cache_dir), true);
-            runtime
-                .block_on(uv::run(cli, false))
-                .expect("Failed to run synthetic workspace benchmark");
+            run_cli(
+                &runtime,
+                cli,
+                false,
+                "Failed to run synthetic workspace benchmark",
+            );
         });
     });
 }
@@ -332,6 +336,7 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
         cache_dir,
         "--exclude-newer",
         EXCLUDE_NEWER,
+        "--quiet",
     ];
     if offline {
         args.push("--offline");
@@ -339,6 +344,13 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
     args.extend(["python", "-V"]);
 
     Cli::try_parse_from(args).expect("Failed to parse synthetic workspace run benchmark arguments")
+}
+
+fn run_cli(runtime: &tokio::runtime::Runtime, cli: Cli, initialize_globals: bool, message: &str) {
+    let status = runtime
+        .block_on(uv::run(cli, initialize_globals))
+        .expect(message);
+    assert!(matches!(status, ExitStatus::Success), "{message}");
 }
 
 criterion_group!(
