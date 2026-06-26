@@ -3178,14 +3178,12 @@ impl ForkState {
             if is_real_package || dependency.version.is_preference_agnostic() {
                 let dependency_package =
                     self.pubgrub.package_store.alloc(dependency.package.clone());
-                if dependency_package != for_package {
-                    self.pubgrub
-                        .add_incompatibility(Incompatibility::from_dependency(
-                            for_package,
-                            versions.clone(),
-                            (dependency_package, dependency.version.clone()),
-                        ));
-                }
+                self.pubgrub
+                    .add_incompatibility(Incompatibility::from_dependency(
+                        for_package,
+                        versions.clone(),
+                        (dependency_package, dependency.version.clone()),
+                    ));
             }
         }
 
