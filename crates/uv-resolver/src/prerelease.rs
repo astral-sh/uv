@@ -21,6 +21,8 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active direct or transitive requirement contains an explicit pre-release marker.
     #[default]
+    #[serde(alias = "explicit")]
+    #[cfg_attr(feature = "clap", value(alias("explicit")))]
     IfNecessaryOrExplicit,
 }
 
@@ -94,6 +96,8 @@ pub(crate) enum PrereleaseSelection {
 mod tests {
     use std::str::FromStr;
 
+    #[cfg(feature = "clap")]
+    use clap::ValueEnum;
     use pubgrub::{Ranges, VersionSet};
     use uv_pep440::VersionSpecifiers;
 
@@ -119,5 +123,25 @@ mod tests {
         assert!(contains_prerelease(
             &VersionSpecifiers::from_str(">=2.0a1").expect("valid version specifier")
         ));
+    }
+
+    #[test]
+    fn legacy_explicit_mode_deserializes_to_default() {
+        let mode = serde_json::from_str::<PrereleaseMode>(r#""explicit""#)
+            .expect("legacy pre-release mode should deserialize");
+        assert_eq!(mode, PrereleaseMode::IfNecessaryOrExplicit);
+        assert_eq!(
+            serde_json::to_string(&mode).expect("pre-release mode should serialize"),
+            r#""if-necessary-or-explicit""#
+        );
+    }
+
+    #[cfg(feature = "clap")]
+    #[test]
+    fn legacy_explicit_mode_is_a_cli_alias_for_default() {
+        assert_eq!(
+            PrereleaseMode::from_str("explicit", false).expect("legacy CLI value should parse"),
+            PrereleaseMode::IfNecessaryOrExplicit
+        );
     }
 }
