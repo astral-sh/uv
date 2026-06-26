@@ -425,6 +425,72 @@ fn workspace_metadata_script_dependency_edges() -> Result<()> {
 }
 
 #[test]
+fn workspace_metadata_dependency_edges_include_parent_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let child = context
+        .temp_dir
+        .child("metadata_child-0.1.0-py3-none-any.whl");
+    write_wheel(child.path(), "metadata-child", "metadata_child-0.1.0", &[])?;
+    let child_url = Url::from_file_path(child.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    let parent = context
+        .temp_dir
+        .child("metadata_parent-0.1.0-py3-none-any.whl");
+    write_wheel_with_metadata(
+        parent.path(),
+        "metadata-parent",
+        "0.1.0",
+        "metadata_parent-0.1.0",
+        &format!("Requires-Dist: metadata-child @ {child_url}\n"),
+        &[],
+    )?;
+    let parent_url = Url::from_file_path(parent.path())
+        .map_err(|()| anyhow::anyhow!("failed to convert wheel path to file URL"))?;
+
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(&format!(
+        r#"[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "metadata-parent @ {parent_url} ; sys_platform == 'linux'",
+]
+"#
+    ))?;
+
+    let assert = context
+        .workspace_metadata()
+        .current_dir(&project)
+        .assert()
+        .success();
+    let metadata: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
+    let resolution = metadata["resolution"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("metadata resolution was not an object"))?;
+    let parent_node = resolution
+        .iter()
+        .find_map(|(id, node)| id.starts_with("metadata-parent==").then_some(node))
+        .ok_or_else(|| anyhow::anyhow!("missing metadata-parent resolution node"))?;
+
+    insta::with_settings!({ filters => context.filters() }, {
+        insta::assert_json_snapshot!(parent_node["dependencies"], @r#"
+        [
+          {
+            "id": "metadata-child==0.1.0@path+[TEMP_DIR]/metadata_child-0.1.0-py3-none-any.whl",
+            "marker": "sys_platform == 'linux'"
+          }
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
+#[test]
 fn workspace_metadata_sync_centralized_environment() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
 
