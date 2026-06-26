@@ -149,11 +149,11 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
 /// Return whether a path uses a conventional Python script filename.
 ///
 /// PEP 723 does not require a specific filename, and uv can run explicitly requested scripts with
-/// arbitrary extensions. For discovery, restrict the search to Python extensions and extensionless
-/// files to avoid treating metadata examples embedded in documentation as scripts. This could be
-/// expanded if arbitrary script filenames can be distinguished without introducing false positives.
+/// arbitrary extensions or no extension. For discovery, restrict the search to Python extensions
+/// to avoid treating metadata examples embedded in documentation as scripts. This could be expanded
+/// if arbitrary script filenames can be distinguished without introducing false positives.
 fn is_python_script_path(path: &Path) -> bool {
-    path.extension().is_none_or(|extension| {
+    path.extension().is_some_and(|extension| {
         extension.to_str().is_some_and(|extension| {
             extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
         })
