@@ -614,7 +614,8 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
-        requires-python = ">=3.12.[X]"
+        requires-python = ">=3.12"
+        tool-lock-version = 1
 
         [options]
         exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
@@ -647,9 +648,21 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
         name = "click"
         version = "8.1.7"
         source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "colorama", marker = "sys_platform == 'win32'" },
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
+        ]
+
+        [[package]]
+        name = "colorama"
+        version = "0.4.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
         ]
 
         [[package]]
@@ -1198,7 +1211,7 @@ fn tool_upgrade_no_binary_package_env_var() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 7 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
      + black==23.1.0
@@ -1452,6 +1465,68 @@ fn tool_upgrade_with() {
 
     hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
     ");
+}
+
+#[test]
+fn tool_upgrade_package_preserves_unrelated_installed_candidates() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/simple_launcher-0.1.0-py3-none-any.whl"),
+        links.child("simple_launcher-0.1.0-py3-none-any.whl"),
+    )?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+        links.child("ok-1.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--with")
+        .arg("ok")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    fs_err::remove_file(links.child("ok-1.0.0-py3-none-any.whl"))?;
+    fs_err::copy(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+        links.child("ok-2.0.0-py3-none-any.whl"),
+    )?;
+
+    context
+        .tool_upgrade()
+        .arg("simple-launcher")
+        .arg("--upgrade-package")
+        .arg("simple-launcher")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let site_packages = site_packages_path(&tool_dir.join("simple-launcher"), "python3.12");
+    assert!(site_packages.join("ok-1.0.0.dist-info").is_dir());
+    assert!(!site_packages.join("ok-2.0.0.dist-info").exists());
+
+    Ok(())
 }
 
 #[test]
@@ -1919,7 +1994,8 @@ async fn tool_upgrade_invalid_auth() -> Result<()> {
         assert_snapshot!(fs_err::read_to_string(tool_dir.join("executable-application").join("uv.lock")).unwrap(), @r#"
         version = 1
         revision = 3
-        requires-python = ">=3.12.[X]"
+        requires-python = ">=3.12"
+        tool-lock-version = 1
 
         [options]
         exclude-newer = "2025-01-18T00:00:00Z"

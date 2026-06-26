@@ -301,6 +301,8 @@ pub struct Lock {
     by_id: FxHashMap<PackageId, usize>,
     /// The input requirements to the resolution.
     manifest: ResolverManifest,
+    /// The tool-lock format version, if this is a standalone tool lock.
+    tool_lock_version: Option<u32>,
 }
 
 /// Package selections from a [`Lock`] for a named direct dependency.
@@ -686,6 +688,7 @@ impl Lock {
             packages,
             by_id,
             manifest,
+            tool_lock_version: None,
         };
         Ok(lock)
     }
@@ -695,6 +698,18 @@ impl Lock {
     pub fn with_manifest(mut self, manifest: ResolverManifest) -> Self {
         self.manifest = manifest;
         self
+    }
+
+    /// Mark this lock as a universal standalone tool lock.
+    #[must_use]
+    pub fn with_universal_tool_resolution(mut self) -> Self {
+        self.tool_lock_version = Some(1);
+        self
+    }
+
+    /// Return whether this lock supports universal tool resolution.
+    pub fn supports_universal_tool_resolution(&self) -> bool {
+        self.tool_lock_version == Some(1)
     }
 
     /// Return whether this lock was generated with the given [`ResolverManifest`].
@@ -1308,6 +1323,10 @@ impl Lock {
         }
 
         doc.insert("requires-python", value(self.requires_python.to_string()));
+
+        if let Some(tool_lock_version) = self.tool_lock_version {
+            doc.insert("tool-lock-version", value(i64::from(tool_lock_version)));
+        }
 
         if !self.fork_markers.is_empty() {
             let fork_markers = each_element_on_its_line_array(
@@ -2945,6 +2964,8 @@ struct LockWire {
     version: u32,
     revision: Option<u32>,
     requires_python: RequiresPython,
+    #[serde(default)]
+    tool_lock_version: Option<u32>,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     #[serde(rename = "resolution-markers", default)]
@@ -3026,6 +3047,9 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+
+        let mut lock = lock;
+        lock.tool_lock_version = wire.tool_lock_version;
 
         Ok(lock)
     }

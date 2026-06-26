@@ -1,5 +1,4 @@
 use std::fmt::Write;
-use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, bail};
@@ -15,7 +14,7 @@ use uv_configuration::{
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ExtraBuildRequires, IndexCapabilities, NameRequirementSpecification, Requirement,
-    RequirementSource, Resolution, UnresolvedRequirementSpecification,
+    RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_installer::{InstallationStrategy, Planner, SitePackages};
 use uv_normalize::PackageName;
@@ -27,10 +26,9 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::{Installable, Lock};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
@@ -40,63 +38,20 @@ use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations::{self, Modifications};
-use crate::commands::pip::{resolution_markers, resolution_tags};
+use crate::commands::pip::resolution_tags;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
-    sync_environment, update_environment,
+    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    resolve_environment, resolve_names, sync_environment, update_environment,
 };
 use crate::commands::tool::common::{
     ToolPython, finalize_tool_install, normalize_tool_local_requirements, refine_interpreter,
     remove_entrypoints, tool_environment_spec, tool_lock, tool_lock_manifest,
+    tool_lock_to_resolution,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
-
-/// An [`Installable`] adapter for a tool [`Lock`].
-///
-/// Tools store a `uv.lock`, but they are not modeled as workspace or project install targets. This
-/// adapter lets tool installation reuse [`Installable::to_resolution`] to derive a [`Resolution`]
-/// from the lock when checking whether an existing environment is already up-to-date.
-struct ToolLockInstallTarget<'lock> {
-    install_path: &'lock Path,
-    lock: &'lock Lock,
-    project_name: Option<&'lock PackageName>,
-}
-
-impl<'lock> ToolLockInstallTarget<'lock> {
-    /// Create a [`ToolLockInstallTarget`] for a tool environment and its [`Lock`].
-    fn new(
-        install_path: &'lock Path,
-        lock: &'lock Lock,
-        project_name: Option<&'lock PackageName>,
-    ) -> Self {
-        Self {
-            install_path,
-            lock,
-            project_name,
-        }
-    }
-}
-
-impl<'lock> Installable<'lock> for ToolLockInstallTarget<'lock> {
-    fn install_path(&self) -> &'lock Path {
-        self.install_path
-    }
-
-    fn lock(&self) -> &'lock Lock {
-        self.lock
-    }
-
-    fn roots(&self) -> impl Iterator<Item = &PackageName> {
-        std::iter::empty()
-    }
-
-    fn project_name(&self) -> Option<&PackageName> {
-        self.project_name
-    }
-}
 
 /// Install a tool.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -597,37 +552,27 @@ pub(crate) async fn install(
                 )
                 .into_inner();
 
-                // Only use the environment-specific lock when the requested marker environment
-                // matches the installed interpreter. A lock generated for one platform cannot
-                // recover dependencies that were inactive on that platform.
-                let markers = resolution_markers(
-                    None,
-                    python_platform.as_ref(),
-                    environment.environment().interpreter(),
-                );
-                let marker_environment_unchanged = markers
-                    == resolution_markers(None, None, environment.environment().interpreter());
+                // Project the universal tool lock into the requested environment before checking
+                // it against the installed packages.
                 let tags = resolution_tags(
                     None,
                     python_platform.as_ref(),
                     environment.environment().interpreter(),
                 )?;
-
-                let already_installed =
-                    if marker_environment_unchanged && let Some(lock) = tool_receipt.lock() {
-                        let resolution = ToolLockInstallTarget::new(
-                            environment.environment().root(),
-                            lock,
-                            tool_receipt
-                                .target_requirement()
-                                .map(|requirement| &requirement.name),
-                        )
-                        .to_resolution_simple(
-                            &markers,
-                            &tags,
-                            &settings.resolver.build_options,
-                        )?;
-                        Planner::new(&resolution)
+                let already_installed = if let Some(lock) = tool_receipt.lock()
+                    && lock.supports_universal_tool_resolution()
+                {
+                    match tool_lock_to_resolution(
+                        environment.environment().root(),
+                        lock,
+                        tool_receipt
+                            .target_requirement()
+                            .map(|requirement| &requirement.name),
+                        environment.environment().interpreter(),
+                        python_platform.as_ref(),
+                        &settings.resolver.build_options,
+                    ) {
+                        Ok(resolution) => Planner::new(&resolution)
                             .build(
                                 SitePackages::from_environment(environment.environment())?,
                                 InstallationStrategy::Permissive,
@@ -643,11 +588,17 @@ pub(crate) async fn install(
                                 environment.environment(),
                                 &tags,
                             )?
-                            .is_empty()
-                    } else {
-                        // Force tools without locks through the update path so a lock gets generated.
-                        false
-                    };
+                            .is_empty(),
+                        Err(err) => {
+                            debug!("Failed to check tool lock against environment: {err}");
+                            false
+                        }
+                    }
+                } else {
+                    // Force tools without a universal lock through the update path so one gets
+                    // generated.
+                    false
+                };
                 if already_installed {
                     // Then we're done! Though we might need to update the receipt.
                     if *tool_receipt.options() != options {
@@ -743,6 +694,8 @@ pub(crate) async fn install(
                     &installed_tools.tool_dir(package_name),
                     site_packages.as_ref(),
                 ),
+                EmptyInstalledPackages,
+                EnvironmentResolution::Universal,
                 update.environment.interpreter(),
                 python_platform.as_ref(),
                 SourceTreeEditablePolicy::Tool,
@@ -765,67 +718,89 @@ pub(crate) async fn install(
                         &resolution,
                         &lock_manifest,
                     );
-                    let resolution = Resolution::from(resolution);
+                    let lock_resolution = tool_lock.and_then(|tool_lock| {
+                        match tool_lock_to_resolution(
+                            &installed_tools.tool_dir(package_name),
+                            &tool_lock,
+                            tool_receipt
+                                .target_requirement()
+                                .map(|requirement| &requirement.name),
+                            update.environment.interpreter(),
+                            python_platform.as_ref(),
+                            &settings.resolver.build_options,
+                        ) {
+                            Ok(resolution) => Some((tool_lock, resolution)),
+                            Err(err) => {
+                                debug!("Failed to project rebuilt tool lock: {err}");
+                                None
+                            }
+                        }
+                    });
 
-                    let ResolverInstallerSettings {
-                        resolver:
-                            ResolverSettings {
-                                config_setting,
-                                config_settings_package,
-                                extra_build_dependencies,
-                                extra_build_variables,
-                                ..
-                            },
-                        ..
-                    } = &settings;
-                    let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
-                        extra_build_dependencies.clone(),
-                    )
-                    .into_inner();
-                    let tags = resolution_tags(
-                        None,
-                        python_platform.as_ref(),
-                        update.environment.interpreter(),
-                    )?;
-                    let plan = Planner::new(&resolution).build(
-                        SitePackages::from_environment(&update.environment)?,
-                        InstallationStrategy::Permissive,
-                        &Reinstall::default(),
-                        &settings.resolver.build_options,
-                        &HashStrategy::default(),
-                        &settings.resolver.index_locations,
-                        config_setting,
-                        config_settings_package,
-                        &extra_build_requires,
-                        extra_build_variables,
-                        &cache,
-                        &update.environment,
-                        &tags,
-                    )?;
-                    if plan.is_empty() {
-                        (update.environment, tool_lock)
-                    } else if had_lock {
-                        let environment = sync_environment(
-                            update.environment,
-                            &resolution,
-                            Modifications::Exact,
-                            Constraints::from_requirements(build_constraints.iter().cloned()),
-                            (&settings).into(),
-                            &client_builder,
-                            &state,
-                            Box::new(DefaultInstallLogger),
-                            installer_metadata,
-                            &concurrency,
-                            &cache,
-                            printer,
-                            preview,
+                    if let Some((tool_lock, resolution)) = lock_resolution {
+                        let ResolverInstallerSettings {
+                            resolver:
+                                ResolverSettings {
+                                    config_setting,
+                                    config_settings_package,
+                                    extra_build_dependencies,
+                                    extra_build_variables,
+                                    ..
+                                },
+                            ..
+                        } = &settings;
+                        let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                            extra_build_dependencies.clone(),
                         )
-                        .await?;
-                        (environment, tool_lock)
+                        .into_inner();
+                        let tags = resolution_tags(
+                            None,
+                            python_platform.as_ref(),
+                            update.environment.interpreter(),
+                        )?;
+                        let plan = Planner::new(&resolution).build(
+                            SitePackages::from_environment(&update.environment)?,
+                            InstallationStrategy::Permissive,
+                            &Reinstall::default(),
+                            &settings.resolver.build_options,
+                            &HashStrategy::default(),
+                            &settings.resolver.index_locations,
+                            config_setting,
+                            config_settings_package,
+                            &extra_build_requires,
+                            extra_build_variables,
+                            &cache,
+                            &update.environment,
+                            &tags,
+                        )?;
+                        if plan.is_empty() {
+                            (update.environment, Some(tool_lock))
+                        } else if had_lock {
+                            let environment = sync_environment(
+                                update.environment,
+                                &resolution,
+                                Modifications::Exact,
+                                Constraints::from_requirements(build_constraints.iter().cloned()),
+                                (&settings).into(),
+                                &client_builder,
+                                &state,
+                                Box::new(DefaultInstallLogger),
+                                installer_metadata,
+                                &concurrency,
+                                &cache,
+                                printer,
+                                preview,
+                            )
+                            .await?;
+                            (environment, Some(tool_lock))
+                        } else {
+                            debug!(
+                                "Failed to rebuild tool lock without changing the installed packages"
+                            );
+                            (update.environment, None)
+                        }
                     } else {
-                        debug!(
-                            "Failed to rebuild tool lock without changing the installed packages"
-                        );
+                        debug!("Failed to rebuild tool lock after update");
                         (update.environment, None)
                     }
                 }
@@ -852,6 +827,8 @@ pub(crate) async fn install(
         // to removing any existing tools.
         let resolution = resolve_environment(
             spec.clone(),
+            EmptyInstalledPackages,
+            EnvironmentResolution::Universal,
             &interpreter,
             python_platform.as_ref(),
             SourceTreeEditablePolicy::Tool,
@@ -907,7 +884,9 @@ pub(crate) async fn install(
                     );
 
                     match resolve_environment(
-                        spec,
+                        spec.clone(),
+                        EmptyInstalledPackages,
+                        EnvironmentResolution::Universal,
                         &interpreter,
                         python_platform.as_ref(),
                         SourceTreeEditablePolicy::Tool,
@@ -939,13 +918,45 @@ pub(crate) async fn install(
             },
         };
 
-        let environment = installed_tools.create_environment(package_name, interpreter)?;
         let tool_lock = tool_lock(
             &installed_tools.tool_dir(package_name),
             &resolution,
             &lock_manifest,
         );
-        let resolution: Resolution = resolution.into();
+        let resolution = if let Some(tool_lock) = tool_lock.as_ref() {
+            tool_lock_to_resolution(
+                &installed_tools.tool_dir(package_name),
+                tool_lock,
+                Some(package_name),
+                &interpreter,
+                python_platform.as_ref(),
+                &settings.resolver.build_options,
+            )?
+        } else {
+            debug!("Falling back to a platform-specific tool resolution");
+            let state = PlatformState::default();
+            resolve_environment(
+                spec,
+                EmptyInstalledPackages,
+                EnvironmentResolution::Specific,
+                &interpreter,
+                python_platform.as_ref(),
+                SourceTreeEditablePolicy::Tool,
+                Constraints::from_requirements(build_constraints.iter().cloned()),
+                &settings.resolver,
+                &client_builder,
+                &state,
+                Box::new(DefaultResolveLogger),
+                &concurrency,
+                &cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await?
+            .into()
+        };
+        let environment = installed_tools.create_environment(package_name, interpreter)?;
 
         // At this point, we removed any existing environment, so we should remove any of its
         // executables.

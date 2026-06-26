@@ -8,7 +8,7 @@ use tracing::{debug, trace};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, TargetTriple};
+use uv_configuration::{Concurrency, Constraints, Reinstall, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{Requirement, RequirementSource, Resolution};
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
@@ -24,18 +24,20 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
 };
 use crate::commands::pip::{operations::Modifications, resolution_tags};
-use crate::commands::project::{PlatformState, resolve_environment, sync_environment};
+use crate::commands::project::{
+    EnvironmentResolution, PlatformState, resolve_environment, sync_environment,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
     normalize_tool_local_requirements, remove_entrypoints, tool_environment_spec, tool_lock,
-    tool_lock_manifest,
+    tool_lock_manifest, tool_lock_to_resolution,
 };
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
@@ -367,11 +369,13 @@ async fn upgrade_tool(
         };
         let resolution = resolve_environment(
             tool_environment_spec(
-                spec,
+                spec.clone(),
                 Some(&existing_tool_receipt),
                 &installed_tools.tool_dir(name),
                 site_packages.as_ref(),
             ),
+            EmptyInstalledPackages,
+            EnvironmentResolution::Universal,
             interpreter,
             python_platform,
             SourceTreeEditablePolicy::Tool,
@@ -388,12 +392,50 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
         let tool_lock = tool_lock(&installed_tools.tool_dir(name), &resolution, &lock_manifest);
+        let resolution = if let Some(tool_lock) = tool_lock.as_ref() {
+            tool_lock_to_resolution(
+                &installed_tools.tool_dir(name),
+                tool_lock,
+                Some(name),
+                interpreter,
+                python_platform,
+                &settings.resolver.build_options,
+            )?
+        } else {
+            debug!("Falling back to a platform-specific tool resolution");
+            let state = PlatformState::default();
+            resolve_environment(
+                tool_environment_spec(
+                    spec,
+                    Some(&existing_tool_receipt),
+                    &installed_tools.tool_dir(name),
+                    site_packages.as_ref(),
+                ),
+                EmptyInstalledPackages,
+                EnvironmentResolution::Specific,
+                interpreter,
+                python_platform,
+                SourceTreeEditablePolicy::Tool,
+                build_constraints.clone(),
+                &settings.resolver,
+                client_builder,
+                &state,
+                Box::new(SummaryResolveLogger),
+                concurrency,
+                cache,
+                workspace_cache,
+                printer,
+                preview,
+            )
+            .await?
+            .into()
+        };
+        let environment = installed_tools.create_environment(name, interpreter.clone())?;
 
         let environment = sync_environment(
             environment,
-            &resolution.into(),
+            &resolution,
             HashStrategy::default(),
             Modifications::Exact,
             build_constraints,
@@ -414,11 +456,13 @@ async fn upgrade_tool(
         let site_packages = SitePackages::from_environment(environment.environment())?;
         let resolution = resolve_environment(
             tool_environment_spec(
-                spec,
+                spec.clone(),
                 Some(&existing_tool_receipt),
                 &installed_tools.tool_dir(name),
                 Some(&site_packages),
             ),
+            site_packages.clone(),
+            EnvironmentResolution::Specific,
             environment.environment().interpreter(),
             python_platform,
             SourceTreeEditablePolicy::Tool,
@@ -435,7 +479,6 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let tool_lock = tool_lock(&installed_tools.tool_dir(name), &resolution, &lock_manifest);
         let resolution = Resolution::from(resolution);
 
         let ResolverInstallerSettings {
@@ -457,7 +500,8 @@ async fn upgrade_tool(
             None,
             python_platform,
             environment.environment().interpreter(),
-        )?;
+        )?
+        .into_owned();
         let plan = Planner::new(&resolution).build(
             SitePackages::from_environment(environment.environment())?,
             InstallationStrategy::Permissive,
@@ -493,7 +537,7 @@ async fn upgrade_tool(
                 environment.into_environment(),
                 &resolution,
                 Modifications::Exact,
-                build_constraints,
+                build_constraints.clone(),
                 (&settings).into(),
                 client_builder,
                 &state,
@@ -505,6 +549,80 @@ async fn upgrade_tool(
                 preview,
             )
             .await?
+        };
+
+        let updated_site_packages = SitePackages::from_environment(&environment)?;
+        let tool_lock = match resolve_environment(
+            tool_environment_spec(
+                spec,
+                Some(&existing_tool_receipt),
+                &installed_tools.tool_dir(name),
+                Some(&updated_site_packages),
+            ),
+            EmptyInstalledPackages,
+            EnvironmentResolution::Universal,
+            environment.interpreter(),
+            python_platform,
+            SourceTreeEditablePolicy::Tool,
+            build_constraints,
+            &settings.resolver,
+            client_builder,
+            &state,
+            Box::new(SummaryResolveLogger),
+            concurrency,
+            cache,
+            workspace_cache,
+            printer,
+            preview,
+        )
+        .await
+        {
+            Ok(universal_resolution) => {
+                let tool_lock = tool_lock(
+                    &installed_tools.tool_dir(name),
+                    &universal_resolution,
+                    &lock_manifest,
+                );
+                if let Some(tool_lock) = tool_lock {
+                    match tool_lock_to_resolution(
+                        &installed_tools.tool_dir(name),
+                        &tool_lock,
+                        Some(name),
+                        environment.interpreter(),
+                        python_platform,
+                        &settings.resolver.build_options,
+                    ) {
+                        Ok(lock_resolution) => {
+                            let plan = Planner::new(&lock_resolution).build(
+                                SitePackages::from_environment(&environment)?,
+                                InstallationStrategy::Permissive,
+                                &Reinstall::default(),
+                                &settings.resolver.build_options,
+                                &HashStrategy::default(),
+                                &settings.resolver.index_locations,
+                                config_setting,
+                                config_settings_package,
+                                &extra_build_requires,
+                                extra_build_variables,
+                                cache,
+                                &environment,
+                                &tags,
+                            )?;
+                            plan.is_empty().then_some(tool_lock)
+                        }
+                        Err(err) => {
+                            debug!("Failed to project rebuilt tool lock: {err}");
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+            Err(err) => {
+                debug!("Failed to rebuild tool lock after upgrade: {err}");
+                None
+            }
         };
 
         (environment, outcome, tool_lock)

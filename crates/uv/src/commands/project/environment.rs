@@ -5,7 +5,8 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
+    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -21,7 +22,7 @@ use uv_distribution_types::{
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
@@ -155,6 +156,8 @@ impl CachedEnvironment {
         let resolution = Resolution::from(
             resolve_environment(
                 spec,
+                EmptyInstalledPackages,
+                EnvironmentResolution::Specific,
                 &interpreter,
                 python_platform,
                 SourceTreeEditablePolicy::Project,

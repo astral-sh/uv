@@ -49,7 +49,7 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, HashStrategy, InstalledPackagesProvider, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -2313,9 +2313,17 @@ impl<'lock> EnvironmentSpecification<'lock> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum EnvironmentResolution {
+    Specific,
+    Universal,
+}
+
 /// Run dependency resolution for an interpreter, returning the [`ResolverOutput`].
-pub(crate) async fn resolve_environment(
+pub(crate) async fn resolve_environment<InstalledPackages: InstalledPackagesProvider>(
     spec: EnvironmentSpecification<'_>,
+    installed_packages: InstalledPackages,
+    resolution_scope: EnvironmentResolution,
     interpreter: &Interpreter,
     python_platform: Option<&TargetTriple>,
     source_tree_editable_policy: SourceTreeEditablePolicy,
@@ -2369,10 +2377,30 @@ pub(crate) async fn resolve_environment(
 
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
-    // Determine the tags, markers, and interpreter to use for resolution.
-    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
-    let marker_env = pip::resolution_markers(None, python_platform, interpreter);
-    let python_requirement = PythonRequirement::from_interpreter(interpreter);
+    // Determine the tags and marker environment to use for resolution.
+    let (tags, resolver_environment) = match resolution_scope {
+        EnvironmentResolution::Specific => {
+            let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+            let marker_environment = pip::resolution_markers(None, python_platform, interpreter);
+            (
+                Some(tags),
+                ResolverEnvironment::specific(marker_environment),
+            )
+        }
+        EnvironmentResolution::Universal => (None, ResolverEnvironment::universal(vec![])),
+    };
+    let python_requirement = match resolution_scope {
+        EnvironmentResolution::Specific => PythonRequirement::from_interpreter(interpreter),
+        EnvironmentResolution::Universal => PythonRequirement::from_requires_python(
+            interpreter,
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version()),
+        ),
+    };
+
+    let python_platform = match resolution_scope {
+        EnvironmentResolution::Specific => python_platform,
+        EnvironmentResolution::Universal => None,
+    };
 
     // Determine the PyTorch backend.
     let torch_backend = torch_backend
@@ -2466,7 +2494,7 @@ pub(crate) async fn resolve_environment(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, tags.as_deref(), &hasher, build_options)
     };
 
     // Lower the extra build dependencies, if any.
@@ -2514,12 +2542,12 @@ pub(crate) async fn resolve_environment(
         &extras,
         &groups,
         preferences,
-        EmptyInstalledPackages,
+        installed_packages,
         &hasher,
         &reinstall,
         &upgrade,
-        Some(&tags),
-        ResolverEnvironment::specific(marker_env),
+        tags.as_deref(),
+        resolver_environment,
         python_requirement,
         interpreter.markers(),
         Conflicts::empty(),

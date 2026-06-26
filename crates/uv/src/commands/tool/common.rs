@@ -12,11 +12,11 @@ use thiserror::Error;
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{ExcludeDependency, GitLfsSetting};
+use uv_configuration::{BuildOptions, ExcludeDependency, GitLfsSetting, TargetTriple};
 use uv_distribution::StaticMetadataDatabase;
 use uv_distribution_types::{
-    InstalledDist, Name, Requirement, RequirementSource, RequiresPython, StaticMetadata,
-    UnresolvedRequirement,
+    InstalledDist, Name, Requirement, RequirementSource, RequiresPython, Resolution,
+    StaticMetadata, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -32,7 +32,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::RequirementsSpecification;
-use uv_resolver::{Lock, Preference, ResolverManifest, ResolverOutput};
+use uv_resolver::{Installable, Lock, Preference, ResolverManifest, ResolverOutput};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
@@ -323,7 +323,10 @@ pub(crate) fn tool_lock(
 ) -> Option<Lock> {
     match Lock::from_resolution(resolution, root, vec![]) {
         Ok(lock) => match manifest.clone().relative_to(root) {
-            Ok(manifest) => Some(lock.with_manifest(manifest)),
+            Ok(manifest) => Some(
+                lock.with_manifest(manifest)
+                    .with_universal_tool_resolution(),
+            ),
             Err(err) => {
                 debug!("Failed to relativize tool lock manifest: {err}");
                 None
@@ -334,6 +337,49 @@ pub(crate) fn tool_lock(
             None
         }
     }
+}
+
+/// Project a universal tool lock into a specific environment.
+pub(crate) fn tool_lock_to_resolution(
+    root: &Path,
+    lock: &Lock,
+    project_name: Option<&PackageName>,
+    interpreter: &Interpreter,
+    python_platform: Option<&TargetTriple>,
+    build_options: &BuildOptions,
+) -> anyhow::Result<Resolution> {
+    struct ToolLockInstallTarget<'lock> {
+        root: &'lock Path,
+        lock: &'lock Lock,
+        project_name: Option<&'lock PackageName>,
+    }
+
+    impl<'lock> Installable<'lock> for ToolLockInstallTarget<'lock> {
+        fn install_path(&self) -> &'lock Path {
+            self.root
+        }
+
+        fn lock(&self) -> &'lock Lock {
+            self.lock
+        }
+
+        fn roots(&self) -> impl Iterator<Item = &PackageName> {
+            std::iter::empty()
+        }
+
+        fn project_name(&self) -> Option<&PackageName> {
+            self.project_name
+        }
+    }
+
+    let markers = pip::resolution_markers(None, python_platform, interpreter);
+    let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+    Ok(ToolLockInstallTarget {
+        root,
+        lock,
+        project_name,
+    }
+    .to_resolution_simple(&markers, &tags, build_options)?)
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
