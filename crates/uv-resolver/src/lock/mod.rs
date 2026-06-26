@@ -5732,7 +5732,7 @@ impl Dependency {
         if let Some(marker) = self
             .simplified_marker
             .as_simplified_marker_tree()
-            .simplify_with_assumption(simplified_environment)
+            .restrict(simplified_environment)
             .try_to_string()
         {
             table.insert("marker", value(marker));
