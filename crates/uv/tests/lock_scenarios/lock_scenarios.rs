@@ -14,6 +14,7 @@ use insta::assert_snapshot;
 
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::Scenario;
 use uv_test::uv_snapshot;
 
 /// There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
@@ -5567,6 +5568,195 @@ fn specific_architecture() -> Result<()> {
         .arg(server.index_url())
         .assert()
         .success();
+
+    Ok(())
+}
+
+/// The root reaches `importlib-metadata` only before Python 3.10. Its dependency on `zipp` is
+/// unconditional, so that edge's Python marker is redundant once `importlib-metadata` is reached.
+/// The `numpy` versions force the resolver to fork across the supported Python range, reproducing
+/// the conditions that previously made this marker unstable during workspace updates.
+/// `unrelated` is available for workspace workflow tests that perturb and restore the root project.
+///
+///
+/// ```text
+/// workspace-marker-reachability
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires jax==1.0.0
+/// │       └── satisfied by jax-1.0.0
+/// ├── importlib-metadata
+/// │   └── importlib-metadata-1.0.0
+/// │       ├── requires python>=3.9
+/// │       └── requires zipp
+/// │           └── satisfied by zipp-1.0.0
+/// ├── jax
+/// │   └── jax-1.0.0
+/// │       ├── requires importlib-metadata ; python_full_version < '3.10'
+/// │       │   └── satisfied by importlib-metadata-1.0.0
+/// │       ├── requires numpy
+/// │       │   ├── satisfied by numpy-1.0.0
+/// │       │   ├── satisfied by numpy-2.0.0
+/// │       │   ├── satisfied by numpy-3.0.0
+/// │       │   └── satisfied by numpy-4.0.0
+/// │       └── requires python>=3.9
+/// ├── numpy
+/// │   ├── numpy-1.0.0
+/// │   │   └── requires python>=3.9,<3.10 (incompatible with environment)
+/// │   ├── numpy-2.0.0
+/// │   │   └── requires python>=3.10,<3.11 (incompatible with environment)
+/// │   ├── numpy-3.0.0
+/// │   │   └── requires python>=3.11,<3.12 (incompatible with environment)
+/// │   └── numpy-4.0.0
+/// ├── unrelated
+/// │   └── unrelated-1.0.0
+/// │       └── requires python>=3.9
+/// └── zipp
+///     └── zipp-1.0.0
+///         └── requires python>=3.9
+/// ```
+#[test]
+fn workspace_marker_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let scenario = Scenario::load("workspace/marker-reachability.toml")?;
+    scenario.materialize_workspace(&context.temp_dir)?;
+    let server = PackseServer::from_scenario(&scenario);
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    server.configure(&mut cmd);
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version == '3.11.*'",
+            "python_full_version == '3.10.*'",
+            "python_full_version < '3.10'",
+        ]
+
+        [[package]]
+        name = "importlib-metadata"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "zipp" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/importlib_metadata-1.0.0.tar.gz", hash = "sha256:96b3e92f4789bf74e7019782079e598633b776a873bc92c4bb4f99d497e38865", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/importlib_metadata-1.0.0-py3-none-any.whl", hash = "sha256:98cb75632e3ee3f638305671c83c2f3b0e9c998b95d79a3bdc5d0f670e36b941", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "jax"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "importlib-metadata", marker = "python_full_version < '3.10'" },
+            { name = "numpy", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.10'" },
+            { name = "numpy", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version == '3.10.*'" },
+            { name = "numpy", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version == '3.11.*'" },
+            { name = "numpy", version = "4.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/jax-1.0.0.tar.gz", hash = "sha256:a3cba364647599233c6156e4ea2e809645c1119723ebebf73df4317c5e618db7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/jax-1.0.0-py3-none-any.whl", hash = "sha256:82118fed08888f7eab680d1102e603cf89d25d1f3548dc4f6294f15870a8fe4e", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "numpy"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.10'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/numpy-1.0.0.tar.gz", hash = "sha256:aad5b6720f7a1574d1e3e51bee47f87fba09b6f26660687a80a0d4e2005a7c2e", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/numpy-1.0.0-py3-none-any.whl", hash = "sha256:eff15d39d8802a7249692184345e93661ae541a86c499c1c0bc2f6112ec626cb", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "numpy"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version == '3.10.*'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/numpy-2.0.0.tar.gz", hash = "sha256:e460e824b4fa1142e47a40002ee50ad11f2ad5813fe3862e88c027fb0fa9bb1e", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/numpy-2.0.0-py3-none-any.whl", hash = "sha256:dcc5a0acef7ecebcccac83420b788b06201af77fafb452c12e72b03ad90abd38", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "numpy"
+        version = "3.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version == '3.11.*'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/numpy-3.0.0.tar.gz", hash = "sha256:145cdb063bc70600db1e226434782a53b2cd1d80af8cf401d0775292c5dbfcf6", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/numpy-3.0.0-py3-none-any.whl", hash = "sha256:8fbf84e9be22474126ef3943a8fe28c9cb1ab7db0121ce535c8f3ae85a6599d4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "numpy"
+        version = "4.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/numpy-4.0.0.tar.gz", hash = "sha256:2795d770565b43fd2ef767f4e5d0f4bd1e85044e1d4b89ce4ff66dcf9059375c", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/numpy-4.0.0-py3-none-any.whl", hash = "sha256:95f1e78507dcab51451172a23c7773b010187049fe1590deee2f600fd0523efb", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "jax" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "jax", specifier = "==1.0.0" }]
+
+        [[package]]
+        name = "zipp"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/zipp-1.0.0.tar.gz", hash = "sha256:9e01e60fce37b73bb04738574eaebcd7db4395d3368c634dc66e9a9f1771bcbc", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/zipp-1.0.0-py3-none-any.whl", hash = "sha256:8aaf4f95fb11e16a7a59a5125ab8dbf5e316c9d39ebc5d1302e8c252f965346f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    let mut locked = context.lock();
+    locked.arg("--locked");
+    server.configure(&mut locked);
+    locked.assert().success();
 
     Ok(())
 }

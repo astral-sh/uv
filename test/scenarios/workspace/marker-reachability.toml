@@ -1,0 +1,53 @@
+name = "workspace-marker-reachability"
+description = '''
+The root reaches `importlib-metadata` only before Python 3.10. Its dependency on `zipp` is
+unconditional, so that edge's Python marker is redundant once `importlib-metadata` is reached.
+The `numpy` versions force the resolver to fork across the supported Python range, reproducing
+the conditions that previously made this marker unstable during workspace updates.
+`unrelated` is available for workspace workflow tests that perturb and restore the root project.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires_python = ">=3.9"
+requires = [
+  "jax==1.0.0",
+]
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[packages.jax.versions."1.0.0"]
+requires_python = ">=3.9"
+requires = [
+  "importlib-metadata ; python_version < '3.10'",
+  "numpy",
+]
+
+[packages.numpy.versions."4.0.0"]
+requires_python = ">=3.12"
+
+[packages.numpy.versions."3.0.0"]
+requires_python = ">=3.11,<3.12"
+
+[packages.numpy.versions."2.0.0"]
+requires_python = ">=3.10,<3.11"
+
+[packages.numpy.versions."1.0.0"]
+requires_python = ">=3.9,<3.10"
+
+[packages.importlib-metadata.versions."1.0.0"]
+requires_python = ">=3.9"
+requires = ["zipp"]
+
+[packages.zipp.versions."1.0.0"]
+requires_python = ">=3.9"
+
+[packages.unrelated.versions."1.0.0"]
+requires_python = ">=3.9"
