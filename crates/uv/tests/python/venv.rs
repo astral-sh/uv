@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -470,11 +472,56 @@ fn create_centralized_project_environment() -> Result<()> {
 }
 
 #[test]
+fn create_centralized_project_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    context
+        .venv()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .assert()
+        .success();
+
+    let environment = context.temp_dir.child(".venv");
+    let target = fs_err::read_link(environment.path())?;
+    let marker = target.join("marker");
+    fs_err::write(&marker, "")?;
+
+    uv_fs::remove_virtualenv(environment.path())?;
+    environment.write_str(&target.to_string_lossy())?;
+
+    // Without the preview, `--allow-existing` operates on the environment through the path file.
+    context.venv().arg("--allow-existing").assert().success();
+    assert_eq!(
+        target,
+        PathBuf::from(fs_err::read_to_string(environment.path())?)
+    );
+    assert!(marker.is_file());
+
+    // A default invocation replaces the path file without clearing its cached target.
+    context.venv().assert().success();
+    assert!(uv_fs::is_virtualenv_base(environment.path()));
+    assert!(marker.is_file());
+    Ok(())
+}
+
+#[test]
 fn create_centralized_project_environment_link_failure() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_centralized_environment_hashes()
         .with_filter((
-            r"(?m)^(warning: Failed to create link to project environment at `[^`]+`): .*$",
+            r"(?m)^(warning: Failed to write the environment path to `[^`]+`):.*$",
             "$1: [ERR]",
         ));
     context
@@ -501,7 +548,7 @@ fn create_centralized_project_environment_link_failure() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment `project-cp3.12.[X]-[HASH]`
-    warning: Failed to create link to project environment at `.venv`: [ERR]
+    warning: Failed to write the environment path to `[VENV]/`: [ERR]
     Activate with: source [CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]/[BIN]/activate
     "#);
 

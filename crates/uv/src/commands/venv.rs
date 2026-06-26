@@ -24,7 +24,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::DefaultGroups;
 use uv_preview::Preview;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest,
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
@@ -41,8 +42,9 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
 use crate::commands::project::{
     LinkErrorReporting, WorkspacePython, centralized_environment_root,
-    centralized_environments_enabled, is_centralized_environment_link, lock_project_environment,
-    update_project_environment_link, validate_project_requires_python,
+    centralized_environments_enabled, is_centralized_environment_reference,
+    lock_project_environment, read_project_environment_path_file, update_project_environment_link,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
@@ -249,13 +251,23 @@ pub(crate) async fn venv(
             OnExisting::Remove(RemovalReason::ManagedEnvironment)
         }
         OnExisting::Prompt | OnExisting::Remove(_)
-            if is_centralized_environment_link(&path, cache) =>
+            if is_centralized_environment_reference(&path, cache) =>
         {
             // Remove `.venv` without following it into the cache.
-            uv_fs::remove_symlink(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            uv_fs::remove_virtualenv(&path).map_err(|err| VenvError::Creation(err.into()))?;
             on_existing
         }
         _ => on_existing,
+    };
+
+    // `--allow-existing` follows a usable path file just as it follows a directory link.
+    let path = if matches!(on_existing, OnExisting::Allow)
+        && let Some(target) = read_project_environment_path_file(&path)
+        && PythonEnvironment::from_root(&target, cache).is_ok()
+    {
+        target
+    } else {
+        path
     };
 
     // Create the virtual environment.
