@@ -724,7 +724,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     Some((reporter, progress)) => {
                         let mut reader = ProgressReader::new(&mut hasher, progress, &**reporter);
                         match extension {
-                            WheelExtension::Whl => unzip_streaming_wheel(
+                            WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
                                 &mut reader,
                                 temp_dir.path(),
                                 self.content_addressed_cache,
@@ -741,7 +741,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         }
                     }
                     None => match extension {
-                        WheelExtension::Whl => unzip_streaming_wheel(
+                        WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
                             &mut hasher,
                             temp_dir.path(),
                             self.content_addressed_cache,
@@ -971,7 +971,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     WheelExtension::Whl => {
                         let file = file.into_std().await;
                         tokio::task::spawn_blocking(move || {
-                            unzip_seekable_wheel(file, &target, content_addressed_cache)
+                            ExtractedWheelManifest::extract_seekable(
+                                file,
+                                &target,
+                                content_addressed_cache,
+                            )
                         })
                         .await?
                         .map_err(|err| Error::Extract(filename.to_string(), err))?
@@ -1176,7 +1180,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             // Unzip the wheel to a temporary directory.
             let ExtractedWheelManifest { files, digest } = match extension {
-                WheelExtension::Whl => unzip_streaming_wheel(
+                WheelExtension::Whl => ExtractedWheelManifest::extract_streaming(
                     &mut hasher,
                     temp_dir.path(),
                     self.content_addressed_cache,
@@ -1247,9 +1251,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // Unzip the wheel into a temporary directory.
                 let temp_dir = tempfile::tempdir_in(root).map_err(Error::CacheWrite)?;
                 let reader = fs_err::File::open(&path).map_err(Error::CacheWrite)?;
-                let extracted =
-                    unzip_seekable_wheel(reader, temp_dir.path(), content_addressed_cache)
-                        .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
+                let extracted = ExtractedWheelManifest::extract_seekable(
+                    reader,
+                    temp_dir.path(),
+                    content_addressed_cache,
+                )
+                .map_err(|err| Error::Extract(path.to_string_lossy().into_owned(), err))?;
                 Ok((temp_dir, extracted))
             }
         })
@@ -1311,46 +1318,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 }
 
-/// Extract a wheel from a streaming reader, optionally computing its directory digest.
-async fn unzip_streaming_wheel<R>(
-    reader: R,
-    target: &Path,
-    content_addressed: bool,
-) -> Result<ExtractedWheelManifest, uv_extract::Error>
-where
-    R: AsyncRead + Unpin,
-{
-    if content_addressed {
-        let (files, digest) =
-            uv_extract::stream::unzip_and_hash(reader, target).await?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: Some(digest),
-        })
-    } else {
-        let files = uv_extract::stream::unzip(reader, target).await?;
-        Ok(ExtractedWheelManifest::without_digest(files))
-    }
-}
-
-/// Extract a wheel from a seekable file, optionally computing its directory digest.
-fn unzip_seekable_wheel(
-    reader: fs_err::File,
-    target: &Path,
-    content_addressed: bool,
-) -> Result<ExtractedWheelManifest, uv_extract::Error> {
-    if content_addressed {
-        let (files, digest) = uv_extract::unzip_and_hash(reader, target)?;
-        Ok(ExtractedWheelManifest {
-            files,
-            digest: Some(digest),
-        })
-    } else {
-        let files = uv_extract::unzip(reader, target)?;
-        Ok(ExtractedWheelManifest::without_digest(files))
-    }
-}
-
 /// The manifest of files extracted from a wheel, along with a hash of the unpacked archive.
 struct ExtractedWheelManifest {
     files: Vec<(PathBuf, u64)>,
@@ -1358,6 +1325,46 @@ struct ExtractedWheelManifest {
 }
 
 impl ExtractedWheelManifest {
+    /// Extract a wheel from a streaming reader, optionally computing its directory digest.
+    async fn extract_streaming<R>(
+        reader: R,
+        target: &Path,
+        content_addressed: bool,
+    ) -> Result<Self, uv_extract::Error>
+    where
+        R: AsyncRead + Unpin,
+    {
+        if content_addressed {
+            let (files, digest) =
+                uv_extract::stream::unzip_and_hash(reader, target).await?;
+            Ok(Self {
+                files,
+                digest: Some(digest),
+            })
+        } else {
+            let files = uv_extract::stream::unzip(reader, target).await?;
+            Ok(Self::without_digest(files))
+        }
+    }
+
+    /// Extract a wheel from a seekable file, optionally computing its directory digest.
+    fn extract_seekable(
+        reader: fs_err::File,
+        target: &Path,
+        content_addressed: bool,
+    ) -> Result<Self, uv_extract::Error> {
+        if content_addressed {
+            let (files, digest) = uv_extract::unzip_and_hash(reader, target)?;
+            Ok(Self {
+                files,
+                digest: Some(digest),
+            })
+        } else {
+            let files = uv_extract::unzip(reader, target)?;
+            Ok(Self::without_digest(files))
+        }
+    }
+
     fn without_digest(files: Vec<(PathBuf, u64)>) -> Self {
         Self {
             files,
