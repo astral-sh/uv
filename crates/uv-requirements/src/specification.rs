@@ -557,6 +557,7 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
             spec.override_dependencies
                 .extend(source.override_dependencies);
+            spec.excludes.extend(source.excludes);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
 
