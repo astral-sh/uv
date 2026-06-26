@@ -464,8 +464,9 @@ pub struct ToolUv {
     /// Overrides can be limited to the dependencies declared by a specific package version by
     /// using a table with `package` and `dependencies`. The `package` table identifies the package
     /// whose dependencies will be overridden by `name` and, optionally, `version`. If `version` is
-    /// omitted, the overrides apply to all versions of that package. Dependencies not listed in
-    /// `dependencies` are left unchanged.
+    /// omitted, the overrides apply to all versions of that package. Requirements in `dependencies`
+    /// replace dependencies with the same name and add dependencies that are not declared by the
+    /// package. Dependencies not listed in `dependencies` are left unchanged.
     ///
     /// Scoped overrides currently support registry version specifiers only. Direct URL and path
     /// sources, including Git sources, and explicit indexes are not supported.

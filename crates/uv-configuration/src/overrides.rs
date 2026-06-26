@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use either::Either;
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use serde::de::IntoDeserializer;
 
 use uv_distribution_types::{Requirement, RequirementSource};
@@ -288,42 +288,72 @@ impl Overrides {
         I: IntoIterator<Item = &'a Requirement>,
     {
         let scoped = package.and_then(|(package, version)| self.scoped_for(package, version));
-        if self.global.is_empty() && scoped.is_none() {
-            // Fast path: There are no overrides.
-            return Either::Left(requirements.into_iter().map(Cow::Borrowed));
+        if let Some(scoped) = scoped {
+            let requirements = requirements.into_iter().collect::<Vec<_>>();
+            let names = requirements
+                .iter()
+                .map(|requirement| requirement.name.clone())
+                .collect::<FxHashSet<_>>();
+            let mut additions = scoped
+                .overrides
+                .iter()
+                .filter(|(name, _)| !names.contains(*name))
+                .flat_map(|(_, requirements)| requirements)
+                .collect::<Vec<_>>();
+            additions.sort_unstable();
+
+            return Either::Left(
+                requirements
+                    .into_iter()
+                    .flat_map(move |requirement| self.apply_requirement(requirement, Some(scoped)))
+                    .chain(additions.into_iter().map(Cow::Borrowed)),
+            );
         }
 
-        Either::Right(requirements.into_iter().flat_map(move |requirement| {
-            let overrides = scoped
-                .and_then(|scoped| scoped.overrides.get(&requirement.name))
-                .or_else(|| self.get(&requirement.name));
-            let Some(overrides) = overrides else {
-                // Case 1: No override(s).
-                return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
-            };
+        if self.global.is_empty() {
+            // Fast path: There are no overrides.
+            return Either::Right(Either::Left(requirements.into_iter().map(Cow::Borrowed)));
+        }
 
-            // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
-            // of the main conjunction.
-            let Some(extra_expression) = requirement.marker.top_level_extra() else {
-                // Case 2: A non-optional dependency with override(s).
-                return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
-            };
+        Either::Right(Either::Right(requirements.into_iter().flat_map(
+            move |requirement| self.apply_requirement(requirement, None),
+        )))
+    }
 
-            // Case 3: An optional dependency with override(s).
-            //
-            // When the original requirement is an optional dependency, the override(s) need to
-            // be optional for the same extra, otherwise we activate extras that should be inactive.
-            Either::Right(Either::Left(overrides.iter().map(
-                move |override_requirement| {
-                    // Add the extra to the override marker.
-                    let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(override_requirement.marker);
-                    Cow::Owned(Requirement {
-                        marker: joint_marker,
-                        ..override_requirement.clone()
-                    })
-                },
-            )))
-        }))
+    fn apply_requirement<'a>(
+        &'a self,
+        requirement: &'a Requirement,
+        scoped: Option<&'a ScopedOverrides>,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
+        let overrides = scoped
+            .and_then(|scoped| scoped.overrides.get(&requirement.name))
+            .or_else(|| self.get(&requirement.name));
+        let Some(overrides) = overrides else {
+            // Case 1: No override(s).
+            return Either::Left(std::iter::once(Cow::Borrowed(requirement)));
+        };
+
+        // ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part
+        // of the main conjunction.
+        let Some(extra_expression) = requirement.marker.top_level_extra() else {
+            // Case 2: A non-optional dependency with override(s).
+            return Either::Right(Either::Right(overrides.iter().map(Cow::Borrowed)));
+        };
+
+        // Case 3: An optional dependency with override(s).
+        //
+        // When the original requirement is an optional dependency, the override(s) need to
+        // be optional for the same extra, otherwise we activate extras that should be inactive.
+        Either::Right(Either::Left(overrides.iter().map(
+            move |override_requirement| {
+                // Add the extra to the override marker.
+                let mut joint_marker = MarkerTree::expression(extra_expression.clone());
+                joint_marker.and(override_requirement.marker);
+                Cow::Owned(Requirement {
+                    marker: joint_marker,
+                    ..override_requirement.clone()
+                })
+            },
+        )))
     }
 }

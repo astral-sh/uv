@@ -405,8 +405,8 @@ requirements on `pydantic`, replacing them with the override. In the above examp
 
 While constraints can only _reduce_ the set of acceptable versions for a package, overrides can
 _expand_ the set of acceptable versions, providing an escape hatch for erroneous upper version
-bounds. As with constraints, overrides do not add a dependency on the package and only take effect
-if the package is requested in a direct or transitive dependency.
+bounds. As with constraints, global overrides do not add a dependency on the package and only take
+effect if the package is requested in a direct or transitive dependency.
 
 In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of overrides. In the
 pip-compatible interface, the `--override` option can be used to pass files with the same format as
@@ -425,10 +425,11 @@ override-dependencies = [
 ```
 
 In this example, `foo>1` is the global override, while `foo>2` replaces requirements for `foo`
-declared by `bar==0.0.5`. Other dependencies declared by `bar` are unchanged. The `version` field in
-`package` can be omitted to apply the scoped overrides to all versions of `bar`. A version-specific
-entry takes precedence over an all-versions entry, and a scoped override takes precedence over a
-global override for the same dependency.
+declared by `bar==0.0.5`. If `bar` does not declare a dependency on `foo`, the scoped override adds
+it. Other dependencies declared by `bar` are unchanged. The `version` field in `package` can be
+omitted to apply the scoped overrides to all versions of `bar`. A version-specific entry takes
+precedence over an all-versions entry, and a scoped override takes precedence over a global override
+for the same dependency.
 
 Scoped overrides currently support registry version specifiers only. Direct URL and path sources,
 including Git sources, and explicit indexes are not supported.
