@@ -237,7 +237,7 @@ fn workspace_list_no_project() {
 /// boundaries.
 #[test]
 fn workspace_list_scripts() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
+    let mut context = uv_test::test_context!("3.12");
 
     context.init().arg("project").assert().success();
     let project = context.temp_dir.child("project");
@@ -311,16 +311,33 @@ fn workspace_list_scripts() -> Result<()> {
         .arg("--scripts")
         .arg("--paths")
         .current_dir(&project), @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
 
     ----- stderr -----
-    error: the argument '--scripts' cannot be used with '--paths'
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
+    ");
 
-    Usage: uv workspace list --cache-dir [CACHE_DIR] --scripts
+    // The configured cache is excluded even when it has not been initialized with ignore files.
+    let cache = project.child("cache");
+    cache.child("script.py").write_str(script)?;
+    context.cache_dir = cache;
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .current_dir(&project), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    .github/hidden.py
+    script.py
+    scripts/nested.py
 
-    For more information, try '--help'.
+    ----- stderr -----
+    warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
     ");
 
     Ok(())

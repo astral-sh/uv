@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
@@ -5,7 +6,7 @@ use anyhow::{Context, Result};
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
-use uv_fs::{CWD, Simplified, normalize_path};
+use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path};
 use uv_preview::{Preview, PreviewFeature};
 use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
@@ -72,21 +73,22 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     // Avoid descending into the cache when it is inside the workspace. If the workspace itself is
     // inside the cache, it is still the requested search root and must not be excluded.
     let cache_root = if cache.root().is_absolute() {
-        cache.root().to_path_buf()
+        Cow::Borrowed(cache.root())
     } else {
-        CWD.join(cache.root())
+        Cow::Owned(CWD.join(cache.root()))
     };
-    let cache_root = normalize_path(&cache_root).into_owned();
-    let cache_root = (!workspace_root.starts_with(&cache_root)).then_some(cache_root);
+    let cache_root = normalize_path(cache_root);
+    // The filter closure requires owned data, but only capture the cache root when it is strictly
+    // inside the workspace. This avoids allocation and per-entry comparisons for external caches.
+    let cache_is_nested =
+        cache_root.as_ref() != workspace_root && cache_root.starts_with(workspace_root);
+    let cache_root = cache_is_nested.then(|| cache_root.into_owned());
 
     let mut builder = ignore::WalkBuilder::new(workspace_root);
+    // Include scripts in hidden directories, such as `.github`.
     ignore::WalkBuilder::hidden(&mut builder, false);
     builder
-        .parents(true)
-        .ignore(true)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
+        // Respect `.gitignore` files in source archives and other workspaces without `.git`.
         .require_git(false)
         .filter_entry(move |entry| {
             let path = entry.path();
@@ -104,11 +106,20 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
                 return true;
             }
 
-            // Repository internals and virtual environments can be very large and cannot contain
-            // scripts that belong to the workspace. Detect virtual environments by their marker
-            // file so custom environment directory names are handled too.
-            !matches!(entry.file_name().to_str(), Some(".git" | ".venv"))
-                && !path.join("pyvenv.cfg").is_file()
+            // Hidden directories are included above, but Git internals cannot contain workspace
+            // scripts and can be very large.
+            if entry.file_name() == ".git" {
+                return false;
+            }
+
+            // Ignore rules have already been applied, but `.venv` is not guaranteed to be ignored.
+            if entry.file_name() == ".venv" {
+                return false;
+            }
+
+            // Detect virtual environments by their marker file so custom directory names are
+            // handled too.
+            !is_virtualenv_base(path)
         });
     let walker = builder.build();
 
