@@ -1193,19 +1193,23 @@ impl Lock {
         self.fork_markers.as_slice()
     }
 
+    /// The marker describing the universe of this resolution.
+    fn fork_markers_union(&self) -> MarkerTree {
+        if self.fork_markers.is_empty() {
+            return self.requires_python.to_marker_tree();
+        }
+        let mut fork_markers_union = MarkerTree::FALSE;
+        for fork_marker in &self.fork_markers {
+            fork_markers_union.or(fork_marker.pep508());
+        }
+        fork_markers_union
+    }
+
     /// Checks whether the fork markers cover the entire supported marker space.
     ///
     /// Returns the actually covered and the expected marker space on validation error.
     pub fn check_marker_coverage(&self) -> Result<(), (MarkerTree, MarkerTree)> {
-        let fork_markers_union = if self.fork_markers().is_empty() {
-            self.requires_python.to_marker_tree()
-        } else {
-            let mut fork_markers_union = MarkerTree::FALSE;
-            for fork_marker in self.fork_markers() {
-                fork_markers_union.or(fork_marker.pep508());
-            }
-            fork_markers_union
-        };
+        let fork_markers_union = self.fork_markers_union();
         let mut environments_union = if !self.supported_environments.is_empty() {
             let mut environments_union = MarkerTree::FALSE;
             for fork_marker in &self.supported_environments {
@@ -1237,15 +1241,7 @@ impl Lock {
         &self,
         new_requires_python: &RequiresPython,
     ) -> Result<(), (MarkerTree, MarkerTree)> {
-        let fork_markers_union = if self.fork_markers().is_empty() {
-            self.requires_python.to_marker_tree()
-        } else {
-            let mut fork_markers_union = MarkerTree::FALSE;
-            for fork_marker in self.fork_markers() {
-                fork_markers_union.or(fork_marker.pep508());
-            }
-            fork_markers_union
-        };
+        let fork_markers_union = self.fork_markers_union();
         let new_requires_python = new_requires_python.to_marker_tree();
         if fork_markers_union.is_disjoint(new_requires_python) {
             Err((fork_markers_union, new_requires_python))
@@ -1279,6 +1275,11 @@ impl Lock {
                 doc.insert("resolution-markers", value(fork_markers));
             }
         }
+
+        // The simplified marker space covered by this resolution.
+        let simplified_environment =
+            SimplifiedMarkerTree::new(&self.requires_python, self.fork_markers_union())
+                .as_simplified_marker_tree();
 
         if !self.supported_environments.is_empty() {
             let supported_environments = each_element_on_its_line_array(
@@ -1592,7 +1593,11 @@ impl Lock {
 
         let mut packages = ArrayOfTables::new();
         for dist in &self.packages {
-            packages.push(dist.to_toml(&self.requires_python, &dist_count_by_name)?);
+            packages.push(dist.to_toml(
+                &self.requires_python,
+                simplified_environment,
+                &dist_count_by_name,
+            )?);
         }
 
         doc.insert("package", Item::ArrayOfTables(packages));
@@ -3652,6 +3657,7 @@ impl Package {
     fn to_toml(
         &self,
         requires_python: &RequiresPython,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
@@ -3669,7 +3675,7 @@ impl Package {
 
         if !self.dependencies.is_empty() {
             let deps = each_element_on_its_line_array(self.dependencies.iter().map(|dep| {
-                dep.to_toml(requires_python, dist_count_by_name)
+                dep.to_toml(simplified_environment, dist_count_by_name)
                     .into_inline_table()
             }));
             table.insert("dependencies", value(deps));
@@ -3679,7 +3685,7 @@ impl Package {
             let mut optional_deps = Table::new();
             for (extra, deps) in &self.optional_dependencies {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(requires_python, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -3695,7 +3701,7 @@ impl Package {
             let mut dependency_groups = Table::new();
             for (extra, deps) in &self.dependency_groups {
                 let deps = each_element_on_its_line_array(deps.iter().map(|dep| {
-                    dep.to_toml(requires_python, dist_count_by_name)
+                    dep.to_toml(simplified_environment, dist_count_by_name)
                         .into_inline_table()
                 }));
                 if !deps.is_empty() {
@@ -5722,7 +5728,7 @@ impl Dependency {
     /// Returns the TOML representation of this dependency.
     fn to_toml(
         &self,
-        _requires_python: &RequiresPython,
+        simplified_environment: MarkerTree,
         dist_count_by_name: &FxHashMap<PackageName, u64>,
     ) -> Table {
         let mut table = Table::new();
@@ -5736,7 +5742,14 @@ impl Dependency {
                 .collect::<Array>();
             table.insert("extra", value(extra_array));
         }
-        if let Some(marker) = self.simplified_marker.try_to_string() {
+        // Avoid writing edge markers that are always fulfilled.
+        if !self
+            .simplified_marker
+            .as_simplified_marker_tree()
+            .negate()
+            .is_disjoint(simplified_environment)
+            && let Some(marker) = self.simplified_marker.try_to_string()
+        {
             table.insert("marker", value(marker));
         }
 
