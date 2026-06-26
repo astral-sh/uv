@@ -4403,6 +4403,41 @@ fn scoped_exclude_dependency_from_script() -> Result<()> {
     Ok(())
 }
 
+/// Check that package-scoped exclusions apply to a `pyproject.toml` project's dependencies.
+#[test]
+fn scoped_exclude_dependency_from_pyproject_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "project", version = "0.1.0" }, dependencies = ["anyio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .arg("--no-header")
+            .current_dir(&context.temp_dir), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn constraint_dependency_from_pyproject() -> Result<()> {
