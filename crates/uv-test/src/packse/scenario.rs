@@ -4,11 +4,12 @@
 //! `[packages.<name>.versions.<version>]` becomes a [`PackageName`] key, then a [`Version`] key.
 
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
-use serde::Deserialize;
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 
 use uv_configuration::TargetTriple;
 use uv_distribution_filename::WheelFilename;
@@ -16,6 +17,8 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_python::PythonVersion;
+
+use super::scenarios_dir;
 
 /// A complete packse scenario definition.
 #[derive(Debug, Deserialize)]
@@ -48,12 +51,82 @@ pub struct Scenario {
 }
 
 impl Scenario {
+    /// Parse a vendored scenario by its path relative to `test/scenarios`.
+    pub fn load(path: &str) -> Result<Self> {
+        Self::from_path(&scenarios_dir().join(path))
+    }
+
     /// Parse a single scenario from a TOML file path.
     pub fn from_path(path: &Path) -> Result<Self> {
         let contents = fs_err::read_to_string(path)
             .with_context(|| format!("failed to read scenario file `{}`", path.display()))?;
-        toml::from_str(&contents)
-            .with_context(|| format!("failed to parse scenario file `{}`", path.display()))
+        let scenario: Self = toml::from_str(&contents)
+            .with_context(|| format!("failed to parse scenario file `{}`", path.display()))?;
+        scenario
+            .validate()
+            .with_context(|| format!("invalid scenario file `{}`", path.display()))?;
+        Ok(scenario)
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.root.workspace.is_some() && !self.resolver_options.universal {
+            bail!("root workspaces are only supported for universal lock scenarios");
+        }
+        Ok(())
+    }
+
+    /// Render this scenario's root workspace as a `pyproject.toml` document.
+    fn pyproject_toml(&self) -> Result<String> {
+        let workspace = self
+            .root
+            .workspace
+            .as_ref()
+            .context("scenario root does not define a workspace")?;
+        let required_environments = self
+            .resolver_options
+            .required_environments
+            .iter()
+            .map(|environment| {
+                environment
+                    .contents()
+                    .context("required environment markers should not be empty")
+                    .map(|contents| contents.to_string())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let tool = (!required_environments.is_empty()).then_some(PyProjectTool {
+            uv: PyProjectUv {
+                required_environments,
+            },
+        });
+        let pyproject = PyProjectToml {
+            project: PyProjectProject {
+                name: workspace.project.name.to_string(),
+                version: workspace.project.version.to_string(),
+                requires_python: self.root.requires_python.as_ref().map(ToString::to_string),
+                dependencies: self.root.requires.iter().map(ToString::to_string).collect(),
+            },
+            tool,
+        };
+        toml::to_string_pretty(&pyproject).context("failed to serialize scenario workspace")
+    }
+
+    /// Materialize this scenario's root workspace into `destination`.
+    pub fn materialize_workspace(&self, destination: impl AsRef<Path>) -> Result<()> {
+        let destination = destination.as_ref();
+        fs_err::create_dir_all(destination).with_context(|| {
+            format!(
+                "failed to create workspace directory `{}`",
+                destination.display()
+            )
+        })?;
+        let pyproject_toml = destination.join("pyproject.toml");
+        let mut file = fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&pyproject_toml)
+            .with_context(|| format!("failed to create `{}`", pyproject_toml.display()))?;
+        file.write_all(self.pyproject_toml()?.as_bytes())
+            .with_context(|| format!("failed to write `{}`", pyproject_toml.display()))
     }
 
     /// Construct an otherwise-empty scenario for indexes that should only expose vendored files.
@@ -65,6 +138,7 @@ impl Scenario {
             root: RootPackage {
                 requires_python: None,
                 requires: Vec::new(),
+                workspace: None,
             },
             expected: Expected {
                 satisfiable: true,
@@ -165,6 +239,53 @@ pub struct RootPackage {
     /// Top-level requirements.
     #[serde(default)]
     pub requires: Vec<Requirement>,
+
+    /// Project metadata to use when materializing this root as a workspace.
+    #[serde(default)]
+    pub workspace: Option<RootWorkspace>,
+}
+
+/// An inline workspace definition for a scenario root.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RootWorkspace {
+    /// The project at the workspace root.
+    project: RootWorkspaceProject,
+}
+
+/// The single project supported by an inline root workspace.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RootWorkspaceProject {
+    name: PackageName,
+    version: Version,
+}
+
+#[derive(Serialize)]
+struct PyProjectToml {
+    project: PyProjectProject,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool: Option<PyProjectTool>,
+}
+
+#[derive(Serialize)]
+struct PyProjectProject {
+    name: String,
+    version: String,
+    #[serde(rename = "requires-python", skip_serializing_if = "Option::is_none")]
+    requires_python: Option<String>,
+    dependencies: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct PyProjectTool {
+    uv: PyProjectUv,
+}
+
+#[derive(Serialize)]
+struct PyProjectUv {
+    #[serde(rename = "required-environments")]
+    required_environments: Vec<String>,
 }
 
 /// Expected resolution outcome.
@@ -279,6 +400,176 @@ requires = ["a>=2 ; sys_platform == 'linux'", "a<2 ; sys_platform == 'darwin'"]
         assert!(scenario.resolver_options.universal);
         assert_eq!(scenario.packages.len(), 1);
         assert_eq!(scenario.packages[&package_name].versions.len(), 2);
+    }
+
+    #[test]
+    fn parse_root_workspace() {
+        let toml = r#"
+name = "workspace"
+
+[root]
+requires = []
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[expected]
+satisfiable = true
+"#;
+        let scenario: Scenario = toml::from_str(toml).expect("scenario should parse");
+        let project = scenario
+            .root
+            .workspace
+            .expect("root should define a workspace")
+            .project;
+        assert_eq!(project.name.as_ref(), "project");
+        assert_eq!(
+            project.version,
+            Version::from_str("0.1.0").expect("valid version")
+        );
+    }
+
+    #[test]
+    fn materialize_root_workspace() {
+        let toml = r#"
+name = "workspace"
+
+[root]
+requires_python = ">=3.9"
+requires = ["a ; python_version < '3.10'"]
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[resolver_options]
+required_environments = ["sys_platform == 'darwin'"]
+
+[expected]
+satisfiable = true
+"#;
+        let scenario: Scenario = toml::from_str(toml).expect("scenario should parse");
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        scenario
+            .materialize_workspace(temporary_directory.path())
+            .expect("workspace should materialize");
+
+        let pyproject_toml =
+            fs_err::read_to_string(temporary_directory.path().join("pyproject.toml"))
+                .expect("pyproject.toml should be readable");
+        let pyproject: toml::Value =
+            toml::from_str(&pyproject_toml).expect("pyproject.toml should parse");
+        assert_eq!(pyproject["project"]["name"].as_str(), Some("project"));
+        assert_eq!(pyproject["project"]["version"].as_str(), Some("0.1.0"));
+        assert_eq!(
+            pyproject["project"]["requires-python"].as_str(),
+            Some(">=3.9")
+        );
+        assert_eq!(
+            pyproject["project"]["dependencies"][0].as_str(),
+            Some("a ; python_full_version < '3.10'")
+        );
+        assert_eq!(
+            pyproject["tool"]["uv"]["required-environments"][0].as_str(),
+            Some("sys_platform == 'darwin'")
+        );
+    }
+
+    #[test]
+    fn materialize_root_workspace_requires_configuration() {
+        let scenario = Scenario::empty();
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        assert!(
+            scenario
+                .materialize_workspace(temporary_directory.path())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn materialize_root_workspace_does_not_overwrite() {
+        let toml = r#"
+name = "workspace"
+
+[root]
+requires = []
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[expected]
+satisfiable = true
+"#;
+        let scenario: Scenario = toml::from_str(toml).expect("scenario should parse");
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::write(
+            temporary_directory.path().join("pyproject.toml"),
+            "existing contents",
+        )
+        .expect("existing pyproject.toml should be written");
+
+        assert!(
+            scenario
+                .materialize_workspace(temporary_directory.path())
+                .is_err()
+        );
+        assert_eq!(
+            fs_err::read_to_string(temporary_directory.path().join("pyproject.toml"))
+                .expect("existing pyproject.toml should be readable"),
+            "existing contents"
+        );
+    }
+
+    #[test]
+    fn reject_unknown_root_workspace_field() {
+        let toml = r#"
+name = "workspace"
+
+[root]
+requires = []
+
+[root.workspace]
+members = []
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[expected]
+satisfiable = true
+"#;
+        assert!(toml::from_str::<Scenario>(toml).is_err());
+    }
+
+    #[test]
+    fn reject_root_workspace_for_non_universal_scenario() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        let path = temporary_directory.path().join("workspace.toml");
+        fs_err::write(
+            &path,
+            r#"
+name = "workspace"
+
+[root]
+requires = []
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[expected]
+satisfiable = true
+"#,
+        )
+        .expect("scenario should be written");
+
+        assert!(Scenario::from_path(&path).is_err());
     }
 
     #[test]

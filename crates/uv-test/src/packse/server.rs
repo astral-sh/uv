@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -18,12 +19,12 @@ use wiremock::{Request, ResponseTemplate};
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
+use uv_static::EnvVars;
 
 use crate::http_server::{HttpServer, content_type_for_filename};
 use crate::vendor::{VendorArtifact, vendor_artifacts};
 
 use super::scenario::{Scenario, WheelTag};
-use super::scenarios_dir;
 use super::wheel::{generate_sdist, generate_wheel, sha256_hex};
 
 const PACKSE_UPLOAD_TIME: &str = "2024-03-24T00:00:00Z";
@@ -76,9 +77,8 @@ impl PackseServer {
     /// Load a scenario from a TOML path (relative to the vendored scenarios directory)
     /// and start a mock server for it.
     pub fn new(scenario_path: &str) -> Self {
-        let full_path = scenarios_dir().join(scenario_path);
         let scenario =
-            Scenario::from_path(&full_path).expect("vendored Packse scenario should parse");
+            Scenario::load(scenario_path).expect("vendored Packse scenario should parse");
         Self::from_scenario(&scenario)
     }
 
@@ -102,6 +102,13 @@ impl PackseServer {
     /// The Simple API index URL (e.g., `http://127.0.0.1:PORT/simple/`).
     pub fn index_url(&self) -> String {
         format!("{}/simple/", self.server.url())
+    }
+
+    /// Configure a uv command to use this server as its package index.
+    pub fn configure(&self, command: &mut Command) {
+        command
+            .env(EnvVars::UV_DEFAULT_INDEX, self.index_url())
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER);
     }
 }
 

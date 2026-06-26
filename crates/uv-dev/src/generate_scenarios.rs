@@ -471,6 +471,12 @@ fn render_lock(output: &mut String, cases: &[&ScenarioCase]) -> Result<()> {
     output.push_str("use assert_fs::prelude::*;\n");
     output.push_str("use insta::assert_snapshot;\n\n");
     output.push_str("use uv_static::EnvVars;\n");
+    if cases
+        .iter()
+        .any(|case| case.scenario.root.workspace.is_some())
+    {
+        output.push_str("use uv_test::packse::scenario::Scenario;\n");
+    }
     output.push_str("use uv_test::packse::PackseServer;\n");
     output.push_str("use uv_test::uv_snapshot;\n\n");
 
@@ -495,49 +501,65 @@ fn render_lock_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
         case.scenario.environment.python
     )
     .unwrap();
-    writeln!(
-        output,
-        "    let server = PackseServer::new(\"{}\");",
-        case.path
-    )
-    .unwrap();
-    output.push('\n');
-    output.push_str("    let pyproject_toml = context.temp_dir.child(\"pyproject.toml\");\n");
-    output.push_str("    pyproject_toml.write_str(\n");
-    output.push_str("        r###\"\n");
-    output.push_str("        [project]\n");
-    output.push_str("        name = \"project\"\n");
-    output.push_str("        version = \"0.1.0\"\n");
-    output.push_str("        dependencies = [\n");
-    for requirement in &case.scenario.root.requires {
-        writeln!(output, "          '''{requirement}''',").unwrap();
-    }
-    output.push_str("        ]\n");
-    if let Some(requires_python) = &case.scenario.root.requires_python {
-        writeln!(output, "        requires-python = \"{requires_python}\"").unwrap();
-    }
-    if !case
-        .scenario
-        .resolver_options
-        .required_environments
-        .is_empty()
-    {
-        output.push_str("        [tool.uv]\n");
-        output.push_str("        required-environments = [\n");
-        for environment in &case.scenario.resolver_options.required_environments {
-            let environment = environment
-                .contents()
-                .context("required environment markers should not be empty")?;
-            writeln!(output, "          '''{environment}''',").unwrap();
+    let workspace = case.scenario.root.workspace.is_some();
+    if workspace {
+        writeln!(
+            output,
+            "    let scenario = Scenario::load(\"{}\")?;",
+            case.path
+        )
+        .unwrap();
+        output.push_str("    scenario.materialize_workspace(&context.temp_dir)?;\n");
+        output.push_str("    let server = PackseServer::from_scenario(&scenario);\n\n");
+    } else {
+        writeln!(
+            output,
+            "    let server = PackseServer::new(\"{}\");",
+            case.path
+        )
+        .unwrap();
+        output.push('\n');
+        output.push_str("    let pyproject_toml = context.temp_dir.child(\"pyproject.toml\");\n");
+        output.push_str("    pyproject_toml.write_str(\n");
+        output.push_str("        r###\"\n");
+        output.push_str("        [project]\n");
+        output.push_str("        name = \"project\"\n");
+        output.push_str("        version = \"0.1.0\"\n");
+        output.push_str("        dependencies = [\n");
+        for requirement in &case.scenario.root.requires {
+            writeln!(output, "          '''{requirement}''',").unwrap();
         }
         output.push_str("        ]\n");
+        if let Some(requires_python) = &case.scenario.root.requires_python {
+            writeln!(output, "        requires-python = \"{requires_python}\"").unwrap();
+        }
+        if !case
+            .scenario
+            .resolver_options
+            .required_environments
+            .is_empty()
+        {
+            output.push_str("        [tool.uv]\n");
+            output.push_str("        required-environments = [\n");
+            for environment in &case.scenario.resolver_options.required_environments {
+                let environment = environment
+                    .contents()
+                    .context("required environment markers should not be empty")?;
+                writeln!(output, "          '''{environment}''',").unwrap();
+            }
+            output.push_str("        ]\n");
+        }
+        output.push_str("        \"###\n");
+        output.push_str("    )?;\n\n");
     }
-    output.push_str("        \"###\n");
-    output.push_str("    )?;\n\n");
     output.push_str("    let filters = context.filters();\n\n");
     output.push_str("    let mut cmd = context.lock();\n");
-    output.push_str("    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);\n");
-    output.push_str("    cmd.arg(\"--index-url\").arg(server.index_url());\n");
+    if workspace {
+        output.push_str("    server.configure(&mut cmd);\n");
+    } else {
+        output.push_str("    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);\n");
+        output.push_str("    cmd.arg(\"--index-url\").arg(server.index_url());\n");
+    }
     render_expected_explanation(output, &case.scenario, "    // ");
     output.push_str("    uv_snapshot!(filters, cmd, @r###\"<snapshot>\n");
     output.push_str("    \"###\n");
@@ -553,14 +575,21 @@ fn render_lock_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
         output.push_str("        );\n");
         output.push_str("    });\n\n");
         output.push_str("    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).\n");
-        output.push_str("    context\n");
-        output.push_str("        .lock()\n");
-        output.push_str("        .arg(\"--locked\")\n");
-        output.push_str("        .env_remove(EnvVars::UV_EXCLUDE_NEWER)\n");
-        output.push_str("        .arg(\"--index-url\")\n");
-        output.push_str("        .arg(server.index_url())\n");
-        output.push_str("        .assert()\n");
-        output.push_str("        .success();\n");
+        if workspace {
+            output.push_str("    let mut locked = context.lock();\n");
+            output.push_str("    locked.arg(\"--locked\");\n");
+            output.push_str("    server.configure(&mut locked);\n");
+            output.push_str("    locked.assert().success();\n");
+        } else {
+            output.push_str("    context\n");
+            output.push_str("        .lock()\n");
+            output.push_str("        .arg(\"--locked\")\n");
+            output.push_str("        .env_remove(EnvVars::UV_EXCLUDE_NEWER)\n");
+            output.push_str("        .arg(\"--index-url\")\n");
+            output.push_str("        .arg(server.index_url())\n");
+            output.push_str("        .assert()\n");
+            output.push_str("        .success();\n");
+        }
     }
     output.push('\n');
     output.push_str("    Ok(())\n");
@@ -955,6 +984,41 @@ mod tests {
         let scenarios = load_scenarios().expect("vendored scenarios should parse");
 
         assert!(!scenarios.is_empty());
+    }
+
+    #[test]
+    fn workspace_lock_scenario_uses_shared_materializer() {
+        let temporary_directory =
+            tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::write(
+            temporary_directory.path().join("workspace.toml"),
+            r#"
+name = "workspace"
+
+[resolver_options]
+universal = true
+
+[root]
+requires = []
+
+[root.workspace.project]
+name = "project"
+version = "0.1.0"
+
+[expected]
+satisfiable = true
+"#,
+        )
+        .expect("scenario should be written");
+        let scenarios = load_scenarios_from(temporary_directory.path())
+            .expect("scenario directory should load");
+        let cases = scenarios.iter().collect::<Vec<_>>();
+
+        let output = render(TemplateKind::Lock, &cases).expect("lock suite should render");
+
+        assert!(output.contains("use uv_test::packse::scenario::Scenario;"));
+        assert!(output.contains("scenario.materialize_workspace(&context.temp_dir)?;"));
+        assert!(!output.contains("let pyproject_toml"));
     }
 
     #[test]
