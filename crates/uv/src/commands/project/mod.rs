@@ -1098,7 +1098,7 @@ fn discover_project_environment(
 }
 
 /// Return whether to use centralized project environments for this invocation.
-fn centralized_environments_enabled(
+pub(crate) fn centralized_environments_enabled(
     selection: &ProjectEnvironmentSelection,
     cache: &Cache,
 ) -> bool {
@@ -1115,7 +1115,7 @@ fn centralized_environments_enabled(
 }
 
 /// Return whether `path` is a link into the current cache's environment bucket.
-fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
+pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
     let Ok(target) = fs_err::read_link(path) else {
         return false;
     };
@@ -1139,7 +1139,7 @@ fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
 }
 
 /// Return the centralized environment path for a given workspace and interpreter.
-fn centralized_environment_root(
+pub(crate) fn centralized_environment_root(
     workspace: &Workspace,
     interpreter: &Interpreter,
     upgradeable: bool,
@@ -1203,11 +1203,11 @@ pub(crate) enum LinkErrorReporting {
 }
 
 /// Point the workspace's `.venv` to the centralized environment.
-fn update_project_environment_link(
+pub(crate) fn update_project_environment_link(
     environment: &PythonEnvironment,
     workspace: &Workspace,
     link_error_reporting: LinkErrorReporting,
-) {
+) -> bool {
     let link = workspace.install_path().join(".venv");
     let report_error = |message: &str, err: &std::io::Error| match link_error_reporting {
         LinkErrorReporting::User => {
@@ -1220,22 +1220,26 @@ fn update_project_environment_link(
         if uv_fs::is_virtualenv_base(&link) {
             if let Err(err) = uv_fs::remove_virtualenv(&link) {
                 report_error("Failed to remove existing local virtual environment", &err);
-                return;
+                return false;
             }
         } else {
             // On Windows, copying a junction can produce an empty directory.
             #[cfg(windows)]
             if let Err(err) = fs_err::remove_dir(&link) {
                 report_error("Failed to create link to project environment", &err);
-                return;
+                return false;
             }
         }
     }
 
     // TODO(tk): When directory links are unavailable, write `.venv` as a file containing the
     // environment path.
-    if let Err(err) = uv_fs::replace_symlink(environment.root(), &link) {
-        report_error("Failed to create link to project environment", &err);
+    match uv_fs::replace_symlink(environment.root(), &link) {
+        Ok(()) => true,
+        Err(err) => {
+            report_error("Failed to create link to project environment", &err);
+            false
+        }
     }
 }
 
