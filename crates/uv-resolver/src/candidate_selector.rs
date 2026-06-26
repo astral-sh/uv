@@ -470,6 +470,23 @@ impl CandidateSelector {
         )
     }
 
+    pub(crate) fn select_no_preference_for_prerelease<'a>(
+        &'a self,
+        package_name: &'a PackageName,
+        range: &Ranges<Version>,
+        version_maps: &'a [VersionMap],
+        preference: PrereleasePreference,
+        env: &ResolverEnvironment,
+    ) -> Option<Candidate<'a>> {
+        self.select_no_preference_with(
+            package_name,
+            range,
+            version_maps,
+            self.prerelease_mode.selection(preference),
+            env,
+        )
+    }
+
     fn select_no_preference_with<'a>(
         &'a self,
         package_name: &'a PackageName,
@@ -848,6 +865,11 @@ impl<'a> Candidate<'a> {
     /// Return the version of the package.
     pub(crate) fn version(&self) -> &Version {
         self.version
+    }
+
+    /// Return the pre-release preference dimension selected by PubGrub.
+    pub(crate) fn prerelease_preference(&self) -> PrereleasePreference {
+        self.preference
     }
 
     /// Return the candidate as a version in PubGrub's expanded version universe.

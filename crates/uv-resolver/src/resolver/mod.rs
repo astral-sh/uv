@@ -579,19 +579,28 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Only consider registry packages for prefetch.
                     if url.is_none() {
-                        let versions = term_intersection.unwrap_positive().versions();
+                        let preference = version.preference();
+                        let versions = term_intersection
+                            .unwrap_positive()
+                            .preference(preference)
+                            .clone();
                         let unchangeable_constraints = state
                             .pubgrub
                             .partial_solution
                             .unchanging_term_for_package(next_id)
                             .map(|term| match term {
-                                Term::Positive(range) => Term::Positive(range.versions()),
-                                Term::Negative(range) => Term::Negative(range.versions()),
+                                Term::Positive(range) => {
+                                    Term::Positive(range.preference(preference).clone())
+                                }
+                                Term::Negative(range) => {
+                                    Term::Negative(range.preference(preference).clone())
+                                }
                             });
                         state.prefetcher.prefetch_batches(
                             next_package,
                             index,
                             version.version(),
+                            preference,
                             &versions,
                             unchangeable_constraints.as_ref(),
                             &state.python_requirement,
@@ -1086,7 +1095,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             request_sink.blocking_send(Request::Prefetch(
                 name.clone(),
-                range.versions(),
+                range.clone(),
                 python_requirement.clone(),
             ))?;
         }
@@ -2598,15 +2607,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // Prefetch runs before package selection, so use the stable-first dimension.
                 let env = ResolverEnvironment::universal(vec![]);
-                let pubgrub_range = self.selector.prerelease_mode().range(range.clone(), false);
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
                 let Some(candidate) = self.selector.select(
                     &package_name,
-                    &pubgrub_range,
+                    &range,
                     version_map,
                     &self.preferences,
                     &self.installed_packages,
@@ -2663,7 +2670,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // incompatible with modern build tools.
                 if dist.wheel().is_none() {
                     if !self.selector.use_highest_version(&package_name, &env) {
-                        if let Some((lower, _)) = range.iter().next() {
+                        if let Some((lower, _)) = range
+                            .preference(candidate.prerelease_preference())
+                            .iter()
+                            .next()
+                        {
                             if lower == &Bound::Unbounded {
                                 debug!(
                                     "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
@@ -3664,7 +3675,6 @@ impl ResolutionDependencyEdge {
 
 /// Fetch the metadata for an item
 #[derive(Debug)]
-#[expect(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
     Package(PackageName, Option<IndexMetadata>),
@@ -3673,7 +3683,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
-    Prefetch(PackageName, Ranges<Version>, PythonRequirement),
+    Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
 
 impl<'a> From<ResolvedDistRef<'a>> for Request {

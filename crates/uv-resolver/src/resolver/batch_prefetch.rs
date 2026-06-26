@@ -8,7 +8,7 @@ use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::pubgrub::{PrereleasePreference, PubGrubPackage, PubGrubPackageInner};
 use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
@@ -83,6 +83,7 @@ impl BatchPrefetcher {
         next: &PubGrubPackage,
         index: Option<&IndexMetadata>,
         version: &Version,
+        preference: PrereleasePreference,
         current_range: &Range<Version>,
         unchangeable_constraints: Option<&Term<Range<Version>>>,
         python_requirement: &PythonRequirement,
@@ -133,6 +134,7 @@ impl BatchPrefetcher {
             total_prefetch,
             &versions_response,
             phase,
+            preference,
             python_requirement,
             selector,
             env,
@@ -213,6 +215,7 @@ impl BatchPrefetcherRunner {
         total_prefetch: usize,
         versions_response: &Arc<VersionsResponse>,
         mut phase: BatchPrefetchStrategy,
+        preference: PrereleasePreference,
         python_requirement: &PythonRequirement,
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
@@ -228,9 +231,13 @@ impl BatchPrefetcherRunner {
                     compatible,
                     previous,
                 } => {
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
-                    {
+                    if let Some(candidate) = selector.select_no_preference_for_prerelease(
+                        name,
+                        &compatible,
+                        version_map,
+                        preference,
+                        env,
+                    ) {
                         let compatible = compatible.intersection(
                             &Range::singleton(candidate.version().clone()).complement(),
                         );
@@ -263,9 +270,13 @@ impl BatchPrefetcherRunner {
                             }
                         };
                     }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
+                    if let Some(candidate) = selector.select_no_preference_for_prerelease(
+                        name,
+                        &range,
+                        version_map,
+                        preference,
+                        env,
+                    ) {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
                         };
