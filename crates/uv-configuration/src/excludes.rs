@@ -112,6 +112,35 @@ impl Excludes {
         self.contains_for_package(Some((package, version)), dependency)
     }
 
+    /// Check if a dependency is always excluded from a package scope.
+    ///
+    /// A versionless scope remains eligible if any exact-version exclusion allows the dependency.
+    pub fn contains_for_scope(
+        &self,
+        package: &PackageName,
+        version: Option<&Version>,
+        dependency: &PackageName,
+    ) -> bool {
+        if let Some(version) = version {
+            return self.contains_for(package, version, dependency);
+        }
+        if self.contains(dependency) {
+            return true;
+        }
+
+        let Some(entries) = self.scoped.get(package) else {
+            return false;
+        };
+        entries
+            .iter()
+            .find(|entry| entry.version.is_none())
+            .is_some_and(|entry| entry.excludes.contains(dependency))
+            && entries
+                .iter()
+                .filter(|entry| entry.version.is_some())
+                .all(|entry| entry.excludes.contains(dependency))
+    }
+
     /// Check if a dependency is excluded with optional package-version context.
     pub fn contains_for_package(
         &self,
