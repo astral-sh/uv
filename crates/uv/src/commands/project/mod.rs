@@ -1202,7 +1202,8 @@ pub(crate) enum LinkErrorReporting {
     Log,
 }
 
-/// Point the workspace's `.venv` to the centralized environment.
+/// Point the workspace's `.venv` to the centralized environment, returning whether the link was
+/// successfully updated.
 pub(crate) fn update_project_environment_link(
     environment: &PythonEnvironment,
     workspace: &Workspace,
