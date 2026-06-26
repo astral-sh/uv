@@ -11,6 +11,98 @@ use uv_test::uv_snapshot;
 // They are split from `lock.rs` somewhat arbitrarily. Mostly because there are
 // a lot of them, and `lock.rs` was growing large enough as it is.
 
+/// Conflict discovery can provisionally visit a package that is later excluded after all
+/// transitive extras have been activated. Its dependencies must be evaluated under the package's
+/// reachability marker during that preliminary traversal.
+#[test]
+fn extra_conflict_discovery_respects_parent_reachability() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        feature = ["x[foo]"]
+
+        [tool.uv]
+        conflicts = [[
+            { package = "x", extra = "foo" },
+            { package = "q", extra = "bar" },
+        ]]
+        "#,
+    )?;
+
+    // This is the lock shape produced when `parent`'s reachability marker is removed from its
+    // outgoing edge: the edge is only valid in the context of `parent`, but conflict discovery
+    // traverses `parent` before it knows that `x[foo]` makes the package unreachable.
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        conflicts = [[
+            { package = "q", extra = "bar" },
+            { package = "x", extra = "foo" },
+        ]]
+
+        [[package]]
+        name = "parent"
+        source = { virtual = "parent" }
+        dependencies = [
+            { name = "q", extra = ["bar"] },
+        ]
+
+        [[package]]
+        name = "project"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent", marker = "extra != 'extra-1-x-foo'" },
+        ]
+
+        [package.optional-dependencies]
+        feature = [
+            { name = "x", extra = ["foo"] },
+        ]
+
+        [package.metadata]
+        provides-extras = ["feature"]
+
+        [[package]]
+        name = "q"
+        source = { virtual = "q" }
+
+        [package.optional-dependencies]
+        bar = []
+
+        [[package]]
+        name = "x"
+        source = { virtual = "x" }
+
+        [package.optional-dependencies]
+        foo = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--extra")
+        .arg("feature")
+        .arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// This tests a "basic" case for specifying conflicting extras.
 ///
 /// Namely, we check that 1) without declaring them conflicting,

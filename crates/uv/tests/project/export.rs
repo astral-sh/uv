@@ -694,7 +694,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             version = "1.16.0"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "pycparser", marker = "sys_platform == 'win32'" },
+                { name = "pycparser" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/68/ce/95b0bae7968c65473e1298efb042e10cafc7bafc14d9e4f154008241c91d/cffi-1.16.0.tar.gz", hash = "sha256:bcb3ef43e58665bbda2fb198698fcae6776483e0c4a631aa5647806c25e02cc0", size = 512873, upload-time = "2023-09-28T18:02:04.656Z" }
             wheels = [
@@ -716,7 +716,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             version = "1.3.0.post0"
             source = { registry = "https://pypi.org/simple" }
             dependencies = [
-                { name = "attrs", marker = "sys_platform == 'darwin' or sys_platform == 'win32'" },
+                { name = "attrs" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/98/df/77698abfac98571e65ffeb0c1fba8ffd692ab8458d617a0eed7d9a8d38f2/outcome-1.3.0.post0.tar.gz", hash = "sha256:9dcf02e65f2971b80047b377468e72a268e15c0af3cf1238e6ff14f7f91143b8", size = 21060, upload-time = "2023-10-26T04:26:04.361Z" }
             wheels = [
@@ -773,13 +773,13 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
                 "sys_platform == 'win32'",
             ]
             dependencies = [
-                { name = "async-generator", marker = "sys_platform == 'win32'" },
-                { name = "attrs", marker = "sys_platform == 'win32'" },
-                { name = "cffi", marker = "os_name == 'nt' and sys_platform == 'win32'" },
-                { name = "idna", marker = "sys_platform == 'win32'" },
-                { name = "outcome", marker = "sys_platform == 'win32'" },
-                { name = "sniffio", marker = "sys_platform == 'win32'" },
-                { name = "sortedcontainers", marker = "sys_platform == 'win32'" },
+                { name = "async-generator" },
+                { name = "attrs" },
+                { name = "cffi", marker = "os_name == 'nt'" },
+                { name = "idna" },
+                { name = "outcome" },
+                { name = "sniffio" },
+                { name = "sortedcontainers" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/e6/20/37be7b5f47db6a9fbf905b5de5386e5b7193c45d07becb750db6f03cd117/trio-0.10.0.tar.gz", hash = "sha256:d323cc15f6406d15954af91e5e34af2001cc24163fdde29e3f88a227a1b53ab0", size = 402511, upload-time = "2019-01-08T09:59:04.649Z" }
 
@@ -791,11 +791,11 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
                 "sys_platform == 'darwin'",
             ]
             dependencies = [
-                { name = "attrs", marker = "sys_platform == 'darwin'" },
-                { name = "idna", marker = "sys_platform == 'darwin'" },
-                { name = "outcome", marker = "sys_platform == 'darwin'" },
-                { name = "sniffio", marker = "sys_platform == 'darwin'" },
-                { name = "sortedcontainers", marker = "sys_platform == 'darwin'" },
+                { name = "attrs" },
+                { name = "idna" },
+                { name = "outcome" },
+                { name = "sniffio" },
+                { name = "sortedcontainers" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/b4/51/4f5ae37ec58768b9c30e5bc5b89431a7baf3fa9d0dda98983af6ef55eb47/trio-0.25.0.tar.gz", hash = "sha256:9b41f5993ad2c0e5f62d0acca320ec657fdb6b2a2c22b8c7aed6caf154475c4e", size = 551863, upload-time = "2024-03-17T02:53:47.736Z" }
             wheels = [
@@ -1707,8 +1707,8 @@ fn requirements_txt_non_project_fork() -> Result<()> {
                 "sys_platform == 'win32'",
             ]
             dependencies = [
-                { name = "idna", marker = "sys_platform == 'win32'" },
-                { name = "sniffio", marker = "sys_platform == 'win32'" },
+                { name = "idna" },
+                { name = "sniffio" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/daeadb9b34093d3968afcc93946ee567cd6d2b402a96c608cb160f74d737/anyio-2.0.0.tar.gz", hash = "sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826", size = 91291, upload-time = "2020-09-11T09:22:49.334Z" }
             wheels = [
@@ -1724,8 +1724,8 @@ fn requirements_txt_non_project_fork() -> Result<()> {
                 "sys_platform != 'linux' and sys_platform != 'win32'",
             ]
             dependencies = [
-                { name = "idna", marker = "sys_platform != 'win32'" },
-                { name = "sniffio", marker = "sys_platform != 'win32'" },
+                { name = "idna" },
+                { name = "sniffio" },
             ]
             sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952, upload-time = "2021-04-20T14:02:14.75Z" }
             wheels = [
@@ -2879,8 +2879,8 @@ fn requirements_txt_script() -> Result<()> {
             "sys_platform == 'win32'",
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform == 'win32'" },
-            { name = "sniffio", marker = "sys_platform == 'win32'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/daeadb9b34093d3968afcc93946ee567cd6d2b402a96c608cb160f74d737/anyio-2.0.0.tar.gz", hash = "sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826", size = 91291, upload-time = "2020-09-11T09:22:49.334Z" }
         wheels = [
@@ -2895,8 +2895,8 @@ fn requirements_txt_script() -> Result<()> {
             "sys_platform == 'linux'",
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform == 'linux'" },
-            { name = "sniffio", marker = "sys_platform == 'linux'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952, upload-time = "2021-04-20T14:02:14.75Z" }
         wheels = [
@@ -2999,8 +2999,8 @@ fn requirements_txt_script() -> Result<()> {
             "sys_platform == 'win32'",
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform == 'win32'" },
-            { name = "sniffio", marker = "sys_platform == 'win32'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/daeadb9b34093d3968afcc93946ee567cd6d2b402a96c608cb160f74d737/anyio-2.0.0.tar.gz", hash = "sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826", size = 91291, upload-time = "2020-09-11T09:22:49.334Z" }
         wheels = [
@@ -3015,8 +3015,8 @@ fn requirements_txt_script() -> Result<()> {
             "sys_platform == 'linux'",
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform == 'linux'" },
-            { name = "sniffio", marker = "sys_platform == 'linux'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952, upload-time = "2021-04-20T14:02:14.75Z" }
         wheels = [
