@@ -22,7 +22,7 @@ use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
+    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -164,49 +164,30 @@ impl<'a> RegistryClientBuilder<'a> {
         Ok(())
     }
 
-    pub fn build(mut self) -> Result<RegistryClient, ClientBuildError> {
-        self.cache_index_credentials()?;
-        let index_urls = self.index_locations.index_urls();
-
-        // Build a base client
-        let builder = self
-            .base_client_builder
-            .indexes(Indexes::from(&self.index_locations));
-
-        let client = builder.build()?;
-
-        let read_timeout = client.read_timeout();
-        let connectivity = client.connectivity();
-
-        // Wrap in the cache middleware.
-        let client = CachedClient::new(client);
-
-        Ok(RegistryClient {
-            index_urls,
-            index_strategy: self.index_strategy,
-            torch_backend: self.torch_backend,
-            cache: self.cache,
-            connectivity,
-            client,
-            read_timeout,
-            flat_indexes: Arc::default(),
-            pyx_token_store: PyxTokenStore::from_settings().ok(),
-        })
+    pub fn build(self) -> Result<RegistryClient, ClientBuildError> {
+        self.build_inner(None)
     }
 
     /// Share the underlying client between two different middleware configurations.
-    pub fn wrap_existing(
+    pub fn wrap_existing(self, existing: &BaseClient) -> Result<RegistryClient, ClientBuildError> {
+        self.build_inner(Some(existing))
+    }
+
+    fn build_inner(
         mut self,
-        existing: &BaseClient,
+        existing: Option<&BaseClient>,
     ) -> Result<RegistryClient, ClientBuildError> {
         self.cache_index_credentials()?;
-        let index_urls = self.index_locations.index_urls();
 
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self
+        let builder = self
             .base_client_builder
-            .indexes(Indexes::from(&self.index_locations))
-            .wrap_existing(existing);
+            .indexes(Indexes::from(&self.index_locations));
+        let client = if let Some(existing) = existing {
+            builder.wrap_existing(existing)
+        } else {
+            builder.build()?
+        };
 
         let read_timeout = client.read_timeout();
         let connectivity = client.connectivity();
@@ -215,7 +196,7 @@ impl<'a> RegistryClientBuilder<'a> {
         let client = CachedClient::new(client);
 
         Ok(RegistryClient {
-            index_urls,
+            indexes: self.index_locations,
             index_strategy: self.index_strategy,
             torch_backend: self.torch_backend,
             cache: self.cache,
@@ -231,8 +212,8 @@ impl<'a> RegistryClientBuilder<'a> {
 /// A client for fetching packages from a `PyPI`-compatible index.
 #[derive(Debug, Clone)]
 pub struct RegistryClient {
-    /// The index URLs to use for fetching packages.
-    index_urls: IndexUrls,
+    /// The indexes to use for fetching packages.
+    indexes: IndexLocations,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
     /// The strategy to use when selecting a PyTorch backend, if any.
@@ -305,7 +286,9 @@ impl RegistryClient {
                     .map(|indexes| indexes.map(IndexMetadataRef::from))
             })
             .map(Either::Left)
-            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(IndexMetadataRef::from)))
+            .unwrap_or_else(|| {
+                Either::Right(self.indexes.fetch_indexes().map(IndexMetadataRef::from))
+            })
     }
 
     /// Return the appropriate [`IndexStrategy`] for the given [`PackageName`].
@@ -337,7 +320,7 @@ impl RegistryClient {
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
-        if self.index_urls.no_index() {
+        if self.indexes.no_index() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
@@ -357,7 +340,7 @@ impl RegistryClient {
                     match index.format {
                         IndexFormat::Simple => {
                             let status_code_strategy =
-                                self.index_urls.status_code_strategy_for(index.url);
+                                self.indexes.status_code_strategy_for(index.url);
                             match self
                                 .simple_detail_single_index(
                                     package_name,
@@ -455,7 +438,7 @@ impl RegistryClient {
         package_name: &PackageName,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<FlatIndexEntry>, Error> {
-        Ok(futures::stream::iter(self.index_urls.flat_indexes())
+        Ok(futures::stream::iter(self.indexes.flat_indexes())
             .map(async |index| {
                 let _permit = download_concurrency.acquire().await;
                 self.flat_single_index(package_name, index.url()).await
@@ -545,7 +528,7 @@ impl RegistryClient {
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => {
-                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                if let Some(header) = self.indexes.simple_api_cache_control_for(index) {
                     CacheControl::Override(header)
                 } else {
                     CacheControl::from(
@@ -805,7 +788,7 @@ impl RegistryClient {
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => {
-                if let Some(header) = self.index_urls.simple_api_cache_control_for(index) {
+                if let Some(header) = self.indexes.simple_api_cache_control_for(index) {
                     CacheControl::Override(header)
                 } else {
                     CacheControl::from(
@@ -1091,7 +1074,7 @@ impl RegistryClient {
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => {
-                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                    if let Some(header) = self.indexes.artifact_cache_control_for(index) {
                         CacheControl::Override(header)
                     } else {
                         CacheControl::from(
@@ -1168,7 +1151,7 @@ impl RegistryClient {
         let cache_control = match self.connectivity {
             Connectivity::Online => {
                 if let Some(index) = index {
-                    if let Some(header) = self.index_urls.artifact_cache_control_for(index) {
+                    if let Some(header) = self.indexes.artifact_cache_control_for(index) {
                         CacheControl::Override(header)
                     } else {
                         CacheControl::from(
