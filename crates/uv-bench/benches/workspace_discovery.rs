@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 
+use uv::GlobalInitialization;
 use uv::commands::ExitStatus;
 use uv_cache::Cache;
 use uv_cli::Cli;
@@ -301,14 +302,14 @@ fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
     run_cli(
         &runtime,
         run_python_version_cli(&workspace_dir, &cache_dir, false),
-        true,
+        GlobalInitialization::Initialize,
         "Failed to warm synthetic workspace run benchmark",
     );
     // Warm cache reading
     run_cli(
         &runtime,
         run_python_version_cli(&workspace_dir, &cache_dir, true),
-        false,
+        GlobalInitialization::Reuse,
         "Failed to warm offline synthetic workspace run benchmark",
     );
 
@@ -319,7 +320,7 @@ fn run_python_version_synthetic_workspace(c: &mut Criterion<WallTime>) {
             run_cli(
                 &runtime,
                 cli,
-                false,
+                GlobalInitialization::Reuse,
                 "Failed to run synthetic workspace benchmark",
             );
         });
@@ -346,11 +347,19 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
     Cli::try_parse_from(args).expect("Failed to parse synthetic workspace run benchmark arguments")
 }
 
-fn run_cli(runtime: &tokio::runtime::Runtime, cli: Cli, initialize_globals: bool, message: &str) {
+fn run_cli(
+    runtime: &tokio::runtime::Runtime,
+    cli: Cli,
+    global_initialization: GlobalInitialization,
+    message: &str,
+) {
     let status = runtime
-        .block_on(uv::run(cli, initialize_globals))
+        .block_on(uv::run(cli, global_initialization))
         .expect(message);
-    assert!(matches!(status, ExitStatus::Success), "{message}");
+    assert!(
+        matches!(status, ExitStatus::Success | ExitStatus::External(0)),
+        "{message}"
+    );
 }
 
 criterion_group!(
