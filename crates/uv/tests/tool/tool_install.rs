@@ -6679,3 +6679,52 @@ fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that changing a constraint invalidates an otherwise reusable tool lock.
+#[test]
+fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("platformdirs>=4\n")?;
+
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    constraints_txt.write_str("platformdirs<4\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - platformdirs==4.2.0
+     + platformdirs==3.11.0
+    Installed 2 executables: black, blackd
+    ");
+
+    Ok(())
+}
