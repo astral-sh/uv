@@ -5,7 +5,7 @@ use futures::stream::FuturesUnordered;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{Constraints, Excludes, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{Dist, Identifier, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
@@ -36,6 +36,8 @@ pub struct LookaheadResolver<'a, Context: BuildContext> {
     constraints: &'a Constraints,
     /// The overrides for the project.
     overrides: &'a Overrides,
+    /// The dependency exclusions for the project.
+    excludes: &'a Excludes,
     /// The required hashes for the project.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -50,6 +52,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         requirements: &'a [Requirement],
         constraints: &'a Constraints,
         overrides: &'a Overrides,
+        excludes: &'a Excludes,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
@@ -58,6 +61,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
             requirements,
             constraints,
             overrides,
+            excludes,
             hasher,
             index,
             database,
@@ -92,6 +96,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut queue: VecDeque<_> = self
             .constraints
             .apply(self.overrides.apply(self.requirements))
+            .filter(|requirement| !self.excludes.contains(&requirement.name))
             .filter(|requirement| requirement.evaluate_markers(env.marker_environment(), &[]))
             .map(|requirement| (*requirement).clone())
             .collect();
@@ -107,13 +112,25 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
 
             while let Some(result) = futures.next().await {
                 if let Some(lookahead) = result? {
-                    hasher = hasher.augment_with_requirements(lookahead.requirements().iter())?;
+                    hasher = hasher.augment_with_requirements(
+                        lookahead.requirements().iter().filter(|requirement| {
+                            !self.excludes.contains_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                &requirement.name,
+                            )
+                        }),
+                    )?;
                     for requirement in self.constraints.apply(self.overrides.apply_for(
                         lookahead.package(),
                         lookahead.version(),
                         lookahead.requirements(),
                     )) {
-                        if requirement
+                        if !self.excludes.contains_for(
+                            lookahead.package(),
+                            lookahead.version(),
+                            &requirement.name,
+                        ) && requirement
                             .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
                             queue.push_back((*requirement).clone());

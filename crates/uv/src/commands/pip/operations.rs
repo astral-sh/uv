@@ -324,6 +324,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 &requirements,
                 &constraints,
                 &overrides,
+                &excludes,
                 &hasher,
                 index,
                 DistributionDatabase::new(
