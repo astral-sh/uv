@@ -536,7 +536,7 @@ pub(crate) async fn check(
                 let resolution = project::toolchain::resolution_from_lock(
                     project,
                     result.lock(),
-                    tool.package(),
+                    &tool,
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;
