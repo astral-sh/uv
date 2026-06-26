@@ -63,7 +63,7 @@ impl PubGrubPriorities {
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(index))
                 } else if versions.as_singleton().is_some()
-                    || SentinelRange::from(&versions).is_sentinel()
+                    || SentinelRange::from(versions.as_ref()).is_sentinel()
                 {
                     PubGrubPriority::Singleton(Reverse(index))
                 } else {
@@ -88,7 +88,7 @@ impl PubGrubPriorities {
                 let priority = if urls.get(name).is_some() {
                     PubGrubPriority::DirectUrl(Reverse(len))
                 } else if versions.as_singleton().is_some()
-                    || SentinelRange::from(&versions).is_sentinel()
+                    || SentinelRange::from(versions.as_ref()).is_sentinel()
                 {
                     PubGrubPriority::Singleton(Reverse(len))
                 } else {

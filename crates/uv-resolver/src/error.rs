@@ -437,7 +437,7 @@ pub(crate) fn collapse_prerelease_preferences(
     derivation_tree: pubgrub::NoSolutionError<UvDependencyProvider>,
 ) -> ErrorTree {
     enum Task {
-        Visit(StackSafeSolverErrorTree),
+        Visit(Box<StackSafeSolverErrorTree>),
         Rebuild(DerivedMetadata),
     }
 
@@ -447,18 +447,18 @@ pub(crate) fn collapse_prerelease_preferences(
                 External::NotRoot(package, version.into_version())
             }
             External::NoVersions(package, versions) => {
-                External::NoVersions(package, versions.versions())
+                External::NoVersions(package, versions.versions().into_owned())
             }
             External::FromDependencyOf(package, versions, dependency, dependency_versions) => {
                 External::FromDependencyOf(
                     package,
-                    versions.versions(),
+                    versions.versions().into_owned(),
                     dependency,
-                    dependency_versions.versions(),
+                    dependency_versions.versions().into_owned(),
                 )
             }
             External::Custom(package, versions, reason) => {
-                External::Custom(package, versions.versions(), reason)
+                External::Custom(package, versions.versions().into_owned(), reason)
             }
         }
     }
@@ -476,8 +476,8 @@ pub(crate) fn collapse_prerelease_preferences(
             .into_iter()
             .map(|(package, term)| {
                 let term = match term {
-                    Term::Positive(versions) => Term::Positive(versions.versions()),
-                    Term::Negative(versions) => Term::Negative(versions.versions()),
+                    Term::Positive(versions) => Term::Positive(versions.versions().into_owned()),
+                    Term::Negative(versions) => Term::Negative(versions.versions().into_owned()),
                 };
                 (package, term)
             })
@@ -485,24 +485,26 @@ pub(crate) fn collapse_prerelease_preferences(
         (DerivedMetadata { terms, shared_id }, cause1, cause2)
     }
 
-    let mut tasks = vec![Task::Visit(StackSafeSolverErrorTree::new(derivation_tree))];
+    let mut tasks = vec![Task::Visit(Box::new(StackSafeSolverErrorTree::new(
+        derivation_tree,
+    )))];
     let mut results = Vec::new();
 
     while let Some(task) = tasks.pop() {
         match task {
-            Task::Visit(tree) => match tree.into_inner() {
+            Task::Visit(tree) => match (*tree).into_inner() {
                 DerivationTree::External(external) => results.push(StackSafeErrorTree::new(
                     DerivationTree::External(normalize_external(external)),
                 )),
                 DerivationTree::Derived(derived) => {
                     let (metadata, cause1, cause2) = normalize_derived(derived);
                     tasks.push(Task::Rebuild(metadata));
-                    tasks.push(Task::Visit(StackSafeSolverErrorTree::new(
+                    tasks.push(Task::Visit(Box::new(StackSafeSolverErrorTree::new(
                         Arc::unwrap_or_clone(cause2),
-                    )));
-                    tasks.push(Task::Visit(StackSafeSolverErrorTree::new(
+                    ))));
+                    tasks.push(Task::Visit(Box::new(StackSafeSolverErrorTree::new(
                         Arc::unwrap_or_clone(cause1),
-                    )));
+                    ))));
                 }
             },
             Task::Rebuild(metadata) => {

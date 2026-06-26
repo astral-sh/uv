@@ -381,6 +381,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 ));
                             }
                             Ok(conflicts) => {
+                                if !conflicts.is_empty() {
+                                    state.has_ever_backtracked = true;
+                                }
                                 for (affected, incompatibility) in conflicts {
                                     // Conflict tracking: If there was a conflict, track affected and
                                     // culprit for all root cause incompatibilities
@@ -583,18 +586,25 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         let versions = term_intersection
                             .unwrap_positive()
                             .preference(preference)
-                            .clone();
+                            .cloned()
+                            .unwrap_or_else(Ranges::empty);
                         let unchangeable_constraints = state
                             .pubgrub
                             .partial_solution
                             .unchanging_term_for_package(next_id)
                             .map(|term| match term {
-                                Term::Positive(range) => {
-                                    Term::Positive(range.preference(preference).clone())
-                                }
-                                Term::Negative(range) => {
-                                    Term::Negative(range.preference(preference).clone())
-                                }
+                                Term::Positive(range) => Term::Positive(
+                                    range
+                                        .preference(preference)
+                                        .cloned()
+                                        .unwrap_or_else(Ranges::empty),
+                                ),
+                                Term::Negative(range) => Term::Negative(
+                                    range
+                                        .preference(preference)
+                                        .cloned()
+                                        .unwrap_or_else(Ranges::empty),
+                                ),
                             });
                         state.prefetcher.prefetch_batches(
                             next_package,
@@ -813,6 +823,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
                 let backtrack_level = state.pubgrub.backtrack_package(package);
                 if let Some(backtrack_level) = backtrack_level {
+                    state.has_ever_backtracked = true;
                     debug!("Backtracked {backtrack_level} decisions");
                 } else {
                     debug!(
@@ -2670,10 +2681,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // incompatible with modern build tools.
                 if dist.wheel().is_none() {
                     if !self.selector.use_highest_version(&package_name, &env) {
-                        if let Some((lower, _)) = range
-                            .preference(candidate.prerelease_preference())
-                            .iter()
-                            .next()
+                        if let Some(versions) = range.preference(candidate.prerelease_preference())
+                            && let Some((lower, _)) = versions.iter().next()
                         {
                             if lower == &Bound::Unbounded {
                                 debug!(
@@ -2983,6 +2992,11 @@ pub(crate) struct ForkState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<PubGrubVersion<Version>>>,
+    /// Whether PubGrub has backtracked during this fork's resolution.
+    ///
+    /// This mirrors PubGrub's dependency-check fast path so that shared incompatibilities can be
+    /// checked before adding a decision without registering selected-variant duplicates.
+    has_ever_backtracked: bool,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3035,6 +3049,7 @@ impl ForkState {
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            has_ever_backtracked: false,
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3152,11 +3167,6 @@ impl ForkState {
         for_version: &PubGrubVersion<Version>,
         dependencies: Vec<PubGrubDependency>,
     ) {
-        // Register dependencies shared by both solver variants over both parent variants. All
-        // dependencies from real package metadata are shared; virtual packages also have shared
-        // release-identity dependencies, while their authorization edge remains specific to
-        // `Allow`. PubGrub merges these with the selected variant's incompatibilities below while
-        // retaining the selected variant for its immediate conflict check.
         let is_real_package = matches!(
             &*self.pubgrub.package_store[for_package],
             PubGrubPackageInner::Package { .. }
@@ -3171,19 +3181,6 @@ impl ForkState {
                     preference,
                     for_version.version().clone(),
                 ));
-            }
-        }
-        let versions = Range::both(Ranges::singleton(for_version.version().clone()));
-        for dependency in &dependencies {
-            if is_real_package || dependency.version.is_preference_agnostic() {
-                let dependency_package =
-                    self.pubgrub.package_store.alloc(dependency.package.clone());
-                self.pubgrub
-                    .add_incompatibility(Incompatibility::from_dependency(
-                        for_package,
-                        versions.clone(),
-                        (dependency_package, dependency.version.clone()),
-                    ));
             }
         }
 
@@ -3205,25 +3202,78 @@ impl ForkState {
                 .add_proxy_package(proxy_package, base_package_id, version.clone());
         }
 
-        let conflict = self.pubgrub.add_package_version_dependencies(
-            self.next,
-            for_version.clone(),
-            dependencies.into_iter().map(|dependency| {
-                let PubGrubDependency {
-                    package,
-                    version,
-                    parent: _,
-                    source: _,
-                } = dependency;
-                (package, version)
-            }),
-        );
-
-        // Conflict tracking: If the version was rejected due to its dependencies, record culprit
-        // and affected.
-        if let Some(incompatibility) = conflict {
-            self.record_conflict(for_package, Some(for_version.version()), incompatibility);
+        // Add one incompatibility per dependency. Real package metadata applies to both parent
+        // preferences, while a virtual package's authorization edge applies only to the selected
+        // preference.
+        //
+        // PubGrub normally checks the incompatibilities it just created before adding the
+        // decision. Retain the first conflicting shared incompatibility here so we can perform the
+        // same check without creating a second selected-preference incompatibility for every edge.
+        let parent_versions = Range::both(Ranges::singleton(for_version.version().clone()));
+        let mut dependency_conflict = None;
+        for dependency in dependencies {
+            let dependency_package = self.pubgrub.package_store.alloc(dependency.package);
+            let conflicts = self.has_ever_backtracked
+                && dependency_conflict.is_none()
+                && self.dependency_conflicts(
+                    for_package,
+                    for_version,
+                    dependency_package,
+                    &dependency.version,
+                );
+            self.pubgrub
+                .add_incompatibility(Incompatibility::from_dependency(
+                    for_package,
+                    if is_real_package || dependency.version.is_preference_agnostic() {
+                        parent_versions.clone()
+                    } else {
+                        Range::singleton(for_version.clone())
+                    },
+                    (dependency_package, dependency.version),
+                ));
+            if conflicts {
+                // `add_incompatibility` appends the active, possibly merged ID to every package
+                // indexed by the incompatibility.
+                dependency_conflict = Some(
+                    self.pubgrub
+                        .incompatibilities
+                        .get(&for_package)
+                        .and_then(|incompatibilities| incompatibilities.last())
+                        .copied(),
+                );
+            }
         }
+
+        if let Some(incompatibility) = dependency_conflict {
+            if let Some(incompatibility) = incompatibility {
+                self.record_conflict(for_package, Some(for_version.version()), incompatibility);
+            }
+            return;
+        }
+
+        self.pubgrub
+            .partial_solution
+            .add_decision(for_package, for_version.clone());
+    }
+
+    /// Return whether the selected version's dependency contradicts the partial solution.
+    fn dependency_conflicts(
+        &self,
+        for_package: Id<PubGrubPackage>,
+        for_version: &PubGrubVersion<Version>,
+        dependency_package: Id<PubGrubPackage>,
+        dependency_versions: &Range<Version>,
+    ) -> bool {
+        if dependency_package == for_package {
+            return !dependency_versions.contains(for_version);
+        }
+        self.pubgrub
+            .partial_solution
+            .term_intersection_for_package(dependency_package)
+            .is_some_and(|term| match term {
+                Term::Positive(versions) => versions.is_disjoint(dependency_versions),
+                Term::Negative(versions) => dependency_versions.subset_of(versions),
+            })
     }
 
     fn record_conflict(

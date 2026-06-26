@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use uv_pep440::{Operator, VersionSpecifiers};
 
 use pubgrub::Ranges;
@@ -39,11 +41,10 @@ impl std::fmt::Display for PrereleaseMode {
 
 impl PrereleaseMode {
     /// Expand a structural version range into PubGrub's pre-release preference dimensions.
-    pub(crate) fn range<T: Clone>(
-        self,
-        versions: Ranges<T>,
-        explicit_prerelease: bool,
-    ) -> Range<T> {
+    pub(crate) fn range<T>(self, versions: Ranges<T>, explicit_prerelease: bool) -> Range<T>
+    where
+        T: Debug + Display + Clone + Eq + Ord,
+    {
         match (self, explicit_prerelease) {
             (Self::Disallow | Self::IfNecessary, _) => Range::prefer_stable(versions),
             (Self::Allow, _) | (Self::IfNecessaryOrExplicit, true) => Range::allow(versions),

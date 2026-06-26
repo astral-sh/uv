@@ -86,7 +86,9 @@ impl CandidateSelector {
             PrereleasePreference::PreferStable,
             PrereleasePreference::Allow,
         ] {
-            let versions = range.preference(preference);
+            let Some(versions) = range.preference(preference) else {
+                continue;
+            };
             if versions.is_empty() {
                 continue;
             }

@@ -61,7 +61,7 @@ impl DerivationChainBuilder {
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
                                     Some(selected_version.version().clone()),
-                                    v2.versions(),
+                                    v2.versions().into_owned(),
                                 ));
 
                                 // Recursively search the next package.
