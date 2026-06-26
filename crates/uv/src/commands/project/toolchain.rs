@@ -39,39 +39,24 @@ pub(crate) fn find_locked_tool<'lock>(
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<LockedTool<'lock>>> {
     let marker_environment = interpreter.resolver_marker_environment();
-    let group_package = lock
-        .find_dependency_group_package(
+    let selection = lock
+        .dependency_selection(
             project.project_name(),
-            dependency_group,
             package_name,
             marker_environment.markers(),
         )
         .map_err(anyhow::Error::msg)?;
-    let production_package = if group_package.is_none()
-        && let Some(project_name) = project.project_name()
-    {
-        lock.find_dependency_package(project_name, package_name, marker_environment.markers())
-            .map_err(anyhow::Error::msg)?
+    let (package, installed) = if let Some(package) = selection.group(dependency_group) {
+        (package, groups.contains(dependency_group))
+    } else if let Some(package) = selection.production() {
+        (package, groups.prod())
     } else {
-        None
-    };
-    let Some(package) = group_package.or(production_package) else {
         return Ok(None);
     };
 
-    let installed_by_production = groups.prod() && production_package == Some(package);
-    let installed_by_group = lock
-        .is_package_in_dependency_groups(
-            project.project_name(),
-            package,
-            marker_environment.markers(),
-            groups,
-        )
-        .map_err(anyhow::Error::msg)?;
-
     Ok(Some(LockedTool {
         package,
-        requires_separate_environment: !(installed_by_production || installed_by_group),
+        requires_separate_environment: !installed,
     }))
 }
 
