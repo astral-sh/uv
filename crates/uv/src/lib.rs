@@ -2062,7 +2062,15 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 .await
             }
             WorkspaceCommand::List(args) => {
-                commands::list(&project_dir, args.paths, &cache, &workspace_cache, printer).await
+                commands::list(
+                    &project_dir,
+                    args.paths,
+                    args.depends_on,
+                    &cache,
+                    &workspace_cache,
+                    printer,
+                )
+                .await
             }
         },
         Commands::BuildBackend { command } => spawn_blocking(move || match command {

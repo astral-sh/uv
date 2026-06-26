@@ -8375,6 +8375,14 @@ pub struct WorkspaceListArgs {
     /// Show paths instead of names.
     #[arg(long)]
     pub paths: bool,
+
+    /// Only list workspace members that depend on the given package.
+    ///
+    /// Includes direct and transitive dependencies from production dependencies, optional
+    /// dependencies, and dependency groups under at least one valid marker environment. The query
+    /// reads the existing `uv.lock` without updating it.
+    #[arg(long, value_hint = ValueHint::Other)]
+    pub depends_on: Option<PackageName>,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

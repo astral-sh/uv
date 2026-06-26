@@ -1,6 +1,6 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::PathChild;
+use assert_fs::fixture::{FileWriteStr, PathChild};
 
 use uv_test::{copy_dir_ignore, uv_snapshot};
 
@@ -231,4 +231,280 @@ fn workspace_list_no_project() {
     error: No `pyproject.toml` found in current directory or any parent directory
     "
     );
+}
+
+#[test]
+fn workspace_list_depends_on() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-x"]
+
+        [tool.uv.sources]
+        package-x = { workspace = true }
+        "#,
+    )?;
+
+    let package_c = context.temp_dir.child("packages/package-c");
+    package_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-c"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages/package-x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    // The query is deliberately lock-backed and does not mutate the project.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-x"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `[TEMP_DIR]/uv.lock` found; run `uv lock` to create it
+    ");
+
+    context.lock().assert().success();
+
+    // Both direct and transitive dependents are included; the target itself and unrelated members
+    // are not.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a
+    package-b
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-x")
+        .arg("--paths"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/packages/package-a
+    [TEMP_DIR]/packages/package-b
+
+    ----- stderr -----
+    ");
+
+    // A known target with no dependents produces an empty successful result.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-c"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Unknown package names fail instead of silently producing an empty CI matrix.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("missing"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `missing` was not found in `[TEMP_DIR]/uv.lock`
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn workspace_list_depends_on_preserves_context() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["packages/*"]
+        "#,
+    )?;
+
+    let package_p = context.temp_dir.child("packages/package-p");
+    package_p.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-p"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-x; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        package-x = { workspace = true }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p[feature]; sys_platform == 'linux'"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_b = context.temp_dir.child("packages/package-b");
+    package_b.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-b"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_c = context.temp_dir.child("packages/package-c");
+    package_c.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-c"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-p[feature]; sys_platform == 'win32'"]
+
+        [tool.uv.sources]
+        package-p = { workspace = true }
+        "#,
+    )?;
+
+    let package_x = context.temp_dir.child("packages/package-x");
+    package_x.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-x"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    let package_g = context.temp_dir.child("packages/package-g");
+    package_g.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-g"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = ["package-y"]
+
+        [tool.uv.sources]
+        package-y = { workspace = true }
+        "#,
+    )?;
+
+    let package_h = context.temp_dir.child("packages/package-h");
+    package_h.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-h"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-g"]
+
+        [tool.uv.sources]
+        package-g = { workspace = true }
+        "#,
+    )?;
+
+    let package_y = context.temp_dir.child("packages/package-y");
+    package_y.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-y"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Optional dependencies only propagate to consumers that activate the extra under a
+    // compatible marker. The package that declares the extra is itself a possible dependent.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-x"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-a
+    package-p
+
+    ----- stderr -----
+    ");
+
+    // A member's dependency groups do not become dependencies of packages that consume it.
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--depends-on")
+        .arg("package-y"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    package-g
+
+    ----- stderr -----
+    ");
+
+    Ok(())
 }
