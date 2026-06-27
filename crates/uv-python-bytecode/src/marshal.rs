@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::compiler::{CodeObject, Constant};
 
@@ -52,9 +52,9 @@ enum ObjectKey {
 
 #[derive(Debug, Default)]
 struct ObjectGraph {
-    counts: HashMap<ObjectKey, usize>,
-    expanded: HashSet<ObjectKey>,
-    interned_strings: HashSet<String>,
+    counts: FxHashMap<ObjectKey, usize>,
+    expanded: FxHashSet<ObjectKey>,
+    interned_strings: FxHashSet<String>,
 }
 
 impl ObjectGraph {
@@ -204,7 +204,7 @@ pub(crate) fn encode_code(code: &CodeObject) -> Vec<u8> {
     let mut writer = Writer {
         graph: &graph,
         output: Vec::new(),
-        references: HashMap::new(),
+        references: FxHashMap::default(),
     };
     writer.write_code(code, true);
     writer.output
@@ -214,7 +214,7 @@ pub(crate) fn encode_code(code: &CodeObject) -> Vec<u8> {
 struct Writer<'a> {
     graph: &'a ObjectGraph,
     output: Vec<u8>,
-    references: HashMap<ObjectKey, u32>,
+    references: FxHashMap<ObjectKey, u32>,
 }
 
 impl Writer<'_> {
