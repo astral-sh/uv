@@ -8,8 +8,8 @@ use ruff_python_ast::{
     StmtFunctionDef, Suite, TypeParam, UnaryOp,
 };
 use ruff_python_codegen::{Generator, Indentation, Mode as CodegenMode};
-use ruff_source_file::LineEnding;
-use ruff_text_size::Ranged;
+use ruff_source_file::{LineEnding, LineIndex};
+use ruff_text_size::{Ranged, TextSize};
 
 use crate::CompileError;
 use crate::assembler::{Assembler, InstructionId, Label, Opcode, SourceLocation};
@@ -632,6 +632,7 @@ pub(crate) struct Compiler {
     max_depth: u32,
     filename: String,
     source: Arc<str>,
+    line_index: LineIndex,
     name: String,
     qualified_name: String,
     private_name: Option<String>,
@@ -645,6 +646,7 @@ pub(crate) struct Compiler {
 
 impl Compiler {
     pub(crate) fn module(filename: &str, source: &str) -> Self {
+        let line_index = LineIndex::from_source_text(source);
         Self {
             assembler: Assembler::default(),
             constants: Vec::new(),
@@ -708,6 +710,7 @@ impl Compiler {
             max_depth: 0,
             filename: filename.to_string(),
             source: Arc::from(source),
+            line_index,
             name: "<module>".to_string(),
             qualified_name: "<module>".to_string(),
             private_name: None,
@@ -723,6 +726,7 @@ impl Compiler {
     fn function(
         filename: &str,
         source: Arc<str>,
+        line_index: LineIndex,
         name: &str,
         qualified_name: String,
         first_line_number: u32,
@@ -852,6 +856,7 @@ impl Compiler {
             max_depth: 0,
             filename: filename.to_string(),
             source,
+            line_index,
             name: name.to_string(),
             qualified_name,
             private_name: None,
@@ -867,6 +872,7 @@ impl Compiler {
     fn class(
         filename: &str,
         source: Arc<str>,
+        line_index: LineIndex,
         name: &str,
         qualified_name: String,
         first_line_number: u32,
@@ -969,6 +975,7 @@ impl Compiler {
             max_depth: 0,
             filename: filename.to_string(),
             source,
+            line_index,
             name: name.to_string(),
             qualified_name,
             private_name: Some(name.to_string()),
@@ -7399,6 +7406,7 @@ impl Compiler {
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(statement.range.start())),
@@ -7542,6 +7550,7 @@ impl Compiler {
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(
@@ -7733,6 +7742,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             definition.name.as_str(),
             qualified_name,
             first_line_number,
@@ -7947,6 +7957,7 @@ impl Compiler {
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(
@@ -8074,6 +8085,7 @@ impl Compiler {
         let mut child = Self::class(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             definition.name.as_str(),
             qualified_name,
             first_line_number,
@@ -8381,6 +8393,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             name,
             self.generic_target_qualified_name.as_ref().map_or_else(
                 || self.child_qualified_name(name),
@@ -8523,6 +8536,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             "__annotate__",
             self.generic_target_qualified_name.as_ref().map_or_else(
                 || self.child_qualified_name("__annotate__"),
@@ -8634,6 +8648,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             "__annotate__",
             self.child_qualified_name("__annotate__"),
             self.first_line_number,
@@ -8701,6 +8716,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             "__annotate__",
             "__annotate__".to_string(),
             self.line_number(u32::from(
@@ -10252,6 +10268,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             "<lambda>",
             qualified_name,
             first_line_number,
@@ -10607,6 +10624,7 @@ impl Compiler {
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
+            self.line_index.clone(),
             "<genexpr>",
             self.child_qualified_name("<genexpr>"),
             self.line_number(u32::from(generator_range.start())),
@@ -12724,16 +12742,8 @@ impl Compiler {
     }
 
     fn line_number(&self, offset: u32) -> u32 {
-        let offset = usize::try_from(offset)
-            .unwrap_or(usize::MAX)
-            .min(self.source.len());
-        1 + u32::try_from(
-            self.source[..offset]
-                .bytes()
-                .filter(|byte| *byte == b'\n')
-                .count(),
-        )
-        .unwrap_or(u32::MAX - 1)
+        u32::try_from(self.line_index.line_index(self.source_offset(offset)).get())
+            .unwrap_or(u32::MAX)
     }
 
     fn source_location(&self, range: ruff_text_size::TextRange) -> SourceLocation {
@@ -12813,21 +12823,17 @@ impl Compiler {
     }
 
     fn source_position(&self, offset: u32) -> (i32, i32) {
-        let offset = usize::try_from(offset)
-            .unwrap_or(usize::MAX)
-            .min(self.source.len());
-        let prefix = &self.source.as_bytes()[..offset];
-        let mut line = 1;
-        for byte in prefix {
-            if *byte == b'\n' {
-                line += 1;
-            }
-        }
-        let line_start = prefix
-            .iter()
-            .rposition(|byte| *byte == b'\n')
-            .map_or(0, |position| position + 1);
-        (line, i32::try_from(offset - line_start).unwrap_or(i32::MAX))
+        let offset = self.source_offset(offset);
+        let line = self.line_index.line_index(offset);
+        let line_start = self.line_index.line_start(line, &self.source);
+        (
+            i32::try_from(line.get()).unwrap_or(i32::MAX),
+            i32::try_from(u32::from(offset - line_start)).unwrap_or(i32::MAX),
+        )
+    }
+
+    fn source_offset(&self, offset: u32) -> TextSize {
+        TextSize::new(offset.min(u32::try_from(self.source.len()).unwrap_or(u32::MAX)))
     }
 
     fn source_text(&self, range: ruff_text_size::TextRange) -> &str {
@@ -17162,6 +17168,29 @@ mod tests {
         Compiler::module("example.py", source)
             .compile_module(parsed.suite())
             .unwrap();
+    }
+
+    #[test]
+    fn source_positions_use_utf8_byte_columns() {
+        let compiler = Compiler::module("example.py", "α = 1\nβγ = 2\n");
+
+        assert_eq!(compiler.source_position(0), (1, 0));
+        assert_eq!(compiler.source_position(2), (1, 2));
+        assert_eq!(compiler.source_position(7), (2, 0));
+        assert_eq!(compiler.source_position(9), (2, 2));
+        assert_eq!(compiler.source_position(11), (2, 4));
+        assert_eq!(compiler.line_number(11), 2);
+    }
+
+    #[test]
+    fn source_positions_clamp_to_eof() {
+        let source = "first\né\n";
+        let compiler = Compiler::module("example.py", source);
+        let eof = u32::try_from(source.len()).unwrap();
+
+        assert_eq!(compiler.source_position(eof), (3, 0));
+        assert_eq!(compiler.source_position(u32::MAX), (3, 0));
+        assert_eq!(compiler.line_number(u32::MAX), 3);
     }
 
     #[test]

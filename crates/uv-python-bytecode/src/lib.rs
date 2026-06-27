@@ -149,6 +149,18 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_bom_and_newlines_before_compiling() {
+        let source =
+            "\u{feff}def greet(name):\r\n    message = f\"héllo, {name}\"\r    return message\r\n";
+        let normalized = "def greet(name):\n    message = f\"héllo, {name}\"\n    return message\n";
+
+        assert_eq!(
+            compile(source, "greet.py").unwrap().marshal(),
+            compile(normalized, "greet.py").unwrap().marshal()
+        );
+    }
+
+    #[test]
     fn matches_cpython_marshal_for_an_empty_module() {
         let Some(python) = python_314() else {
             return;
