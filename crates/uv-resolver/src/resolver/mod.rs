@@ -387,11 +387,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Pre-visit all candidate packages, to allow metadata to be fetched in parallel.
                         if self.dependency_mode.is_transitive() {
                             Self::pre_visit(
-                                state
-                                    .pubgrub
-                                    .partial_solution
-                                    .prioritized_packages()
-                                    .map(|(id, range)| (&state.pubgrub.package_store[id], range)),
+                                state.pubgrub.partial_solution.prioritized_packages().map(
+                                    |(id, range)| (id, &state.pubgrub.package_store[id], range),
+                                ),
+                                &mut state.pre_visited,
                                 &self.urls,
                                 &self.indexes,
                                 &state.python_requirement,
@@ -512,20 +511,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .partial_solution
                         .term_intersection_for_package(next_id)
                         .expect("a package was chosen but we don't have a term");
-                    let decision = self.choose_version(
-                        next_package,
-                        next_id,
-                        index.map(IndexMetadata::url),
-                        term_intersection.unwrap_positive(),
-                        &mut state.pins,
-                        &preferences,
-                        &state.fork_urls,
-                        &state.env,
-                        &state.python_requirement,
-                        &state.pubgrub,
-                        &mut visited,
-                        request_sink,
-                    )?;
+                    let range = term_intersection.unwrap_positive();
+
+                    // In a specific environment, an implicit registry candidate is stable for a
+                    // given range. Avoid repeating candidate selection when PubGrub revisits an
+                    // identical decision after backtracking.
+                    let cache_selected_version = state.env.marker_environment().is_some()
+                        && url.is_none()
+                        && index.is_none();
+                    let decision = if cache_selected_version
+                        && let Some((selected_range, version)) =
+                            state.selected_versions.get(&next_id)
+                        && selected_range == range
+                    {
+                        Some(ResolverVersion::Unforked(version.clone()))
+                    } else {
+                        let decision = self.choose_version(
+                            next_package,
+                            next_id,
+                            index.map(IndexMetadata::url),
+                            range,
+                            &mut state.pins,
+                            &preferences,
+                            &state.fork_urls,
+                            &state.env,
+                            &state.python_requirement,
+                            &state.pubgrub,
+                            &mut visited,
+                            request_sink,
+                        )?;
+
+                        if cache_selected_version
+                            && let Some(ResolverVersion::Unforked(version)) = &decision
+                        {
+                            state
+                                .selected_versions
+                                .insert(next_id, (range.clone(), version.clone()));
+                        }
+
+                        decision
+                    };
 
                     // Pick the next compatible version.
                     let Some(version) = decision else {
@@ -1022,7 +1047,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// Visit the set of [`PubGrubPackage`] candidates prior to selection. This allows us to fetch
     /// metadata for all packages in parallel.
     fn pre_visit<'data>(
-        packages: impl Iterator<Item = (&'data PubGrubPackage, &'data Range<Version>)>,
+        packages: impl Iterator<
+            Item = (
+                Id<PubGrubPackage>,
+                &'data PubGrubPackage,
+                &'data Range<Version>,
+            ),
+        >,
+        pre_visited: &mut FxHashMap<Id<PubGrubPackage>, Range<Version>>,
         urls: &Urls,
         indexes: &Indexes,
         python_requirement: &PythonRequirement,
@@ -1030,7 +1062,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     ) -> Result<(), ResolveError> {
         // Iterate over the potential packages, and fetch file metadata for any of them. These
         // represent our current best guesses for the versions that we _might_ select.
-        for (package, range) in packages {
+        for (id, package, range) in packages {
             let PubGrubPackageInner::Package {
                 name,
                 extra: None,
@@ -1049,6 +1081,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if indexes.contains_key(name) {
                 continue;
             }
+            // Unit propagation often leaves a package's range unchanged. Although prefetching the
+            // same package and range is idempotent, selecting its candidate is not free.
+            if pre_visited.get(&id) == Some(range) {
+                continue;
+            }
+            pre_visited.insert(id, range.clone());
             request_sink.blocking_send(Request::Prefetch(
                 name.clone(),
                 range.clone(),
@@ -2935,6 +2973,10 @@ pub(crate) struct ForkState {
     /// This keeps track of the set of versions for each package that we've
     /// already visited during resolution. This avoids doing redundant work.
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
+    /// The last range scheduled for prefetch for each undecided package.
+    pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
+    /// The last version selected for each package and range in a specific environment.
+    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -2987,6 +3029,8 @@ impl ForkState {
             fork_indexes: ForkIndexes::default(),
             priorities: PubGrubPriorities::default(),
             added_dependencies: FxHashMap::default(),
+            pre_visited: FxHashMap::default(),
+            selected_versions: FxHashMap::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
