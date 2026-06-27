@@ -148,6 +148,7 @@ while True:
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Options {
     python: String,
+    phase: Phase,
     warmups: usize,
     samples: usize,
     cooldown: Duration,
@@ -164,13 +165,22 @@ enum Phase {
 }
 
 impl Phase {
-    const ALL: [Self; 3] = [Self::CompilerCore, Self::CompileMarshal, Self::MarshalOnly];
-
     const fn label(self) -> &'static str {
         match self {
             Self::CompilerCore => "compiler_core",
             Self::CompileMarshal => "compile_marshal",
             Self::MarshalOnly => "marshal_only",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "compiler_core" => Ok(Self::CompilerCore),
+            "compile_marshal" => Ok(Self::CompileMarshal),
+            "marshal_only" => Ok(Self::MarshalOnly),
+            _ => Err(format!(
+                "--phase must be one of compiler_core, compile_marshal, or marshal_only; got {value}"
+            )),
         }
     }
 }
@@ -373,30 +383,36 @@ fn run() -> Result<(), String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut rows = Vec::new();
-    for phase in Phase::ALL {
-        run_blocks(
-            phase,
-            "warmup",
-            options.warmups,
-            options.cooldown,
-            false,
-            &accepted,
-            &precompiled,
-            &mut python,
-            &mut rows,
-        )?;
-        run_blocks(
-            phase,
-            "measured",
-            options.samples,
-            options.cooldown,
-            true,
-            &accepted,
-            &precompiled,
-            &mut python,
-            &mut rows,
-        )?;
+    let expected_rows = expected_row_count(&options)?;
+    let mut rows = Vec::with_capacity(expected_rows);
+    run_blocks(
+        options.phase,
+        "warmup",
+        options.warmups,
+        options.cooldown,
+        false,
+        &accepted,
+        &precompiled,
+        &mut python,
+        &mut rows,
+    )?;
+    run_blocks(
+        options.phase,
+        "measured",
+        options.samples,
+        options.cooldown,
+        true,
+        &accepted,
+        &precompiled,
+        &mut python,
+        &mut rows,
+    )?;
+    if rows.len() != expected_rows {
+        return Err(format!(
+            "phase {} produced {} observations, expected {expected_rows}",
+            options.phase.label(),
+            rows.len(),
+        ));
     }
     python.finish()?;
 
@@ -408,7 +424,7 @@ fn run() -> Result<(), String> {
         accepted_source_bytes,
     )?;
     write_raw(&options.output, &metadata, &accepted, &rows)?;
-    print_summaries(&rows)?;
+    print_summaries(&rows, options.phase)?;
     Ok(())
 }
 
@@ -418,6 +434,7 @@ where
     S: Into<String>,
 {
     let mut python = None;
+    let mut phase = None;
     let mut warmups = None;
     let mut samples = None;
     let mut cooldown = None;
@@ -434,6 +451,13 @@ where
                         .next()
                         .ok_or_else(|| "--python requires an executable".to_string())?,
                 );
+            }
+            "--phase" => {
+                phase = Some(Phase::parse(
+                    &arguments
+                        .next()
+                        .ok_or_else(|| "--phase requires a value".to_string())?,
+                )?);
             }
             "--warmups" => {
                 warmups = Some(parse_positive(
@@ -483,6 +507,7 @@ where
     }
     Ok(Options {
         python: python.ok_or_else(|| "--python is required".to_string())?,
+        phase: phase.ok_or_else(|| "--phase is required".to_string())?,
         warmups: warmups.ok_or_else(|| "--warmups is required".to_string())?,
         samples: samples.ok_or_else(|| "--samples is required".to_string())?,
         cooldown: cooldown.ok_or_else(|| "--cooldown-ms is required".to_string())?,
@@ -493,7 +518,15 @@ where
 }
 
 fn usage() -> String {
-    "usage: benchmark_cpython_corpus --python PATH --warmups N --samples N --cooldown-ms N --output PATH [--limit N] ROOT ...".to_string()
+    "usage: benchmark_cpython_corpus --python PATH --phase {compiler_core|compile_marshal|marshal_only} --warmups N --samples N --cooldown-ms N --output PATH [--limit N] ROOT ...".to_string()
+}
+
+fn expected_row_count(options: &Options) -> Result<usize, String> {
+    options
+        .warmups
+        .checked_add(options.samples)
+        .and_then(|blocks| blocks.checked_mul(4))
+        .ok_or_else(|| "warmup and sample counts produce too many observations".to_string())
 }
 
 fn parse_positive(value: &str, option: &str) -> Result<usize, String> {
@@ -877,6 +910,7 @@ fn metadata(
         ),
         ("python_version".to_string(), EXPECTED_VERSION.to_string()),
         ("python_magic".to_string(), EXPECTED_MAGIC.to_string()),
+        ("phase".to_string(), options.phase.label().to_string()),
         ("warmups".to_string(), options.warmups.to_string()),
         ("samples".to_string(), options.samples.to_string()),
         cooldown_metadata(options),
@@ -990,58 +1024,56 @@ fn write_raw(
         .map_err(|error| format!("failed to write {}: {error}", output.display()))
 }
 
-fn print_summaries(rows: &[RawRow]) -> Result<(), String> {
+fn print_summaries(rows: &[RawRow], phase: Phase) -> Result<(), String> {
     for metric in Metric::ALL {
-        for phase in Phase::ALL {
-            let blocks = block_samples(rows, phase.label(), metric)?;
-            let rust = blocks
-                .iter()
-                .map(|block| block.rust_mean_ns)
-                .collect::<Vec<_>>();
-            let cpython = blocks
-                .iter()
-                .map(|block| block.cpython_mean_ns)
-                .collect::<Vec<_>>();
-            let rust_summary = summarize(&rust)?;
-            let cpython_summary = summarize(&cpython)?;
-            let ratio_statistics = ratio_statistics(&blocks)?;
-            println!(
-                "metric={} phase={} engine=rust median_ns={:.0} p95_ns={} mad_ns={:.0} relative_mad={:.6} half_delta={:.6}",
-                metric.label(),
-                phase.label(),
-                rust_summary.median,
-                rust_summary.p95.round(),
-                rust_summary.mad,
-                rust_summary.relative_mad,
-                rust_summary.half_delta,
-            );
-            println!(
-                "metric={} phase={} engine=cpython median_ns={:.0} p95_ns={} mad_ns={:.0} relative_mad={:.6} half_delta={:.6}",
-                metric.label(),
-                phase.label(),
-                cpython_summary.median,
-                cpython_summary.p95.round(),
-                cpython_summary.mad,
-                cpython_summary.relative_mad,
-                cpython_summary.half_delta,
-            );
-            println!(
-                "metric={} phase={} block_ratio_median={:.6} block_ratio_p95={:.6} block_ratio_mad={:.6} block_ratio_relative_mad={:.6} block_ratio_half_delta={:.6} bootstrap95_low={:.6} bootstrap95_high={:.6} abba_median={} baab_median={} order_delta={} stable={}",
-                metric.label(),
-                phase.label(),
-                ratio_statistics.summary.median,
-                ratio_statistics.summary.p95,
-                ratio_statistics.summary.mad,
-                ratio_statistics.summary.relative_mad,
-                ratio_statistics.summary.half_delta,
-                ratio_statistics.bootstrap_low,
-                ratio_statistics.bootstrap_high,
-                format_optional(ratio_statistics.abba_median),
-                format_optional(ratio_statistics.baab_median),
-                format_optional(ratio_statistics.order_delta),
-                ratio_statistics.stable,
-            );
-        }
+        let blocks = block_samples(rows, phase.label(), metric)?;
+        let rust = blocks
+            .iter()
+            .map(|block| block.rust_mean_ns)
+            .collect::<Vec<_>>();
+        let cpython = blocks
+            .iter()
+            .map(|block| block.cpython_mean_ns)
+            .collect::<Vec<_>>();
+        let rust_summary = summarize(&rust)?;
+        let cpython_summary = summarize(&cpython)?;
+        let ratio_statistics = ratio_statistics(&blocks)?;
+        println!(
+            "metric={} phase={} engine=rust median_ns={:.0} p95_ns={} mad_ns={:.0} relative_mad={:.6} half_delta={:.6}",
+            metric.label(),
+            phase.label(),
+            rust_summary.median,
+            rust_summary.p95.round(),
+            rust_summary.mad,
+            rust_summary.relative_mad,
+            rust_summary.half_delta,
+        );
+        println!(
+            "metric={} phase={} engine=cpython median_ns={:.0} p95_ns={} mad_ns={:.0} relative_mad={:.6} half_delta={:.6}",
+            metric.label(),
+            phase.label(),
+            cpython_summary.median,
+            cpython_summary.p95.round(),
+            cpython_summary.mad,
+            cpython_summary.relative_mad,
+            cpython_summary.half_delta,
+        );
+        println!(
+            "metric={} phase={} block_ratio_median={:.6} block_ratio_p95={:.6} block_ratio_mad={:.6} block_ratio_relative_mad={:.6} block_ratio_half_delta={:.6} bootstrap95_low={:.6} bootstrap95_high={:.6} abba_median={} baab_median={} order_delta={} stable={}",
+            metric.label(),
+            phase.label(),
+            ratio_statistics.summary.median,
+            ratio_statistics.summary.p95,
+            ratio_statistics.summary.mad,
+            ratio_statistics.summary.relative_mad,
+            ratio_statistics.summary.half_delta,
+            ratio_statistics.bootstrap_low,
+            ratio_statistics.bootstrap_high,
+            format_optional(ratio_statistics.abba_median),
+            format_optional(ratio_statistics.baab_median),
+            format_optional(ratio_statistics.order_delta),
+            ratio_statistics.stable,
+        );
     }
     Ok(())
 }
@@ -1244,10 +1276,10 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        BOOTSTRAP_SEED, BlockSample, Engine, Metric, Options, RawRow, SourceFile, Timings,
+        BOOTSTRAP_SEED, BlockSample, Engine, Metric, Options, Phase, RawRow, SourceFile, Timings,
         block_order, block_order_label, block_samples, bootstrap_median_ci, cooldown_metadata,
-        parse_options_from, parse_sample_response, process_timer_result, ratio_statistics,
-        summarize, wait_for_cooldown, write_raw,
+        expected_row_count, parse_options_from, parse_sample_response, process_timer_result,
+        ratio_statistics, summarize, wait_for_cooldown, write_raw,
     };
 
     fn raw_row(
@@ -1279,6 +1311,8 @@ mod tests {
         let options = parse_options_from([
             "--python",
             "/opt/homebrew/bin/python3",
+            "--phase",
+            "compiler_core",
             "--warmups",
             "5",
             "--samples",
@@ -1292,6 +1326,7 @@ mod tests {
             "corpus",
         ])
         .expect("valid options");
+        assert_eq!(options.phase, Phase::CompilerCore);
         assert_eq!(options.warmups, 5);
         assert_eq!(options.samples, 21);
         assert_eq!(options.cooldown, Duration::from_millis(5000));
@@ -1300,10 +1335,76 @@ mod tests {
     }
 
     #[test]
+    fn parses_each_supported_phase() {
+        for (label, phase) in [
+            ("compiler_core", Phase::CompilerCore),
+            ("compile_marshal", Phase::CompileMarshal),
+            ("marshal_only", Phase::MarshalOnly),
+        ] {
+            let options = parse_options_from([
+                "--python",
+                "python3",
+                "--phase",
+                label,
+                "--warmups",
+                "1",
+                "--samples",
+                "1",
+                "--cooldown-ms",
+                "0",
+                "--output",
+                "samples.tsv",
+                "corpus",
+            ])
+            .expect("supported phase");
+            assert_eq!(options.phase, phase);
+        }
+    }
+
+    #[test]
+    fn requires_a_supported_phase() {
+        let missing = parse_options_from([
+            "--python",
+            "python3",
+            "--warmups",
+            "1",
+            "--samples",
+            "1",
+            "--cooldown-ms",
+            "0",
+            "--output",
+            "samples.tsv",
+            "corpus",
+        ])
+        .expect_err("phase is required");
+        assert_eq!(missing, "--phase is required");
+
+        let unsupported = parse_options_from([
+            "--python",
+            "python3",
+            "--phase",
+            "all",
+            "--warmups",
+            "1",
+            "--samples",
+            "1",
+            "--cooldown-ms",
+            "0",
+            "--output",
+            "samples.tsv",
+            "corpus",
+        ])
+        .expect_err("unsupported phase must fail");
+        assert!(unsupported.contains("compiler_core, compile_marshal, or marshal_only"));
+    }
+
+    #[test]
     fn rejects_zero_samples() {
         let error = parse_options_from([
             "--python",
             "python3",
+            "--phase",
+            "compiler_core",
             "--warmups",
             "1",
             "--samples",
@@ -1323,6 +1424,8 @@ mod tests {
         let error = parse_options_from([
             "--python",
             "python3",
+            "--phase",
+            "compiler_core",
             "--warmups",
             "1",
             "--samples",
@@ -1339,6 +1442,7 @@ mod tests {
     fn records_cooldown_metadata() {
         let options = Options {
             python: "python3".to_string(),
+            phase: Phase::CompilerCore,
             warmups: 1,
             samples: 1,
             cooldown: Duration::from_millis(5000),
@@ -1350,6 +1454,21 @@ mod tests {
             cooldown_metadata(&options),
             ("cooldown_ms".to_string(), "5000".to_string())
         );
+    }
+
+    #[test]
+    fn counts_rows_for_exactly_one_phase() {
+        let options = Options {
+            python: "python3".to_string(),
+            phase: Phase::MarshalOnly,
+            warmups: 5,
+            samples: 21,
+            cooldown: Duration::ZERO,
+            output: PathBuf::from("samples.tsv"),
+            roots: vec![PathBuf::from("corpus")],
+            limit: None,
+        };
+        assert_eq!(expected_row_count(&options), Ok(104));
     }
 
     #[test]
