@@ -516,12 +516,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         matches!(&**next_package, PubGrubPackageInner::Prerelease { .. })
                             || state.has_active_prerelease_proxy(next_package);
 
-                    // In a specific environment, an implicit registry candidate is stable for a
-                    // given range and pre-release policy. Avoid repeating candidate selection when
-                    // PubGrub revisits an identical decision after backtracking.
-                    let cache_selected_version = state.env.marker_environment().is_some()
-                        && url.is_none()
-                        && index.is_none();
+                    // Within a fixed resolver environment, an implicit registry candidate is
+                    // stable for a given range and pre-release policy. Avoid repeating candidate
+                    // selection when PubGrub revisits an identical decision after backtracking.
+                    let cache_selected_version = url.is_none() && index.is_none();
                     let decision = if cache_selected_version
                         && let Some((selected_range, selected_prerelease, version)) =
                             state.selected_versions.get(&next_id)
@@ -3356,6 +3354,7 @@ impl ForkState {
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        self.selected_versions.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
