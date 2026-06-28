@@ -250,8 +250,14 @@ mod tests {
     fn malformed_non_ascii() {
         let package_name = PackageName::from_str("a").unwrap();
         for (filename, extension) in [
-            ("é-1.2.3.zip", SourceDistExtension::Zip),
-            ("aé1.2.3.zip", SourceDistExtension::Zip),
+            (
+                "é-1.2.3.zip",
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+            ),
+            (
+                "aé1.2.3.zip",
+                SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+            ),
             ("é-1.zip", SourceDistExtension::TarGz),
         ] {
             assert!(SourceDistFilename::parse(filename, extension, &package_name).is_err());
@@ -268,9 +274,13 @@ mod tests {
             "Foo.Bar-1.2.3.zip",
         ] {
             assert_eq!(
-                SourceDistFilename::parse(filename, SourceDistExtension::Zip, &package_name)
-                    .unwrap()
-                    .name,
+                SourceDistFilename::parse(
+                    filename,
+                    SourceDistExtension::Legacy(LegacySourceDistExtension::Zip),
+                    &package_name
+                )
+                .unwrap()
+                .name,
                 package_name
             );
         }
