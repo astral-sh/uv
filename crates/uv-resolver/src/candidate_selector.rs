@@ -553,11 +553,13 @@ impl CandidateSelector {
                 |_| true,
             );
         };
-        let segments = [first_segment, second_segment]
-            .into_iter()
-            .chain(segments)
-            .collect::<SmallVec<[_; 8]>>();
-        let mut cursor = RangeCursor::new(segments, highest);
+        let segments = [first_segment, second_segment].into_iter().chain(segments);
+        let segments = if highest {
+            Either::Left(segments.rev())
+        } else {
+            Either::Right(segments)
+        };
+        let mut cursor = RangeCursor::new(segments, highest)?;
         Self::select_candidate_from(versions, package_name, range, allow_prerelease, |version| {
             cursor.contains(version)
         })
@@ -675,26 +677,23 @@ impl CandidateSelector {
 ///
 /// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
 /// each segment at most once.
-struct RangeCursor<'a> {
-    segments: SmallVec<[(&'a Bound<Version>, &'a Bound<Version>); 8]>,
-    index: usize,
+struct RangeCursor<'a, Segments> {
+    current: (&'a Bound<Version>, &'a Bound<Version>),
+    segments: Segments,
     highest: bool,
 }
 
-impl<'a> RangeCursor<'a> {
-    /// Create a cursor over at least two ascending, non-overlapping segments.
-    ///
-    /// `highest` must match the order in which versions are passed to [`Self::contains`].
-    fn new(
-        segments: SmallVec<[(&'a Bound<Version>, &'a Bound<Version>); 8]>,
-        highest: bool,
-    ) -> Self {
-        let index = if highest { segments.len() - 1 } else { 0 };
-        Self {
+impl<'a, Segments> RangeCursor<'a, Segments>
+where
+    Segments: Iterator<Item = (&'a Bound<Version>, &'a Bound<Version>)>,
+{
+    /// Create a cursor over segments ordered in the same direction as the visited versions.
+    fn new(mut segments: Segments, highest: bool) -> Option<Self> {
+        Some(Self {
+            current: segments.next()?,
             segments,
-            index,
             highest,
-        }
+        })
     }
 
     /// Return whether `version` is in the range, advancing past segments that cannot contain any
@@ -702,24 +701,24 @@ impl<'a> RangeCursor<'a> {
     fn contains(&mut self, version: &Version) -> bool {
         if self.highest {
             loop {
-                let (start, end) = self.segments[self.index];
+                let (start, end) = self.current;
                 if is_before(version, start) {
-                    if self.index == 0 {
+                    let Some(current) = self.segments.next() else {
                         return false;
-                    }
-                    self.index -= 1;
+                    };
+                    self.current = current;
                 } else {
                     return !is_after(version, end);
                 }
             }
         } else {
             loop {
-                let (start, end) = self.segments[self.index];
+                let (start, end) = self.current;
                 if is_after(version, end) {
-                    if self.index + 1 == self.segments.len() {
+                    let Some(current) = self.segments.next() else {
                         return false;
-                    }
-                    self.index += 1;
+                    };
+                    self.current = current;
                 } else {
                     return !is_before(version, start);
                 }
@@ -760,7 +759,12 @@ mod tests {
         ]
         .into_iter()
         .collect::<Range<_>>();
-        let mut cursor = RangeCursor::new(range.iter().collect(), highest);
+        let segments = if highest {
+            Either::Left(range.iter().rev())
+        } else {
+            Either::Right(range.iter())
+        };
+        let mut cursor = RangeCursor::new(segments, highest).expect("test range is not empty");
 
         for value in values {
             let version = version(value);
