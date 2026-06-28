@@ -102,7 +102,6 @@ arrayvec = { version = "0.7.6" }
 astral-tokio-tar = { version = "0.6.3" }
 async-channel = { version = "2.3.1" }
 async-compression = { version = "0.4.12", features = [
-  "bzip2",
   "gzip",
   "zstd",
 ] }
