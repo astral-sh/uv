@@ -568,6 +568,9 @@ fn looks_like_unnamed_requirement(cursor: &mut Cursor) -> bool {
 ///
 /// See <https://github.com/pypa/pip/blob/111eed14b6e9fba7c78a5ec2b7594812d17b5d2b/src/pip/_internal/utils/filetypes.py#L8>
 /// for the original list of supported archive extensions.
+///
+/// NOTE: Unlike pip, we don't allow xz or lzma archives here.
+/// Longer term, we will also probably disallow bzip2 archives.
 fn looks_like_archive(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref();
 
@@ -583,7 +586,7 @@ fn looks_like_archive(file: impl AsRef<Path>) -> bool {
 
     matches!(
         (pre_extension, extension),
-        (_, "whl" | "tlz" | "zip" | "tgz" | "tar") | (Some("tar"), "gz")
+        (_, "whl" | "tbz" | "tlz" | "zip" | "tgz" | "tar") | (Some("tar"), "bz2" | "gz")
     )
 }
 
