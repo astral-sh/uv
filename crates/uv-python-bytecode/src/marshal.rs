@@ -51,9 +51,13 @@ enum ObjectKey {
 }
 
 #[derive(Debug, Default)]
+struct ObjectState {
+    count: usize,
+}
+
+#[derive(Debug, Default)]
 struct ObjectGraph {
-    counts: FxHashMap<ObjectKey, usize>,
-    expanded: FxHashSet<ObjectKey>,
+    objects: FxHashMap<ObjectKey, ObjectState>,
     interned_strings: FxHashSet<String>,
 }
 
@@ -65,8 +69,9 @@ impl ObjectGraph {
     }
 
     fn record(&mut self, key: ObjectKey) -> bool {
-        *self.counts.entry(key.clone()).or_default() += 1;
-        self.expanded.insert(key)
+        let state = self.objects.entry(key).or_default();
+        state.count += 1;
+        state.count == 1
     }
 
     fn visit_code(&mut self, code: &CodeObject) {
@@ -185,7 +190,7 @@ impl ObjectGraph {
     }
 
     fn is_shared(&self, key: &ObjectKey, force_reference: bool) -> bool {
-        if force_reference || self.counts.get(key).copied().unwrap_or_default() > 1 {
+        if force_reference || self.objects.get(key).is_some_and(|state| state.count > 1) {
             return true;
         }
         match key {
@@ -923,4 +928,20 @@ fn is_cached_character(value: &str) -> bool {
     characters
         .next()
         .is_some_and(|character| characters.next().is_none() && u32::from(character) <= 0xff)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ObjectGraph, ObjectKey};
+
+    #[test]
+    fn counts_repeated_objects_without_reexpanding_them() {
+        let mut graph = ObjectGraph::default();
+        let key = ObjectKey::Float(1.0_f64.to_bits());
+
+        assert!(graph.record(key.clone()));
+        assert!(!graph.is_shared(&key, false));
+        assert!(!graph.record(key.clone()));
+        assert!(graph.is_shared(&key, false));
+    }
 }
