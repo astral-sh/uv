@@ -1020,24 +1020,31 @@ impl Assembler {
         }
 
         fn is_value_preserving_jump(items: &[Item], index: usize) -> bool {
-            let previous = items[..index]
-                .iter()
-                .rev()
-                .filter_map(|item| {
-                    let Item::Instruction(instruction) = item else {
-                        return None;
-                    };
-                    (instruction.opcode.code != NOP).then_some(*instruction)
-                })
-                .take(2)
-                .collect::<Vec<_>>();
-            matches!(
-                previous.as_slice(),
-                [to_bool, copy]
-                    if to_bool.opcode.code == TO_BOOL
-                        && copy.opcode.code == COPY
-                        && matches!(copy.operand, Operand::Value(1))
-            )
+            let Item::Instruction(instruction) = items[index] else {
+                return false;
+            };
+            if !matches!(
+                instruction.opcode.code,
+                POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE
+            ) || !matches!(instruction.operand, Operand::Forward(_))
+            {
+                return false;
+            }
+            let mut previous = items[..index].iter().rev().filter_map(|item| {
+                let Item::Instruction(instruction) = item else {
+                    return None;
+                };
+                (instruction.opcode.code != NOP).then_some(instruction)
+            });
+            let Some(to_bool) = previous.next() else {
+                return false;
+            };
+            let Some(copy) = previous.next() else {
+                return false;
+            };
+            to_bool.opcode.code == TO_BOOL
+                && copy.opcode.code == COPY
+                && matches!(copy.operand, Operand::Value(1))
         }
 
         // CPython threads the value-preserving jumps used by boolean
