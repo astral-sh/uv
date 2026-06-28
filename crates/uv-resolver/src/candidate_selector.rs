@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
@@ -455,6 +456,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    highest,
                 )
             } else {
                 Self::select_candidate(
@@ -477,6 +479,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    highest,
                 )
             }
         } else {
@@ -487,6 +490,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        highest,
                     )
                 })
             } else {
@@ -496,6 +500,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        highest,
                     )
                 })
             }
@@ -529,6 +534,38 @@ impl CandidateSelector {
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        highest: bool,
+    ) -> Option<Candidate<'a>> {
+        let mut segments = range.iter();
+        let Some(first_segment) = segments.next() else {
+            trace!("Exhausted all candidates for package {package_name} with empty range");
+            return None;
+        };
+        let Some(second_segment) = segments.next() else {
+            return Self::select_candidate_from(
+                versions,
+                package_name,
+                range,
+                allow_prerelease,
+                |_| true,
+            );
+        };
+        let segments = std::iter::once(first_segment)
+            .chain(std::iter::once(second_segment))
+            .chain(segments)
+            .collect::<SmallVec<[_; 8]>>();
+        let mut cursor = RangeCursor::new(segments, highest);
+        Self::select_candidate_from(versions, package_name, range, allow_prerelease, |version| {
+            cursor.contains(version)
+        })
+    }
+
+    fn select_candidate_from<'a>(
+        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
+        package_name: &'a PackageName,
+        range: &Range<Version>,
+        allow_prerelease: bool,
+        mut range_contains: impl FnMut(&Version) -> bool,
     ) -> Option<Candidate<'a>> {
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
@@ -550,7 +587,7 @@ impl CandidateSelector {
                 if version.any_prerelease() && !allow_prerelease {
                     continue;
                 }
-                if !range.contains(version) {
+                if !range_contains(version) {
                     continue;
                 }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -624,6 +661,129 @@ impl CandidateSelector {
             "Exhausted all candidates for package {package_name} with range {range} after {steps} steps"
         );
         None
+    }
+}
+
+/// Tracks membership in a disjoint range while visiting versions monotonically.
+///
+/// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
+/// each segment at most once.
+struct RangeCursor<'a> {
+    segments: SmallVec<[(&'a Bound<Version>, &'a Bound<Version>); 8]>,
+    index: usize,
+    highest: bool,
+}
+
+impl<'a> RangeCursor<'a> {
+    fn new(
+        segments: SmallVec<[(&'a Bound<Version>, &'a Bound<Version>); 8]>,
+        highest: bool,
+    ) -> Self {
+        let index = if highest { segments.len() - 1 } else { 0 };
+        Self {
+            segments,
+            index,
+            highest,
+        }
+    }
+
+    fn contains(&mut self, version: &Version) -> bool {
+        if self.highest {
+            loop {
+                let (start, end) = self.segments[self.index];
+                if is_before(version, start) {
+                    if self.index == 0 {
+                        return false;
+                    }
+                    self.index -= 1;
+                } else {
+                    return !is_after(version, end);
+                }
+            }
+        } else {
+            loop {
+                let (start, end) = self.segments[self.index];
+                if is_after(version, end) {
+                    if self.index + 1 == self.segments.len() {
+                        return false;
+                    }
+                    self.index += 1;
+                } else {
+                    return !is_before(version, start);
+                }
+            }
+        }
+    }
+}
+
+fn is_before(version: &Version, bound: &Bound<Version>) -> bool {
+    match bound {
+        Bound::Included(start) => version < start,
+        Bound::Excluded(start) => version <= start,
+        Bound::Unbounded => false,
+    }
+}
+
+fn is_after(version: &Version, bound: &Bound<Version>) -> bool {
+    match bound {
+        Bound::Included(end) => version > end,
+        Bound::Excluded(end) => version >= end,
+        Bound::Unbounded => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version(value: &str) -> Version {
+        value.parse().expect("valid test version")
+    }
+
+    #[test]
+    fn range_cursor_ascending() {
+        let segments = [
+            (Bound::Unbounded, Bound::Excluded(version("2"))),
+            (Bound::Included(version("3")), Bound::Included(version("4"))),
+            (Bound::Excluded(version("5")), Bound::Unbounded),
+        ];
+        let segments = segments.iter().map(|(start, end)| (start, end)).collect();
+        let mut cursor = RangeCursor::new(segments, false);
+
+        for (value, expected) in [
+            ("1", true),
+            ("2", false),
+            ("2.5", false),
+            ("3", true),
+            ("4", true),
+            ("5", false),
+            ("6", true),
+        ] {
+            assert_eq!(cursor.contains(&version(value)), expected, "{value}");
+        }
+    }
+
+    #[test]
+    fn range_cursor_descending() {
+        let segments = [
+            (Bound::Unbounded, Bound::Excluded(version("2"))),
+            (Bound::Included(version("3")), Bound::Included(version("4"))),
+            (Bound::Excluded(version("5")), Bound::Unbounded),
+        ];
+        let segments = segments.iter().map(|(start, end)| (start, end)).collect();
+        let mut cursor = RangeCursor::new(segments, true);
+
+        for (value, expected) in [
+            ("6", true),
+            ("5", false),
+            ("4", true),
+            ("3", true),
+            ("2.5", false),
+            ("2", false),
+            ("1", true),
+        ] {
+            assert_eq!(cursor.contains(&version(value)), expected, "{value}");
+        }
     }
 }
 
