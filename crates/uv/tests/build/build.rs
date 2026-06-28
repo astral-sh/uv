@@ -2847,8 +2847,28 @@ fn venv_included_in_sdist() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
 
-    // context.filters()
-    uv_snapshot!(context.filters(), context.build(), @r#"
+    // The default astral-tokio-tar backend recognizes the external virtual-environment link.
+    uv_snapshot!(context.filters(), context.build(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid tar file
+      Caused by: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      Caused by: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
+
+    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
+    ");
+
+    // The preview tar-codec backend reports a structured unsafe-link error and preserves the same
+    // user-facing hint.
+    uv_snapshot!(context.filters(), context
+        .build()
+        .arg("--preview-features")
+        .arg("tar-codec"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2862,7 +2882,7 @@ fn venv_included_in_sdist() -> Result<()> {
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
 
-    uv_snapshot!(context.filters(), context.build().arg("-q"), @r#"
+    uv_snapshot!(context.filters(), context.build().arg("-q"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -2870,10 +2890,11 @@ fn venv_included_in_sdist() -> Result<()> {
     ----- stderr -----
     error: Failed to build `[TEMP_DIR]/`
       Caused by: Invalid tar file
-      Caused by: at byte [OFFSET]: unsafe symbolic-link target "[PYTHON-3.12]": is absolute
+      Caused by: failed to unpack `[CACHE_DIR]/sdists-v9/[TMP]/python`
+      Caused by: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
-    "#);
+    ");
 
     uv_snapshot!(context.filters(), context.build().arg("-qq"), @"
     success: false

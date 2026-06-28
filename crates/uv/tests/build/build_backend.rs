@@ -267,6 +267,8 @@ fn preserve_executable_bit() -> Result<()> {
 
     context
         .build_backend()
+        .arg("--preview-features")
+        .arg("tar-codec")
         .arg("build-sdist")
         .arg(context.temp_dir.path())
         .current_dir(&project_dir)
@@ -584,6 +586,7 @@ fn build_module_name_normalization() -> Result<()> {
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let default_dir = TempDir::new()?;
     let temp_dir = TempDir::new()?;
 
     context
@@ -614,6 +617,44 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
+        .arg("build-sdist")
+        .arg(default_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0.tar.gz
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import gzip
+            import sys
+            import tarfile
+
+            with gzip.open(sys.argv[1], mode="rb") as archive:
+                header = archive.read(512)
+                assert header[257:265] == b"ustar  \x00"
+
+            with tarfile.open(sys.argv[1], mode="r:gz") as archive:
+                members = archive.getmembers()
+                assert all(not member.pax_headers for member in members)
+                print(f"GNU members: {len(members)}")
+        "#})
+        .arg(default_dir.path().join("foo-1.0.0.tar.gz")), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    GNU members: 9
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context
+        .build_backend()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tar-codec")
         .arg("build-sdist")
         .arg(temp_dir.path()), @"
     success: true

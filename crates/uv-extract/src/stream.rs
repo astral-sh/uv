@@ -1,9 +1,10 @@
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
+use std::pin::Pin;
 
 use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
-use futures::AsyncReadExt;
+use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tar_codec::extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy};
 use tar_codec::{
@@ -13,6 +14,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
@@ -592,7 +594,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 /// Unpack the given tar archive into the destination directory.
 ///
 /// Returns the list of unpacked files and their sizes.
-async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
+async fn untar_in_tar_codec<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     dst: &Path,
 ) -> Result<Vec<(PathBuf, u64)>, ExtractError<DecodeError>> {
@@ -662,6 +664,99 @@ fn tar_extract_policy() -> ExtractPolicy {
     }
 }
 
+/// Unpack the given tar archive into the destination directory with `astral-tokio-tar`.
+///
+/// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_in_tokio_tar(
+    mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
+    dst: &Path,
+) -> std::io::Result<Vec<(PathBuf, u64)>> {
+    // Like `tokio-tar`, canonicalize the destination prior to unpacking.
+    let dst = fs_err::tokio::canonicalize(dst).await?;
+
+    // Memoize filesystem calls to canonicalize paths.
+    let mut memo = FxHashSet::default();
+
+    let mut files = Vec::new();
+
+    let mut entries = archive.entries()?;
+    let mut pinned = Pin::new(&mut entries);
+    while let Some(entry) = pinned.next().await {
+        // Unpack the file into the destination directory.
+        let mut file = entry?;
+
+        // On Windows, skip symlink entries, as they're not supported. pip recursively copies the
+        // symlink target instead.
+        if cfg!(windows) && file.header().entry_type().is_symlink() {
+            warn!(
+                "Skipping symlink in tar archive: {}",
+                file.path()?.display()
+            );
+            continue;
+        }
+
+        // Collect file paths (excluding directories).
+        let entry_type = file.header().entry_type();
+        if entry_type.is_file() || entry_type.is_hard_link() {
+            let relpath = file.path()?.into_owned();
+            let size = file.header().size()?;
+            files.push((relpath, size));
+        }
+
+        // Unpack the file into the destination directory.
+        #[cfg_attr(not(unix), expect(unused_variables))]
+        let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
+
+        // Preserve the executable bit.
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+
+            if entry_type.is_file() || entry_type.is_hard_link() {
+                let mode = file.header().mode()?;
+                let has_any_executable_bit = mode & 0o111;
+                if has_any_executable_bit != 0 {
+                    if let Some(path) = unpacked_at.as_deref() {
+                        let permissions = fs_err::tokio::metadata(&path).await?.permissions();
+                        if permissions.mode() & 0o111 != 0o111 {
+                            fs_err::tokio::set_permissions(
+                                &path,
+                                Permissions::from_mode(permissions.mode() | 0o111),
+                            )
+                            .await?;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+/// Select the tar implementation and unpack the archive into the destination directory.
+async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+    dst: &Path,
+) -> Result<Vec<(PathBuf, u64)>, Error> {
+    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+        untar_in_tar_codec(reader, dst).await.map_err(Error::from)
+    } else {
+        let archive =
+            tokio_tar::ArchiveBuilder::new(&mut reader as &mut (dyn tokio::io::AsyncRead + Unpin))
+                .set_preserve_mtime(false)
+                .set_preserve_permissions(false)
+                .set_allow_external_symlinks(false)
+                .build();
+        untar_in_tokio_tar(archive, dst)
+            .await
+            .map_err(Error::io_or_tar)
+    }
+}
+
 /// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -673,9 +768,7 @@ async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
-    untar_in(decompressed_bytes, target.as_ref())
-        .await
-        .map_err(Error::from)
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
@@ -689,9 +782,7 @@ async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
-    untar_in(decompressed_bytes, target.as_ref())
-        .await
-        .map_err(Error::from)
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
@@ -705,9 +796,7 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
-    untar_in(decompressed_bytes, target.as_ref())
-        .await
-        .map_err(Error::from)
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -721,9 +810,7 @@ async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
     let decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
-    untar_in(decompressed_bytes, target.as_ref())
-        .await
-        .map_err(Error::from)
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
@@ -736,7 +823,7 @@ async fn untar<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    untar_in(reader, target.as_ref()).await.map_err(Error::from)
+    untar_in(reader, target.as_ref()).await
 }
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
@@ -777,8 +864,9 @@ mod tests {
     use insta::assert_snapshot;
     use tar_codec::{DecodeError, ExtractError, ExtractPolicyViolation};
     use tokio::io::{AsyncRead, ReadBuf};
+    use uv_preview::PreviewFeature;
 
-    use super::{untar, untar_in};
+    use super::{untar, untar_in, untar_in_tar_codec};
 
     const BLOCK_SIZE: usize = 512;
 
@@ -797,7 +885,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let files = untar_in(archive.as_slice(), temp.path())
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect("tar archive should extract");
 
@@ -825,7 +913,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let error = untar_in(archive.as_slice(), temp.path())
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect_err("hardlink should be rejected");
 
@@ -837,6 +925,53 @@ mod tests {
             }
         ));
         assert!(!temp.path().join("pkg/tool-copy").exists());
+    }
+
+    #[tokio::test]
+    async fn untar_selects_backend_from_preview_feature() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "pkg/tool", b'0', b"run", "", 0o644);
+        append_entry(&mut archive, "pkg/tool-copy", b'1', b"", "pkg/tool", 0o644);
+        finish_archive(&mut archive);
+
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let files = untar_in(archive.as_slice(), temp.path())
+                .await
+                .expect("the default tar backend should allow hardlinks");
+
+            assert_eq!(
+                files,
+                [
+                    (PathBuf::from("pkg/tool"), 3),
+                    (PathBuf::from("pkg/tool-copy"), 0),
+                ]
+            );
+            assert_eq!(
+                fs_err::read(temp.path().join("pkg/tool-copy"))
+                    .expect("hardlink should be readable"),
+                b"run"
+            );
+        }
+
+        {
+            let _preview = uv_preview::test::with_features(&[PreviewFeature::TarCodec]);
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let error = untar_in(archive.as_slice(), temp.path())
+                .await
+                .expect_err("the tar-codec backend should reject hardlinks");
+
+            assert!(matches!(
+                error,
+                crate::Error::TarCodec(ExtractError::PolicyViolation {
+                    violation: ExtractPolicyViolation::HardLink,
+                    ..
+                })
+            ));
+        }
     }
 
     #[tokio::test]
@@ -853,7 +988,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let error = untar_in(archive.as_slice(), temp.path())
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect_err("default name validation should reject colons");
 
@@ -884,7 +1019,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let files = untar_in(archive.as_slice(), temp.path())
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect("GNU archive should extract");
 
@@ -919,7 +1054,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let files = untar_in(archive.as_slice(), temp.path())
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect("safe symlinks should extract");
 
@@ -952,7 +1087,7 @@ mod tests {
         fs_err::write(temp.path().join("pkg/ambient"), b"ambient")
             .expect("ambient target should be created");
 
-        let error = untar_in(archive.as_slice(), temp.path())
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect_err("ambient symlink target should be rejected");
 
@@ -977,7 +1112,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        untar_in(archive.as_slice(), temp.path())
+        untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect("archive should extract while skipping its symlink");
 
@@ -994,7 +1129,7 @@ mod tests {
     #[tokio::test]
     async fn untar_rejects_malformed_archives() {
         let temp = tempfile::tempdir().expect("temporary directory should be created");
-        let error = untar_in(b"not a tar archive".as_slice(), temp.path())
+        let error = untar_in_tar_codec(b"not a tar archive".as_slice(), temp.path())
             .await
             .expect_err("malformed archive should be rejected");
 
@@ -1012,7 +1147,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temporary directory should be created");
         let destination = temp.path().join("out");
 
-        let error = untar_in(archive.as_slice(), &destination)
+        let error = untar_in_tar_codec(archive.as_slice(), &destination)
             .await
             .expect_err("parent-directory traversal should be rejected");
 
@@ -1055,7 +1190,7 @@ mod tests {
             ("malformed termination", malformed_termination),
         ] {
             let temp = tempfile::tempdir().expect("temporary directory should be created");
-            let error = untar_in(archive.as_slice(), temp.path())
+            let error = untar_in_tar_codec(archive.as_slice(), temp.path())
                 .await
                 .expect_err(case);
             assert!(
@@ -1081,7 +1216,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let error = untar_in(archive.as_slice(), temp.path())
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect_err("non-UTF-8 member path should be rejected");
 
@@ -1094,19 +1229,39 @@ mod tests {
 
     #[tokio::test]
     async fn tar_http_errors_are_detected_through_the_source_chain() {
-        let reqwest_error = reqwest::Client::new()
-            .get("://")
-            .build()
-            .expect_err("invalid URL should be rejected");
-        let reader = FailingReader(Some(io::Error::other(reqwest_error)));
-        let temp = tempfile::tempdir().expect("temporary directory should be created");
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            let reqwest_error = reqwest::Client::new()
+                .get("://")
+                .build()
+                .expect_err("invalid URL should be rejected");
+            let reader = FailingReader(Some(io::Error::other(reqwest_error)));
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let error = untar(reader, temp.path())
-            .await
-            .expect_err("reader error should fail extraction");
+            let error = untar(reader, temp.path())
+                .await
+                .expect_err("reader error should fail astral-tokio-tar extraction");
 
-        assert!(matches!(error, crate::Error::Tar(_)));
-        assert!(error.is_http_streaming_failed());
+            assert!(matches!(error, crate::Error::Io(_)));
+            assert!(error.is_http_streaming_failed());
+        }
+
+        {
+            let _preview = uv_preview::test::with_features(&[PreviewFeature::TarCodec]);
+            let reqwest_error = reqwest::Client::new()
+                .get("://")
+                .build()
+                .expect_err("invalid URL should be rejected");
+            let reader = FailingReader(Some(io::Error::other(reqwest_error)));
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let error = untar(reader, temp.path())
+                .await
+                .expect_err("reader error should fail tar-codec extraction");
+
+            assert!(matches!(error, crate::Error::TarCodec(_)));
+            assert!(error.is_http_streaming_failed());
+        }
     }
 
     #[cfg(unix)]
@@ -1117,7 +1272,7 @@ mod tests {
         finish_archive(&mut archive);
         let temp = tempfile::tempdir().expect("temporary directory should be created");
 
-        let error = untar_in(archive.as_slice(), temp.path())
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
             .await
             .expect_err("external symlink target should be rejected");
 

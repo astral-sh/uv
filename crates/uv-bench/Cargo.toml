@@ -47,7 +47,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-performance-memory-allocator = { workspace = true }
 uv-platform-tags = { workspace = true }
-uv-preview = { workspace = true }
+uv-preview = { workspace = true, features = ["testing"] }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }

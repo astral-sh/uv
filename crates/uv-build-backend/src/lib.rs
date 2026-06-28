@@ -85,7 +85,9 @@ pub enum Error {
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
     #[error("Failed to write tar archive to {}", _0.user_display())]
-    TarWrite(
+    TarWrite(PathBuf, #[source] io::Error),
+    #[error("Failed to write tar archive to {}", _0.user_display())]
+    TarCodecWrite(
         PathBuf,
         #[source] tar_codec::BuildError<tar_codec::EncodeError>,
     ),
@@ -711,7 +713,25 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        let _preview = uv_preview::test::with_features(&[]);
+        built_by_uv_building_with_backend(
+            &[],
+            "8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e",
+        );
+    }
+
+    #[test]
+    fn built_by_uv_building_tar_codec() {
+        built_by_uv_building_with_backend(
+            &[PreviewFeature::TarCodec],
+            "8cb4da783db5873762b0640f83e8d14e317e6bb4edb8934936f8a4ee0d946098",
+        );
+    }
+
+    fn built_by_uv_building_with_backend(
+        preview_features: &[PreviewFeature],
+        expected_source_dist_hash: &str,
+    ) {
+        let _preview = uv_preview::test::with_features(preview_features);
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -782,9 +802,12 @@ mod tests {
             "built_by_uv-0.1.0.tar.gz"
         );
         // Check that the source dist is reproducible across platforms.
-        assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"8cb4da783db5873762b0640f83e8d14e317e6bb4edb8934936f8a4ee0d946098"
+        assert_eq!(
+            format!(
+                "{:x}",
+                sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())
+            ),
+            expected_source_dist_hash
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"

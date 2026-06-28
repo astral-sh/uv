@@ -20,7 +20,7 @@ use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
@@ -108,32 +108,41 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    c.bench_function("unpack_sdist_many_files", |b| {
-        b.iter_batched(
-            || {
-                (
-                    runtime
-                        .block_on(fs_err::tokio::File::open(archive.path()))
-                        .expect("Failed to open temporary archive"),
-                    create_sdist_extraction_directory(),
-                )
-            },
-            |(archive, extracted_sdist)| {
-                let files = runtime
-                    .block_on(uv_extract::stream::archive(
-                        MANY_FILES_SDIST_FILENAME,
-                        archive,
-                        SourceDistExtension::TarGz,
-                        extracted_sdist.path(),
-                    ))
-                    .expect("Failed to unpack sdist");
-                let source_tree = uv_extract::strip_component(extracted_sdist.path())
-                    .expect("Failed to strip top-level sdist directory");
-                black_box((files, extracted_sdist, source_tree))
-            },
-            BatchSize::PerIteration,
-        );
-    });
+    for (name, preview_features) in [
+        ("unpack_sdist_many_files/astral_tokio_tar", &[][..]),
+        (
+            "unpack_sdist_many_files/tar_codec",
+            &[PreviewFeature::TarCodec][..],
+        ),
+    ] {
+        let _preview = uv_preview::test::with_features(preview_features);
+        c.bench_function(name, |b| {
+            b.iter_batched(
+                || {
+                    (
+                        runtime
+                            .block_on(fs_err::tokio::File::open(archive.path()))
+                            .expect("Failed to open temporary archive"),
+                        create_sdist_extraction_directory(),
+                    )
+                },
+                |(archive, extracted_sdist)| {
+                    let files = runtime
+                        .block_on(uv_extract::stream::archive(
+                            MANY_FILES_SDIST_FILENAME,
+                            archive,
+                            SourceDistExtension::TarGz,
+                            extracted_sdist.path(),
+                        ))
+                        .expect("Failed to unpack sdist");
+                    let source_tree = uv_extract::strip_component(extracted_sdist.path())
+                        .expect("Failed to strip top-level sdist directory");
+                    black_box((files, extracted_sdist, source_tree))
+                },
+                BatchSize::PerIteration,
+            );
+        });
+    }
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {

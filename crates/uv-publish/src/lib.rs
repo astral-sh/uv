@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::{fmt, io};
 
 use fs_err::tokio::File;
+use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
@@ -17,7 +18,7 @@ use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use tar_codec::{Archive as _, Member, MemberPayload as _, TarArchive};
 use thiserror::Error;
-use tokio::io::BufReader;
+use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
@@ -35,6 +36,7 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_warnings::warn_user;
@@ -121,6 +123,10 @@ pub enum PublishPrepareError {
     Decode(#[source] tar_codec::DecodeError),
     #[error("Failed to read: `{0}`")]
     Read(String, #[source] tar_codec::DecodeError),
+    #[error(transparent)]
+    TokioTar(io::Error),
+    #[error("Failed to read: `{0}`")]
+    TokioTarRead(String, #[source] io::Error),
     #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
@@ -1090,6 +1096,58 @@ async fn hash_file(
 
 // Not in `uv-metadata` because we only support tar files here.
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
+    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+        source_dist_pkg_info_tar_codec(file).await
+    } else {
+        source_dist_pkg_info_tokio_tar(file).await
+    }
+}
+
+async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
+    let reader = BufReader::new(File::open(&file).await?);
+    let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    let mut archive = tokio_tar::Archive::new(decoded);
+    let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
+        .entries()
+        .map_err(PublishPrepareError::TokioTar)?
+        .map_err(PublishPrepareError::TokioTar)
+        .try_filter_map(async |mut entry| {
+            let path = entry
+                .path()
+                .map_err(PublishPrepareError::TokioTar)?
+                .to_path_buf();
+            let mut components = path.components();
+            let Some(_top_level) = components.next() else {
+                return Ok(None);
+            };
+            let Some(pkg_info) = components.next() else {
+                return Ok(None);
+            };
+            if components.next().is_some() || pkg_info.as_os_str() != "PKG-INFO" {
+                return Ok(None);
+            }
+            let mut buffer = Vec::new();
+            // We have to read while iterating or the entry is empty as we're beyond it in the file.
+            entry.read_to_end(&mut buffer).await.map_err(|err| {
+                PublishPrepareError::TokioTarRead(path.to_string_lossy().to_string(), err)
+            })?;
+            Ok(Some((path, buffer)))
+        })
+        .try_collect()
+        .await?;
+    match pkg_infos.len() {
+        0 => Err(PublishPrepareError::MissingPkgInfo),
+        1 => Ok(pkg_infos.remove(0).1),
+        _ => Err(PublishPrepareError::MultiplePkgInfo(
+            pkg_infos
+                .iter()
+                .map(|(path, _buffer)| path.to_string_lossy())
+                .join(", "),
+        )),
+    }
+}
+
+async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
     let mut members = TarArchive::new(decoded).members();
@@ -1539,6 +1597,7 @@ mod tests {
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
+    use uv_preview::PreviewFeature;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::DisplaySafeUrl;
 
@@ -1552,6 +1611,8 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
+
+    const TAR_BACKENDS: &[&[PreviewFeature]] = &[&[], &[PreviewFeature::TarCodec]];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1599,22 +1660,28 @@ mod tests {
         ])
         .await;
 
-        assert_eq!(
-            source_dist_pkg_info(file.path())
-                .await
-                .expect("top-level PKG-INFO should be read"),
-            expected
-        );
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert_eq!(
+                source_dist_pkg_info(file.path())
+                    .await
+                    .expect("top-level PKG-INFO should be read"),
+                expected
+            );
+        }
     }
 
     #[tokio::test]
     async fn source_dist_pkg_info_requires_a_file() {
         let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
 
-        assert!(matches!(
-            source_dist_pkg_info(file.path()).await,
-            Err(PublishPrepareError::MissingPkgInfo)
-        ));
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert!(matches!(
+                source_dist_pkg_info(file.path()).await,
+                Err(PublishPrepareError::MissingPkgInfo)
+            ));
+        }
     }
 
     #[tokio::test]
@@ -1625,11 +1692,14 @@ mod tests {
         ])
         .await;
 
-        assert!(matches!(
-            source_dist_pkg_info(file.path()).await,
-            Err(PublishPrepareError::MultiplePkgInfo(paths))
-                if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
-        ));
+        for features in TAR_BACKENDS {
+            let _preview = uv_preview::test::with_features(features);
+            assert!(matches!(
+                source_dist_pkg_info(file.path()).await,
+                Err(PublishPrepareError::MultiplePkgInfo(paths))
+                    if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
+            ));
+        }
     }
 
     async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {
@@ -1993,6 +2063,7 @@ mod tests {
     /// Snapshot the data we send for an upload request for a source distribution.
     #[tokio::test]
     async fn upload_request_source_dist() {
+        let _preview = uv_preview::test::with_features(&[]);
         let group = {
             let raw_filename = "tqdm-999.0.0.tar.gz";
             let file = PathBuf::from("../../test/links/").join(raw_filename);

@@ -109,6 +109,27 @@ impl Hint for Error {
             Self::Project(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
+                // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                // encoding everything in strings
+                // NOTE(ww): We check for both messages below because they indicate
+                // different external extraction scenarios; the first is for any
+                // absolute path outside of the target directory, and the second
+                // is specifically for symlinks that point outside.
+                if err.to_string().contains("/bin/python")
+                    && std::error::Error::source(err).is_some_and(|err| {
+                        let err = err.to_string();
+                        err.ends_with("outside of the target directory")
+                            || err.ends_with("external symlinks are not allowed")
+                    })
+                {
+                    Hints::from(
+                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
+                    )
+                } else {
+                    Hints::none()
+                }
+            }
+            Self::Extract(uv_extract::Error::TarCodec(err)) => {
                 let is_virtual_environment_python = |path: &Path| {
                     path.parent().is_some_and(|parent| parent.ends_with("bin"))
                         && path
