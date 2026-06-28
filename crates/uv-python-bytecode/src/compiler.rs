@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_pattern, walk_stmt};
@@ -10,6 +10,7 @@ use ruff_python_ast::{
 use ruff_python_codegen::{Generator, Indentation, Mode as CodegenMode};
 use ruff_source_file::{LineEnding, LineIndex};
 use ruff_text_size::{Ranged, TextSize};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
 use crate::assembler::{Assembler, InstructionId, Label, Opcode, SourceLocation};
@@ -202,23 +203,23 @@ pub(crate) struct CodeObject {
     pub(crate) line_table: Vec<u8>,
     pub(crate) exception_table: Vec<u8>,
     pub(crate) annotation_thunk: bool,
-    pub(crate) interned_constant_strings: HashSet<String>,
+    pub(crate) interned_constant_strings: FxHashSet<String>,
 }
 
 #[derive(Debug)]
 enum Scope {
     Module,
     Class {
-        globals: HashSet<String>,
-        nonlocals: HashSet<String>,
-        free_indices: HashMap<String, u32>,
-        bound_names: HashSet<String>,
+        globals: FxHashSet<String>,
+        nonlocals: FxHashSet<String>,
+        free_indices: FxHashMap<String, u32>,
+        bound_names: FxHashSet<String>,
     },
     Function {
-        indices: HashMap<String, u32>,
-        free_indices: HashMap<String, u32>,
-        cells: HashSet<String>,
-        globals: HashSet<String>,
+        indices: FxHashMap<String, u32>,
+        free_indices: FxHashMap<String, u32>,
+        cells: FxHashSet<String>,
+        globals: FxHashSet<String>,
     },
 }
 
@@ -319,12 +320,12 @@ impl CollectionKind {
 struct FunctionPlan {
     key: (u32, u32),
     locals: Vec<String>,
-    globals: HashSet<String>,
-    nonlocals: HashSet<String>,
-    references: HashSet<String>,
-    annotation_references: HashSet<String>,
-    cellvars: HashSet<String>,
-    inlined_comprehension_cellvars: HashSet<String>,
+    globals: FxHashSet<String>,
+    nonlocals: FxHashSet<String>,
+    references: FxHashSet<String>,
+    annotation_references: FxHashSet<String>,
+    cellvars: FxHashSet<String>,
+    inlined_comprehension_cellvars: FxHashSet<String>,
     freevars: BTreeSet<String>,
     annotation_freevars: BTreeSet<String>,
     children: Vec<Self>,
@@ -342,7 +343,7 @@ impl FunctionPlan {
     fn analyze_in_class(
         definition: &StmtFunctionDef,
         future_annotations: bool,
-        class_freevars: &HashSet<&str>,
+        class_freevars: &FxHashSet<&str>,
     ) -> Self {
         let mut plan = Self::build(definition, future_annotations);
         for name in plan.resolve() {
@@ -435,7 +436,7 @@ impl FunctionPlan {
         {
             reference_collector.references.remove("__class__");
         }
-        let local_names: HashSet<_> = locals.names.iter().cloned().collect();
+        let local_names: FxHashSet<_> = locals.names.iter().cloned().collect();
         let class_requirements = nested_class_required_names(&definition.body, future_annotations);
         let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
         let generator_requirements = nested_generator_required_names_in_suite(&definition.body);
@@ -445,7 +446,7 @@ impl FunctionPlan {
             .iter()
             .cloned()
             .flat_map(|mut child| child.resolve())
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
         locals.names.retain(|name| {
             !locals.annotation_only.contains(name)
                 || reference_collector.references.contains(name)
@@ -471,7 +472,7 @@ impl FunctionPlan {
         let mut cellvars = generator_named_targets_in_suite(&definition.body)
             .into_iter()
             .filter(|name| local_names.contains(name))
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
         cellvars.extend(
             class_requirements
                 .into_iter()
@@ -510,7 +511,7 @@ impl FunctionPlan {
     }
 
     fn resolve(&mut self) -> BTreeSet<String> {
-        let local_names: HashSet<_> = self.locals.iter().map(String::as_str).collect();
+        let local_names: FxHashSet<_> = self.locals.iter().map(String::as_str).collect();
         let mut needed: BTreeSet<_> = self
             .references
             .iter()
@@ -573,18 +574,18 @@ pub(crate) struct Compiler {
     deferred_constants: Vec<(Option<InstructionId>, Constant)>,
     deferred_names: Vec<(InstructionId, String)>,
     names: Vec<String>,
-    name_indices: HashMap<String, u32>,
+    name_indices: FxHashMap<String, u32>,
     locals: Vec<String>,
     fast_local_count: usize,
-    cell_names: HashSet<String>,
+    cell_names: FxHashSet<String>,
     free_names: Vec<String>,
-    temporary_indices: HashMap<String, u32>,
-    hidden_names: HashSet<String>,
-    active_temporaries: HashSet<String>,
-    initialized_locals: HashSet<String>,
-    owned_load_locals: HashSet<String>,
-    imported_scope_names: HashSet<String>,
-    interned_constant_strings: HashSet<String>,
+    temporary_indices: FxHashMap<String, u32>,
+    hidden_names: FxHashSet<String>,
+    active_temporaries: FxHashSet<String>,
+    initialized_locals: FxHashSet<String>,
+    owned_load_locals: FxHashSet<String>,
+    imported_scope_names: FxHashSet<String>,
+    interned_constant_strings: FxHashSet<String>,
     type_parameter_names: BTreeSet<String>,
     generic_target_qualified_name: Option<String>,
     child_qualified_name_parent: Option<String>,
@@ -620,7 +621,7 @@ pub(crate) struct Compiler {
     deferred_comprehension_cleanups: Vec<DeferredComprehensionCleanup>,
     scope: Scope,
     function_plan: Option<FunctionPlan>,
-    module_globals: HashSet<String>,
+    module_globals: FxHashSet<String>,
     module_annotation_index: u32,
     annotation_classdict_index: Option<u32>,
     generator_region_start: Option<Label>,
@@ -654,18 +655,18 @@ impl Compiler {
             deferred_constants: Vec::new(),
             deferred_names: Vec::new(),
             names: Vec::new(),
-            name_indices: HashMap::new(),
+            name_indices: FxHashMap::default(),
             locals: Vec::new(),
             fast_local_count: 0,
-            cell_names: HashSet::new(),
+            cell_names: FxHashSet::default(),
             free_names: Vec::new(),
-            temporary_indices: HashMap::new(),
-            hidden_names: HashSet::new(),
-            active_temporaries: HashSet::new(),
-            initialized_locals: HashSet::new(),
-            owned_load_locals: HashSet::new(),
-            imported_scope_names: HashSet::new(),
-            interned_constant_strings: HashSet::new(),
+            temporary_indices: FxHashMap::default(),
+            hidden_names: FxHashSet::default(),
+            active_temporaries: FxHashSet::default(),
+            initialized_locals: FxHashSet::default(),
+            owned_load_locals: FxHashSet::default(),
+            imported_scope_names: FxHashSet::default(),
+            interned_constant_strings: FxHashSet::default(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
@@ -698,7 +699,7 @@ impl Compiler {
             deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Module,
             function_plan: None,
-            module_globals: HashSet::new(),
+            module_globals: FxHashSet::default(),
             module_annotation_index: 0,
             annotation_classdict_index: None,
             generator_region_start: None,
@@ -772,7 +773,7 @@ impl Compiler {
             .iter()
             .enumerate()
             .map(|(index, name)| Ok((name.clone(), to_u32(index, "local variable count")?)))
-            .collect::<Result<HashMap<_, _>, CompileError>>()?;
+            .collect::<Result<FxHashMap<_, _>, CompileError>>()?;
         let local_count = locals.len();
         let free_indices = plan
             .freevars
@@ -784,7 +785,7 @@ impl Compiler {
                     to_u32(local_count + index, "free variable count")?,
                 ))
             })
-            .collect::<Result<HashMap<_, _>, CompileError>>()?;
+            .collect::<Result<FxHashMap<_, _>, CompileError>>()?;
         let initialized_locals = locals.iter().take(parameter_count).cloned().collect();
         locals.extend(plan.freevars.iter().cloned());
 
@@ -795,18 +796,18 @@ impl Compiler {
             deferred_constants: Vec::new(),
             deferred_names: Vec::new(),
             names: Vec::new(),
-            name_indices: HashMap::new(),
+            name_indices: FxHashMap::default(),
             locals,
             fast_local_count,
             cell_names: plan.cellvars.clone(),
             free_names: plan.freevars.iter().cloned().collect(),
-            temporary_indices: HashMap::new(),
-            hidden_names: HashSet::new(),
-            active_temporaries: HashSet::new(),
+            temporary_indices: FxHashMap::default(),
+            hidden_names: FxHashSet::default(),
+            active_temporaries: FxHashSet::default(),
             initialized_locals,
-            owned_load_locals: HashSet::new(),
-            imported_scope_names: HashSet::new(),
-            interned_constant_strings: HashSet::new(),
+            owned_load_locals: FxHashSet::default(),
+            imported_scope_names: FxHashSet::default(),
+            interned_constant_strings: FxHashSet::default(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
@@ -844,7 +845,7 @@ impl Compiler {
                 globals: plan.globals.clone(),
             },
             function_plan: Some(plan),
-            module_globals: HashSet::new(),
+            module_globals: FxHashSet::default(),
             module_annotation_index: 0,
             annotation_classdict_index: None,
             generator_region_start: None,
@@ -876,16 +877,16 @@ impl Compiler {
         name: &str,
         qualified_name: String,
         first_line_number: u32,
-        globals: HashSet<String>,
-        nonlocals: HashSet<String>,
+        globals: FxHashSet<String>,
+        nonlocals: FxHashSet<String>,
         freevars: BTreeSet<String>,
-        bound_names: HashSet<String>,
+        bound_names: FxHashSet<String>,
         needs_class_closure: bool,
         has_methods: bool,
         future_flags: u32,
     ) -> Self {
         let mut locals = Vec::new();
-        let mut cell_names = HashSet::new();
+        let mut cell_names = FxHashSet::default();
         if needs_class_closure {
             locals.push("__class__".to_string());
             cell_names.insert("__class__".to_string());
@@ -914,18 +915,18 @@ impl Compiler {
             deferred_constants: Vec::new(),
             deferred_names: Vec::new(),
             names: Vec::new(),
-            name_indices: HashMap::new(),
+            name_indices: FxHashMap::default(),
             locals,
             fast_local_count: 0,
             cell_names,
             free_names,
-            temporary_indices: HashMap::new(),
-            hidden_names: HashSet::new(),
-            active_temporaries: HashSet::new(),
-            initialized_locals: HashSet::new(),
-            owned_load_locals: HashSet::new(),
-            imported_scope_names: HashSet::new(),
-            interned_constant_strings: HashSet::new(),
+            temporary_indices: FxHashMap::default(),
+            hidden_names: FxHashSet::default(),
+            active_temporaries: FxHashSet::default(),
+            initialized_locals: FxHashSet::default(),
+            owned_load_locals: FxHashSet::default(),
+            imported_scope_names: FxHashSet::default(),
+            interned_constant_strings: FxHashSet::default(),
             type_parameter_names: BTreeSet::new(),
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
@@ -963,7 +964,7 @@ impl Compiler {
                 bound_names,
             },
             function_plan: None,
-            module_globals: HashSet::new(),
+            module_globals: FxHashSet::default(),
             module_annotation_index: 0,
             annotation_classdict_index: None,
             generator_region_start: None,
@@ -7387,12 +7388,12 @@ impl Compiler {
         let plan = FunctionPlan {
             key: (0, 0),
             locals,
-            globals: HashSet::new(),
-            nonlocals: HashSet::new(),
-            references: HashSet::new(),
-            annotation_references: HashSet::new(),
+            globals: FxHashSet::default(),
+            nonlocals: FxHashSet::default(),
+            references: FxHashSet::default(),
+            annotation_references: FxHashSet::default(),
             cellvars,
-            inlined_comprehension_cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -7517,15 +7518,15 @@ impl Compiler {
         let mut wrapper_plan = FunctionPlan {
             key: (0, 0),
             locals,
-            globals: HashSet::new(),
-            nonlocals: HashSet::new(),
+            globals: FxHashSet::default(),
+            nonlocals: FxHashSet::default(),
             references: type_parameter_requirements.iter().cloned().collect(),
-            annotation_references: HashSet::new(),
+            annotation_references: FxHashSet::default(),
             cellvars: type_parameter_requirements
                 .intersection(&type_names)
                 .cloned()
                 .collect(),
-            inlined_comprehension_cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
             children: vec![child_plan],
@@ -7911,7 +7912,7 @@ impl Compiler {
                     .extend(nested_expression_required_names(&keyword.value));
             }
         }
-        let mut cellvars: HashSet<_> = type_names
+        let mut cellvars: FxHashSet<_> = type_names
             .intersection(&required_names)
             .chain(type_names.intersection(&type_parameter_cell_requirements))
             .cloned()
@@ -7933,12 +7934,12 @@ impl Compiler {
         let plan = FunctionPlan {
             key: (0, 0),
             locals,
-            globals: HashSet::new(),
-            nonlocals: HashSet::new(),
-            references: HashSet::new(),
-            annotation_references: HashSet::new(),
+            globals: FxHashSet::default(),
+            nonlocals: FxHashSet::default(),
+            references: FxHashSet::default(),
+            annotation_references: FxHashSet::default(),
             cellvars,
-            inlined_comprehension_cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8369,11 +8370,11 @@ impl Compiler {
             key: (0, 0),
             locals: vec![".format".to_string()],
             globals,
-            nonlocals: HashSet::new(),
+            nonlocals: FxHashSet::default(),
             references: references.references,
-            annotation_references: HashSet::new(),
-            cellvars: HashSet::new(),
-            inlined_comprehension_cellvars: HashSet::new(),
+            annotation_references: FxHashSet::default(),
+            cellvars: FxHashSet::default(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8518,12 +8519,12 @@ impl Compiler {
         let plan = FunctionPlan {
             key: (0, 0),
             locals: vec!["format".to_string()],
-            globals: HashSet::new(),
-            nonlocals: HashSet::new(),
-            references: HashSet::new(),
-            annotation_references: HashSet::new(),
-            cellvars: HashSet::new(),
-            inlined_comprehension_cellvars: HashSet::new(),
+            globals: FxHashSet::default(),
+            nonlocals: FxHashSet::default(),
+            references: FxHashSet::default(),
+            annotation_references: FxHashSet::default(),
+            cellvars: FxHashSet::default(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8612,7 +8613,7 @@ impl Compiler {
         for annotation in &annotations {
             references.visit_expr(&annotation.annotation);
         }
-        let available_freevars: HashSet<_> = self.free_names.iter().cloned().collect();
+        let available_freevars: FxHashSet<_> = self.free_names.iter().cloned().collect();
         let mut freevars: BTreeSet<_> = references
             .references
             .iter()
@@ -8631,11 +8632,11 @@ impl Compiler {
             key: (0, 0),
             locals: vec!["format".to_string()],
             globals,
-            nonlocals: HashSet::new(),
+            nonlocals: FxHashSet::default(),
             references: references.references,
-            annotation_references: HashSet::new(),
-            cellvars: HashSet::new(),
-            inlined_comprehension_cellvars: HashSet::new(),
+            annotation_references: FxHashSet::default(),
+            cellvars: FxHashSet::default(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -8703,12 +8704,12 @@ impl Compiler {
         let plan = FunctionPlan {
             key: (0, 0),
             locals: vec!["format".to_string()],
-            globals: HashSet::new(),
-            nonlocals: HashSet::new(),
-            references: HashSet::new(),
-            annotation_references: HashSet::new(),
-            cellvars: HashSet::new(),
-            inlined_comprehension_cellvars: HashSet::new(),
+            globals: FxHashSet::default(),
+            nonlocals: FxHashSet::default(),
+            references: FxHashSet::default(),
+            annotation_references: FxHashSet::default(),
+            cellvars: FxHashSet::default(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -10216,9 +10217,9 @@ impl Compiler {
             key: (0, 0),
             locals: analysis.locals,
             globals,
-            nonlocals: HashSet::new(),
+            nonlocals: FxHashSet::default(),
             references: analysis.references,
-            annotation_references: HashSet::new(),
+            annotation_references: FxHashSet::default(),
             cellvars: analysis.cellvars,
             inlined_comprehension_cellvars: analysis.inlined_comprehension_cellvars,
             freevars,
@@ -10378,7 +10379,7 @@ impl Compiler {
                 }
             }
         }
-        let mut seen_temporaries = HashSet::new();
+        let mut seen_temporaries = FxHashSet::default();
         temporary_names.retain(|name| seen_temporaries.insert(name.clone()));
         let mut temporary_indices = Vec::with_capacity(temporary_names.len());
         for name in &temporary_names {
@@ -10580,11 +10581,11 @@ impl Compiler {
         for comprehension in &generator.generators {
             collect_target_names(&comprehension.target, &mut locals);
         }
-        let mut seen = HashSet::new();
+        let mut seen = FxHashSet::default();
         locals.retain(|name| seen.insert(name.clone()));
         let required_names = generator_required_names(generator);
         let generator_cellvars = generator_cellvars(generator);
-        let mut globals = HashSet::new();
+        let mut globals = FxHashSet::default();
         let mut freevars = BTreeSet::new();
         for name in required_names {
             if self.can_provide_closure(&name) {
@@ -10599,11 +10600,11 @@ impl Compiler {
             key: (0, 0),
             locals,
             globals,
-            nonlocals: HashSet::new(),
-            references: HashSet::new(),
-            annotation_references: HashSet::new(),
+            nonlocals: FxHashSet::default(),
+            references: FxHashSet::default(),
+            annotation_references: FxHashSet::default(),
             cellvars: generator_cellvars,
-            inlined_comprehension_cellvars: HashSet::new(),
+            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
@@ -13438,13 +13439,13 @@ impl Compiler {
 #[derive(Debug, Default)]
 struct LocalCollector {
     names: Vec<String>,
-    seen: HashSet<String>,
-    known_bindings: HashSet<String>,
+    seen: FxHashSet<String>,
+    known_bindings: FxHashSet<String>,
     comprehension_targets: Vec<String>,
-    seen_comprehension_targets: HashSet<String>,
-    annotation_only: HashSet<String>,
-    globals: HashSet<String>,
-    nonlocals: HashSet<String>,
+    seen_comprehension_targets: FxHashSet<String>,
+    annotation_only: FxHashSet<String>,
+    globals: FxHashSet<String>,
+    nonlocals: FxHashSet<String>,
 }
 
 impl LocalCollector {
@@ -13821,7 +13822,7 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
 
 #[derive(Default)]
 struct ReferenceCollector {
-    references: HashSet<String>,
+    references: FxHashSet<String>,
     skip_annotations: bool,
     explicit_dunder_class_reference: bool,
 }
@@ -13861,7 +13862,7 @@ impl<'ast> Visitor<'ast> for ReferenceCollector {
     }
 }
 
-fn definitely_evaluated_references(expression: &Expr) -> Option<HashSet<String>> {
+fn definitely_evaluated_references(expression: &Expr) -> Option<FxHashSet<String>> {
     #[derive(Default)]
     struct ConditionalEvaluationDetector(bool);
 
@@ -13897,9 +13898,9 @@ fn definitely_evaluated_references(expression: &Expr) -> Option<HashSet<String>>
 
 struct LambdaScopeAnalysis {
     locals: Vec<String>,
-    references: HashSet<String>,
-    cellvars: HashSet<String>,
-    inlined_comprehension_cellvars: HashSet<String>,
+    references: FxHashSet<String>,
+    cellvars: FxHashSet<String>,
+    inlined_comprehension_cellvars: FxHashSet<String>,
     required: BTreeSet<String>,
 }
 
@@ -13927,7 +13928,7 @@ fn analyze_lambda_scope(lambda: &ruff_python_ast::ExprLambda) -> LambdaScopeAnal
     references.visit_expr(&lambda.body);
     let mut nested_requirements = nested_lambda_required_names_in_expression(&lambda.body);
     nested_requirements.extend(nested_generator_required_names_in_expression(&lambda.body));
-    let local_names = locals.names.iter().cloned().collect::<HashSet<_>>();
+    let local_names = locals.names.iter().cloned().collect::<FxHashSet<_>>();
     let cellvars = nested_requirements
         .iter()
         .filter(|name| local_names.contains(*name))
@@ -14611,7 +14612,7 @@ fn comprehension_cell_names(
     generators: &[ruff_python_ast::Comprehension],
     key: Option<&Expr>,
     value: &Expr,
-) -> HashSet<String> {
+) -> FxHashSet<String> {
     fn extend_requirements(expression: &Expr, required: &mut BTreeSet<String>) {
         required.extend(nested_lambda_required_names_in_expression(expression));
         required.extend(nested_generator_required_names_in_expression(expression));
@@ -14637,17 +14638,17 @@ fn comprehension_cell_names(
     collect_nested_comprehension_target_names(value, &mut targets);
     extend_requirements(value, &mut required);
 
-    let targets = targets.into_iter().collect::<HashSet<_>>();
+    let targets = targets.into_iter().collect::<FxHashSet<_>>();
     required
         .into_iter()
         .filter(|name| targets.contains(name))
         .collect()
 }
 
-fn inlined_comprehension_cell_names_in_expression(expression: &Expr) -> HashSet<String> {
+fn inlined_comprehension_cell_names_in_expression(expression: &Expr) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
@@ -14680,10 +14681,10 @@ fn inlined_comprehension_cell_names_in_expression(expression: &Expr) -> HashSet<
     collector.names
 }
 
-fn inlined_comprehension_cell_names_in_suite(body: &[Stmt]) -> HashSet<String> {
+fn inlined_comprehension_cell_names_in_suite(body: &[Stmt]) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
@@ -14734,10 +14735,10 @@ fn collect_named_expression_target_names(expression: &Expr, names: &mut Vec<Stri
     Collector { names }.visit_expr(expression);
 }
 
-fn generator_named_targets(generator: &ruff_python_ast::ExprGenerator) -> HashSet<String> {
+fn generator_named_targets(generator: &ruff_python_ast::ExprGenerator) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
@@ -14763,7 +14764,7 @@ fn generator_named_targets(generator: &ruff_python_ast::ExprGenerator) -> HashSe
 }
 
 fn generator_required_names(generator: &ruff_python_ast::ExprGenerator) -> BTreeSet<String> {
-    let mut local_names = HashSet::new();
+    let mut local_names = FxHashSet::default();
     for comprehension in &generator.generators {
         let mut names = Vec::new();
         collect_target_names(&comprehension.target, &mut names);
@@ -14792,8 +14793,8 @@ fn generator_required_names(generator: &ruff_python_ast::ExprGenerator) -> BTree
         .collect()
 }
 
-fn generator_cellvars(generator: &ruff_python_ast::ExprGenerator) -> HashSet<String> {
-    let mut local_names = HashSet::new();
+fn generator_cellvars(generator: &ruff_python_ast::ExprGenerator) -> FxHashSet<String> {
+    let mut local_names = FxHashSet::default();
     for comprehension in &generator.generators {
         let mut names = Vec::new();
         collect_target_names(&comprehension.target, &mut names);
@@ -14850,10 +14851,10 @@ fn nested_generator_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
     collector.required
 }
 
-fn generator_named_targets_in_suite(body: &[Stmt]) -> HashSet<String> {
+fn generator_named_targets_in_suite(body: &[Stmt]) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
@@ -15395,10 +15396,10 @@ fn future_feature_flags(body: &[Stmt]) -> u32 {
         })
 }
 
-fn module_global_names(body: &[Stmt]) -> HashSet<String> {
+fn module_global_names(body: &[Stmt]) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
         comprehension_depth: usize,
         nested_scope_depth: usize,
     }
@@ -15450,10 +15451,10 @@ fn module_global_names(body: &[Stmt]) -> HashSet<String> {
     collector.names
 }
 
-fn module_imported_names(body: &[Stmt]) -> HashSet<String> {
+fn module_imported_names(body: &[Stmt]) -> FxHashSet<String> {
     #[derive(Default)]
     struct Collector {
-        names: HashSet<String>,
+        names: FxHashSet<String>,
     }
 
     impl<'ast> Visitor<'ast> for Collector {
@@ -16989,7 +16990,7 @@ fn unparse_annotation(expression: &Expr) -> String {
         .expr(expression);
     let bytes = annotation.as_bytes();
     let mut stack = Vec::<(u8, usize)>::new();
-    let mut parenthesis_pairs = HashSet::new();
+    let mut parenthesis_pairs = FxHashSet::default();
     let mut bracket_pairs = Vec::new();
     let mut quote = None::<(u8, bool)>;
     let mut index = 0_usize;

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
 
@@ -83,8 +83,8 @@ pub(crate) struct Assembler {
     next_label: u32,
     location: SourceLocation,
     exception_regions: Vec<ExceptionRegion>,
-    preserved_block_boundaries: HashSet<Label>,
-    borrow_unreachable_blocks: HashSet<Label>,
+    preserved_block_boundaries: FxHashSet<Label>,
+    borrow_unreachable_blocks: FxHashSet<Label>,
     load_fast_borrowing_enabled: bool,
     strict_owned_loads: bool,
     next_instruction_borrow_unreachable: bool,
@@ -132,8 +132,8 @@ impl Default for Assembler {
             next_label: 0,
             location: SourceLocation::NONE,
             exception_regions: Vec::new(),
-            preserved_block_boundaries: HashSet::new(),
-            borrow_unreachable_blocks: HashSet::new(),
+            preserved_block_boundaries: FxHashSet::default(),
+            borrow_unreachable_blocks: FxHashSet::default(),
             load_fast_borrowing_enabled: true,
             strict_owned_loads: false,
             next_instruction_borrow_unreachable: false,
@@ -492,8 +492,8 @@ impl Assembler {
         instruction.operand = Operand::Value(argument);
     }
 
-    pub(crate) fn used_constant_indices(&self, load_const: Opcode) -> HashSet<u32> {
-        let mut used = HashSet::new();
+    pub(crate) fn used_constant_indices(&self, load_const: Opcode) -> FxHashSet<u32> {
+        let mut used = FxHashSet::default();
         let reachable = self.reachable_items();
         for (index, item) in self.items.iter().enumerate() {
             let Item::Instruction(instruction) = item else {
@@ -554,7 +554,7 @@ impl Assembler {
             pop.operand = Operand::Value(0);
         }
 
-        let mut label_positions = HashMap::new();
+        let mut label_positions = FxHashMap::default();
         for (index, item) in self.items.iter().enumerate() {
             if let Item::Label(label) = item {
                 label_positions.insert(*label, index);
@@ -872,7 +872,7 @@ impl Assembler {
             })
             .collect::<Vec<_>>();
         let mut item_blocks = vec![0_usize; self.items.len()];
-        let mut label_blocks = HashMap::new();
+        let mut label_blocks = FxHashMap::default();
         for (block, (start, end)) in block_ranges.iter().copied().enumerate() {
             for index in start..end {
                 item_blocks[index] = block;
@@ -1045,7 +1045,7 @@ impl Assembler {
         // the same truth value, they share the final target. Otherwise the
         // inner jump skips the redundant outer test and enters its POP_TOP
         // fallthrough path directly.
-        let mut conditional_targets = HashMap::new();
+        let mut conditional_targets = FxHashMap::default();
         for (index, item) in self.items.iter().enumerate() {
             let Item::Label(label) = item else {
                 continue;
@@ -1114,7 +1114,7 @@ impl Assembler {
         let fallthrough_labels = fallthrough_indices
             .iter()
             .map(|index| (*index, self.label()))
-            .collect::<HashMap<_, _>>();
+            .collect::<FxHashMap<_, _>>();
         for index in fallthrough_indices.into_iter().rev() {
             self.items
                 .insert(index, Item::Label(fallthrough_labels[&index]));
@@ -1122,7 +1122,7 @@ impl Assembler {
 
         let value_preserving_jumps = (0..self.items.len())
             .filter(|index| is_value_preserving_jump(&self.items, *index))
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
         for (index, item) in self.items.iter_mut().enumerate() {
             let Item::Instruction(instruction) = item else {
                 continue;
@@ -1162,7 +1162,7 @@ impl Assembler {
             }
         }
 
-        let mut jump_targets = HashMap::new();
+        let mut jump_targets = FxHashMap::default();
         for (index, item) in self.items.iter().enumerate() {
             let Item::Label(label) = item else {
                 continue;
@@ -1349,7 +1349,7 @@ impl Assembler {
             block_labels.push(label);
         }
 
-        let mut label_blocks = HashMap::new();
+        let mut label_blocks = FxHashMap::default();
         for (index, block) in blocks.iter().enumerate() {
             for item in block {
                 if let Item::Label(label) = item {
@@ -1523,7 +1523,7 @@ impl Assembler {
             let cleanup_throw_blocks = cleanup_throw_positions
                 .iter()
                 .map(|position| order[*position])
-                .collect::<HashSet<_>>();
+                .collect::<FxHashSet<_>>();
             // Move each cleanup and its continuation as a pair. Intervening cold handler blocks
             // retain their relative position, as they do in CPython's block list.
             loop {
@@ -1619,7 +1619,7 @@ impl Assembler {
         }
         self.exception_regions = rebuilt_regions;
 
-        let mut label_positions = HashMap::new();
+        let mut label_positions = FxHashMap::default();
         let mut item_position = 0_usize;
         for block in &reordered {
             for item in block {
@@ -1723,7 +1723,7 @@ impl Assembler {
                     }
                 })
             })
-            .collect::<HashMap<_, _>>();
+            .collect::<FxHashMap<_, _>>();
         let exception_boundary_blocks = (0..blocks.len())
             .map(|index| {
                 self.exception_regions.iter().any(|region| {
@@ -1757,7 +1757,7 @@ impl Assembler {
             .exception_regions
             .iter()
             .flat_map(|region| [region.start, region.end])
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
         let mut predecessors = vec![0_usize; blocks.len()];
         predecessors[0] = 1;
         for (index, block) in blocks.iter().enumerate() {
@@ -1953,7 +1953,7 @@ impl Assembler {
             };
             let copied_label = self.label();
             let mut replaced_entry_label = false;
-            let mut copied_labels = HashMap::new();
+            let mut copied_labels = FxHashMap::default();
             for item in &mut copied {
                 if let Item::Label(label) = item {
                     let original = *label;
@@ -2357,7 +2357,7 @@ impl Assembler {
         const SWAP: u8 = 117;
         const VISITED: usize = usize::MAX;
 
-        let mut block_labels = HashSet::new();
+        let mut block_labels = FxHashSet::default();
         for item in &self.items {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
@@ -2540,7 +2540,7 @@ impl Assembler {
             None
         }
 
-        let mut block_labels = HashSet::new();
+        let mut block_labels = FxHashSet::default();
         for item in &self.items {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
@@ -2666,7 +2666,7 @@ impl Assembler {
             return;
         }
 
-        let mut block_labels = HashSet::new();
+        let mut block_labels = FxHashSet::default();
         for item in &self.items {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
@@ -2711,8 +2711,8 @@ impl Assembler {
                 item_blocks[*index] = Some(block_index);
             }
         }
-        let mut label_blocks = HashMap::new();
-        let mut label_positions = HashMap::new();
+        let mut label_blocks = FxHashMap::default();
+        let mut label_positions = FxHashMap::default();
         let mut next_block = None;
         for (index, item) in self.items.iter().enumerate().rev() {
             match item {
@@ -2728,7 +2728,7 @@ impl Assembler {
             }
         }
 
-        let mut exception_successors = HashMap::new();
+        let mut exception_successors = FxHashMap::default();
         for (index, item) in self.items.iter().enumerate() {
             if !matches!(item, Item::Instruction(_)) {
                 continue;
@@ -2760,8 +2760,8 @@ impl Assembler {
         for local in parameter_count.min(local_count)..local_count {
             unsafe_at_entry[0][local] = true;
         }
-        let mut needs_check = HashSet::new();
-        let mut checked_loads_needing_check = HashSet::new();
+        let mut needs_check = FxHashSet::default();
+        let mut checked_loads_needing_check = FxHashSet::default();
         let mut pending = (0..blocks.len()).collect::<Vec<_>>();
         let mut queued = vec![true; blocks.len()];
 
@@ -2871,7 +2871,7 @@ impl Assembler {
         const STORE_FAST_LOAD_FAST: u8 = 113;
         const STORE_FAST_STORE_FAST: u8 = 114;
 
-        let mut initialized = HashSet::new();
+        let mut initialized = FxHashSet::default();
         let mut block_has_instruction = false;
         for item in &mut self.items {
             let Item::Instruction(instruction) = item else {
@@ -2940,7 +2940,7 @@ impl Assembler {
             })
         }
 
-        fn kill_local(unsafe_loads: &mut HashSet<usize>, stack: &[Reference], local: u32) {
+        fn kill_local(unsafe_loads: &mut FxHashSet<usize>, stack: &[Reference], local: u32) {
             for reference in stack {
                 if reference.local == Some(local)
                     && let Some(producer) = reference.producer
@@ -2951,7 +2951,7 @@ impl Assembler {
         }
 
         fn store_local(
-            unsafe_loads: &mut HashSet<usize>,
+            unsafe_loads: &mut FxHashSet<usize>,
             stack: &[Reference],
             local: u32,
             reference: Reference,
@@ -2972,7 +2972,7 @@ impl Assembler {
             return;
         }
 
-        let mut block_labels = HashSet::new();
+        let mut block_labels = FxHashSet::default();
         for item in &self.items {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
@@ -3019,7 +3019,7 @@ impl Assembler {
                 item_blocks[*index] = Some(block_index);
             }
         }
-        let mut label_blocks = HashMap::new();
+        let mut label_blocks = FxHashMap::default();
         let mut next_block = None;
         for (index, item) in self.items.iter().enumerate().rev() {
             match item {
@@ -3036,7 +3036,7 @@ impl Assembler {
             .borrow_unreachable_blocks
             .iter()
             .filter_map(|label| label_blocks.get(label).copied())
-            .collect::<HashSet<_>>();
+            .collect::<FxHashSet<_>>();
         borrow_unreachable_blocks.extend(self.items.iter().enumerate().filter_map(
             |(index, item)| match item {
                 Item::Instruction(instruction) if instruction.borrow_unreachable_entry => {
@@ -3110,7 +3110,7 @@ impl Assembler {
                 };
                 usize::try_from(start_depth.unwrap_or(0).max(0)).unwrap()
             ];
-            let mut unsafe_loads = HashSet::new();
+            let mut unsafe_loads = FxHashSet::default();
 
             for index in &block {
                 let Item::Instruction(instruction) = self.items[*index] else {
@@ -3459,7 +3459,7 @@ impl Assembler {
             })
             .collect::<Vec<_>>();
         let mut block_labels = self.preserved_block_boundaries.clone();
-        let mut setup_labels = HashSet::new();
+        let mut setup_labels = FxHashSet::default();
         for region in &self.exception_regions {
             block_labels.insert(region.target);
             setup_labels.insert(region.start);
@@ -3616,9 +3616,9 @@ impl Assembler {
         output
     }
 
-    fn positions(&self, extended_args: &[u8]) -> (Vec<u32>, HashMap<Label, u32>) {
+    fn positions(&self, extended_args: &[u8]) -> (Vec<u32>, FxHashMap<Label, u32>) {
         let mut positions = Vec::with_capacity(extended_args.len());
-        let mut labels = HashMap::new();
+        let mut labels = FxHashMap::default();
         let mut position = 0_u32;
         let mut instruction_index = 0;
 
