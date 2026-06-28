@@ -626,7 +626,6 @@ pub(crate) struct Compiler {
     annotation_classdict_index: Option<u32>,
     generator_region_start: Option<Label>,
     generator_region_exclusions: Vec<(Label, Label)>,
-    match_temporary_index: u32,
     emitted_fallthrough_return: bool,
     loops: Vec<LoopContext>,
     depth: i32,
@@ -704,7 +703,6 @@ impl Compiler {
             annotation_classdict_index: None,
             generator_region_start: None,
             generator_region_exclusions: Vec::new(),
-            match_temporary_index: 0,
             emitted_fallthrough_return: false,
             loops: Vec::new(),
             depth: 0,
@@ -850,7 +848,6 @@ impl Compiler {
             annotation_classdict_index: None,
             generator_region_start: None,
             generator_region_exclusions: Vec::new(),
-            match_temporary_index: 0,
             emitted_fallthrough_return: false,
             loops: Vec::new(),
             depth: 0,
@@ -969,7 +966,6 @@ impl Compiler {
             annotation_classdict_index: None,
             generator_region_start: None,
             generator_region_exclusions: Vec::new(),
-            match_temporary_index: 0,
             emitted_fallthrough_return: false,
             loops: Vec::new(),
             depth: 0,
@@ -4383,320 +4379,6 @@ impl Compiler {
             context.on_top -= 1;
             self.compile_stack_pattern(subpattern, context)?;
         }
-        Ok(())
-    }
-
-    fn compile_pattern(
-        &mut self,
-        pattern: &Pattern,
-        subject: u32,
-        failure: Label,
-    ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
-        self.assembler
-            .set_location(self.source_location(pattern.range()));
-        match pattern {
-            Pattern::MatchValue(pattern) => {
-                self.emit(LOAD_FAST, subject, 1)?;
-                self.compile_expression(&pattern.value)?;
-                self.emit(COMPARE_OP, 88, -1)?;
-                self.emit_jump_forward(POP_JUMP_IF_FALSE, failure, -1)?;
-                self.emit(NOT_TAKEN, 0, 0)?;
-            }
-            Pattern::MatchSingleton(pattern) => {
-                self.emit(LOAD_FAST, subject, 1)?;
-                let constant = self.add_constant(match pattern.value {
-                    Singleton::None => Constant::None,
-                    Singleton::True => Constant::Bool(true),
-                    Singleton::False => Constant::Bool(false),
-                })?;
-                self.emit(LOAD_CONST, constant, 1)?;
-                self.emit(IS_OP, 0, -1)?;
-                self.emit_jump_forward(POP_JUMP_IF_FALSE, failure, -1)?;
-                self.emit(NOT_TAKEN, 0, 0)?;
-            }
-            Pattern::MatchAs(pattern) => {
-                if let Some(inner) = &pattern.pattern {
-                    self.compile_pattern(inner, subject, failure)?;
-                }
-                if let Some(name) = &pattern.name {
-                    self.emit(LOAD_FAST, subject, 1)?;
-                    self.store_name(name.as_str())?;
-                }
-            }
-            Pattern::MatchStar(pattern) => {
-                if let Some(name) = &pattern.name {
-                    self.emit(LOAD_FAST, subject, 1)?;
-                    self.store_name(name.as_str())?;
-                }
-            }
-            Pattern::MatchOr(pattern) => {
-                let success = self.assembler.label();
-                for (index, alternative) in pattern.patterns.iter().enumerate() {
-                    if index + 1 == pattern.patterns.len() {
-                        self.compile_pattern(alternative, subject, failure)?;
-                    } else {
-                        let next = self.assembler.label();
-                        self.compile_pattern(alternative, subject, next)?;
-                        self.emit_jump_forward(JUMP_FORWARD, success, 0)?;
-                        self.assembler.mark(next);
-                        self.set_depth(base_depth);
-                    }
-                }
-                self.assembler.mark(success);
-                self.set_depth(base_depth);
-            }
-            Pattern::MatchSequence(pattern) => {
-                self.compile_sequence_pattern(pattern, subject, failure)?;
-            }
-            Pattern::MatchMapping(pattern) => {
-                self.compile_mapping_pattern(pattern, subject, failure)?;
-            }
-            Pattern::MatchClass(pattern) => {
-                self.compile_class_pattern(pattern, subject, failure)?;
-            }
-        }
-        if self.depth != base_depth {
-            return Err(CompileError::Internal(format!(
-                "pattern changed stack depth from {base_depth} to {}",
-                self.depth
-            )));
-        }
-        Ok(())
-    }
-
-    fn compile_sequence_pattern(
-        &mut self,
-        pattern: &ruff_python_ast::PatternMatchSequence,
-        subject: u32,
-        failure: Label,
-    ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
-        let structural_failure = self.assembler.label();
-        let success = self.assembler.label();
-        let starred = pattern
-            .patterns
-            .iter()
-            .position(|pattern| matches!(pattern, Pattern::MatchStar(_)));
-        let minimum = pattern.patterns.len() - usize::from(starred.is_some());
-
-        self.emit(LOAD_FAST, subject, 1)?;
-        self.emit(MATCH_SEQUENCE, 0, 1)?;
-        self.emit_jump_forward(POP_JUMP_IF_FALSE, structural_failure, -1)?;
-        self.emit(NOT_TAKEN, 0, 0)?;
-        self.emit(GET_LEN, 0, 1)?;
-        self.emit(
-            LOAD_SMALL_INT,
-            to_u32(minimum, "sequence pattern length")?,
-            1,
-        )?;
-        self.emit(COMPARE_OP, if starred.is_some() { 172 } else { 72 }, -1)?;
-        self.emit_jump_forward(POP_JUMP_IF_FALSE, structural_failure, -1)?;
-        self.emit(NOT_TAKEN, 0, 0)?;
-
-        if let Some(starred) = starred {
-            let before = to_u32(starred, "sequence pattern prefix length")?;
-            let after = to_u32(
-                pattern.patterns.len() - starred - 1,
-                "sequence pattern suffix length",
-            )?;
-            self.emit(
-                UNPACK_EX,
-                before | (after << 8),
-                i32::try_from(pattern.patterns.len()).unwrap() - 1,
-            )?;
-        } else {
-            self.emit(
-                UNPACK_SEQUENCE,
-                to_u32(pattern.patterns.len(), "sequence pattern length")?,
-                i32::try_from(pattern.patterns.len()).unwrap() - 1,
-            )?;
-        }
-        let mut elements = Vec::with_capacity(pattern.patterns.len());
-        for _ in &pattern.patterns {
-            let temporary = self.allocate_match_temporary()?;
-            self.emit(STORE_FAST, temporary, -1)?;
-            elements.push(temporary);
-        }
-        for (element, pattern) in elements.into_iter().zip(&pattern.patterns) {
-            self.compile_pattern(pattern, element, failure)?;
-        }
-        self.emit_jump_forward(JUMP_FORWARD, success, 0)?;
-
-        self.assembler.mark(structural_failure);
-        self.set_depth(base_depth + 1);
-        self.emit(POP_TOP, 0, -1)?;
-        self.emit_jump_forward(JUMP_FORWARD, failure, 0)?;
-        self.assembler.mark(success);
-        self.set_depth(base_depth);
-        Ok(())
-    }
-
-    fn compile_mapping_pattern(
-        &mut self,
-        pattern: &ruff_python_ast::PatternMatchMapping,
-        subject: u32,
-        failure: Label,
-    ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
-        let structural_failure = self.assembler.label();
-        let keys_failure = self.assembler.label();
-        let success = self.assembler.label();
-
-        self.emit(LOAD_FAST, subject, 1)?;
-        self.emit(MATCH_MAPPING, 0, 1)?;
-        self.emit_jump_forward(POP_JUMP_IF_FALSE, structural_failure, -1)?;
-        self.emit(NOT_TAKEN, 0, 0)?;
-        self.emit(GET_LEN, 0, 1)?;
-        self.emit(
-            LOAD_SMALL_INT,
-            to_u32(pattern.keys.len(), "mapping pattern key count")?,
-            1,
-        )?;
-        self.emit(COMPARE_OP, 172, -1)?;
-        self.emit_jump_forward(POP_JUMP_IF_FALSE, structural_failure, -1)?;
-        self.emit(NOT_TAKEN, 0, 0)?;
-
-        let keys_temporary = if pattern.keys.is_empty() {
-            None
-        } else {
-            for key in &pattern.keys {
-                self.compile_expression(key)?;
-            }
-            self.emit_build(BUILD_TUPLE, pattern.keys.len())?;
-            let temporary = self.allocate_match_temporary()?;
-            self.emit(COPY, 1, 1)?;
-            self.emit(STORE_FAST, temporary, -1)?;
-            self.emit(MATCH_KEYS, 0, 1)?;
-            self.emit(COPY, 1, 1)?;
-            self.emit_jump_forward(POP_JUMP_IF_NONE, keys_failure, -1)?;
-            self.emit(NOT_TAKEN, 0, 0)?;
-            self.emit(
-                UNPACK_SEQUENCE,
-                to_u32(pattern.patterns.len(), "mapping pattern value count")?,
-                i32::try_from(pattern.patterns.len()).unwrap() - 1,
-            )?;
-            Some(temporary)
-        };
-
-        let mut values = Vec::with_capacity(pattern.patterns.len());
-        for _ in &pattern.patterns {
-            let temporary = self.allocate_match_temporary()?;
-            self.emit(STORE_FAST, temporary, -1)?;
-            values.push(temporary);
-        }
-        if keys_temporary.is_some() {
-            self.emit(POP_TOP, 0, -1)?;
-        }
-        self.emit(POP_TOP, 0, -1)?;
-
-        if let Some(rest) = &pattern.rest {
-            self.emit(BUILD_MAP, 0, 1)?;
-            self.emit(LOAD_FAST, subject, 1)?;
-            self.emit(DICT_UPDATE, 1, -1)?;
-            if let Some(keys) = keys_temporary {
-                for index in 0..pattern.keys.len() {
-                    self.emit(COPY, 1, 1)?;
-                    self.emit(LOAD_FAST, keys, 1)?;
-                    self.emit(
-                        LOAD_SMALL_INT,
-                        to_u32(index, "mapping pattern key index")?,
-                        1,
-                    )?;
-                    self.emit(BINARY_OP, 26, -1)?;
-                    self.emit(DELETE_SUBSCR, 0, -2)?;
-                }
-            }
-            self.store_name(rest.as_str())?;
-        }
-        for (value, pattern) in values.into_iter().zip(&pattern.patterns) {
-            self.compile_pattern(pattern, value, failure)?;
-        }
-        self.emit_jump_forward(JUMP_FORWARD, success, 0)?;
-
-        if !pattern.keys.is_empty() {
-            self.assembler.mark(keys_failure);
-            self.set_depth(base_depth + 3);
-            self.emit(POP_TOP, 0, -1)?;
-            self.emit(POP_TOP, 0, -1)?;
-            self.emit(POP_TOP, 0, -1)?;
-            self.emit_jump_forward(JUMP_FORWARD, failure, 0)?;
-        }
-        self.assembler.mark(structural_failure);
-        self.set_depth(base_depth + 1);
-        self.emit(POP_TOP, 0, -1)?;
-        self.emit_jump_forward(JUMP_FORWARD, failure, 0)?;
-        self.assembler.mark(success);
-        self.set_depth(base_depth);
-        Ok(())
-    }
-
-    fn compile_class_pattern(
-        &mut self,
-        pattern: &ruff_python_ast::PatternMatchClass,
-        subject: u32,
-        failure: Label,
-    ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
-        let structural_failure = self.assembler.label();
-        let success = self.assembler.label();
-        let count = pattern.arguments.patterns.len() + pattern.arguments.keywords.len();
-
-        self.emit(LOAD_FAST, subject, 1)?;
-        self.compile_expression(&pattern.cls)?;
-        let keywords = pattern
-            .arguments
-            .keywords
-            .iter()
-            .map(|keyword| Constant::String(keyword.attr.as_str().to_string()))
-            .collect();
-        let keywords = self.add_interned_string_tuple(keywords)?;
-        self.emit(LOAD_CONST, keywords, 1)?;
-        self.emit(
-            MATCH_CLASS,
-            to_u32(
-                pattern.arguments.patterns.len(),
-                "class positional pattern count",
-            )?,
-            -2,
-        )?;
-        self.emit(COPY, 1, 1)?;
-        self.emit_jump_forward(POP_JUMP_IF_NONE, structural_failure, -1)?;
-        self.emit(NOT_TAKEN, 0, 0)?;
-        if count == 0 {
-            self.emit(POP_TOP, 0, -1)?;
-        } else {
-            self.emit(
-                UNPACK_SEQUENCE,
-                to_u32(count, "class pattern argument count")?,
-                i32::try_from(count).unwrap() - 1,
-            )?;
-        }
-        let mut values = Vec::with_capacity(count);
-        for _ in 0..count {
-            let temporary = self.allocate_match_temporary()?;
-            self.emit(STORE_FAST, temporary, -1)?;
-            values.push(temporary);
-        }
-        for (value, argument) in values.into_iter().zip(
-            pattern.arguments.patterns.iter().chain(
-                pattern
-                    .arguments
-                    .keywords
-                    .iter()
-                    .map(|keyword| &keyword.pattern),
-            ),
-        ) {
-            self.compile_pattern(argument, value, failure)?;
-        }
-        self.emit_jump_forward(JUMP_FORWARD, success, 0)?;
-
-        self.assembler.mark(structural_failure);
-        self.set_depth(base_depth + 1);
-        self.emit(POP_TOP, 0, -1)?;
-        self.emit_jump_forward(JUMP_FORWARD, failure, 0)?;
-        self.assembler.mark(success);
-        self.set_depth(base_depth);
         Ok(())
     }
 
@@ -11463,12 +11145,6 @@ impl Compiler {
         Ok(index)
     }
 
-    fn allocate_match_temporary(&mut self) -> Result<u32, CompileError> {
-        let name = format!(".match_temp_{}", self.match_temporary_index);
-        self.match_temporary_index += 1;
-        self.ensure_temporary(&name)
-    }
-
     fn compile_collection(
         &mut self,
         elements: &[Expr],
@@ -14698,9 +14374,6 @@ fn inlined_comprehension_cell_names_in_suite(body: &[Stmt]) -> FxHashSet<String>
         fn visit_expr(&mut self, expression: &'ast Expr) {
             self.names
                 .extend(inlined_comprehension_cell_names_in_expression(expression));
-            if matches!(expression, Expr::Lambda(_) | Expr::Generator(_)) {
-                return;
-            }
             // The expression helper recursively handles every inlined comprehension below this
             // node, so walking again is unnecessary and would only repeat the same analysis.
         }
@@ -15369,10 +15042,6 @@ fn expression_contains_await(expression: &Expr) -> bool {
     collector.found
 }
 
-fn has_future_annotations(body: &[Stmt]) -> bool {
-    future_feature_flags(body) & CO_FUTURE_ANNOTATIONS != 0
-}
-
 fn future_feature_flags(body: &[Stmt]) -> u32 {
     body.iter()
         .filter_map(|statement| {
@@ -15495,22 +15164,6 @@ fn module_imported_names(body: &[Stmt]) -> FxHashSet<String> {
         collector.visit_stmt(statement);
     }
     collector.names
-}
-
-fn future_annotations_statement(body: &[Stmt]) -> Option<&Stmt> {
-    body.iter().find(|statement| {
-        let Stmt::ImportFrom(import) = statement else {
-            return false;
-        };
-        import
-            .module
-            .as_ref()
-            .is_some_and(|module| module.as_str() == "__future__")
-            && import
-                .names
-                .iter()
-                .any(|alias| alias.name.as_str() == "annotations")
-    })
 }
 
 fn has_simple_annotations(body: &[Stmt]) -> bool {

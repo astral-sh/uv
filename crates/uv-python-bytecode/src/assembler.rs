@@ -166,6 +166,13 @@ impl Assembler {
         })
     }
 
+    fn last_instruction_mut(&mut self) -> Option<&mut Instruction> {
+        self.items.iter_mut().rev().find_map(|item| match item {
+            Item::Instruction(instruction) => Some(instruction),
+            Item::Label(_) => None,
+        })
+    }
+
     pub(crate) fn instruction_count(&self) -> usize {
         self.items
             .iter()
@@ -252,81 +259,47 @@ impl Assembler {
 
     /// Prevents fusion with the next instruction without introducing a CFG boundary.
     pub(crate) fn prevent_last_instruction_fusion(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.prevent_fusion_with_next = true;
         }
     }
 
     /// Prevents fusion with the previous instruction without introducing a CFG boundary.
     pub(crate) fn prevent_last_instruction_fusion_with_previous(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.prevent_fusion_with_previous = true;
         }
     }
 
     /// Defers a redundant jump until the pass after exit-block duplication.
     pub(crate) fn defer_last_jump_removal(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.defer_redundant_jump_removal = true;
         }
     }
 
     /// Allows incoming jumps to thread through the last jump before retaining it as a NOP.
     pub(crate) fn preserve_last_redundant_jump_nop_after_threading(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.defer_redundant_jump_removal = true;
             instruction.preserve_nop_after_jump_threading = true;
         }
     }
 
     pub(crate) fn prevent_last_jump_inlining(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.inline_small_exit = false;
         }
     }
 
     pub(crate) fn preserve_last_inlined_jump_nop(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.preserve_inlined_jump_nop = true;
         }
     }
 
     pub(crate) fn preserve_last_direct_inlined_jump_nop(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
+        if let Some(instruction) = self.last_instruction_mut()
             && let Operand::Forward(target) = instruction.operand
         {
             instruction.preserve_direct_inlined_jump_nop = Some(target);
@@ -334,23 +307,13 @@ impl Assembler {
     }
 
     pub(crate) fn prevent_last_jump_threading_target(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.allow_jump_threading_target = false;
         }
     }
 
     pub(crate) fn prepare_last_no_location_block_for_inlining(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.location = SourceLocation::NONE;
             instruction.allow_jump_threading_target = false;
             instruction.allow_no_location_block_inlining = true;
@@ -358,23 +321,13 @@ impl Assembler {
     }
 
     pub(crate) fn preserve_last_no_location(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.preserve_no_location = true;
         }
     }
 
     pub(crate) fn mark_last_as_converted_pop_block(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.converted_pop_block = true;
         }
     }
@@ -429,34 +382,19 @@ impl Assembler {
     }
 
     pub(crate) fn exclude_last_instruction_from_exception_if_extended(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.exclude_exception_if_extended = true;
         }
     }
 
     pub(crate) fn exclude_last_instruction_from_exception(&mut self) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.exclude_exception = true;
         }
     }
 
     pub(crate) fn set_last_normalized_exception_owner(&mut self, has_owner: bool) {
-        if let Some(Item::Instruction(instruction)) = self
-            .items
-            .iter_mut()
-            .rev()
-            .find(|item| matches!(item, Item::Instruction(_)))
-        {
+        if let Some(instruction) = self.last_instruction_mut() {
             instruction.normalized_exception_owner = Some(has_owner);
         }
     }
@@ -467,12 +405,6 @@ impl Assembler {
 
     pub(crate) fn emit_with_depth(&mut self, opcode: Opcode, argument: u32, depth_after: u32) {
         self.emit_operand_with_depth(opcode, Operand::Value(argument), Some(depth_after));
-    }
-
-    pub(crate) fn emit_placeholder(&mut self, opcode: Opcode) -> InstructionId {
-        let id = InstructionId(self.items.len());
-        self.emit_operand(opcode, Operand::Value(0));
-        id
     }
 
     pub(crate) fn emit_placeholder_with_depth(
@@ -602,10 +534,6 @@ impl Assembler {
         }
     }
 
-    pub(crate) fn emit_forward(&mut self, opcode: Opcode, label: Label) {
-        self.emit_operand(opcode, Operand::Forward(label));
-    }
-
     pub(crate) fn emit_forward_with_depth(
         &mut self,
         opcode: Opcode,
@@ -704,11 +632,7 @@ impl Assembler {
         self.remove_redundant_nops();
         self.remove_redundant_forward_jumps();
         self.optimize_load_fast();
-        let instruction_count = self
-            .items
-            .iter()
-            .filter(|item| matches!(item, Item::Instruction(_)))
-            .count();
+        let instruction_count = self.instruction_count();
         let mut extended_args = vec![0_u8; instruction_count];
         let mut resolved_arguments = vec![0_u32; instruction_count];
 
@@ -3956,7 +3880,7 @@ fn extended_arg_count(argument: u32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Assembler, Opcode};
+    use super::{Assembler, Opcode, Operand};
 
     #[test]
     fn removes_unreachable_jumps() {
@@ -3968,7 +3892,7 @@ mod tests {
 
         assembler.mark(start);
         assembler.emit(resume, 0);
-        assembler.emit_forward(jump, end);
+        assembler.emit_operand(jump, Operand::Forward(end));
         assembler.emit_backward(jump, start);
         assembler.mark(end);
 
