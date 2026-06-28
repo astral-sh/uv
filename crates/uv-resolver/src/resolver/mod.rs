@@ -3160,8 +3160,11 @@ impl ForkState {
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub
-                .add_proxy_package(proxy_package, base_package_id, version.clone());
+            self.pubgrub.add_proxy_package_incompatibility(
+                proxy_package,
+                base_package_id,
+                version.clone(),
+            );
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(
