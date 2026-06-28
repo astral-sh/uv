@@ -529,6 +529,9 @@ impl CandidateSelector {
     /// The returned [`Candidate`] _may not_ be compatible with the current platform; in such
     /// cases, the resolver is responsible for tracking the incompatibility and re-running the
     /// selection process with additional constraints.
+    ///
+    /// `versions` must be ordered from highest to lowest when `highest` is `true`, and from lowest
+    /// to highest otherwise.
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
@@ -550,8 +553,8 @@ impl CandidateSelector {
                 |_| true,
             );
         };
-        let segments = std::iter::once(first_segment)
-            .chain(std::iter::once(second_segment))
+        let segments = [first_segment, second_segment]
+            .into_iter()
             .chain(segments)
             .collect::<SmallVec<[_; 8]>>();
         let mut cursor = RangeCursor::new(segments, highest);
@@ -560,6 +563,10 @@ impl CandidateSelector {
         })
     }
 
+    /// Run candidate selection with the given range-membership test.
+    ///
+    /// This keeps contiguous ranges on the no-filter fast path while disjoint ranges use a
+    /// [`RangeCursor`].
     fn select_candidate_from<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
@@ -675,6 +682,9 @@ struct RangeCursor<'a> {
 }
 
 impl<'a> RangeCursor<'a> {
+    /// Create a cursor over at least two ascending, non-overlapping segments.
+    ///
+    /// `highest` must match the order in which versions are passed to [`Self::contains`].
     fn new(
         segments: SmallVec<[(&'a Bound<Version>, &'a Bound<Version>); 8]>,
         highest: bool,
@@ -687,6 +697,8 @@ impl<'a> RangeCursor<'a> {
         }
     }
 
+    /// Return whether `version` is in the range, advancing past segments that cannot contain any
+    /// subsequently visited versions.
     fn contains(&mut self, version: &Version) -> bool {
         if self.highest {
             loop {
@@ -740,50 +752,34 @@ mod tests {
         value.parse().expect("valid test version")
     }
 
-    #[test]
-    fn range_cursor_ascending() {
-        let segments = [
+    fn assert_range_cursor(highest: bool, values: &[&str]) {
+        let range = [
             (Bound::Unbounded, Bound::Excluded(version("2"))),
             (Bound::Included(version("3")), Bound::Included(version("4"))),
             (Bound::Excluded(version("5")), Bound::Unbounded),
-        ];
-        let segments = segments.iter().map(|(start, end)| (start, end)).collect();
-        let mut cursor = RangeCursor::new(segments, false);
+        ]
+        .into_iter()
+        .collect::<Range<_>>();
+        let mut cursor = RangeCursor::new(range.iter().collect(), highest);
 
-        for (value, expected) in [
-            ("1", true),
-            ("2", false),
-            ("2.5", false),
-            ("3", true),
-            ("4", true),
-            ("5", false),
-            ("6", true),
-        ] {
-            assert_eq!(cursor.contains(&version(value)), expected, "{value}");
+        for value in values {
+            let version = version(value);
+            assert_eq!(
+                cursor.contains(&version),
+                range.contains(&version),
+                "{value}"
+            );
         }
     }
 
     #[test]
-    fn range_cursor_descending() {
-        let segments = [
-            (Bound::Unbounded, Bound::Excluded(version("2"))),
-            (Bound::Included(version("3")), Bound::Included(version("4"))),
-            (Bound::Excluded(version("5")), Bound::Unbounded),
-        ];
-        let segments = segments.iter().map(|(start, end)| (start, end)).collect();
-        let mut cursor = RangeCursor::new(segments, true);
+    fn range_cursor_ascending() {
+        assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
+    }
 
-        for (value, expected) in [
-            ("6", true),
-            ("5", false),
-            ("4", true),
-            ("3", true),
-            ("2.5", false),
-            ("2", false),
-            ("1", true),
-        ] {
-            assert_eq!(cursor.contains(&version(value)), expected, "{value}");
-        }
+    #[test]
+    fn range_cursor_descending() {
+        assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
 }
 
