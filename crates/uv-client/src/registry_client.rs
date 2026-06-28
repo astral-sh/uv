@@ -21,8 +21,8 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    BuiltDist, DistributionId, File, Identifier, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -204,6 +204,7 @@ impl<'a> RegistryClientBuilder<'a> {
             client,
             read_timeout,
             flat_indexes: Arc::default(),
+            wheel_metadata_cache: Arc::default(),
             pyx_token_store: PyxTokenStore::from_settings().ok(),
         })
     }
@@ -228,6 +229,8 @@ pub struct RegistryClient {
     read_timeout: Duration,
     /// The flat index entries for each `--find-links`-style index URL, with one slot per index.
     flat_indexes: Arc<Mutex<FlatIndexCache>>,
+    /// Registry wheel metadata read in offline mode, shared across client clones.
+    wheel_metadata_cache: Arc<Mutex<FxHashMap<DistributionId, ResolutionMetadata>>>,
     /// The pyx token store to use for persistent credentials.
     // TODO(charlie): The token store is only needed for `is_known_url`; can we avoid storing it here?
     pyx_token_store: Option<PyxTokenStore>,
@@ -920,6 +923,24 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<ResolutionMetadata, Error> {
+        let cache_id = if self.connectivity.is_offline()
+            && let BuiltDist::Registry(wheels) = built_dist
+        {
+            Some(wheels.distribution_id())
+        } else {
+            None
+        };
+        if let Some(cache_id) = &cache_id
+            && let Some(metadata) = self
+                .wheel_metadata_cache
+                .lock()
+                .await
+                .get(cache_id)
+                .cloned()
+        {
+            return Ok(metadata);
+        }
+
         let metadata = match &built_dist {
             BuiltDist::Registry(wheels) => {
                 #[derive(Debug, Clone)]
@@ -1047,6 +1068,13 @@ impl RegistryClient {
                 metadata: metadata.name,
                 given: built_dist.name().clone(),
             }));
+        }
+
+        if let Some(cache_id) = cache_id {
+            self.wheel_metadata_cache
+                .lock()
+                .await
+                .insert(cache_id, metadata.clone());
         }
 
         Ok(metadata)
