@@ -449,6 +449,16 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         .map(FilesystemOptions::from)
         .combine(filesystem);
 
+    // Apply the managed Python installation directory from the configuration file, if any. The CLI
+    // flag and the `UV_PYTHON_INSTALL_DIR` environment variable take precedence and are handled
+    // directly by `ManagedPythonInstallations::from_settings`.
+    if let Some(python_install_dir) = filesystem
+        .as_ref()
+        .and_then(|filesystem| filesystem.globals.python_install_dir.clone())
+    {
+        uv_python::managed::set_python_install_dir(python_install_dir);
+    }
+
     // Resolve the global settings.
     let globals = GlobalSettings::resolve(
         &cli.top_level.global_args,

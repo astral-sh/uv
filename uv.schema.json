@@ -477,6 +477,10 @@
       "description": "URL pointing to JSON of custom Python installations.",
       "type": ["string", "null"]
     },
+    "python-install-dir": {
+      "description": "Path to the directory where uv installs and discovers managed Python versions.\n\nBy default, managed Python versions are stored in the `python` subdirectory of the uv data\ndirectory, e.g., `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Linux and\nmacOS, and `%APPDATA%\\uv\\data\\python` on Windows. Run `uv python dir` to view the active\ndirectory.\n\nThe `UV_PYTHON_INSTALL_DIR` environment variable takes precedence over this setting.",
+      "type": ["string", "null"]
+    },
     "python-install-mirror": {
       "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone).\nThis variable can be set to a mirror URL to use a different source for Python installations.\nThe provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
       "type": ["string", "null"]
