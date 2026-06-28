@@ -3300,7 +3300,7 @@ impl Assembler {
             let opcode = match (first.opcode.code, second.opcode.code) {
                 (LOAD_FAST_BORROW, LOAD_FAST_BORROW) => LOAD_FAST_BORROW_LOAD_FAST_BORROW,
                 (LOAD_FAST, LOAD_FAST) => LOAD_FAST_LOAD_FAST,
-                (STORE_FAST, LOAD_FAST) | (STORE_FAST, LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
+                (STORE_FAST, LOAD_FAST | LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
                 (STORE_FAST, STORE_FAST) => STORE_FAST_STORE_FAST,
                 _ => {
                     fused.push(self.items[index]);

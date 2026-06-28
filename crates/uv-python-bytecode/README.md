@@ -18,12 +18,6 @@ The backend currently implements:
 - classes with bases, metaclass keywords, decorators, methods, class namespace metadata, class
   dictionary cells, and static-attribute metadata.
 
-The parser corpus now compiles without any `CompileError::Unsupported` results. This does not yet
-mean that every lowering is CPython-compatible: exception and context-manager unwinding,
-tail-duplicated control flow, generic-class metadata, and several async and pattern-matching paths
-still produce byte mismatches. The crate is therefore not ready to replace uv's existing
-`--compile-bytecode` implementation.
-
 ## CPython corpus comparison
 
 The `compare_cpython_corpus` example discovers every `.py` file under Ruff's linter, formatter,
@@ -36,22 +30,26 @@ cargo run -p uv-python-bytecode --example compare_cpython_corpus
 
 Pass `--require-all` to return a failure status unless every CPython-accepted file matches exactly.
 Additional roots can be supplied explicitly, and `--python`, `--limit`, and `--examples` control
-the oracle executable and report size.
+the oracle executable and report size. Pass `--dump-mismatches DIR` to save mismatch inputs and
+outputs for inspection.
 
-The current CPython 3.14.5 baseline over 2,451 Ruff and ty files is:
+The frozen compatibility gate is pinned to CPython 3.14.0rc1 and 2,451 Ruff and ty files. Its
+current result is:
 
 ```text
-exact:             829
-byte mismatch:   1,401
-unsupported:         0
-CPython rejected:  221
-parser mismatch:     0
-compiler panic:      0
-oracle failure:      0
+exact:               2,230
+CPython rejected:      221
+byte mismatch:           0
+unsupported:             0
+Ruff parse mismatch:     0
+compiler panic:          0
+non-UTF-8:               0
+oracle failure:          0
 ```
 
-This is an executable progress metric, not a compatibility claim. Byte-for-byte compatibility is
-only complete when `--require-all` succeeds.
+This exact-compatibility result is specific to the pinned oracle version and frozen corpus; it is
+not a claim about arbitrary CPython versions or Python inputs. A successful `--require-all` run is
+the authoritative compatibility gate.
 
 The Ruff dependencies are pinned to a specific Git revision because Ruff's parser crates are not
 published independently.

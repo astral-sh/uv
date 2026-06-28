@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_pattern, walk_stmt};
 use ruff_python_ast::{
-    BoolOp, CmpOp, ConversionFlag, Expr, ExprBinOp, ExprContext, FStringPart,
+    BoolOp, CmpOp, ConversionFlag, Expr, ExprBinOp, ExprContext, FStringPart, Identifier,
     InterpolatedStringElement, Keyword, Number, Operator, Pattern, Singleton, Stmt, StmtClassDef,
     StmtFunctionDef, Suite, TypeParam, UnaryOp,
 };
@@ -4027,10 +4027,10 @@ impl Compiler {
                 }
                 self.assembler
                     .set_location(self.source_location(pattern.range));
-                self.capture_match_name(pattern.name.as_ref().map(|name| name.as_str()), context)
+                self.capture_match_name(pattern.name.as_ref().map(Identifier::as_str), context)
             }
             Pattern::MatchStar(pattern) => {
-                self.capture_match_name(pattern.name.as_ref().map(|name| name.as_str()), context)
+                self.capture_match_name(pattern.name.as_ref().map(Identifier::as_str), context)
             }
             Pattern::MatchOr(pattern) => self.compile_stack_or_pattern(pattern, context),
             Pattern::MatchSequence(pattern) => {
@@ -15141,10 +15141,10 @@ fn module_imported_names(body: &[Stmt]) -> FxHashSet<String> {
                     }
                 }
                 Stmt::ImportFrom(import)
-                    if !import
+                    if import
                         .module
                         .as_ref()
-                        .is_some_and(|module| module.as_str() == "__future__") =>
+                        .is_none_or(|module| module.as_str() != "__future__") =>
                 {
                     for alias in &import.names {
                         if alias.name.as_str() != "*" {

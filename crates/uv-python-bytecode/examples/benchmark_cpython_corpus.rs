@@ -764,7 +764,7 @@ fn run_blocks(
     for block in 1..=blocks {
         let order = block_order(block);
         for (position, engine) in order.into_iter().enumerate() {
-            wait_for_cooldown(cooldown);
+            thread::sleep(cooldown);
             let sample = match engine {
                 Engine::Rust => run_rust_phase(phase, accepted, precompiled)?,
                 Engine::Cpython => {
@@ -798,10 +798,6 @@ fn run_blocks(
         }
     }
     Ok(())
-}
-
-fn wait_for_cooldown(cooldown: Duration) {
-    thread::sleep(cooldown);
 }
 
 fn block_order(block: usize) -> [Engine; 4] {
@@ -1235,8 +1231,8 @@ fn median_f64(values: &[f64]) -> Result<f64, String> {
     let mut values = values.to_vec();
     values.sort_by(f64::total_cmp);
     let middle = values.len() / 2;
-    if values.len() % 2 == 0 {
-        Ok((values[middle - 1] + values[middle]) / 2.0)
+    if values.len().is_multiple_of(2) {
+        Ok(f64::midpoint(values[middle - 1], values[middle]))
     } else {
         Ok(values[middle])
     }
@@ -1279,7 +1275,7 @@ mod tests {
         BOOTSTRAP_SEED, BlockSample, Engine, Metric, Options, Phase, RawRow, SourceFile, Timings,
         block_order, block_order_label, block_samples, bootstrap_median_ci, cooldown_metadata,
         expected_row_count, parse_options_from, parse_sample_response, process_timer_result,
-        ratio_statistics, summarize, wait_for_cooldown, write_raw,
+        ratio_statistics, summarize, write_raw,
     };
 
     fn raw_row(
@@ -1472,11 +1468,6 @@ mod tests {
     }
 
     #[test]
-    fn supports_zero_duration_scheduler_path() {
-        wait_for_cooldown(Duration::ZERO);
-    }
-
-    #[test]
     fn parses_dual_clock_response() {
         let sample =
             parse_sample_response("RESULT\t120\t90\t2\t42").expect("valid dual-clock response");
@@ -1615,26 +1606,6 @@ mod tests {
             bootstrap_median_ci(&ratios, 1_000, BOOTSTRAP_SEED).expect("valid bootstrap sample");
         assert_eq!(first, second);
         assert!(first.0 <= 1.0 && first.1 >= 1.0);
-    }
-
-    #[test]
-    fn raw_row_tracks_inclusion() {
-        let row = RawRow {
-            phase: "compiler_core",
-            block: 1,
-            position: 1,
-            order: "ABBA",
-            kind: "warmup",
-            first_engine: "rust",
-            engine: "rust",
-            cooldown_ms: 0,
-            wall_elapsed_ns: 10,
-            process_cpu_ns: 9,
-            file_count: 2,
-            source_bytes: 20,
-            included: false,
-        };
-        assert!(!row.included);
     }
 
     #[test]

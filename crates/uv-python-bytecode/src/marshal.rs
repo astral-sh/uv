@@ -51,13 +51,8 @@ enum ObjectKey {
 }
 
 #[derive(Debug, Default)]
-struct ObjectState {
-    count: usize,
-}
-
-#[derive(Debug, Default)]
 struct ObjectGraph {
-    objects: FxHashMap<ObjectKey, ObjectState>,
+    objects: FxHashMap<ObjectKey, usize>,
     interned_strings: FxHashSet<String>,
 }
 
@@ -69,9 +64,9 @@ impl ObjectGraph {
     }
 
     fn record(&mut self, key: ObjectKey) -> bool {
-        let state = self.objects.entry(key).or_default();
-        state.count += 1;
-        state.count == 1
+        let count = self.objects.entry(key).or_default();
+        *count += 1;
+        *count == 1
     }
 
     fn visit_code(&mut self, code: &CodeObject) {
@@ -190,7 +185,7 @@ impl ObjectGraph {
     }
 
     fn is_shared(&self, key: &ObjectKey, force_reference: bool) -> bool {
-        if force_reference || self.objects.get(key).is_some_and(|state| state.count > 1) {
+        if force_reference || self.objects.get(key).is_some_and(|count| *count > 1) {
             return true;
         }
         match key {
@@ -246,42 +241,16 @@ impl Writer<'_> {
     }
 
     fn bytes(&mut self, value: &[u8], force_reference: bool) {
-        let Some(flag) = self.begin_object(ObjectKey::Bytes(value.to_vec()), force_reference)
-        else {
+        self.bytes_with_key(ObjectKey::Bytes(value.to_vec()), value, force_reference);
+    }
+
+    fn bytes_with_key(&mut self, key: ObjectKey, value: &[u8], force_reference: bool) {
+        let Some(flag) = self.begin_object(key, force_reference) else {
             return;
         };
         self.byte(TYPE_BYTES | flag);
         self.long(value.len().try_into().expect("marshal value exceeds 4 GiB"));
         self.output.extend_from_slice(value);
-    }
-
-    fn code_bytes(&mut self, code: &CodeObject) {
-        let Some(flag) = self.begin_object(code_bytes_key(code), true) else {
-            return;
-        };
-        self.byte(TYPE_BYTES | flag);
-        self.long(
-            code.bytecode
-                .len()
-                .try_into()
-                .expect("marshal value exceeds 4 GiB"),
-        );
-        self.output.extend_from_slice(&code.bytecode);
-    }
-
-    fn local_kinds(&mut self, code: &CodeObject) {
-        let key = local_kinds_key(code);
-        let Some(flag) = self.begin_object(key, false) else {
-            return;
-        };
-        self.byte(TYPE_BYTES | flag);
-        self.long(
-            code.local_kinds
-                .len()
-                .try_into()
-                .expect("marshal value exceeds 4 GiB"),
-        );
-        self.output.extend_from_slice(&code.local_kinds);
     }
 
     fn string(&mut self, value: &str) {
@@ -425,14 +394,7 @@ impl Writer<'_> {
                 self.surrogate_string_with_force(value, force_reference);
             }
             Constant::Bytes(value) => self.bytes(value, force_reference),
-            Constant::Tuple(values) => {
-                let key = constants_tuple_key(values);
-                if self.tuple_header(key, values.len(), force_reference) {
-                    for value in values {
-                        self.constant(value);
-                    }
-                }
-            }
+            Constant::Tuple(values) => self.constants(values, force_reference),
             Constant::FrozenSet(values) => {
                 let Some(flag) = self.begin_object(constant_key(value), force_reference) else {
                     return;
@@ -640,11 +602,11 @@ impl Writer<'_> {
         self.long(code.keyword_only_arg_count);
         self.long(code.stack_size);
         self.long(code.flags);
-        self.code_bytes(code);
+        self.bytes_with_key(code_bytes_key(code), &code.bytecode, true);
         self.constants(&code.constants, false);
         self.strings(&code.names, false);
         self.locals(code);
-        self.local_kinds(code);
+        self.bytes_with_key(local_kinds_key(code), &code.local_kinds, false);
         self.string(&code.filename);
         self.string(&code.name);
         self.string(&code.qualified_name);
