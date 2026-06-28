@@ -2927,16 +2927,6 @@ impl Assembler {
         const STORE_FAST_LOAD_FAST: u8 = 113;
         const STORE_FAST_STORE_FAST: u8 = 114;
 
-        if !self.items.iter().any(|item| {
-            matches!(
-                item,
-                Item::Instruction(instruction)
-                    if matches!(instruction.opcode.code, LOAD_FAST | LOAD_FAST_LOAD_FAST)
-            )
-        }) {
-            return;
-        }
-
         #[derive(Clone, Copy)]
         struct Reference {
             producer: Option<usize>,
@@ -2970,6 +2960,16 @@ impl Assembler {
             if let Some(producer) = reference.producer {
                 unsafe_loads.insert(producer);
             }
+        }
+
+        if !self.items.iter().any(|item| {
+            matches!(
+                item,
+                Item::Instruction(instruction)
+                    if matches!(instruction.opcode.code, LOAD_FAST | LOAD_FAST_LOAD_FAST)
+            )
+        }) {
+            return;
         }
 
         let mut block_labels = HashSet::new();
