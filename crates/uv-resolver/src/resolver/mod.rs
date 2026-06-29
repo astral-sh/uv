@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -2666,7 +2666,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if dist.wheel().is_none() {
                     if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
-                            if lower == &Bound::Unbounded {
+                            if lower == Bound::Unbounded {
                                 debug!(
                                     "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
                                 );
@@ -3160,8 +3160,11 @@ impl ForkState {
 
             let proxy_package = self.pubgrub.package_store.alloc(package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
-            self.pubgrub
-                .add_proxy_package(proxy_package, base_package_id, version.clone());
+            self.pubgrub.add_proxy_package_incompatibility(
+                proxy_package,
+                base_package_id,
+                version.clone(),
+            );
         }
 
         let conflict = self.pubgrub.add_package_version_dependencies(
@@ -3323,15 +3326,33 @@ impl ForkState {
         let mut edges: Vec<ResolutionDependencyEdge> = Vec::with_capacity(edge_count);
         for (package, self_version) in &solution {
             for id in &self.pubgrub.incompatibilities[package] {
-                let pubgrub::Kind::FromDependencyOf(
-                    self_package,
-                    ref self_range,
-                    dependency_package,
-                    ref dependency_range,
-                ) = self.pubgrub.incompatibility_store[*id].kind
+                let incompatibility = &self.pubgrub.incompatibility_store[*id];
+                let pubgrub::Kind::FromDependencyOf(self_package, dependency_package) =
+                    &incompatibility.kind
                 else {
                     continue;
                 };
+                let (self_package, dependency_package) = (*self_package, *dependency_package);
+                let mut terms = incompatibility.iter();
+                let Some((term_package, Term::Positive(self_range))) = terms.next() else {
+                    unreachable!("dependency incompatibility must start with its positive term");
+                };
+                if term_package != self_package {
+                    unreachable!("dependency incompatibility has a mismatched dependent term");
+                }
+                let dependency_range = match terms.next() {
+                    None => Cow::Owned(Ranges::empty()),
+                    Some((term_package, Term::Negative(range)))
+                        if term_package == dependency_package =>
+                    {
+                        Cow::Borrowed(range)
+                    }
+                    _ => unreachable!("dependency incompatibility must end with its negative term"),
+                };
+                assert!(
+                    terms.next().is_none(),
+                    "dependency incompatibility must contain at most two terms"
+                );
                 if *package != self_package {
                     continue;
                 }
@@ -4257,7 +4278,7 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
 
         for index in incompatibilities {
             let incompat = &state.incompatibility_store[*index];
-            if let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind {
+            if let Kind::FromDependencyOf(parent, child) = &incompat.kind {
                 if current != *child {
                     continue;
                 }
@@ -4291,7 +4312,7 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
 
         for index in incompatibilities {
             let incompat = &state.incompatibility_store[*index];
-            let Kind::FromDependencyOf(parent, _, child, _) = &incompat.kind else {
+            let Kind::FromDependencyOf(parent, child) = &incompat.kind else {
                 continue;
             };
             if current != *parent || !ancestors.contains(child) {

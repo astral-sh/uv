@@ -2380,7 +2380,7 @@ fn update_availability_range(
     range
         .iter()
         .filter_map(|(lower, upper)| {
-            let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+            let segment_range = Range::from_range_bounds((lower.cloned(), upper.cloned()));
 
             // Drop the segment if it's disjoint with the available range, e.g., if the segment is
             // `foo>999`, and the available versions are all `<10` it's useless to show.
@@ -2412,13 +2412,13 @@ fn update_availability_range(
                 Bound::Included(version) if !version_contained_in(version, available_versions) => {
                     Bound::Excluded(version.clone())
                 }
-                _ => (*lower).clone(),
+                _ => lower.cloned(),
             };
             let upper = match upper {
                 Bound::Included(version) if !version_contained_in(version, available_versions) => {
                     Bound::Excluded(version.clone())
                 }
-                _ => (*upper).clone(),
+                _ => upper.cloned(),
             };
 
             Some((lower, upper))
@@ -2477,7 +2477,7 @@ impl std::fmt::Display for PackageRange<'_> {
                     }
                 }
                 (Bound::Included(v), Bound::Excluded(b)) => {
-                    if let Some(prefix) = PrefixMatch::from_range(lower, upper) {
+                    if let Some(prefix) = PrefixMatch::from_range(*lower, *upper) {
                         write!(f, "{package}{prefix}")?;
                     } else {
                         write!(f, "{package}>={v},<{b}")?;

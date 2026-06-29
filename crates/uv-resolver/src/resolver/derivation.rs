@@ -1,4 +1,4 @@
-use pubgrub::{Id, Kind, State};
+use pubgrub::{Id, Kind, Ranges, State, Term};
 use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{DerivationChain, DerivationStep};
@@ -37,7 +37,27 @@ impl DerivationChainBuilder {
                 let incompat = &state.incompatibility_store[*index];
 
                 // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(id1, _, id2, v2) = &incompat.kind {
+                if let Kind::FromDependencyOf(id1, id2) = &incompat.kind {
+                    let mut terms = incompat.iter();
+                    let Some((term_id1, Term::Positive(_))) = terms.next() else {
+                        unreachable!(
+                            "dependency incompatibility must start with its positive term"
+                        );
+                    };
+                    if term_id1 != *id1 {
+                        unreachable!("dependency incompatibility has a mismatched dependent term");
+                    }
+                    let v2 = match terms.next() {
+                        None => Ranges::empty(),
+                        Some((term_id2, Term::Negative(v2))) if term_id2 == *id2 => v2.clone(),
+                        _ => unreachable!(
+                            "dependency incompatibility must end with its negative term"
+                        ),
+                    };
+                    assert!(
+                        terms.next().is_none(),
+                        "dependency incompatibility must contain at most two terms"
+                    );
                     if id == *id2 && v2.contains(version) {
                         if let Some(version) = solution.get(id1) {
                             let p1 = &state.package_store[*id1];
@@ -55,7 +75,7 @@ impl DerivationChainBuilder {
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
                                     Some(version.clone()),
-                                    v2.clone(),
+                                    v2,
                                 ));
 
                                 // Recursively search the next package.
