@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::{fmt, io};
 
 use fs_err::tokio::File;
-use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::{AUTHORIZATION, LOCATION, ToStrError};
@@ -16,8 +15,9 @@ use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use rustc_hash::FxHashMap;
 use serde::Deserialize;
+use tar_codec::{Archive as _, Member, MemberPayload as _, TarArchive};
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
@@ -117,8 +117,10 @@ pub enum PublishPrepareError {
     MissingPkgInfo,
     #[error("Multiple PKG-INFO files found: `{0}`")]
     MultiplePkgInfo(String),
+    #[error("Failed to decode source distribution")]
+    Decode(#[source] tar_codec::DecodeError),
     #[error("Failed to read: `{0}`")]
-    Read(String, #[source] io::Error),
+    Read(String, #[source] tar_codec::DecodeError),
     #[error("Invalid PEP 740 attestation (not JSON): `{0}`")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
@@ -1090,42 +1092,41 @@ async fn hash_file(
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
-    let mut archive = tokio_tar::Archive::new(decoded);
-    let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
-        .entries()?
-        .map_err(PublishPrepareError::from)
-        .try_filter_map(async |mut entry| {
-            let path = entry
-                .path()
-                .map_err(PublishPrepareError::from)?
-                .to_path_buf();
-            let mut components = path.components();
-            let Some(_top_level) = components.next() else {
-                return Ok(None);
-            };
-            let Some(pkg_info) = components.next() else {
-                return Ok(None);
-            };
-            if components.next().is_some() || pkg_info.as_os_str() != "PKG-INFO" {
-                return Ok(None);
+    let mut members = TarArchive::new(decoded).members();
+    let mut pkg_infos = Vec::new();
+
+    while let Some(member) = members.next().await.map_err(PublishPrepareError::Decode)? {
+        let path = member.metadata().path.clone();
+        let mut components = Path::new(&path).components();
+        let Some(_top_level) = components.next() else {
+            continue;
+        };
+        let Some(pkg_info) = components.next() else {
+            continue;
+        };
+        if components.next().is_some() || pkg_info.as_os_str() != "PKG-INFO" {
+            continue;
+        }
+
+        let mut buffer = Vec::new();
+        if let Member::File { mut payload, .. } | Member::HardLink { mut payload, .. } = member {
+            let mut chunk = Vec::new();
+            while payload
+                .next_chunk(&mut chunk, 8 * 1024)
+                .await
+                .map_err(|err| PublishPrepareError::Read(path.clone(), err))?
+            {
+                buffer.extend_from_slice(&chunk);
             }
-            let mut buffer = Vec::new();
-            // We have to read while iterating or the entry is empty as we're beyond it in the file.
-            entry.read_to_end(&mut buffer).await.map_err(|err| {
-                PublishPrepareError::Read(path.to_string_lossy().to_string(), err)
-            })?;
-            Ok(Some((path, buffer)))
-        })
-        .try_collect()
-        .await?;
+        }
+        pkg_infos.push((path, buffer));
+    }
+
     match pkg_infos.len() {
         0 => Err(PublishPrepareError::MissingPkgInfo),
         1 => Ok(pkg_infos.remove(0).1),
         _ => Err(PublishPrepareError::MultiplePkgInfo(
-            pkg_infos
-                .iter()
-                .map(|(path, _buffer)| path.to_string_lossy())
-                .join(", "),
+            pkg_infos.iter().map(|(path, _buffer)| path).join(", "),
         )),
     }
 }
@@ -1529,8 +1530,12 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
+    use async_compression::tokio::write::GzipEncoder;
     use insta::{allow_duplicates, assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
+    use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+    use tempfile::NamedTempFile;
+    use tokio::io::AsyncWriteExt as _;
     use uv_auth::Credentials;
     use uv_client::{AuthIntegration, BaseClientBuilder, RedirectPolicy};
     use uv_distribution_filename::DistFilename;
@@ -1538,8 +1543,8 @@ mod tests {
     use uv_redacted::DisplaySafeUrl;
 
     use crate::{
-        FormMetadata, PublishError, Reporter, UploadDistribution, build_upload_request,
-        group_files, upload,
+        FormMetadata, PublishError, PublishPrepareError, Reporter, UploadDistribution,
+        build_upload_request, group_files, source_dist_pkg_info, upload,
     };
     use tokio::sync::Semaphore;
     use uv_errors::{ErrorOptions, write_error_chain_with_options};
@@ -1560,6 +1565,71 @@ mod tests {
         }
         fn on_hash_progress(&self, _id: usize, _inc: u64) {}
         fn on_hash_complete(&self, _id: usize) {}
+    }
+
+    async fn source_dist(entries: &[(&str, &[u8])]) -> NamedTempFile {
+        let mut bytes = Vec::new();
+        {
+            let mut gzip = GzipEncoder::new(&mut bytes);
+            {
+                let mut archive = TarEncoder::new(&mut gzip).builder();
+                for (path, contents) in entries {
+                    archive
+                        .add_file(path, *contents, EntryMetadata::default())
+                        .await
+                        .expect("test archive entry should be added");
+                }
+                archive.finish().await.expect("test archive should finish");
+            }
+            gzip.shutdown().await.expect("gzip stream should finish");
+        }
+
+        let file = NamedTempFile::new().expect("temporary file should be created");
+        fs_err::write(file.path(), bytes).expect("test archive should be written");
+        file
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_reads_single_top_level_file() {
+        let expected = b"Metadata-Version: 2.3\nName: example\nVersion: 1.0\n";
+        let file = source_dist(&[
+            ("example-1.0/nested/PKG-INFO", b"ignored"),
+            ("example-1.0/PKG-INFO", expected),
+            ("example-1.0/README", b"also ignored"),
+        ])
+        .await;
+
+        assert_eq!(
+            source_dist_pkg_info(file.path())
+                .await
+                .expect("top-level PKG-INFO should be read"),
+            expected
+        );
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_requires_a_file() {
+        let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
+
+        assert!(matches!(
+            source_dist_pkg_info(file.path()).await,
+            Err(PublishPrepareError::MissingPkgInfo)
+        ));
+    }
+
+    #[tokio::test]
+    async fn source_dist_pkg_info_rejects_duplicates() {
+        let file = source_dist(&[
+            ("example-1.0/PKG-INFO", b"first"),
+            ("other-1.0/PKG-INFO", b"second"),
+        ])
+        .await;
+
+        assert!(matches!(
+            source_dist_pkg_info(file.path()).await,
+            Err(PublishPrepareError::MultiplePkgInfo(paths))
+                if paths == "example-1.0/PKG-INFO, other-1.0/PKG-INFO"
+        ));
     }
 
     async fn mock_server_upload(mock_server: &MockServer) -> Result<bool, PublishError> {

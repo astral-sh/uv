@@ -1,4 +1,3 @@
-use std::io::Cursor;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -15,7 +14,8 @@ use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
@@ -35,23 +35,15 @@ use uv_test::{
 };
 
 fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
-    let enc = GzEncoder::new(file, flate2::Compression::default());
-    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(enc).compat_write());
+    let mut encoder = GzEncoder::new(file, flate2::Compression::default());
+    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
     for (path, contents) in entries {
-        let mut header = tokio_tar::Header::new_gnu();
-        header.set_size(contents.len() as u64);
-        header.set_mode(0o644);
-        header.set_cksum();
-        block_on(tar.append_data(
-            &mut header,
-            path,
-            AllowStdIo::new(Cursor::new(contents)).compat(),
-        ))?;
+        block_on(tar.add_file(path, contents.as_bytes(), EntryMetadata::default()))?;
     }
 
-    let writer = block_on(tar.into_inner())?;
-    writer.into_inner().into_inner().finish()?;
+    block_on(tar.finish())?;
+    encoder.finish()?;
     Ok(())
 }
 
