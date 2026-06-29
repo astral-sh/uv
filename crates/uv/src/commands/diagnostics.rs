@@ -230,7 +230,11 @@ fn requested_dist_error(
     anstream::eprint!("{hints}");
 }
 
-/// Format a hint when a build failure is caused by a `requires-python` mismatch.
+/// Format a hint when a failing distribution's `requires-python` does not
+/// include the interpreter in use.
+///
+/// Returns `None` when the interpreter version is unknown, the distribution has
+/// no `requires-python`, or the interpreter is within the supported range.
 fn requires_python_hint(
     name: &PackageName,
     file: Option<&File>,
@@ -241,15 +245,36 @@ fn requires_python_hint(
     if requires_python.contains(python_version) {
         return None;
     }
-    Some(format!(
-        "`{}` declares `requires-python = \"{}\"`, but you are using Python {}. \
-         This is the most likely cause of the build failure; try a newer version of `{}` \
-         that supports your Python.",
+    Some(requires_python_mismatch_hint(
+        name,
+        requires_python,
+        python_version,
+    ))
+}
+
+/// Build the text of the `requires-python` mismatch hint.
+///
+/// The suggestion is direction-neutral: it points at selecting a different
+/// version of the package rather than always recommending a newer one, which
+/// would be wrong when the interpreter is newer than the package supports. It
+/// states the mismatch as a fact rather than asserting it is the cause of the
+/// build failure, since being out of range is not proof of causation.
+///
+/// The caller is responsible for only invoking this when `python_version` is
+/// outside `requires_python`.
+fn requires_python_mismatch_hint(
+    name: &PackageName,
+    requires_python: &VersionSpecifiers,
+    python_version: &Version,
+) -> String {
+    format!(
+        "`{}` declares `requires-python = \"{}\"`, but you are using Python {}; \
+         consider adding a constraint on `{}` to select a version that supports your Python.",
         name.cyan(),
         requires_python,
         python_version,
         name.cyan(),
-    ))
+    )
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -523,10 +548,46 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::str::FromStr;
 
+    use uv_normalize::PackageName;
+    use uv_pep440::{Version, VersionSpecifiers};
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
-    use super::hints_for_error;
+    use super::{hints_for_error, requires_python_mismatch_hint};
+
+    fn mismatch_hint(name: &str, requires_python: &str, python_version: &str) -> String {
+        let hint = requires_python_mismatch_hint(
+            &PackageName::from_str(name).unwrap(),
+            &VersionSpecifiers::from_str(requires_python).unwrap(),
+            &Version::from_str(python_version).unwrap(),
+        );
+        // Strip ANSI styling so we can assert on the plain text.
+        console::strip_ansi_codes(&hint).into_owned()
+    }
+
+    #[test]
+    fn requires_python_hint_interpreter_too_old() {
+        // Interpreter is older than the package supports.
+        let hint = mismatch_hint("foo", ">=3.11", "3.10");
+        assert_eq!(
+            hint,
+            "`foo` declares `requires-python = \">=3.11\"`, but you are using Python 3.10; \
+             consider adding a constraint on `foo` to select a version that supports your Python."
+        );
+    }
+
+    #[test]
+    fn requires_python_hint_interpreter_too_new() {
+        // Interpreter is newer than the package supports; the suggestion is the
+        // same direction-neutral wording, which is never wrong.
+        let hint = mismatch_hint("foo", "<=3.8", "3.12");
+        assert_eq!(
+            hint,
+            "`foo` declares `requires-python = \"<=3.8\"`, but you are using Python 3.12; \
+             consider adding a constraint on `foo` to select a version that supports your Python."
+        );
+    }
 
     #[test]
     fn collects_source_hints_through_pyproject_errors() {
