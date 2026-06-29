@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State, Term};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -3333,26 +3333,13 @@ impl ForkState {
                     continue;
                 };
                 let (self_package, dependency_package) = (*self_package, *dependency_package);
-                let mut terms = incompatibility.iter();
-                let Some((term_package, Term::Positive(self_range))) = terms.next() else {
-                    unreachable!("dependency incompatibility must start with its positive term");
+                let Some((self_range, dependency_range)) =
+                    incompatibility.dependency_version_sets()
+                else {
+                    continue;
                 };
-                if term_package != self_package {
-                    unreachable!("dependency incompatibility has a mismatched dependent term");
-                }
-                let dependency_range = match terms.next() {
-                    None => Cow::Owned(Ranges::empty()),
-                    Some((term_package, Term::Negative(range)))
-                        if term_package == dependency_package =>
-                    {
-                        Cow::Borrowed(range)
-                    }
-                    _ => unreachable!("dependency incompatibility must end with its negative term"),
-                };
-                assert!(
-                    terms.next().is_none(),
-                    "dependency incompatibility must contain at most two terms"
-                );
+                let dependency_range =
+                    dependency_range.map_or_else(|| Cow::Owned(Ranges::empty()), Cow::Borrowed);
                 if *package != self_package {
                     continue;
                 }
