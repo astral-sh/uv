@@ -539,43 +539,16 @@ impl CandidateSelector {
         allow_prerelease: bool,
         highest: bool,
     ) -> Option<Candidate<'a>> {
-        let mut segments = range.iter();
-        let Some(first_segment) = segments.next() else {
-            trace!("Exhausted all candidates for package {package_name} with empty range");
-            return None;
-        };
-        let Some(second_segment) = segments.next() else {
-            return Self::select_candidate_from(
-                versions,
-                package_name,
-                range,
-                allow_prerelease,
-                |_| true,
-            );
-        };
-        let segments = [first_segment, second_segment].into_iter().chain(segments);
+        let segments = range.iter();
         let segments = if highest {
             Either::Left(segments.rev())
         } else {
             Either::Right(segments)
         };
-        let mut cursor = RangeCursor::new(segments, highest)?;
-        Self::select_candidate_from(versions, package_name, range, allow_prerelease, |version| {
-            cursor.contains(version)
-        })
-    }
-
-    /// Run candidate selection with the given range-membership test.
-    ///
-    /// This keeps contiguous ranges on the no-filter fast path while disjoint ranges use a
-    /// [`RangeCursor`].
-    fn select_candidate_from<'a>(
-        versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
-        package_name: &'a PackageName,
-        range: &Range<Version>,
-        allow_prerelease: bool,
-        mut range_contains: impl FnMut(&Version) -> bool,
-    ) -> Option<Candidate<'a>> {
+        let Some(mut cursor) = RangeCursor::new(segments, highest) else {
+            trace!("Exhausted all candidates for package {package_name} with empty range");
+            return None;
+        };
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
         for (version, maybe_dist) in versions {
@@ -596,7 +569,7 @@ impl CandidateSelector {
                 if version.any_prerelease() && !allow_prerelease {
                     continue;
                 }
-                if !range_contains(version) {
+                if !cursor.contains(version) {
                     continue;
                 }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -673,7 +646,7 @@ impl CandidateSelector {
     }
 }
 
-/// Tracks membership in a disjoint range while visiting versions monotonically.
+/// Tracks membership in a range while visiting versions monotonically.
 ///
 /// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
 /// each segment at most once.
@@ -751,14 +724,17 @@ mod tests {
         value.parse().expect("valid test version")
     }
 
-    fn assert_range_cursor(highest: bool, values: &[&str]) {
-        let range = [
+    fn disjoint_range() -> Range<Version> {
+        [
             (Bound::Unbounded, Bound::Excluded(version("2"))),
             (Bound::Included(version("3")), Bound::Included(version("4"))),
             (Bound::Excluded(version("5")), Bound::Unbounded),
         ]
         .into_iter()
-        .collect::<Range<_>>();
+        .collect()
+    }
+
+    fn assert_range_cursor(range: &Range<Version>, highest: bool, values: &[&str]) {
         let segments = if highest {
             Either::Left(range.iter().rev())
         } else {
@@ -777,13 +753,30 @@ mod tests {
     }
 
     #[test]
+    fn range_cursor_single_segment() {
+        let range = [(Bound::Included(version("2")), Bound::Excluded(version("5")))]
+            .into_iter()
+            .collect();
+        assert_range_cursor(&range, false, &["1", "2", "3", "5", "6"]);
+        assert_range_cursor(&range, true, &["6", "5", "3", "2", "1"]);
+    }
+
+    #[test]
     fn range_cursor_ascending() {
-        assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
+        assert_range_cursor(
+            &disjoint_range(),
+            false,
+            &["1", "2", "2.5", "3", "4", "5", "6"],
+        );
     }
 
     #[test]
     fn range_cursor_descending() {
-        assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
+        assert_range_cursor(
+            &disjoint_range(),
+            true,
+            &["6", "5", "4", "3", "2.5", "2", "1"],
+        );
     }
 }
 
