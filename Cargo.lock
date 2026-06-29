@@ -2378,6 +2378,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5723,7 +5732,7 @@ dependencies = [
  "indicatif",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "miette",
  "nix 0.31.3",
@@ -5984,7 +5993,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "regex",
  "rustc-hash",
  "schemars",
@@ -6023,7 +6032,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "regex",
  "rustc-hash",
@@ -6163,7 +6172,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "percent-encoding",
  "rcgen",
@@ -6264,7 +6273,7 @@ dependencies = [
  "fs-err",
  "futures",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "markdown",
  "poloto",
  "pretty_assertions",
@@ -6326,7 +6335,7 @@ version = "0.0.58"
 dependencies = [
  "anyhow",
  "futures",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "rustc-hash",
  "thiserror",
  "tokio",
@@ -6432,7 +6441,7 @@ dependencies = [
  "bitflags",
  "fs-err",
  "http",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "percent-encoding",
@@ -6623,7 +6632,7 @@ dependencies = [
  "data-encoding",
  "fs-err",
  "indoc",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mailparse",
  "owo-colors",
  "pathdiff",
@@ -6805,7 +6814,7 @@ dependencies = [
  "boxcar",
  "indexmap",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "regex",
  "rkyv",
  "rustc-hash",
@@ -6874,7 +6883,7 @@ name = "uv-preview"
 version = "0.0.58"
 dependencies = [
  "enumflags2",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "schemars",
  "serde",
  "thiserror",
@@ -6898,7 +6907,7 @@ dependencies = [
  "futures",
  "glob",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "reqwest",
  "rustc-hash",
  "serde",
@@ -6933,7 +6942,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "mailparse",
  "petgraph",
@@ -6974,7 +6983,7 @@ dependencies = [
  "indexmap",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "rayon",
  "ref-cast",
@@ -7077,7 +7086,7 @@ dependencies = [
  "fs-err",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "memchr",
  "regex",
  "reqwest",
@@ -7114,7 +7123,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "owo-colors",
  "papaya",
@@ -7291,7 +7300,7 @@ dependencies = [
  "ignore",
  "indoc",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "predicates",
  "regex",
  "reqwest",
@@ -7438,7 +7447,7 @@ version = "0.0.58"
 dependencies = [
  "console",
  "fs-err",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "owo-colors",
  "pathdiff",
  "thiserror",
@@ -7485,7 +7494,7 @@ dependencies = [
  "glob",
  "ignore",
  "insta",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "regex",
  "rustc-hash",
  "schemars",
