@@ -1438,13 +1438,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::FALSE));
         }
 

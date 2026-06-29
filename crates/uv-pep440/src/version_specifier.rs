@@ -83,7 +83,7 @@ impl VersionSpecifiers {
     ///
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds<'a>(
-        mut bounds: impl Iterator<Item = (&'a Bound<Version>, &'a Bound<Version>)>,
+        mut bounds: impl Iterator<Item = (Bound<&'a Version>, Bound<&'a Version>)>,
     ) -> Self {
         let mut specifiers = Vec::new();
 
@@ -552,7 +552,7 @@ impl VersionSpecifier {
     ///
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
-        bounds: (&Bound<Version>, &Bound<Version>),
+        bounds: (Bound<&Version>, Bound<&Version>),
     ) -> impl Iterator<Item = Self> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
@@ -572,8 +572,8 @@ impl VersionSpecifier {
                         (Some(Self::equals_star_version(version)), None)
                     }
                     _ => (
-                        Self::from_lower_bound(&Bound::Included(v1.clone())),
-                        Self::from_upper_bound(&Bound::Excluded(v2.clone())),
+                        Self::from_lower_bound(Bound::Included(v1)),
+                        Self::from_upper_bound(Bound::Excluded(v2)),
                     ),
                 }
             }
@@ -584,7 +584,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given lower bound.
-    fn from_lower_bound(bound: &Bound<Version>) -> Option<Self> {
+    fn from_lower_bound(bound: Bound<&Version>) -> Option<Self> {
         match bound {
             Bound::Included(version) => {
                 Some(Self::from_version(Operator::GreaterThanEqual, version.clone()).unwrap())
@@ -597,7 +597,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given upper bound.
-    fn from_upper_bound(bound: &Bound<Version>) -> Option<Self> {
+    fn from_upper_bound(bound: Bound<&Version>) -> Option<Self> {
         match bound {
             Bound::Included(version) => {
                 Some(Self::from_version(Operator::LessThanEqual, version.clone()).unwrap())

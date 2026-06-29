@@ -1315,7 +1315,7 @@ impl SentinelRange<'_> {
     pub fn strip(&self) -> Ranges<Version> {
         self.0
             .iter()
-            .map(|(lower, upper)| Self::strip_sentinel(lower.clone(), upper.clone()))
+            .map(|(lower, upper)| Self::strip_sentinel(lower.cloned(), upper.cloned()))
             .collect()
     }
 
@@ -1406,7 +1406,7 @@ impl<'a> PrefixMatch<'a> {
     ///
     /// Prefix matches are desugared to (e.g.) `>=2.4.dev0,<2.5.dev0`, but we want to render them
     /// as `==2.4.*` in error messages.
-    pub(crate) fn from_range(lower: &'a Bound<Version>, upper: &'a Bound<Version>) -> Option<Self> {
+    pub(crate) fn from_range(lower: Bound<&'a Version>, upper: Bound<&'a Version>) -> Option<Self> {
         let Bound::Included(lower) = lower else {
             return None;
         };
