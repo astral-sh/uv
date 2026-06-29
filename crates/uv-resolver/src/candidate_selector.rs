@@ -678,14 +678,14 @@ impl CandidateSelector {
 /// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
 /// each segment at most once.
 struct RangeCursor<'a, Segments> {
-    current: (&'a Bound<Version>, &'a Bound<Version>),
+    current: (Bound<&'a Version>, Bound<&'a Version>),
     segments: Segments,
     highest: bool,
 }
 
 impl<'a, Segments> RangeCursor<'a, Segments>
 where
-    Segments: Iterator<Item = (&'a Bound<Version>, &'a Bound<Version>)>,
+    Segments: Iterator<Item = (Bound<&'a Version>, Bound<&'a Version>)>,
 {
     /// Create a cursor over segments ordered in the same direction as the visited versions.
     fn new(mut segments: Segments, highest: bool) -> Option<Self> {
@@ -727,7 +727,7 @@ where
     }
 }
 
-fn is_before(version: &Version, bound: &Bound<Version>) -> bool {
+fn is_before(version: &Version, bound: Bound<&Version>) -> bool {
     match bound {
         Bound::Included(start) => version < start,
         Bound::Excluded(start) => version <= start,
@@ -735,7 +735,7 @@ fn is_before(version: &Version, bound: &Bound<Version>) -> bool {
     }
 }
 
-fn is_after(version: &Version, bound: &Bound<Version>) -> bool {
+fn is_after(version: &Version, bound: Bound<&Version>) -> bool {
     match bound {
         Bound::Included(end) => version > end,
         Bound::Excluded(end) => version >= end,
