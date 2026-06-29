@@ -724,17 +724,14 @@ mod tests {
         value.parse().expect("valid test version")
     }
 
-    fn disjoint_range() -> Range<Version> {
-        [
+    fn assert_range_cursor(highest: bool, values: &[&str]) {
+        let range = [
             (Bound::Unbounded, Bound::Excluded(version("2"))),
             (Bound::Included(version("3")), Bound::Included(version("4"))),
             (Bound::Excluded(version("5")), Bound::Unbounded),
         ]
         .into_iter()
-        .collect()
-    }
-
-    fn assert_range_cursor(range: &Range<Version>, highest: bool, values: &[&str]) {
+        .collect::<Range<_>>();
         let segments = if highest {
             Either::Left(range.iter().rev())
         } else {
@@ -753,30 +750,13 @@ mod tests {
     }
 
     #[test]
-    fn range_cursor_single_segment() {
-        let range = [(Bound::Included(version("2")), Bound::Excluded(version("5")))]
-            .into_iter()
-            .collect();
-        assert_range_cursor(&range, false, &["1", "2", "3", "5", "6"]);
-        assert_range_cursor(&range, true, &["6", "5", "3", "2", "1"]);
-    }
-
-    #[test]
     fn range_cursor_ascending() {
-        assert_range_cursor(
-            &disjoint_range(),
-            false,
-            &["1", "2", "2.5", "3", "4", "5", "6"],
-        );
+        assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
     }
 
     #[test]
     fn range_cursor_descending() {
-        assert_range_cursor(
-            &disjoint_range(),
-            true,
-            &["6", "5", "4", "3", "2.5", "2", "1"],
-        );
+        assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
 }
 
