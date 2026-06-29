@@ -3127,12 +3127,14 @@ impl ForkState {
             }
 
             // Update the package priorities.
-            self.priorities.insert(package, version, &self.fork_urls);
+            let parent = &self.pubgrub.package_store[for_package];
+            self.priorities
+                .insert(parent, package, version, &self.fork_urls);
             // As we're adding an incompatibility from the proxy package to the base package,
             // we need to register the base package.
             if let Some(base_package) = package.base_package() {
                 self.priorities
-                    .insert(&base_package, version, &self.fork_urls);
+                    .insert(parent, &base_package, version, &self.fork_urls);
             }
         }
 
