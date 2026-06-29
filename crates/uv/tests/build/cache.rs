@@ -7,10 +7,10 @@ use std::process::Command;
 use uv_fs::create_symlink;
 use uv_test::{get_bin, uv_snapshot};
 
-/// When the active cache directory is inside an explicit build source, we should error before
-/// invoking the build backend or creating the output directory.
+/// When the active cache directory is inside an explicit build source, we should warn and continue
+/// the build.
 #[test]
-fn build_rejects_cache_inside_source() -> Result<()> {
+fn build_warns_cache_inside_source() -> Result<()> {
     let mut context = uv_test::test_context!("3.12");
     let project = context.temp_dir.child("project");
 
@@ -24,6 +24,9 @@ fn build_rejects_cache_inside_source() -> Result<()> {
         [build-system]
         requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        source-exclude = [".uv-cache"]
         "#,
     )?;
     project.child("src/project/__init__.py").touch()?;
@@ -31,24 +34,28 @@ fn build_rejects_cache_inside_source() -> Result<()> {
     context.cache_dir = project.child(".uv-cache");
 
     uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("project"), @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: The cache directory `project/.uv-cache` is inside the build source directory `project`
+    warning: The cache directory `project/.uv-cache` is inside the build source directory `project`
+    Building source distribution (uv build backend)...
+    Successfully built project/dist/project-0.1.0.tar.gz
     ");
 
-    project.child("dist").assert(predicate::path::missing());
+    project
+        .child("dist/project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }
 
-/// When the canonical cache directory is inside an explicit build source, we should error even if
+/// When the canonical cache directory is inside an explicit build source, we should warn even if
 /// the configured cache path itself is outside the source.
 #[test]
 #[cfg(unix)]
-fn build_rejects_symlinked_cache_inside_source() -> Result<()> {
+fn build_warns_symlinked_cache_inside_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let project = context.temp_dir.child("project");
 
@@ -62,6 +69,9 @@ fn build_rejects_symlinked_cache_inside_source() -> Result<()> {
         [build-system]
         requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        source-exclude = [".uv-cache"]
         "#,
     )?;
     project.child("src/project/__init__.py").touch()?;
@@ -82,15 +92,19 @@ fn build_rejects_symlinked_cache_inside_source() -> Result<()> {
     command.current_dir(context.temp_dir.path());
 
     uv_snapshot!(context.filters(), command, @"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: The cache directory `cache-link` is inside the build source directory `project`
+    warning: The cache directory `cache-link` is inside the build source directory `project`
+    Building source distribution (uv build backend)...
+    Successfully built project/dist/project-0.1.0.tar.gz
     ");
 
-    project.child("dist").assert(predicate::path::missing());
+    project
+        .child("dist/project-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
 
     Ok(())
 }
