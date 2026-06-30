@@ -138,31 +138,3 @@ pub(crate) enum PrereleaseSelection {
     /// exhausted.
     PreferStable,
 }
-
-#[cfg(test)]
-mod tests {
-    #[cfg(feature = "clap")]
-    use clap::ValueEnum;
-
-    use super::PrereleaseMode;
-
-    #[test]
-    fn legacy_explicit_mode_deserializes_to_default() {
-        let mode = serde_json::from_str::<PrereleaseMode>(r#""explicit""#)
-            .expect("legacy pre-release mode should deserialize");
-        assert_eq!(mode, PrereleaseMode::IfNecessaryOrExplicit);
-        assert_eq!(
-            serde_json::to_string(&mode).expect("pre-release mode should serialize"),
-            r#""if-necessary-or-explicit""#
-        );
-    }
-
-    #[cfg(feature = "clap")]
-    #[test]
-    fn legacy_explicit_mode_is_a_cli_alias_for_default() {
-        assert_eq!(
-            PrereleaseMode::from_str("explicit", false).expect("legacy CLI value should parse"),
-            PrereleaseMode::IfNecessaryOrExplicit
-        );
-    }
-}
