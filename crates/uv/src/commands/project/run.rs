@@ -118,6 +118,7 @@ pub(crate) async fn run(
     preview: Preview,
     max_recursion_depth: u32,
     malware_settings: MalwareCheckSettings,
+    no_wait: bool,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -1304,6 +1305,12 @@ pub(crate) async fn run(
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
+    #[cfg(windows)]
+    if no_wait {
+        const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+        process.creation_flags(CREATE_NEW_CONSOLE);
+    }
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
@@ -1311,7 +1318,11 @@ pub(crate) async fn run(
         .spawn()
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
-    run_to_completion(handle).await
+    if no_wait {
+        Ok(ExitStatus::Success)
+    } else {
+        run_to_completion(handle).await
+    }
 }
 
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.

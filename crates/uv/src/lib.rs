@@ -2316,6 +2316,7 @@ async fn run_project(
                 globals.preview,
                 args.max_recursion_depth,
                 args.malware_settings,
+                args.no_wait,
             ))
             .await
         }
