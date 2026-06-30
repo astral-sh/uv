@@ -321,23 +321,18 @@ lower bounds.
 
 ## Pre-release handling
 
-By default, uv will accept pre-release versions during dependency resolution in two cases:
+By default, uv prefers stable versions. A pre-release is considered when no stable candidate
+satisfies the active constraints, or when an active direct or transitive requirement contains a
+pre-release specifier (e.g., `flask>=2.0.0rc1`).
 
-1. If the package is a direct dependency, and its version specifiers include a pre-release specifier
-   (e.g., `flask>=2.0.0rc1`).
-1. If _all_ published versions of a package are pre-releases.
+Explicit pre-release authorization is represented in the resolver as part of the dependency graph.
+The authorizing edge targets a proxy package that selects with pre-releases enabled, then pins the
+real package to the same version. PubGrub can therefore reconsider an earlier stable decision
+without restarting resolution. If the parent version that introduced the requirement is rejected
+during backtracking, its authorization is rejected with it.
 
-If dependency resolution fails due to a transitive pre-release, uv will prompt use of
-`--prerelease allow` to allow pre-releases for all dependencies.
-
-Alternatively, the transitive dependency can be added as a [constraint](#dependency-constraints) or
-direct dependency (i.e. in `requirements.in` or `pyproject.toml`) with a pre-release version
-specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
-
-Pre-releases are
-[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
-model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling is
-_intentionally_ limited and requires user opt-in for pre-releases to ensure correctness.
+Use `--prerelease allow` to consider pre-releases for every package without preferring stable
+candidates first, or `--prerelease disallow` to exclude them entirely.
 
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).

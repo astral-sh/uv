@@ -331,6 +331,18 @@ wheels = [
 ]
 
 [[package]]
+name = "bibtexparser"
+version = "2.0.0b7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pylatexenc" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/53/72/f41291c9f75c7ccbb807d361823af39c614363b4e5b272852fe67034fd01/bibtexparser-2.0.0b7.tar.gz", hash = "sha256:9e0034dd16e1961fbc895b108f49bdef6f988b5d48782b62c9492ee8a281efad", size = 37379, upload-time = "2024-02-14T20:45:34.668Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/eb/8d484b58f49b8e7d5060eef5eebcd4e57c26bc4a909c0c857330b362ad01/bibtexparser-2.0.0b7-py3-none-any.whl", hash = "sha256:1f4ac78cc6fbfdcc7ce432105fef127688c78ce60324363955fc11feb32964cd", size = 38677, upload-time = "2024-02-14T20:45:33.329Z" },
+]
+
+[[package]]
 name = "binaryornot"
 version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
@@ -610,10 +622,11 @@ wheels = [
 
 [[package]]
 name = "clldutils"
-version = "3.21.0"
+version = "3.22.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
+    { name = "bibtexparser" },
     { name = "colorlog" },
     { name = "lxml" },
     { name = "markdown" },
@@ -622,9 +635,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "tabulate" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/29/a9/20fe03d6990599fe00879f0e8adb03666a790ab9b86ebccac368ae11d2c2/clldutils-3.21.0.tar.gz", hash = "sha256:a73ab7d664b90efb87a0a057718ac4389782a59b7eb046ef312d5a60d054bf95", size = 1710419, upload-time = "2023-12-07T12:38:07.502Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/74/d8e5849562cc0c409e24ce2efdf76d7a86f1f3370136327d939795deacae/clldutils-3.22.2.tar.gz", hash = "sha256:0efa914d0e0156bf707f8d0160ce9eacb9b088ffeab7afc61daccadd134007b1", size = 1711163, upload-time = "2024-03-12T15:44:24.57Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/32/f8f97b5fb1d3c14ab8b0895082f4eccc280e6787d2b9a5c9d91a34f203f4/clldutils-3.21.0-py2.py3-none-any.whl", hash = "sha256:204851d8897ab590f059e272bcce222f5e15f75e7099e2e50cdc69b388a02792", size = 1723784, upload-time = "2023-12-07T12:37:56.295Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/94/e2736d5fc0b112e59c977b6c2ecb854a5dc786927139703eb2e846151bd3/clldutils-3.22.2-py2.py3-none-any.whl", hash = "sha256:6036093ab91d09bb4e9aaacd2610a9447100a25c5c23eb96165ae1ce7df07520", size = 1724167, upload-time = "2024-03-12T15:44:13.086Z" },
 ]
 
 [[package]]
@@ -1712,7 +1725,8 @@ version = "0.4.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "importlib-metadata", marker = "python_full_version < '3.10'" },
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "ml-dtypes", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
     { name = "numpy" },
     { name = "opt-einsum" },
     { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1730,7 +1744,7 @@ resolution-markers = [
     "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" } },
     { name = "numpy" },
     { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" } },
 ]
@@ -1776,7 +1790,8 @@ resolution-markers = [
     "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13' and sys_platform == 'darwin'" },
+    { name = "ml-dtypes", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13' or sys_platform != 'darwin'" },
     { name = "numpy" },
     { name = "scipy", version = "1.14.0", source = { registry = "https://pypi.org/simple" } },
 ]
@@ -2262,6 +2277,12 @@ wheels = [
 name = "ml-dtypes"
 version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "python_full_version < '3.10' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.10' and platform_machine != 'arm64' and sys_platform == 'darwin') or (python_full_version < '3.10' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.10' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
 dependencies = [
     { name = "numpy" },
 ]
@@ -2283,6 +2304,46 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/58/c56da71b1d9f9c6c1e61f63d27f901c3526e13da0589ec2ff993e9a72c04/ml_dtypes-0.3.2-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7a4c3fcbf86fa52d0204f07cfd23947ef05b4ad743a1a988e163caa34a201e5e", size = 2180720, upload-time = "2024-01-03T19:21:17.874Z" },
     { url = "https://files.pythonhosted.org/packages/86/29/b389f235add26220bc7b7f100362f4e3a84e14f7c837abd34a11347df1b0/ml_dtypes-0.3.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:91f8783fd1f2c23fd3b9ee5ad66b785dafa58ba3cdb050c4458021fa4d1eb226", size = 2158181, upload-time = "2024-01-03T19:21:20.023Z" },
     { url = "https://files.pythonhosted.org/packages/38/3c/5d058a50340759423b25cb99f930cb3691fc30ebe86d53fdf1bff55c2d71/ml_dtypes-0.3.2-cp39-cp39-win_amd64.whl", hash = "sha256:7ba8e1fafc7fff3e643f453bffa7d082df1678a73286ce8187d3e825e776eb94", size = 127704, upload-time = "2024-01-03T19:21:21.407Z" },
+]
+
+[[package]]
+name = "ml-dtypes"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "python_full_version == '3.12.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.13' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "(python_full_version == '3.12.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.10.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.10.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.10.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.10.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/dd/50/17ab8a66d66bdf55ff6dea6fe2df424061cee65c6d772abc871bb563f91b/ml_dtypes-0.4.0.tar.gz", hash = "sha256:eaf197e72f4f7176a19fe3cb8b61846b38c6757607e7bf9cd4b1d84cd3e74deb", size = 692650, upload-time = "2024-04-01T16:11:49.812Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/26/62b6c86ecbe59dbb960be9b134b1d153cc9e0b9c54c8f19b63759403f59c/ml_dtypes-0.4.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:93afe37f3a879d652ec9ef1fc47612388890660a2657fbb5747256c3b818fd81", size = 390928, upload-time = "2024-04-01T16:11:19.627Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/7d/1e84fa0db717f9fd27d19649f67bd01df1e3f92e041d58b918b39e1898a4/ml_dtypes-0.4.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2bb83fd064db43e67e67d021e547698af4c8d5c6190f2e9b1c53c09f6ff5531d", size = 2184075, upload-time = "2024-04-01T16:11:21.423Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/15/e5af59287e712b26ce776f00911c45c97ac9f4cd82d46500602cc94127ed/ml_dtypes-0.4.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:03e7cda6ef164eed0abb31df69d2c00c3a5ab3e2610b6d4c42183a43329c72a5", size = 2158374, upload-time = "2024-04-01T16:11:23.815Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/31/cc9b87fbbb3f4bf2cb1a4aeb7648bd6d6c558dc3f60e1bd21958f18ddf71/ml_dtypes-0.4.0-cp310-cp310-win_amd64.whl", hash = "sha256:a15d96d090aebb55ee85173d1775ae325a001aab607a76c8ea0b964ccd6b5364", size = 126622, upload-time = "2024-04-01T16:11:25.306Z" },
+    { url = "https://files.pythonhosted.org/packages/42/6b/b2fa3e2386c2b7dde43f12b83c67f6e583039141dfbb58e5c8fd365a5a7d/ml_dtypes-0.4.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:bdf689be7351cc3c95110c910c1b864002f113e682e44508910c849e144f3df1", size = 390927, upload-time = "2024-04-01T16:11:27.28Z" },
+    { url = "https://files.pythonhosted.org/packages/17/9b/6c655eae05ba3edb30cb03e116dfbe722775b26234b16ed0a14007c871ed/ml_dtypes-0.4.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c83e4d443962d891d51669ff241d5aaad10a8d3d37a81c5532a45419885d591c", size = 2186867, upload-time = "2024-04-01T16:11:29.471Z" },
+    { url = "https://files.pythonhosted.org/packages/84/17/a936d3dfad84d028ba8539a93167274b7dcd7985e0d9df487e94a62f9428/ml_dtypes-0.4.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e1e2f4237b459a63c97c2c9f449baa637d7e4c20addff6a9bac486f22432f3b6", size = 2161456, upload-time = "2024-04-01T16:11:31.835Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/36/290745178e5776f7416818abc1334c1b19afb93c7c87fd1bef3cc99f84ca/ml_dtypes-0.4.0-cp311-cp311-win_amd64.whl", hash = "sha256:75b4faf99d0711b81f393db36d210b4255fd419f6f790bc6c1b461f95ffb7a9e", size = 126751, upload-time = "2024-04-01T16:11:33.223Z" },
+    { url = "https://files.pythonhosted.org/packages/30/9d/890e8c9cb556cec121f784fd84089e1e52939ba6eabf5dc62f6435db28d6/ml_dtypes-0.4.0-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:ee9f91d4c4f9959a7e1051c141dc565f39e54435618152219769e24f5e9a4d06", size = 394380, upload-time = "2024-04-01T16:11:35.147Z" },
+    { url = "https://files.pythonhosted.org/packages/37/d5/3f3085b3a155e1b84c7fc680f05538d31cf01b835aa19cb17edd4994693f/ml_dtypes-0.4.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ad6849a2db386b38e4d54fe13eb3293464561780531a918f8ef4c8169170dd49", size = 2181698, upload-time = "2024-04-01T16:11:37.356Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/ef/5635b60d444db9c949b32d4e1a0a30b3ac237afbd71cce8bd1ccfb145723/ml_dtypes-0.4.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eaa32979ebfde3a0d7c947cafbf79edc1ec77ac05ad0780ee86c1d8df70f2259", size = 2158784, upload-time = "2024-04-01T16:11:38.898Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/b7/7cfca987ca898b64c0b7d185e957fbd8dccb64fe5ae9e44f68ec83371df5/ml_dtypes-0.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:3b67ec73a697c88c1122038e0de46520e48dc2ec876d42cf61bc5efe3c0b7675", size = 127498, upload-time = "2024-04-01T16:11:40.321Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/df/455704233905ce4fab09b2a80d81ab61d850d530b7ae68acb7f8ef99d349/ml_dtypes-0.4.0-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:41affb38fdfe146e3db226cf2953021184d6f0c4ffab52136613e9601706e368", size = 390888, upload-time = "2024-04-01T16:11:42.309Z" },
+    { url = "https://files.pythonhosted.org/packages/50/96/13d7c3cc82d5ef597279216cf56ff461f8b57e7096a3ef10246a83ca80c0/ml_dtypes-0.4.0-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:43cf4356a0fe2eeac6d289018d0734e17a403bdf1fd911953c125dd0358edcc0", size = 2181059, upload-time = "2024-04-01T16:11:43.998Z" },
+    { url = "https://files.pythonhosted.org/packages/23/1c/06b52d3dcd75a81f6ca1e56514db6b21fe928f159cc5302428c1fed46562/ml_dtypes-0.4.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f1724ddcdf5edbaf615a62110af47407f1719b8d02e68ccee60683acb5f74da1", size = 2156133, upload-time = "2024-04-01T16:11:46.296Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/83/a26cb6635ffd9bee8af8d5cbb3feb71b782f8729ac1df7034cc017d8e9fd/ml_dtypes-0.4.0-cp39-cp39-win_amd64.whl", hash = "sha256:723af6346447268a3cf0b7356e963d80ecb5732b5279b2aa3fa4b9fc8297c85e", size = 126734, upload-time = "2024-04-01T16:11:48.192Z" },
 ]
 
 [[package]]
@@ -4901,7 +4962,7 @@ dependencies = [
     { name = "h5py" },
     { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
     { name = "libclang" },
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" } },
     { name = "numpy" },
     { name = "opt-einsum" },
     { name = "packaging" },
@@ -5003,7 +5064,7 @@ dependencies = [
     { name = "h5py" },
     { name = "keras", version = "2.15.0", source = { registry = "https://pypi.org/simple" } },
     { name = "libclang" },
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" } },
     { name = "numpy" },
     { name = "opt-einsum" },
     { name = "packaging" },
@@ -5213,7 +5274,8 @@ name = "tensorstore"
 version = "0.1.64"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ml-dtypes" },
+    { name = "ml-dtypes", version = "0.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10' or (python_full_version >= '3.13' and sys_platform == 'darwin')" },
+    { name = "ml-dtypes", version = "0.4.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.10' and python_full_version < '3.13') or (python_full_version >= '3.10' and sys_platform != 'darwin')" },
     { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/b7/04d19901451da377f03a6e1ae3d9edf0b43af93309f558abf28b2e5aaceb/tensorstore-0.1.64.tar.gz", hash = "sha256:7fa89e90876fb5377efc54f3f37326a6fb83ec9e1326565819a75a4e80949886", size = 6510000, upload-time = "2024-08-01T23:54:39.328Z" }

@@ -1,0 +1,31 @@
+name = "transitive-prerelease-authorization-backtracks"
+description = "A pre-release authorization introduced by a rejected parent version does not leak into the selected parent version."
+
+[root]
+requires = ["a", "d==1.0.0"]
+
+[expected]
+satisfiable = true
+explanation = "The latest version of `a` is rejected, so its explicit pre-release dependency no longer authorizes pre-releases of `c`."
+
+[expected.packages]
+a = "1.0.0"
+c = "1.0.0"
+d = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=1.0.0"]
+
+[packages.a.versions."2.0.0"]
+requires = ["c>=2.0.0b1"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."1.5.0a1"]
+
+[packages.c.versions."2.0.0b1"]
+requires = ["d==2.0.0"]
+
+[packages.d.versions."1.0.0"]
+
+[packages.d.versions."2.0.0"]

@@ -13,6 +13,7 @@ use uv_pypi_types::{
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
+use crate::prerelease::contains_prerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
 
 /// The source constraint carried by a single dependency edge.
@@ -118,6 +119,10 @@ impl PubGrubDependency {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
             .is_some_and(|parent| parent.extra().is_none() && parent.group().is_none());
+        let explicit_prerelease = matches!(
+            &requirement.source,
+            RequirementSource::Registry { specifier, .. } if contains_prerelease(specifier)
+        );
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -173,7 +178,7 @@ impl PubGrubDependency {
                 version,
                 source,
             } = pubgrub_requirement;
-            match &*package {
+            let dependency = match &*package {
                 PubGrubPackageInner::Package { .. } => Self {
                     package,
                     version,
@@ -226,7 +231,23 @@ impl PubGrubDependency {
                 PubGrubPackageInner::Python(_) => {
                     unreachable!("Python package in dependencies")
                 }
-                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
+                PubGrubPackageInner::System(_) => {
+                    unreachable!("System package in dependencies")
+                }
+                PubGrubPackageInner::Prerelease { .. } => {
+                    unreachable!("Pre-release package in requirements")
+                }
+            };
+            if explicit_prerelease {
+                // Route explicit pre-release requirements through a proxy package. The proxy uses
+                // pre-release-aware candidate ordering and pins this wrapped package to its
+                // selected version, making authorization part of PubGrub's dependency graph.
+                Self {
+                    package: PubGrubPackage::prerelease(dependency.package),
+                    ..dependency
+                }
+            } else {
+                dependency
             }
         })
     }
