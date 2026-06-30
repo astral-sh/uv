@@ -6568,9 +6568,13 @@ enum LockErrorKind {
     /// An error that occurs when converting a URL to a path
     #[error("Failed to convert URL to path: {url}", url = url.cyan())]
     UrlToPath { url: DisplaySafeUrl },
-    /// An error that occurs when multiple packages with the same
-    /// name were found when identifying the root packages.
-    #[error("Found multiple packages matching `{name}`", name = name.cyan())]
+    /// An error that occurs when a package passed to `--package` is a dependency,
+    /// not a workspace member. Dependencies can appear multiple times in the lockfile
+    /// (once per platform fork), while workspace members appear exactly once.
+    #[error(
+        "Package `{name}` is not a workspace member; `--package` accepts only workspace package names",
+        name = name.cyan()
+    )]
     MultipleRootPackages {
         /// The ID of the package.
         name: PackageName,
