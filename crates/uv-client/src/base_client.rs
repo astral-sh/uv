@@ -217,7 +217,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// Note that some configuration options from this builder will still be applied
     /// to the client via middleware.
     #[must_use]
-    pub(crate) fn custom_client(mut self, client: Client) -> Self {
+    pub fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
         self
     }
