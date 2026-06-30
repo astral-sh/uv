@@ -55,7 +55,7 @@ pub fn uninstall_wheel(
 
         // Keep the entire metadata directory intact until every other entry has been removed. It
         // contains the journal and identity metadata needed to retry an interrupted uninstall.
-        if normalize_path(&path).starts_with(&normalized_dist_info) {
+        if is_path_in_directory(&path, &normalized_dist_info) {
             dist_info_file_count += usize::from(path.try_exists()?);
             continue;
         }
@@ -494,6 +494,26 @@ fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
+/// Return whether `path` is inside `directory`, respecting filesystem aliases.
+fn is_path_in_directory(path: &Path, directory: &Path) -> bool {
+    let path = normalize_path(path);
+    if path.starts_with(directory) {
+        return true;
+    }
+
+    let Some(parent) = directory.parent() else {
+        return false;
+    };
+    let Ok(relative) = path.strip_prefix(parent) else {
+        return false;
+    };
+    let Some(component) = relative.components().next() else {
+        return false;
+    };
+
+    uv_fs::is_same_file_allow_missing(&parent.join(component), directory).unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use assert_fs::prelude::*;
@@ -581,6 +601,53 @@ mod tests {
         assert!(target_file.exists());
         assert!(!metadata.exists());
         assert!(!init_py.exists());
+    }
+
+    /// RECORD paths can use a different spelling for the metadata directory on a
+    /// case-insensitive filesystem.
+    #[test]
+    fn test_uninstall_record_case_variant_dist_info() {
+        let venv = assert_fs::TempDir::new().unwrap();
+        let site_packages = venv.child("lib/python3.12/site-packages");
+        let dist_info = site_packages.child("CasePkg-1.0.dist-info");
+        dist_info.create_dir_all().unwrap();
+
+        // This regression only applies when both spellings resolve to the same directory.
+        let record_dist_info = site_packages.child("casepkg-1.0.dist-info");
+        if !record_dist_info.exists() {
+            return;
+        }
+
+        dist_info
+            .child("RECORD")
+            .write_str(
+                "casepkg/__init__.py,,0\n\
+                 casepkg-1.0.dist-info/METADATA,,0\n\
+                 casepkg-1.0.dist-info/RECORD,,\n",
+            )
+            .unwrap();
+        let metadata = dist_info.child("METADATA");
+        metadata.touch().unwrap();
+        let init_py = site_packages.child("casepkg/__init__.py");
+        init_py.touch().unwrap();
+
+        let layout = Layout {
+            sys_executable: venv.path().join("bin/python"),
+            python_version: (3, 13),
+            os_name: "posix".to_string(),
+            scheme: Scheme {
+                purelib: site_packages.to_path_buf(),
+                platlib: site_packages.to_path_buf(),
+                scripts: venv.path().join("bin"),
+                data: venv.path().to_path_buf(),
+                include: venv.path().join("include/python3.12"),
+            },
+        };
+
+        uninstall_wheel(dist_info.path(), "casepkg 1.0", &layout).unwrap();
+
+        assert!(!init_py.exists());
+        assert!(!dist_info.exists());
     }
 
     #[test]
