@@ -515,16 +515,41 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // In a specific environment, an implicit registry candidate is stable for a
                     // given range. Avoid repeating candidate selection when PubGrub revisits an
-                    // identical decision after backtracking.
+                    // identical decision after backtracking. If the range changed, reuse the
+                    // previous decision only when every better candidate is already known to
+                    // conflict with the current partial solution.
                     let cache_selected_version = state.env.marker_environment().is_some()
                         && url.is_none()
                         && index.is_none();
-                    let decision = if cache_selected_version
+                    let phase_saved = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
-                        && selected_range == range
                     {
-                        Some(ResolverVersion::Unforked(version.clone()))
+                        let same_range = selected_range == range;
+                        let changed_range = if let Some(name) = next_package.name() {
+                            !same_range
+                                && range.contains(version)
+                                && preferences.get(name).is_empty()
+                                && (self.exclusions.reinstall(name)
+                                    || self.installed_packages.get_packages(name).is_empty())
+                                && self.all_better_versions_conflict(
+                                    name,
+                                    range,
+                                    version,
+                                    next_id,
+                                    &state.pubgrub,
+                                    &state.env,
+                                    &state.python_requirement,
+                                )?
+                        } else {
+                            false
+                        };
+                        (same_range || changed_range).then(|| version.clone())
+                    } else {
+                        None
+                    };
+                    let decision = if let Some(version) = phase_saved {
+                        Some(ResolverVersion::Unforked(version))
                     } else {
                         let decision = self.choose_version(
                             next_package,
@@ -1454,6 +1479,58 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
+    }
+
+    /// Return whether every registry candidate preferred over `selected` is already known to be
+    /// unavailable or incompatible with the current partial solution.
+    fn all_better_versions_conflict(
+        &self,
+        name: &PackageName,
+        range: &Range<Version>,
+        selected: &Version,
+        package: Id<PubGrubPackage>,
+        pubgrub: &State<UvDependencyProvider>,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Result<bool, ResolveError> {
+        let versions_response = self
+            .index
+            .implicit()
+            .wait_blocking(name)
+            .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?;
+        let VersionsResponse::Found(version_maps) = &*versions_response else {
+            return Ok(false);
+        };
+
+        let highest = self.selector.use_highest_version(name, env);
+        let mut remaining = if highest {
+            range.intersection(&Range::strictly_higher_than(selected.clone()))
+        } else {
+            range.intersection(&Range::strictly_lower_than(selected.clone()))
+        };
+        while let Some(candidate) =
+            self.selector
+                .select_no_preference(name, &remaining, version_maps, env)
+        {
+            let version = candidate.version().clone();
+            let unavailable = match candidate.dist() {
+                CandidateDist::Incompatible { .. } => true,
+                CandidateDist::Compatible(dist) => {
+                    Self::check_requires_python(dist, python_requirement).is_some()
+                }
+            };
+            if !unavailable
+                && !pubgrub.version_conflicts_with_partial_solution(package, version.clone())
+            {
+                return Ok(false);
+            }
+            remaining = if highest {
+                remaining.intersection(&Range::strictly_lower_than(version))
+            } else {
+                remaining.intersection(&Range::strictly_higher_than(version))
+            };
+        }
+        Ok(true)
     }
 
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
