@@ -228,6 +228,15 @@ pub enum WorkspaceErrorKind {
     Normalize(#[source] std::io::Error),
 }
 
+impl uv_errors::Hint for WorkspaceError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self {
+            Self::Toml(_, err) => err.hints(),
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub enum MemberDiscovery {
     /// Discover all workspace members.
