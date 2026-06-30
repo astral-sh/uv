@@ -380,7 +380,7 @@ async fn build_impl(
             && is_path_within(cache.root(), source_dir)
         {
             warn_user!(
-                "The cache directory `{}` is inside the build source directory `{}`",
+                "The cache directory `{}` is inside the build source directory `{}` and may be included in the distributions",
                 cache.root().user_display(),
                 source_dir.user_display()
             );

@@ -24,9 +24,6 @@ fn build_warns_cache_inside_source() -> Result<()> {
         [build-system]
         requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
-
-        [tool.uv.build-backend]
-        source-exclude = [".uv-cache"]
         "#,
     )?;
     project.child("src/project/__init__.py").touch()?;
@@ -39,7 +36,7 @@ fn build_warns_cache_inside_source() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The cache directory `project/.uv-cache` is inside the build source directory `project`
+    warning: The cache directory `project/.uv-cache` is inside the build source directory `project` and may be included in the distributions
     Building source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     ");
@@ -69,9 +66,6 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
         [build-system]
         requires = ["uv_build>=0.5.15,<10000"]
         build-backend = "uv_build"
-
-        [tool.uv.build-backend]
-        source-exclude = [".uv-cache"]
         "#,
     )?;
     project.child("src/project/__init__.py").touch()?;
@@ -97,7 +91,7 @@ fn build_warns_symlinked_cache_inside_source() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The cache directory `cache-link` is inside the build source directory `project`
+    warning: The cache directory `cache-link` is inside the build source directory `project` and may be included in the distributions
     Building source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     ");
