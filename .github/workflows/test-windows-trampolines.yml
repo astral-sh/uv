@@ -78,6 +78,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
       - name: "Install Rust toolchain"
@@ -97,7 +98,7 @@ jobs:
 
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
-        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
+        run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests --profile no-opt -- -D warnings
 
       - name: "Bloat Check"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
@@ -136,6 +137,7 @@ jobs:
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline

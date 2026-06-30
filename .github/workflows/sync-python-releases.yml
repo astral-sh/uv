@@ -26,6 +26,7 @@ jobs:
           enable-cache: true
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: false
       - name: Sync Python Releases
         run: uv run --locked --python 3.12 --no-build --script fetch-download-metadata.py
