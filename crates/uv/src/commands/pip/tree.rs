@@ -164,7 +164,9 @@ pub(crate) async fn pip_tree(
     .render()
     .join("\n");
 
-    writeln!(printer.stdout(), "{rendered_tree}")?;
+    if !rendered_tree.is_empty() {
+        writeln!(printer.stdout(), "{rendered_tree}")?;
+    }
 
     if rendered_tree.contains("(*)") {
         let message = if no_dedupe {
