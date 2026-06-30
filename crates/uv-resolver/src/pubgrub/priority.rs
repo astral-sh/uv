@@ -1,8 +1,7 @@
 use std::cmp::Reverse;
 
-use hashbrown::hash_map::{EntryRef, OccupiedEntry};
+use hashbrown::hash_map::EntryRef;
 use pubgrub::{DependencyProvider, Range};
-use rustc_hash::FxBuildHasher;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -22,12 +21,13 @@ use crate::{FxHashbrownMap, SentinelRange};
 ///
 /// See: <https://github.com/pypa/pip/blob/ef78c129b1a966dbbbdb8ebfffc43723e89110d1/src/pip/_internal/resolution/resolvelib/provider.py#L120>
 ///
-/// Our main priority is the package name, the earlier we encounter a package, the higher its
-/// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
-/// determinism, we also track the discovery order of virtual packages as secondary order.
+/// Our main priority is the package depth, with shallower packages considered first. At the same
+/// depth, constrained packages take priority over unconstrained packages, followed by discovery
+/// order. This way, all virtual packages of the same name will be applied in a batch. To ensure
+/// determinism, we also track the discovery order of virtual packages as a final tiebreaker.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
-    package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
+    package_priority: FxHashbrownMap<PackageName, PackageState>,
     virtual_package_tiebreaker: FxHashbrownMap<PubGrubPackage, PubGrubTiebreaker>,
 }
 
@@ -35,6 +35,7 @@ impl PubGrubPriorities {
     /// Add a [`PubGrubPackage`] to the priority map.
     pub(crate) fn insert(
         &mut self,
+        parent: &PubGrubPackage,
         package: &PubGrubPackage,
         version: &Range<Version>,
         urls: &ForkUrls,
@@ -52,11 +53,21 @@ impl PubGrubPriorities {
             return;
         };
 
+        let parent_depth = parent
+            .name_no_root()
+            .and_then(|name| self.package_priority.get(name))
+            .map(|state| state.depth)
+            .unwrap_or(0);
+        let depth = parent_depth + 1;
+
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Occupied(mut entry) => {
+                let state = entry.get_mut();
+                state.depth = state.depth.min(depth);
+
                 // Preserve the original index.
-                let index = Self::get_index(&entry).unwrap_or(len);
+                let index = Self::get_index(&state.priority).unwrap_or(len);
 
                 // Compute the priority.
                 let priority = if urls.get(name).is_some() {
@@ -69,17 +80,21 @@ impl PubGrubPriorities {
                     // Keep the conflict-causing packages to avoid loops where we seesaw between
                     // `Unspecified` and `Conflict*`.
                     if matches!(
-                        entry.get(),
+                        state.priority,
                         PubGrubPriority::ConflictEarly(_) | PubGrubPriority::ConflictLate(_)
                     ) {
                         return;
                     }
-                    PubGrubPriority::Unspecified(Reverse(index))
+                    PubGrubPriority::Unspecified(PackagePriority {
+                        depth: Reverse(state.depth),
+                        constrained: version != &Range::full(),
+                        index: Reverse(u32::try_from(index).expect("Less than 2**32 packages")),
+                    })
                 };
 
                 // Take the maximum of the new and existing priorities.
-                if priority > *entry.get() {
-                    entry.insert(priority);
+                if priority > state.priority {
+                    state.priority = priority;
                 }
             }
             EntryRef::Vacant(entry) => {
@@ -91,21 +106,26 @@ impl PubGrubPriorities {
                 {
                     PubGrubPriority::Singleton(Reverse(len))
                 } else {
-                    PubGrubPriority::Unspecified(Reverse(len))
+                    PubGrubPriority::Unspecified(PackagePriority {
+                        depth: Reverse(depth),
+                        constrained: version != &Range::full(),
+                        index: Reverse(u32::try_from(len).expect("Less than 2**32 packages")),
+                    })
                 };
 
                 // Insert the priority.
-                entry.insert(priority);
+                entry.insert(PackageState { priority, depth });
             }
         }
     }
 
-    fn get_index(
-        entry: &OccupiedEntry<'_, PackageName, PubGrubPriority, FxBuildHasher>,
-    ) -> Option<usize> {
-        match entry.get() {
+    fn get_index(priority: &PubGrubPriority) -> Option<usize> {
+        match priority {
+            PubGrubPriority::Unspecified(PackagePriority {
+                index: Reverse(index),
+                ..
+            }) => Some(usize::try_from(*index).expect("u32 fits in usize")),
             PubGrubPriority::ConflictLate(Reverse(index))
-            | PubGrubPriority::Unspecified(Reverse(index))
             | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
@@ -138,12 +158,16 @@ impl PubGrubPriorities {
                 // on discovery (as dependency of another package), before we query it for
                 // prioritization.
                 let package_priority = match self.package_priority.get(name) {
-                    Some(priority) => *priority,
+                    Some(state) => state.priority,
                     None => {
                         if cfg!(debug_assertions) {
                             panic!("Package not known: `{name}` from `{package}`")
                         } else {
-                            PubGrubPriority::Unspecified(Reverse(usize::MAX))
+                            PubGrubPriority::Unspecified(PackagePriority {
+                                depth: Reverse(u32::MAX),
+                                constrained: false,
+                                index: Reverse(u32::MAX),
+                            })
                         }
                     }
                 };
@@ -182,16 +206,19 @@ impl PubGrubPriorities {
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Vacant(entry) => {
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(len)));
+                entry.insert(PackageState {
+                    priority: PubGrubPriority::ConflictEarly(Reverse(len)),
+                    depth: 1,
+                });
                 true
             }
             EntryRef::Occupied(mut entry) => {
-                if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
+                if matches!(entry.get().priority, PubGrubPriority::ConflictEarly(_)) {
                     // Already in the right category
                     return false;
                 }
-                let index = Self::get_index(&entry).unwrap_or(len);
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(index)));
+                let index = Self::get_index(&entry.get().priority).unwrap_or(len);
+                entry.get_mut().priority = PubGrubPriority::ConflictEarly(Reverse(index));
                 true
             }
         }
@@ -215,36 +242,42 @@ impl PubGrubPriorities {
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Vacant(entry) => {
-                entry.insert(PubGrubPriority::ConflictLate(Reverse(len)));
+                entry.insert(PackageState {
+                    priority: PubGrubPriority::ConflictLate(Reverse(len)),
+                    depth: 1,
+                });
                 true
             }
             EntryRef::Occupied(mut entry) => {
                 // The ConflictEarly` match avoids infinite loops.
                 if matches!(
-                    entry.get(),
+                    entry.get().priority,
                     PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
                 ) {
                     // Already in the right category
                     return false;
                 }
-                let index = Self::get_index(&entry).unwrap_or(len);
-                entry.insert(PubGrubPriority::ConflictLate(Reverse(index)));
+                let index = Self::get_index(&entry.get().priority).unwrap_or(len);
+                entry.get_mut().priority = PubGrubPriority::ConflictLate(Reverse(index));
                 true
             }
         }
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PackageState {
+    priority: PubGrubPriority,
+    depth: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum PubGrubPriority {
     /// The package has no specific priority.
     ///
-    /// As such, its priority is based on the order in which the packages were added (FIFO), such
-    /// that the first package we visit is prioritized over subsequent packages.
-    ///
-    /// TODO(charlie): Prefer constrained over unconstrained packages, if they're at the same depth
-    /// in the dependency graph.
-    Unspecified(Reverse<usize>),
+    /// As such, its priority is based on its depth in the dependency graph, whether its version
+    /// range is constrained, and the order in which the package was added.
+    Unspecified(PackagePriority),
 
     /// Selected version of this package were often the culprit of rejecting another package, so
     /// it's deprioritized behind `ConflictEarly`. It's still the higher than `Unspecified` to
@@ -267,6 +300,16 @@ pub(crate) enum PubGrubPriority {
 
     /// The package is the root package.
     Root,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct PackagePriority {
+    /// Prefer packages closer to the root of the dependency graph.
+    depth: Reverse<u32>,
+    /// Prefer constrained packages over unconstrained packages at the same depth.
+    constrained: bool,
+    /// Prefer packages discovered earlier when depth and constraint status are equal.
+    index: Reverse<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
