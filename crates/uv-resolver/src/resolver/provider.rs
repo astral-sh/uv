@@ -298,8 +298,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             ))
                         }
                         uv_client::ErrorKind::WrappedReqwestError(url, err) => {
-                            let Some(status) = err.status().filter(StatusCode::is_client_error)
-                            else {
+                            let Some(status) = err.status().filter(|status| {
+                                dist.index().is_some_and(|index| {
+                                    self.index_locations.ignores_error_code_for(index, *status)
+                                })
+                            }) else {
                                 return Err(uv_client::Error::new(
                                     uv_client::ErrorKind::WrappedReqwestError(url, err),
                                     retries,
