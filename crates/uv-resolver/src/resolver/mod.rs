@@ -521,34 +521,33 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let cache_selected_version = state.env.marker_environment().is_some()
                         && url.is_none()
                         && index.is_none();
-                    let phase_saved = if cache_selected_version
+                    let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
                     {
-                        let same_range = selected_range == range;
-                        let changed_range = if let Some(name) = next_package.name() {
-                            !same_range
-                                && range.contains(version)
-                                && preferences.get(name).is_empty()
-                                && (self.exclusions.reinstall(name)
-                                    || self.installed_packages.get_packages(name).is_empty())
-                                && self.all_better_versions_conflict(
-                                    name,
-                                    range,
-                                    version,
-                                    next_id,
-                                    &state.pubgrub,
-                                    &state.env,
-                                    &state.python_requirement,
-                                )?
-                        } else {
-                            false
-                        };
-                        (same_range || changed_range).then(|| version.clone())
+                        let can_reuse = selected_range == range
+                            || if let Some(name) = next_package.name() {
+                                range.contains(version)
+                                    && preferences.get(name).is_empty()
+                                    && (self.exclusions.reinstall(name)
+                                        || self.installed_packages.get_packages(name).is_empty())
+                                    && self.all_better_versions_conflict(
+                                        name,
+                                        range,
+                                        version,
+                                        next_id,
+                                        &state.pubgrub,
+                                        &state.env,
+                                        &state.python_requirement,
+                                    )?
+                            } else {
+                                false
+                            };
+                        can_reuse.then(|| version.clone())
                     } else {
                         None
                     };
-                    let decision = if let Some(version) = phase_saved {
+                    let decision = if let Some(version) = reusable_version {
                         Some(ResolverVersion::Unforked(version))
                     } else {
                         let decision = self.choose_version(
@@ -1513,13 +1512,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .select_no_preference(name, &remaining, version_maps, env)
         {
             let version = candidate.version().clone();
-            let unavailable = match candidate.dist() {
-                CandidateDist::Incompatible { .. } => true,
-                CandidateDist::Compatible(dist) => {
-                    Self::check_requires_python(dist, python_requirement).is_some()
-                }
-            };
-            if !unavailable
+            if let CandidateDist::Compatible(dist) = candidate.dist()
+                && Self::check_requires_python(dist, python_requirement).is_none()
                 && !pubgrub.version_conflicts_with_partial_solution(package, version.clone())
             {
                 return Ok(false);
