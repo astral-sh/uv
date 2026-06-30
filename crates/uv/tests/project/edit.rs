@@ -14045,6 +14045,50 @@ async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
     Ok(())
 }
 
+/// In authentication "never", client errors that are configured to be ignored should allow the
+/// resolver to try another version.
+#[tokio::test]
+async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{proxy_auth_uri}/basic-auth/simple"
+        authenticate = "never"
+        ignore-error-codes = [401]
+        default = true
+        "#,
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only anyio==4.3.0 is available and anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`), we can conclude that all versions of anyio cannot be used.
+          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Metadata for `anyio` (v4.3.0) could not be fetched; the server returned: `401 Unauthorized`
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
+    "
+    );
+
+    Ok(())
+}
+
 /// In authentication "never", even if the correct credentials are supplied
 /// via env vars, no authenticated requests will be allowed.
 #[tokio::test]

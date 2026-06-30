@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
+use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -500,6 +501,12 @@ impl<'a> IndexLocations {
             IndexStatusCodeStrategy::Default,
             Index::status_code_strategy,
         )
+    }
+
+    /// Return whether the given status code is explicitly ignored for an [`IndexUrl`].
+    pub fn ignores_error_code_for(&self, url: &IndexUrl, status_code: StatusCode) -> bool {
+        self.index_for_url(url)
+            .is_some_and(|index| index.ignores_error_code(status_code))
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
