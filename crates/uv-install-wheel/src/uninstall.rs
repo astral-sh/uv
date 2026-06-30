@@ -189,11 +189,12 @@ pub fn uninstall_wheel(
     file_count += dist_info_file_count;
     dir_count += 1;
 
-    let temporary_path = temporary_directory.path().to_path_buf();
-    if let Err(err) = temporary_directory.close() {
+    // Remove the metadata explicitly, while keeping the temporary directory guard alive so its
+    // destructor retries the cleanup if this attempt fails.
+    if let Err(err) = fs_err::remove_dir_all(temporary_directory.path()) {
         warn!(
             "Failed to remove temporary uninstall directory at {}: {err}",
-            temporary_path.display()
+            temporary_directory.path().display()
         );
     }
 
