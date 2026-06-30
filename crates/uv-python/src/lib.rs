@@ -141,10 +141,8 @@ impl std::fmt::Display for MissingPythonHint {
             }
             Self::DownloadsManual(request) => {
                 let canonical = request.to_canonical_string();
-                // Version ranges like `>=3.13, <3.14` contain spaces and must be quoted
-                // so the hint is valid shell syntax.
                 let arg = if canonical.contains(' ') {
-                    format!("\"{canonical}\"")
+                    format!("'{}'", uv_shell::escape_posix_for_single_quotes(&canonical))
                 } else {
                     canonical
                 };
