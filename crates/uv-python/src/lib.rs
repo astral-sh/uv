@@ -140,11 +140,18 @@ impl std::fmt::Display for MissingPythonHint {
                 )
             }
             Self::DownloadsManual(request) => {
+                let canonical = request.to_canonical_string();
+                // Version ranges like `>=3.13, <3.14` contain spaces and must be quoted
+                // so the hint is valid shell syntax.
+                let arg = if canonical.contains(' ') {
+                    format!("\"{canonical}\"")
+                } else {
+                    canonical
+                };
                 write!(
                     f,
-                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {arg}` to install the required version",
                     Self::for_request(request),
-                    request.to_canonical_string(),
                 )
             }
             Self::DownloadsNever(request) => {
