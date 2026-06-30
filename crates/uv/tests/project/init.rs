@@ -39,6 +39,13 @@ fn init() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1129,6 +1136,13 @@ fn init_no_readme() {
         description = "Add your description here"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1162,6 +1176,13 @@ fn init_no_pin_python() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1832,6 +1853,13 @@ fn init_normalized_names() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        baz-bop = "baz_bop:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -1992,6 +2020,13 @@ fn init_no_workspace_warning() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        project = "project:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2067,6 +2102,13 @@ fn init_project_inside_project() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2426,6 +2468,13 @@ fn init_requires_python_workspace() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.10"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2484,6 +2533,13 @@ fn init_requires_python_version() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2543,6 +2599,13 @@ fn init_requires_python_specifiers() -> Result<()> {
         readme = "README.md"
         requires-python = "==3.9.*"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2589,6 +2652,13 @@ fn init_requires_python_version_file() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2638,6 +2708,13 @@ fn init_existing_environment() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2686,6 +2763,13 @@ fn init_existing_environment_parent() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.9"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -2807,6 +2891,13 @@ fn init_failure() -> Result<()> {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -3013,8 +3104,18 @@ fn init_with_author() {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
+        authors = [
+            { name = "Alice", email = "alice@example.com" }
+        ]
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -3043,6 +3144,13 @@ fn init_with_author() {
         ]
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        bar = "bar:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
@@ -4174,6 +4282,13 @@ fn init_project_flag_is_ignored_with_explicit_path() {
         readme = "README.md"
         requires-python = ">=3.12"
         dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build>=[CURRENT_VERSION],<[NEXT_BREAKING]"]
+        build-backend = "uv_build"
         "#
         );
     });
