@@ -436,29 +436,31 @@ impl<'a> Planner<'a> {
                     // Read the HTTP pointer.
                     match HttpArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => {
-                            let cache_info = pointer.to_cache_info();
-                            let build_info = pointer.to_build_info();
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist.as_ref())) {
-                                let cached_dist = CachedDirectUrlDist {
-                                    filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
-                                    hashes: archive.hashes,
-                                    cache_info,
-                                    build_info,
-                                    path: cache.archive(&archive.id).into_boxed_path(),
-                                };
+                            if pointer.exists(cache) {
+                                let cache_info = pointer.to_cache_info();
+                                let build_info = pointer.to_build_info();
+                                let archive = pointer.into_archive();
+                                if archive.satisfies(hasher.get(dist.as_ref())) {
+                                    let cached_dist = CachedDirectUrlDist {
+                                        filename: wheel.filename.clone(),
+                                        url: VerbatimParsedUrl {
+                                            parsed_url: wheel.parsed_url(),
+                                            verbatim: wheel.url.clone(),
+                                        },
+                                        hashes: archive.hashes,
+                                        cache_info,
+                                        build_info,
+                                        path: cache.archive(&archive.id).into_boxed_path(),
+                                    };
 
-                                debug!("URL wheel requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
+                                    debug!("URL wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
+                                debug!(
+                                    "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
+                                );
                             }
-                            debug!(
-                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
-                            );
                         }
                         Ok(None) => {}
                         Err(err) => {
@@ -504,7 +506,7 @@ impl<'a> Planner<'a> {
                     match PathArchivePointer::read_from(&cache_entry) {
                         Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
                             Ok(timestamp) => {
-                                if pointer.is_up_to_date(timestamp) {
+                                if pointer.exists(cache) && pointer.is_up_to_date(timestamp) {
                                     let cache_info = pointer.to_cache_info();
                                     let build_info = pointer.to_build_info();
                                     let archive = pointer.into_archive();
