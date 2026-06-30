@@ -919,6 +919,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // into `forked_states`, and then only clone it if
         // there is at least one more fork to visit.
         let package = current_state.next;
+        let mut current_state = current_state;
+        current_state.candidate_viability = FxHashMap::default();
         let mut cur_state = Some(current_state);
         let forks_len = forks.len();
         forks
@@ -976,6 +978,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // as it needs to be. We basically move the state
         // into `forked_states`, and then only clone it if
         // there is at least one more fork to visit.
+        let mut current_state = current_state;
+        current_state.candidate_viability = FxHashMap::default();
         let mut cur_state = Some(current_state);
         let forks_len = forks.len();
         forks.into_iter().enumerate().map(move |(i, fork)| {
