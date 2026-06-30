@@ -11,14 +11,17 @@ use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Te
 use reqwest::StatusCode;
 use rustc_hash::FxHashMap;
 
-use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
+use uv_configuration::{Constraints, IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
     IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion, RequirementOrigin,
+};
 use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
@@ -50,6 +53,9 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
     /// The members of the workspace.
     pub(crate) workspace_members: &'a BTreeSet<PackageName>,
+
+    /// The active constraints.
+    pub(crate) constraints: &'a Constraints,
 
     /// The compatible tags for the resolution.
     pub(crate) tags: Option<&'a Tags>,
@@ -919,6 +925,24 @@ impl PubGrubReportFormatter<'_> {
                                     && !self.is_single_project_workspace(),
                             });
                         }
+
+                        if !Self::is_root(package) {
+                            let origins: BTreeSet<RequirementOrigin> = self
+                                .constraints
+                                .get(dependency_name)
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|constraint| constraint.origin.clone())
+                                .collect();
+
+                            if !origins.is_empty() {
+                                output_hints.insert(PubGrubHint::TransitiveConstraint {
+                                    package: package_name.clone(),
+                                    dependency: dependency_name.clone(),
+                                    origins,
+                                });
+                            }
+                        }
                     }
                     // Check for no versions due to `Requires-Python`.
                     if matches!(
@@ -1593,6 +1617,13 @@ pub enum PubGrubHint {
     },
     /// The resolution failed for an environment that is different from the current environment.
     DisjointEnvironment,
+    /// A transitive dependency was constrained via a constraints file.
+    TransitiveConstraint {
+        package: PackageName,
+        dependency: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        origins: BTreeSet<RequirementOrigin>,
+    },
 }
 
 /// This private enum mirrors [`PubGrubHint`] but only includes fields that should be
@@ -1681,6 +1712,10 @@ enum PubGrubHintCore {
     },
     DisjointPythonVersion,
     DisjointEnvironment,
+    TransitiveConstraint {
+        package: PackageName,
+        dependency: PackageName,
+    },
 }
 
 impl From<PubGrubHint> for PubGrubHintCore {
@@ -1758,6 +1793,14 @@ impl From<PubGrubHint> for PubGrubHintCore {
             } => Self::ExcludeNewer { package, source },
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
+            PubGrubHint::TransitiveConstraint {
+                package,
+                dependency,
+                ..
+            } => Self::TransitiveConstraint {
+                package,
+                dependency,
+            },
         }
     }
 }
@@ -2077,6 +2120,24 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "A source distribution is required for `{}` because using pre-built wheels is disabled {option}",
                     package.cyan(),
+                )
+            }
+            Self::TransitiveConstraint {
+                package,
+                dependency,
+                origins,
+            } => {
+                let origins = origins
+                    .iter()
+                    .map(|origin| format!("`-c {}`", origin.path().portable_display()))
+                    .join(", ");
+                write!(
+                    f,
+                    "`{}` is constrained by {}. Constraints are applied transitively, so this may appear in the resolution trace as `{}` depending on `{}`.",
+                    dependency.cyan(),
+                    origins.cyan(),
+                    package.cyan(),
+                    dependency.cyan(),
                 )
             }
             Self::LanguageTags {
@@ -2675,6 +2736,7 @@ mod tests {
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         python_requirement: PythonRequirement,
         workspace_members: BTreeSet<PackageName>,
+        constraints: Constraints,
     }
 
     impl FormatterFixture {
@@ -2701,6 +2763,7 @@ mod tests {
                     RequiresPython::greater_than_equal_version(&Version::new([3_u64, 12])),
                 ),
                 workspace_members: BTreeSet::default(),
+                constraints: Constraints::default(),
             }
         }
 
@@ -2710,6 +2773,7 @@ mod tests {
                 available_versions: &self.available_versions,
                 python_requirement: &self.python_requirement,
                 workspace_members: &self.workspace_members,
+                constraints: &self.constraints,
                 tags: None,
             }
         }
