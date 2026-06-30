@@ -513,14 +513,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
 
-                    // In a specific environment, an implicit registry candidate is stable for a
-                    // given range. Avoid repeating candidate selection when PubGrub revisits an
-                    // identical decision after backtracking. If the range changed, reuse the
-                    // previous decision only when every better candidate is already known to
-                    // conflict with the current partial solution.
-                    let cache_selected_version = state.env.marker_environment().is_some()
-                        && url.is_none()
-                        && index.is_none();
+                    // An implicit registry candidate is stable for a given range. Avoid
+                    // repeating candidate selection when PubGrub revisits an identical decision
+                    // after backtracking. If the range changed, reuse the previous decision only
+                    // when every better candidate is already known to conflict with the current
+                    // partial solution. This is safe in universal resolution because we only
+                    // cache unforked decisions; any better candidate that can fork is neither
+                    // unavailable nor known to conflict, so it prevents reuse.
+                    let cache_selected_version = url.is_none() && index.is_none();
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
