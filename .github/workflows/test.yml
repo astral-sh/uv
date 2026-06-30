@@ -9,6 +9,10 @@ on:
         required: false
         type: string
         default: "false"
+      collect-coverage:
+        required: false
+        type: string
+        default: "false"
 
 permissions: {}
 
@@ -25,7 +29,7 @@ jobs:
   # See: https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners/about-larger-runners#about-ubuntu-and-windows-larger-runners
 
   cargo-test-linux:
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 20 || 10 }}
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
@@ -46,6 +50,10 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           version: "0.11.25"
+
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        run: rustup component add llvm-tools
 
       - name: "Install required Python versions"
         run: uv python install
@@ -90,6 +98,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        id: test
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
@@ -102,11 +111,40 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
-            --features test-python-patch,native-auth,secret-service \
-            --workspace \
+          test_args=(
+            --cargo-profile fast-build
+            --features test-python-patch,native-auth,secret-service
+            --workspace
             --profile ci-linux
+          )
+          if ${{ inputs.collect-coverage == 'true' }}; then
+            tracking_id="${GITHUB_SHA:0:16}"
+            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
+            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+          else
+            cargo nextest run "${test_args[@]}"
+          fi
+
+      - name: "Generate HTML coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        env:
+          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
+        run: |
+          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
+          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
+          test -f "target/coverage/html/$COVERAGE_ID/index.html"
+
+      - name: "Upload coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-linux-${{ github.sha }}
+          path: |
+            target/coverage/html/${{ steps.test.outputs.tracking_id }}/
+            target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          if-no-files-found: error
+          retention-days: 14
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -128,8 +166,7 @@ jobs:
           retention-days: 14
 
   cargo-test-macos:
-    timeout-minutes: 20
-    # Only run macOS tests on main without opt-in
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 20 }}
     if: ${{ inputs.test-macos == 'true' }}
     runs-on: depot-macos-15
     name: "cargo test on macos"
@@ -144,6 +181,10 @@ jobs:
 
       - name: "Install Rust toolchain"
         run: rustup show
+
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        run: rustup component add llvm-tools
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -164,6 +205,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        id: test
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
@@ -177,12 +219,41 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
-            --no-default-features \
-            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native \
-            --workspace \
+          test_args=(
+            --cargo-profile fast-build
+            --no-default-features
+            --features test-python,test-python-managed,test-pypi,test-git,test-git-lfs,performance,test-crates-io,native-auth,apple-native
+            --workspace
             --profile ci-macos
+          )
+          if ${{ inputs.collect-coverage == 'true' }}; then
+            tracking_id="${GITHUB_SHA:0:16}"
+            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
+            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+          else
+            cargo nextest run "${test_args[@]}"
+          fi
+
+      - name: "Generate HTML coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        env:
+          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
+        run: |
+          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
+          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
+          test -f "target/coverage/html/$COVERAGE_ID/index.html"
+
+      - name: "Upload coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-macos-${{ github.sha }}
+          path: |
+            target/coverage/html/${{ steps.test.outputs.tracking_id }}/
+            target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          if-no-files-found: error
+          retention-days: 14
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
@@ -204,7 +275,7 @@ jobs:
           retention-days: 14
 
   cargo-test-windows:
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.collect-coverage == 'true' && 30 || 15 }}
     runs-on: namespace-profile-windows-2022-x86-64-16
     name: "cargo test on windows ${{ matrix.partition }} of 3"
     strategy:
@@ -242,6 +313,11 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup show
 
+      - name: "Install LLVM tools"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: rustup component add llvm-tools
+
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
 
@@ -256,6 +332,7 @@ jobs:
           tool: cargo-nextest
 
       - name: "Cargo test"
+        id: test
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
           # Retry more than default to reduce flakes in CI
@@ -272,13 +349,44 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
-            --cargo-profile fast-build \
-            --no-default-features \
-            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native \
-            --workspace \
-            --profile ci-windows \
+          test_args=(
+            --cargo-profile fast-build
+            --no-default-features
+            --features test-python,test-pypi,test-python-managed,test-windows-registry,native-auth,windows-native
+            --workspace
+            --profile ci-windows
             --partition hash:${{ matrix.partition }}/3
+          )
+          if ${{ inputs.collect-coverage == 'true' }}; then
+            tracking_id="${GITHUB_SHA:0:16}"
+            cargo dev coverage --id "$tracking_id" -- "${test_args[@]}"
+            echo "tracking_id=$tracking_id" >> "$GITHUB_OUTPUT"
+          else
+            cargo nextest run "${test_args[@]}"
+          fi
+
+      - name: "Generate HTML coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        working-directory: ${{ env.UV_WORKSPACE }}
+        shell: bash
+        env:
+          COVERAGE_ID: ${{ steps.test.outputs.tracking_id }}
+        run: |
+          uv run --script scripts/coverage-html-report.py "$COVERAGE_ID"
+          test -f "target/coverage/lcov/$COVERAGE_ID.lcov"
+          test -f "target/coverage/html/$COVERAGE_ID/index.html"
+
+      - name: "Upload coverage report"
+        if: ${{ inputs.collect-coverage == 'true' }}
+        id: upload-coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-windows-${{ matrix.partition }}-${{ github.sha }}
+          path: |
+            ${{ env.UV_WORKSPACE }}/target/coverage/html/${{ steps.test.outputs.tracking_id }}/
+            ${{ env.UV_WORKSPACE }}/target/coverage/lcov/${{ steps.test.outputs.tracking_id }}.lcov
+          if-no-files-found: error
+          retention-days: 14
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}

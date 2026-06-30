@@ -6351,6 +6351,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-errors",
  "uv-extract",
+ "uv-fastid",
  "uv-git",
  "uv-installer",
  "uv-macros",

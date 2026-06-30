@@ -247,6 +247,61 @@ uv run resolver \
     ../test/requirements/trio.in
 ```
 
+## Code coverage
+
+You can run uv's unit and integration tests under instrumentation to get a sense for which APIs
+currently lack test coverage.
+
+To performan a coverage-instrumented run, you'll need some additional LLVM tools. We strongly
+recommend adding these via `rustup` so that they match your current Rust toolchain's LLVM version:
+
+```shell
+rustup component add llvm-tools
+```
+
+From there, you can run `cargo dev coverage` to run the tests with coverage. `cargo dev coverage`
+runs `nextest` under the hood, so you can limit a coverage run like you would for normal test runs.
+
+Examples:
+
+```shell
+# run all tests under coverage
+cargo dev coverage
+
+# run just the uv-audit member's tests
+cargo dev coverage -- -p uv-audit
+
+# optional: pass an explicit tracking ID instead of generating one
+cargo dev coverage --id demo
+```
+
+By default, `cargo dev coverage` will generate a tracking ID and print it; you'll see something like
+this:
+
+```console
+Coverage tracking ID: WuSYqZVUl0R9YPka
+Raw profiles: /Users/ww/oss/astral-sh/uv/target/coverage/profraw/WuSYqZVUl0R9YPka
+
+[... normal test output ...]
+[... normal test output ...]
+[... normal test output ...]
+
+Merged profile: /Users/ww/oss/astral-sh/uv/target/coverage/profdata/WuSYqZVUl0R9YPka.profdata
+LCOV profile: /Users/ww/oss/astral-sh/uv/target/coverage/lcov/WuSYqZVUl0R9YPka.lcov
+Generate an HTML report with: uv run --script scripts/coverage-html-report.py WuSYqZVUl0R9YPka
+```
+
+Then, to turn your run's coverage into a human-readable HTML report:
+
+```shell
+uv run --script scripts/coverage-html-report.py TRACKING_ID
+
+# optional: open the HTML report in the default browser
+uv run --script scripts/coverage-html-report.py --open TRACKING_ID
+```
+
+Note that HTML reports can be very large, and may take some time to render in your browser.
+
 ### Analyzing concurrency
 
 You can use [tracing-durations-export](https://github.com/konstin/tracing-durations-export) to
