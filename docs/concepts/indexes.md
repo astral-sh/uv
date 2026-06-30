@@ -50,6 +50,9 @@ $ uv lock --index pytorch=https://download.pytorch.org/whl/cpu
 $ UV_INDEX=pytorch=https://download.pytorch.org/whl/cpu uv lock
 ```
 
+Indexes defined within workspace members' `pyproject.toml` files are ignored for the purposes of
+dependency resolution. Only indexes defined within the workspace's `pyproject.toml` are considered.
+
 ## Pinning a package to an index
 
 A package can be pinned to a specific index by specifying the index in its `tool.uv.sources` entry.
@@ -102,8 +105,11 @@ explicit = true
 ```
 
 Named indexes referenced via `tool.uv.sources` must be defined within the project's `pyproject.toml`
-file; indexes provided via the command-line, environment variables, or user-level configuration will
-not be recognized.
+file; indexes provided via the command-line, environment variables, or the user's or system's
+`uv.toml` will not be recognized.
+
+If the project is a member of a workspace then named indexes will also be looked up within the
+workspace's `pyproject.toml`.
 
 If an index is marked as both `default = true` and `explicit = true`, it will be treated as an
 explicit index (i.e., only usable via `tool.uv.sources`) while also removing PyPI as the default
