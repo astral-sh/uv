@@ -39,6 +39,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -372,16 +373,17 @@ async fn build_impl(
     };
 
     // Build backends can include arbitrary files from the source directory in the distribution.
-    // Reject an active cache within the source to avoid including cache contents in the build.
+    // Warn if the active cache is within the source since cache contents may be included in the
+    // build.
     for source in &packages {
         if let Source::Directory(source_dir) = &source.source
             && is_path_within(cache.root(), source_dir)
         {
-            return Err(anyhow::anyhow!(
-                "The cache directory `{}` is inside the build source directory `{}`",
+            warn_user!(
+                "The cache directory `{}` is inside the build source directory `{}` and may be included in distributions",
                 cache.root().user_display(),
                 source_dir.user_display()
-            ));
+            );
         }
     }
 
