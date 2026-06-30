@@ -3,6 +3,21 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.26
+
+Released on 2026-06-30.
+
+### Performance
+
+- Adapt uv to IDs-only PubGrub dependencies ([#20048](https://github.com/astral-sh/uv/pull/20048))
+- Avoid allocations in `ForkMap::contains` ([#20023](https://github.com/astral-sh/uv/pull/20023))
+- Reuse resolver work across PubGrub iterations ([#20020](https://github.com/astral-sh/uv/pull/20020))
+- Speed up candidate selection for disjoint ranges ([#20026](https://github.com/astral-sh/uv/pull/20026))
+
+### Bug fixes
+
+- Warn when the build cache is inside the source directory ([#20056](https://github.com/astral-sh/uv/pull/20056))
+
 ## 0.11.25
 
 Released on 2026-06-26.
