@@ -1193,6 +1193,7 @@ impl TestContext {
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
             .env(EnvVars::APPDATA, self.home_dir.as_os_str())
+            .env(EnvVars::LOCALAPPDATA, self.home_dir.as_os_str())
             .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
             .env(
                 EnvVars::XDG_CONFIG_DIRS,
