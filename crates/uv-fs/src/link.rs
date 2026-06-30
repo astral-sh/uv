@@ -67,7 +67,7 @@ pub enum OnExistingDirectory {
     Merge,
 }
 
-/// Link a directory tree from `src` to `dst` using the mode in `options`.
+/// Link a directory tree or individual file from `src` to `dst` using the mode in `options`.
 ///
 /// Returns the [`LinkMode`] that was actually used, which may differ from the requested mode if a
 /// fallback was needed, e.g., if hard linking was requested but the source and destination are on
@@ -370,7 +370,13 @@ where
 
         let path = entry.path();
         let relative = path.strip_prefix(src).expect("walkdir starts with root");
-        let target = dst.join(relative);
+        // A file root has an empty relative path. Use the destination directly to avoid treating
+        // the target file as a directory by appending an empty path component.
+        let target = if relative.as_os_str().is_empty() {
+            dst.to_path_buf()
+        } else {
+            dst.join(relative)
+        };
 
         if entry.file_type().is_dir() {
             fs_err::create_dir_all(&target).map_err(|err| LinkError::CreateDir {

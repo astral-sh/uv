@@ -353,6 +353,7 @@ mod tests {
         fs::create_dir_all(&package)?;
         fs::create_dir_all(&dist_info)?;
         fs::create_dir_all(&site_packages)?;
+        fs::write(wheel.join("example.py"), "")?;
         fs::write(package.join("__init__.py"), "")?;
         fs::write(dist_info.join("RECORD"), "")?;
 
@@ -367,6 +368,7 @@ mod tests {
             &filename,
         )?;
 
+        assert!(site_packages.join("example.py").is_file());
         assert!(site_packages.join("example/__init__.py").is_file());
         assert!(!site_packages.join("example-1.0.0.dist-info").exists());
         assert!(
