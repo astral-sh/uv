@@ -459,5 +459,5 @@ codegen-units = 1
 inherits = "release"
 
 [patch.crates-io]
-astral-pubgrub = { git = "https://github.com/astral-sh/pubgrub.git", rev = "66d45efb9e01551924cac41918c3e8fe6f785318" }
-astral-version-ranges = { git = "https://github.com/astral-sh/pubgrub.git", rev = "66d45efb9e01551924cac41918c3e8fe6f785318" }
+astral-pubgrub = { git = "https://github.com/astral-sh/pubgrub.git", rev = "9c96d5c41536e535f94c8495f62afa08ad6420bd" }
+astral-version-ranges = { git = "https://github.com/astral-sh/pubgrub.git", rev = "9c96d5c41536e535f94c8495f62afa08ad6420bd" }
