@@ -1993,9 +1993,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::System(_) => return Ok(Dependencies::Unforkable(Vec::default())),
 
             PubGrubPackageInner::Prerelease { package } => {
-                // Keep the proxy and wrapped package on the same version. This dependency is
-                // deliberately added only after choosing the proxy, so a late authorization can
-                // invalidate an earlier stable decision without restarting resolution.
                 return Ok(Dependencies::Unforkable(vec![PubGrubDependency {
                     package: package.clone(),
                     version: Range::singleton(version.clone()),
@@ -2627,9 +2624,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // Prefetch runs before package selection and has no active transitive pre-release
-                // proxy. Use the base strategy so speculative metadata requests cannot download
-                // or build a pre-release that the resolver is not yet authorized to select.
+                // We don't have access to the fork state when prefetching.
                 let env = ResolverEnvironment::universal(vec![]);
 
                 // Try to find a compatible version. If there aren't any compatible versions,
