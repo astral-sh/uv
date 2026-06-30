@@ -489,7 +489,6 @@ pub(crate) async fn pip_sync(
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .with_python_version(interpreter.python_version().clone())
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
@@ -559,7 +558,6 @@ pub(crate) async fn pip_sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .with_python_version(interpreter.python_version().clone())
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
