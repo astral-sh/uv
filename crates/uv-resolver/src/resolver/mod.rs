@@ -1527,7 +1527,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(true);
         }
         let checked = remaining.clone();
-        let mut viable = Range::empty();
+        let mut viable_versions = Vec::new();
         while let Some(candidate) =
             self.selector
                 .select_no_preference(name, &remaining, version_maps, env)
@@ -1539,7 +1539,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !pubgrub.version_conflicts_with_partial_solution(package, version.clone()) {
                     return Ok(false);
                 }
-                viable = viable.union(&Range::singleton(version.clone()));
+                viable_versions.push(version.clone());
             }
             remaining = if highest {
                 remaining.intersection(&Range::strictly_lower_than(version))
@@ -1547,6 +1547,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 remaining.intersection(&Range::strictly_higher_than(version))
             };
         }
+        // Candidate selection visits versions in preference order. Reverse highest-resolution
+        // candidates so the range constructor receives both modes in ascending order and can
+        // append each disjoint singleton without repeatedly shifting existing segments.
+        if highest {
+            viable_versions.reverse();
+        }
+        let viable = viable_versions
+            .into_iter()
+            .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
+            .collect::<Range<_>>();
         candidate_viability
             .entry(package)
             .and_modify(|cache| {
