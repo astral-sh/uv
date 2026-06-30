@@ -9,7 +9,7 @@ use fs_err::{metadata, set_permissions};
 use indoc::indoc;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
-use uv_test::{uv_snapshot, venv_bin_path};
+use uv_test::{make_project, uv_snapshot, venv_bin_path};
 
 #[test]
 fn tool_run_args() {
@@ -776,7 +776,7 @@ fn tool_run_cache() {
     Resolved [N] packages in [TIME]
     ");
 
-    // Verify that `--refresh` allows cache reuse.
+    // Verify that `--refresh` invalidates the cached environment.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -793,9 +793,17 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     ");
 
-    // Verify that `--refresh-package` allows cache reuse.
+    // Verify that `--refresh-package` invalidates the cached environment.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
         .arg("3.12")
@@ -813,6 +821,14 @@ fn tool_run_cache() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
     ");
 
     // Verify that varying the interpreter leads to a fresh environment.
@@ -887,6 +903,79 @@ fn tool_run_cache() {
      + pathspec==0.12.1
      + platformdirs==4.2.0
     ");
+}
+
+#[test]
+fn tool_run_refresh_local_project() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let project_dir = context.temp_dir.child("local-tool");
+
+    make_project(
+        project_dir.path(),
+        "local_tool",
+        indoc! {r#"
+            [project.scripts]
+            local-tool = "local_tool:main"
+        "#},
+    )?;
+    project_dir
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("v1")
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg(project_dir.as_os_str())
+        .arg("local-tool")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    v1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + local-tool==0.1.0 (from file://[TEMP_DIR]/local-tool)
+    "###);
+
+    project_dir
+        .child("src")
+        .child("local_tool")
+        .child("__init__.py")
+        .write_str(indoc! {r#"
+            def main():
+                print("v2")
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--refresh")
+        .arg("--from")
+        .arg(project_dir.as_os_str())
+        .arg("local-tool")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    v2
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + local-tool==0.1.0 (from file://[TEMP_DIR]/local-tool)
+    "###);
+
+    Ok(())
 }
 
 #[test]
