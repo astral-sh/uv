@@ -6969,6 +6969,7 @@ dependencies = [
  "uv-preview",
  "uv-pypi-types",
  "uv-redacted",
+ "uv-shell",
  "uv-state",
  "uv-static",
  "uv-trampoline-builder",
