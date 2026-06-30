@@ -14,7 +14,8 @@ use uv_static::EnvVars;
 use uv_warnings::owo_colors::OwoColorize;
 
 use crate::providers::{
-    AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
+    ArtifactRegistryProvider, AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider,
+    S3EndpointProvider,
 };
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
@@ -200,6 +201,8 @@ pub struct AuthMiddleware {
     pyx_token_store: Option<PyxTokenStore>,
     /// Tokens to use for persistent credentials.
     pyx_token_state: Mutex<TokenState>,
+    /// Provider for Google Artifact Registry credentials.
+    artifact_registry_provider: ArtifactRegistryProvider,
     /// Cached S3 credentials to avoid running the credential helper multiple times.
     s3_credential_state: Mutex<S3CredentialState>,
     /// Cached GCS credentials to avoid running the credential helper multiple times.
@@ -228,6 +231,7 @@ impl AuthMiddleware {
             base_client: None,
             pyx_token_store: None,
             pyx_token_state: Mutex::new(TokenState::Uninitialized),
+            artifact_registry_provider: ArtifactRegistryProvider::default(),
             s3_credential_state: Mutex::new(S3CredentialState::Uninitialized),
             gcs_credential_state: Mutex::new(GcsCredentialState::Uninitialized),
             azure_credential_state: Mutex::new(AzureCredentialState::Uninitialized),
@@ -317,6 +321,14 @@ impl AuthMiddleware {
     #[must_use]
     pub fn with_pyx_token_store(mut self, token_store: PyxTokenStore) -> Self {
         self.pyx_token_store = Some(token_store);
+        self
+    }
+
+    /// Configure the [`ArtifactRegistryProvider`] to use.
+    #[must_use]
+    #[cfg(test)]
+    fn with_artifact_registry_provider(mut self, provider: ArtifactRegistryProvider) -> Self {
+        self.artifact_registry_provider = provider;
         self
     }
 
@@ -694,7 +706,7 @@ impl AuthMiddleware {
 
     /// Fetch credentials for a URL.
     ///
-    /// Supports netrc file and keyring lookups.
+    /// Supports built-in providers, netrc files, credential stores, and keyring lookups.
     async fn fetch_credentials(
         &self,
         credentials: Option<&Authentication>,
@@ -702,6 +714,7 @@ impl AuthMiddleware {
         index: Option<&Index>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Authentication>> {
+        let requested_username = credentials.and_then(Authentication::username);
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
@@ -716,14 +729,16 @@ impl AuthMiddleware {
         if let Some(credentials) = self.cache().fetches.register_or_wait(&key).await {
             if credentials.is_some() {
                 trace!("Using credentials from previous fetch for {}", key.0);
-            } else {
-                trace!(
-                    "Skipping fetch of credentials for {}, previous attempt failed",
-                    key.0
-                );
+                return credentials;
             }
+            trace!(
+                "Skipping fetch of credentials for {}, previous attempt failed",
+                key.0
+            );
 
-            return credentials;
+            return self
+                .fetch_artifact_registry_credentials(url, requested_username)
+                .await;
         }
 
         // Support for known providers, like Hugging Face and S3.
@@ -956,10 +971,39 @@ impl AuthMiddleware {
 
         let credentials = credentials.map(Authentication::from).map(Arc::new);
 
-        // Register the fetch for this key
+        // Register the fetch for this key. Google Artifact Registry credentials are checked
+        // separately because the provider has its own expiry-aware cache for both hits and misses.
         self.cache().fetches.done(key, credentials.clone());
 
-        credentials
+        if credentials.is_some() {
+            return credentials;
+        }
+
+        self.fetch_artifact_registry_credentials(url, requested_username)
+            .await
+    }
+
+    async fn fetch_artifact_registry_credentials(
+        &self,
+        url: &DisplaySafeUrl,
+        requested_username: Option<&str>,
+    ) -> Option<Arc<Authentication>> {
+        if self.keyring.is_none()
+            && ArtifactRegistryProvider::is_artifact_registry(url)
+            && ArtifactRegistryProvider::supports_username(requested_username)
+            && self
+                .artifact_registry_provider
+                .credentials_for(url)
+                .await
+                .is_some()
+        {
+            debug!("Found Google Artifact Registry credentials for {url}");
+            Some(Arc::new(Authentication::from(
+                self.artifact_registry_provider.clone(),
+            )))
+        } else {
+            None
+        }
     }
 }
 
@@ -1442,6 +1486,130 @@ mod tests {
             client.get(url).send().await?.status(),
             401,
             "Credentials are not pulled from the keyring when given another username"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials() -> Result<(), Error> {
+        let password = "test-token";
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_artifact_registry_provider(ArtifactRegistryProvider::with_signer(
+                reqsign::google::default_signer("artifactregistry.googleapis.com")
+                    .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                        password,
+                    )),
+            ));
+
+        let authentication = middleware
+            .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+            .await
+            .expect("Credentials should be pulled from the Google Artifact Registry provider");
+        let request = authentication
+            .authenticate(Request::new(Method::GET, url))
+            .await?;
+        assert_eq!(
+            Credentials::from_request(&request),
+            Some(Credentials::basic(
+                Some("oauth2accesstoken".to_string()),
+                Some(password.to_string())
+            ))
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials_skip_built_in_provider_with_keyring()
+    -> Result<(), Error> {
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_keyring(Some(KeyringProvider::empty()))
+            .with_artifact_registry_provider(ArtifactRegistryProvider::with_signer(
+                reqsign::google::default_signer("artifactregistry.googleapis.com")
+                    .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                        "test-token",
+                    )),
+            ));
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_none(),
+            "Built-in credentials should not override an explicitly configured keyring provider"
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials_preserve_explicit_username() -> Result<(), Error> {
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_artifact_registry_provider(ArtifactRegistryProvider::with_signer(
+                reqsign::google::default_signer("artifactregistry.googleapis.com")
+                    .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                        "test-token",
+                    )),
+            ));
+        let credentials = Authentication::from(Credentials::basic(Some("user".to_string()), None));
+
+        assert!(
+            middleware
+                .fetch_credentials(
+                    Some(&credentials),
+                    DisplaySafeUrl::ref_cast(&url),
+                    None,
+                    AuthPolicy::Auto
+                )
+                .await
+                .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_artifact_registry_credentials_retry_missing_credentials() -> Result<(), Error> {
+        let url = Url::parse("https://us-central1-python.pkg.dev/project/index/simple")?;
+        let provider = ArtifactRegistryProvider::with_signer(
+            reqsign::google::default_signer("artifactregistry.googleapis.com")
+                .with_credential_provider(reqsign::google::TokenCredentialProvider::new(
+                    "test-token",
+                )),
+        );
+        provider.cache_missing_credentials().await;
+        let middleware = AuthMiddleware::new()
+            .with_cache(CredentialsCache::new())
+            .with_artifact_registry_provider(provider.clone());
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_none()
+        );
+        assert_eq!(
+            middleware
+                .cache()
+                .fetches
+                .get(&(FetchUrl::Realm(Realm::from(&url)), Username::none())),
+            Some(None)
+        );
+
+        provider.clear_cached_credentials().await;
+
+        assert!(
+            middleware
+                .fetch_credentials(None, DisplaySafeUrl::ref_cast(&url), None, AuthPolicy::Auto)
+                .await
+                .is_some()
         );
 
         Ok(())
