@@ -3357,6 +3357,167 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     Ok(())
 }
 
+/// This test checks that phase-saving preserves universal forks after backtracking.
+///
+///
+/// ```text
+/// phase-saving
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires baz
+/// │   │   └── satisfied by baz-1.0.0
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   └── bar-2.0.0
+/// ├── baz
+/// │   └── baz-1.0.0
+/// │       ├── requires bar==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by bar-1.0.0
+/// │       └── requires bar==2 ; sys_platform != 'linux'
+/// │           └── satisfied by bar-2.0.0
+/// └── foo
+///     ├── foo-1.0.0
+///     │   ├── requires bar==1 ; sys_platform == 'linux'
+///     │   │   └── satisfied by bar-1.0.0
+///     │   └── requires bar==2 ; sys_platform != 'linux'
+///     │       └── satisfied by bar-2.0.0
+///     └── foo-2.0.0
+///         └── requires bar==2
+///             └── satisfied by bar-2.0.0
+/// ```
+#[test]
+fn phase_saving() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''foo''',
+          '''baz''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:d373f4858d602855ef53231a7f24ebff4e67e1fe30a2e810ee2b2a29b9d1a50a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-1.0.0-py3-none-any.whl", hash = "sha256:2fbf0e0a7dd4f48a8b1c2148f73ba0c314699d0bfa0a8ec9b9bcb8105882e9fc", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:fa9a4faf506228722784ed740a362bccd96913f4f98a4e10d45ab79d8abb270a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-2.0.0-py3-none-any.whl", hash = "sha256:563b1af3238a4ad819f2b95b74f940319a2ef30ed7991a2416fa98aa115da87d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "baz"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/baz-1.0.0.tar.gz", hash = "sha256:cd4bd6d8d98df82464c3de47bd1c0d1fd3b5b8d13ce934f20cf72d4d7a4458d7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/baz-1.0.0-py3-none-any.whl", hash = "sha256:32eb7602c0ca51b0ffb5e40ad804254a73117157e64c9edb697d1540b3f10bdf", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:b7939168304bd17ae9606ea29edf36907eea6e1a10116335e927986680fd25a8", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:b96e9e502ccd1918e47b93ecb446956c037f6855a7edadca5bc9365803cd106f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "baz" },
+            { name = "foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "baz" },
+            { name = "foo" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// This test contains a bistable resolution scenario when not using ahead-of-time
 /// splitting of resolution forks: We meet one of two fork points depending on the
 /// preferences, creating a resolution whose preferences lead us the other fork
