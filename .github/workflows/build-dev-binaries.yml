@@ -24,9 +24,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -52,8 +49,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
+      - name: "Use bundled LLD"
+        run: |
+          # The direct rustc opt-in is unstable here, so route the C driver to
+          # rustc's bundled LLD wrapper instead of installing mold.
+          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
+          test -x "${bundled_lld_dir}/ld.lld"
+          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -79,9 +81,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
 
       - name: "Setup armv7"
         run: |
@@ -116,8 +115,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
+      - name: "Use bundled LLD"
+        run: |
+          # The direct rustc opt-in is unstable here, so route the C driver to
+          # rustc's bundled LLD wrapper instead of installing mold.
+          bundled_lld_dir="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/gcc-ld"
+          test -x "${bundled_lld_dir}/ld.lld"
+          echo "RUSTFLAGS=-C link-arg=-B${bundled_lld_dir} -C link-arg=-fuse-ld=lld" >> "${GITHUB_ENV}"
 
       - name: "Setup musl"
         run: |
@@ -277,8 +281,6 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
