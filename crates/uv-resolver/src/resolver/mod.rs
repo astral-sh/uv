@@ -20,7 +20,7 @@ use tokio::sync::oneshot;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, Excludes, IndexStrategy, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -522,7 +522,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.selected_versions.get(&next_id)
                     {
                         let can_reuse = selected_range == range
-                            || if let Some(name) = next_package.name() {
+                            || if !matches!(
+                                self.selector.index_strategy(),
+                                IndexStrategy::UnsafeFirstMatch
+                            ) && let Some(name) = next_package.name()
+                            {
                                 range.contains(version)
                                     && preferences.get(name).is_empty()
                                     && (self.exclusions.reinstall(name)

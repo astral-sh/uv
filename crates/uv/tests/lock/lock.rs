@@ -13228,6 +13228,46 @@ fn lock_phase_saving_preserves_universal_forks() -> Result<()> {
     Ok(())
 }
 
+/// Check that phase saving preserves index priority with `unsafe-first-match`.
+#[test]
+fn lock_phase_saving_preserves_unsafe_first_match_priority() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let first_index = PackseServer::new("fork/phase-saving-index-priority-first.toml");
+    let second_index = PackseServer::new("fork/phase-saving-index-priority-second.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+        "#,
+    )?;
+
+    let mut command = context.lock();
+    command
+        .arg("--index-url")
+        .arg(second_index.index_url())
+        .arg("--extra-index-url")
+        .arg(first_index.index_url())
+        .arg("--index-strategy")
+        .arg("unsafe-first-match")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    assert!(lock.contains("name = \"a\"\nversion = \"1.0.0\""));
+    assert!(!lock.contains("name = \"a\"\nversion = \"2.0.0\""));
+
+    command.arg("--locked").assert().success();
+    assert_eq!(lock, context.read("uv.lock"));
+
+    Ok(())
+}
+
 /// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
 #[test]
 fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
