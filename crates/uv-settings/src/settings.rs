@@ -355,6 +355,23 @@ pub struct GlobalOptions {
         possible_values = true
     )]
     pub python_downloads: Option<PythonDownloads>,
+    /// Path to the directory where uv installs and discovers managed Python versions.
+    ///
+    /// By default, managed Python versions are stored in the `python` subdirectory of the uv data
+    /// directory, e.g., `$XDG_DATA_HOME/uv/python` or `$HOME/.local/share/uv/python` on Linux and
+    /// macOS, and `%APPDATA%\uv\data\python` on Windows. Run `uv python dir` to view the active
+    /// directory.
+    ///
+    /// The `UV_PYTHON_INSTALL_DIR` environment variable takes precedence over this setting.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            python-install-dir = "./.uv_python"
+        "#
+    )]
+    pub python_install_dir: Option<PathBuf>,
     /// The maximum number of in-flight concurrent downloads that uv will perform at any given
     /// time.
     #[option(
@@ -453,6 +470,7 @@ struct GlobalOptionsWire {
 
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
+    python_install_dir: Option<PathBuf>,
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
     concurrent_installs: Option<NonZeroUsize>,
@@ -478,6 +496,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             preview_features,
             python_preference,
             python_downloads,
+            python_install_dir,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
@@ -497,6 +516,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             preview: PreviewOption::try_from(preview, preview_features)?,
             python_preference,
             python_downloads,
+            python_install_dir,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
@@ -2457,6 +2477,7 @@ struct OptionsWire {
     preview_features: Option<PreviewFeaturesOption>,
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
+    python_install_dir: Option<PathBuf>,
     concurrent_downloads: Option<NonZeroUsize>,
     concurrent_builds: Option<NonZeroUsize>,
     concurrent_installs: Option<NonZeroUsize>,
@@ -2562,6 +2583,7 @@ impl TryFrom<OptionsWire> for Options {
             preview_features,
             python_preference,
             python_downloads,
+            python_install_dir,
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
@@ -2640,6 +2662,7 @@ impl TryFrom<OptionsWire> for Options {
                 preview: PreviewOption::try_from(preview, preview_features)?,
                 python_preference,
                 python_downloads,
+                python_install_dir,
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,

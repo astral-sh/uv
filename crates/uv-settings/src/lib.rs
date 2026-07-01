@@ -385,6 +385,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 preview,
                 python_preference,
                 python_downloads,
+                python_install_dir,
                 concurrent_downloads,
                 concurrent_builds,
                 concurrent_installs,
@@ -491,6 +492,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if python_downloads.is_some() {
         masked_fields.push("python-downloads");
+    }
+    if python_install_dir.is_some() {
+        masked_fields.push("python-install-dir");
     }
     if concurrent_downloads.is_some() {
         masked_fields.push("concurrent-downloads");
