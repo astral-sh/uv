@@ -24750,7 +24750,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = 1
 
         [tool.uv.sources]
         iniconfig = [

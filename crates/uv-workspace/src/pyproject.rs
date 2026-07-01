@@ -94,24 +94,21 @@ impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
-        let sources_wire =
-            toml::from_str::<PyProjectTomlSourcesWire>(&raw).map_err(PyprojectTomlError::Toml)?;
-        let sources = sources_wire
-            .tool
-            .and_then(|tool| tool.uv)
-            .and_then(|uv| uv.sources)
-            .map(ToolUvSources::try_from)
-            .transpose()?;
-
-        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
-        if let Some(sources) = sources {
-            let tool_uv = pyproject
-                .tool
-                .as_mut()
-                .and_then(|tool| tool.uv.as_mut())
-                .expect("tool.uv must exist when tool.uv.sources is present");
-            tool_uv.sources = Some(sources);
-        }
+        let pyproject: Self = match toml::from_str(&raw) {
+            Ok(pyproject) => pyproject,
+            Err(error) => {
+                // Preserve the more specific source error if both parses would fail.
+                let sources = toml::from_str::<PyProjectTomlSourcesWire>(&raw)
+                    .map_err(PyprojectTomlError::Toml)?
+                    .tool
+                    .and_then(|tool| tool.uv)
+                    .and_then(|uv| uv.sources);
+                if let Some(sources) = sources {
+                    ToolUvSources::try_from(sources)?;
+                }
+                return Err(PyprojectTomlError::Toml(error));
+            }
+        };
 
         Ok(Self { raw, ..pyproject })
     }
@@ -316,7 +313,6 @@ pub struct ToolUv {
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
-    #[serde(default, deserialize_with = "ignore_tool_uv_sources")]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -711,14 +707,6 @@ pub struct ToolUv {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
-
-fn ignore_tool_uv_sources<'de, D>(deserializer: D) -> Result<Option<ToolUvSources>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    serde::de::IgnoredAny::deserialize(deserializer)?;
-    Ok(None)
-}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
