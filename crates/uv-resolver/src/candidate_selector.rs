@@ -318,11 +318,38 @@ impl CandidateSelector {
                 }
             }
 
-            // Check for a remote distribution that matches the preferred version
-            if let Some((version_map, file)) = version_maps
-                .iter()
-                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
-            {
+            // Find the preferred version on a remote index. The same version may be
+            // available from several indexes (e.g. with `unsafe-best-match`); prefer
+            // one whose distribution isn't filtered by `exclude-newer`, but fall back
+            // to the first match so an otherwise-unsatisfiable preference is still
+            // surfaced (e.g. in the resolver error).
+            let mut fallback = None;
+            let mut preferred = None;
+            for version_map in version_maps {
+                let Some(dist) = version_map.get(version) else {
+                    continue;
+                };
+                if fallback.is_none() {
+                    fallback = Some((version_map, dist));
+                }
+                let exclude_newer_incompatible = matches!(
+                    Candidate::new(package_name, version, dist, VersionChoiceKind::Preference)
+                        .dist(),
+                    CandidateDist::Incompatible {
+                        incompatible_dist: IncompatibleDist::Source(
+                            IncompatibleSource::ExcludeNewer(_)
+                        ) | IncompatibleDist::Wheel(
+                            IncompatibleWheel::ExcludeNewer(_)
+                        ),
+                        ..
+                    }
+                );
+                if !exclude_newer_incompatible {
+                    preferred = Some((version_map, dist));
+                    break;
+                }
+            }
+            if let Some((version_map, file)) = preferred.or(fallback) {
                 // If the preferred version has a local variant, prefer that.
                 if version_map.local() {
                     for local in version_map
