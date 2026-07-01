@@ -16235,7 +16235,7 @@ fn abi_compatibility_on_nondebug_python_with_debug_wheel() {
 }
 
 #[test]
-fn warn_on_bz2_wheel() {
+fn fail_on_bz2_wheel() {
     let context = uv_test::test_context!("3.14");
     let vendor = FindLinksServer::vendor();
 
@@ -16244,22 +16244,20 @@ fn warn_on_bz2_wheel() {
         context.pip_install()
             .arg(format!("futzed_bz2 @ {}/futzed_bz2-0.1.0-py3-none-any.whl", vendor.url())),
         @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    warning: One or more file entries in 'http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl' use the 'bzip2' compression method, which is not widely supported. A future version of uv will reject ZIP archives containing entries compressed with this method. Entries must be compressed with the 'stored', 'DEFLATE', or 'zstd' compression methods.
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + futzed-bz2==0.1.0 (from http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl)
+      × Failed to download `futzed-bz2 @ http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_bz2-0.1.0-py3-none-any.whl`
+      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }
 
 #[test]
-fn warn_on_lzma_wheel() {
+fn fail_on_lzma_wheel() {
     let context = uv_test::test_context!("3.14");
     let vendor = FindLinksServer::vendor();
 
@@ -16274,11 +16272,8 @@ fn warn_on_lzma_wheel() {
 
     ----- stderr -----
       × Failed to download `futzed-lzma @ http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries in [TIME]
       ├─▶ Failed to read metadata: `http://[LOCALHOST]/futzed_lzma-0.1.0-py3-none-any.whl`
-      ├─▶ Failed to read from zip file
-      ├─▶ an upstream reader returned an error: stream/file format not recognized
-      ╰─▶ stream/file format not recognized
+      ╰─▶ Archive contains a file with an unsupported compression method; files must be compressed with 'stored', 'DEFLATE', or 'zstd'
     "
     );
 }
