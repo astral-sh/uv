@@ -107,6 +107,7 @@ impl PubGrubPriorities {
             PubGrubPriority::ConflictLate(Reverse(index))
             | PubGrubPriority::Unspecified(Reverse(index))
             | PubGrubPriority::ConflictEarly(Reverse(index))
+            | PubGrubPriority::ConflictActivity(_, Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
             PubGrubPriority::Root => None,
@@ -162,6 +163,32 @@ impl PubGrubPriorities {
                 (package_priority, package_tiebreaker)
             }
         }
+    }
+
+    /// Return the priority for a package, using recent conflict activity to order ordinary
+    /// registry packages.
+    ///
+    /// Direct URLs and singleton requirements remain more important because their ordering is
+    /// correctness-sensitive or already maximally constrained. For every other package, higher
+    /// activity means the package has participated in more recent conflicts and should be tried
+    /// before unrelated packages.
+    pub(crate) fn get_with_activity(
+        &self,
+        package: &PubGrubPackage,
+        activity: u32,
+    ) -> <UvDependencyProvider as DependencyProvider>::Priority {
+        let (priority, tiebreaker) = self.get(package);
+        let priority = match priority {
+            PubGrubPriority::Unspecified(index)
+            | PubGrubPriority::ConflictLate(index)
+            | PubGrubPriority::ConflictEarly(index)
+                if activity > 0 =>
+            {
+                PubGrubPriority::ConflictActivity(activity, index)
+            }
+            _ => priority,
+        };
+        (priority, tiebreaker)
     }
 
     /// Mark a package as prioritized by setting it to [`PubGrubPriority::ConflictEarly`], if it
@@ -254,6 +281,9 @@ pub(crate) enum PubGrubPriority {
     /// Selected version of this package were often rejected, so it's prioritized over
     /// `ConflictLate`.
     ConflictEarly(Reverse<usize>),
+
+    /// The package has participated in recent conflicts. More active packages are selected first.
+    ConflictActivity(u32, Reverse<usize>),
 
     /// The version range is constrained to a single version (e.g., with the `==` operator).
     Singleton(Reverse<usize>),

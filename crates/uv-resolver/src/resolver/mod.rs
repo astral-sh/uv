@@ -413,10 +413,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         // Choose a package.
                         // We aren't allowed to use the term intersection as it would extend the
                         // mutable borrow of `state`.
-                        let Some((highest_priority_pkg, _)) =
-                            state.pubgrub.partial_solution.pick_highest_priority_pkg(
-                                |id, _range| state.priorities.get(&state.pubgrub.package_store[id]),
-                            )
+                        let Some((highest_priority_pkg, _)) = state
+                            .pubgrub
+                            .partial_solution
+                            .pick_highest_priority_pkg(|id, _range| {
+                                let package = &state.pubgrub.package_store[id];
+                                let activity = package
+                                    .name_no_root()
+                                    .and_then(|name| state.conflict_tracker.activity.get(name))
+                                    .copied()
+                                    .unwrap_or_default();
+                                state.priorities.get_with_activity(package, activity)
+                            })
                         else {
                             // All packages have been assigned, the fork has been successfully resolved
                             if tracing::enabled!(Level::DEBUG) {
@@ -3366,6 +3374,14 @@ impl ForkState {
                 continue;
             }
             culprit_is_real = true;
+            if let Some(name) = self.pubgrub.package_store[incompatible].name_no_root() {
+                let activity = self
+                    .conflict_tracker
+                    .activity
+                    .entry(name.clone())
+                    .or_default();
+                *activity = activity.saturating_add(1);
+            }
             let culprit_count = self
                 .conflict_tracker
                 .culprit
@@ -3379,6 +3395,22 @@ impl ForkState {
         // Don't track conflicts between a marker package and the main package, when the
         // marker is "copying" the obligations from the main package through conflicts.
         if culprit_is_real {
+            if let Some(name) = self.pubgrub.package_store[affected].name_no_root() {
+                let activity = self
+                    .conflict_tracker
+                    .activity
+                    .entry(name.clone())
+                    .or_default();
+                *activity = activity.saturating_add(1);
+            }
+            self.conflict_tracker.conflicts = self.conflict_tracker.conflicts.saturating_add(1);
+            if self.conflict_tracker.conflicts.is_multiple_of(32) {
+                self.conflict_tracker.activity.retain(|_, activity| {
+                    *activity = (*activity + 1) / 2;
+                    *activity > 0
+                });
+            }
+
             if tracing::enabled!(Level::DEBUG) {
                 let incompatibility = self.pubgrub.incompatibility_store[incompatibility]
                     .iter()
@@ -4531,6 +4563,10 @@ mod tests {
 
 #[derive(Debug, Default, Clone)]
 struct ConflictTracker {
+    /// Decaying conflict activity by package name.
+    activity: FxHashMap<PackageName, u32>,
+    /// Number of real conflicts recorded for activity decay.
+    conflicts: u32,
     /// How often a decision on the package was discarded due to another package decided earlier.
     affected: FxHashMap<Id<PubGrubPackage>, usize>,
     /// Package(s) to be prioritized after the next unit propagation
