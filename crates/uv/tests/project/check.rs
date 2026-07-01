@@ -3,6 +3,9 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
+use serde_json::json;
+use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
@@ -496,9 +499,9 @@ fn check_no_sync_isolated_does_not_write_lock_or_sync() -> Result<()> {
     Ok(())
 }
 
-#[test]
+#[tokio::test]
 #[cfg(feature = "test-pypi")]
-fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
+async fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     let context =
         uv_test::test_context!("3.12").with_filter((r"ty 0\.0\.17(?: \([^)]*\))?", "ty 0.0.17"));
 
@@ -548,8 +551,20 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
     assert!(context.temp_dir.child("uv.lock").exists());
     assert!(context.site_packages().join("ty").exists());
 
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_string_contains("ty"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": []}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
     // The preferred `dev` group is not enabled, so the tool uses a cached environment even though
-    // the enabled `typing` group selects the same package.
+    // the enabled `typing` group selects the same package. The cached environment and normal sync
+    // should share the malware result instead of querying OSV twice.
     uv_snapshot!(
         context.filters(),
         context
@@ -559,7 +574,9 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
             .arg("typing")
             .arg("--exclude-newer")
             .arg("2026-02-15T00:00:00Z")
-            .arg("--show-version"),
+            .arg("--show-version")
+            .env(EnvVars::UV_MALWARE_CHECK, "1")
+            .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()),
         @"
     success: true
     exit_code: 0
@@ -568,6 +585,7 @@ fn check_uses_exact_ty_version_from_selected_included_group() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Malware checks are experimental and may change without warning. Pass `--preview-features malware-check` to disable this warning.
     Installed 1 package in [TIME]
     Using ty 0.0.17
     "
@@ -639,6 +657,80 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
 
           Computed:
             sha256:[HASH]
+    "
+    );
+
+    Ok(())
+}
+
+/// Ensure that a cached environment for a locked tool is checked for malware before reuse.
+#[tokio::test]
+#[cfg(feature = "test-pypi")]
+async fn check_locked_tool_rejects_malware_from_warm_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty==0.0.17"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    context
+        .lock()
+        .arg("--exclude-newer")
+        .arg("2026-02-15T00:00:00Z")
+        .assert()
+        .success();
+
+    // Populate the locked tool environment without a malware check.
+    context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .env(EnvVars::UV_MALWARE_CHECK, "0")
+        .assert()
+        .success();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .and(body_string_contains("ty"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "MAL-2026-1234"}]}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--no-sync")
+            .arg("--frozen")
+            .arg("--preview-features")
+            .arg("malware-check")
+            .env(EnvVars::UV_MALWARE_CHECK, "1")
+            .env(EnvVars::UV_MALWARE_CHECK_URL, server.uri()),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    warning: Malware detected in locked dependencies:
+      - `ty==0.0.17`: MAL-2026-1234 (https://osv.dev/vulnerability/MAL-2026-1234)
+    error: Malware detected in one or more dependencies that would be installed; aborting sync. Set `UV_MALWARE_CHECK=0` to bypass this check.
     "
     );
 
