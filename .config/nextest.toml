@@ -18,12 +18,24 @@ path = "junit.xml"
 [profile.ci-linux]
 inherits = "ci"
 
+[profile.ci-linux-free]
+inherits = "ci-linux"
+slow-timeout = { period = "30s", terminate-after = 12 }
+
 [profile.ci-macos]
 inherits = "ci"
 test-threads = 12
 
+[profile.ci-macos-free]
+inherits = "ci-macos"
+slow-timeout = { period = "30s", terminate-after = 12 }
+
 [profile.ci-windows]
 inherits = "ci"
+
+[profile.ci-windows-free]
+inherits = "ci-windows"
+slow-timeout = { period = "30s", terminate-after = 12 }
 
 [test-groups]
 serial = { max-threads = 1 }
@@ -38,6 +50,14 @@ filter = 'package(uv-keyring)'
 test-group = 'serial'
 
 [[profile.ci-windows.overrides]]
+platform = 'cfg(target_os = "windows")'
+filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
+test-group = 'io-bound'
+priority = 1 # Start earlier so these can complete before the end
+
+# Per-test overrides are not inherited from parent profiles, so keep this in sync with the
+# `ci-windows` override above.
+[[profile.ci-windows-free.overrides]]
 platform = 'cfg(target_os = "windows")'
 filter = 'test(/^python_install::/) + test(/^python_update::/) + test(/^python_find::/)'
 test-group = 'io-bound'
