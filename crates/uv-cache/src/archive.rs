@@ -21,6 +21,14 @@ impl ArchiveId {
     pub(crate) fn new() -> Self {
         Self(uv_fastid::Id::secure().to_string())
     }
+
+    /// Use a versioned, path-safe digest as the complete archive identifier.
+    ///
+    /// This does not generate or hash an identifier. Callers must ensure that the digest uniquely
+    /// identifies the persisted directory contents.
+    pub fn from_digest(digest: String) -> Self {
+        Self(digest)
+    }
 }
 
 impl AsRef<Path> for ArchiveId {

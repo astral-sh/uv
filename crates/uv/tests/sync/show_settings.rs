@@ -3056,6 +3056,7 @@ fn preview_features() {
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
+    +            ContentAddressedCache,
     +        ],
          },
          python_preference: Managed,

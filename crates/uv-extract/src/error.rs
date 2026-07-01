@@ -38,6 +38,8 @@ pub enum Error {
     },
     #[error("ZIP file contains multiple entries with different contents for: {}", path.display())]
     DuplicateLocalFileHeader { path: PathBuf },
+    #[error("ZIP file contains multiple entries for the same output path: {}", path.display())]
+    DuplicateOutputPath { path: PathBuf },
     #[error("ZIP file contains a local file header without a corresponding central-directory record entry for: {} ({offset})", path.display())]
     MissingCentralDirectoryEntry { path: PathBuf, offset: u64 },
     #[error("ZIP file contains an end-of-central-directory record entry, but no local file header for: {} ({offset}", path.display())]
@@ -48,6 +50,8 @@ pub enum Error {
         local_path: PathBuf,
         central_directory_path: PathBuf,
     },
+    #[error("ZIP file uses conflicting entry types for the local file header and central-directory record for: {} ({offset})", path.display())]
+    ConflictingEntryTypes { path: PathBuf, offset: u64 },
     #[error("ZIP file uses conflicting checksums for the local file header and central-directory record (got {local_crc32}, expected {central_directory_crc32}) for: {} ({offset})", path.display())]
     ConflictingChecksums {
         path: PathBuf,

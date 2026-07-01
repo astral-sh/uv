@@ -2,9 +2,11 @@ use std::{fmt::Display, sync::LazyLock};
 
 pub use error::Error;
 use regex::Regex;
-pub use sync::*;
+pub use sync::{strip_component, unzip, unzip_and_hash};
 use uv_static::EnvVars;
 
+mod archive_path;
+pub mod dirhash;
 mod error;
 pub mod hash;
 pub mod stream;

@@ -261,6 +261,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    ContentAddressedCache = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -305,6 +306,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::ContentAddressedCache => "content-addressed-cache",
         }
     }
 }
@@ -362,6 +364,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "content-addressed-cache" => Self::ContentAddressedCache,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -667,6 +670,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::WorkspaceListScripts.as_str(),
             "workspace-list-scripts"
+        );
+        assert_eq!(
+            PreviewFeature::ContentAddressedCache.as_str(),
+            "content-addressed-cache"
         );
     }
 
