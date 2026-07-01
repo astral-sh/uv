@@ -24,7 +24,8 @@ use crate::{FxHashbrownMap, SentinelRange};
 ///
 /// Our main priority is the package name, the earlier we encounter a package, the higher its
 /// priority. This way, all virtual packages of the same name will be applied in a batch. To ensure
-/// determinism, we also track the discovery order of virtual packages as secondary order.
+/// determinism, we also track the discovery order of virtual packages as secondary order. Among
+/// packages involved in repeated conflicts, we prefer packages seen later in the graph.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PubGrubPriorities {
     package_priority: FxHashbrownMap<PackageName, PubGrubPriority>,
@@ -106,9 +107,9 @@ impl PubGrubPriorities {
         match entry.get() {
             PubGrubPriority::ConflictLate(Reverse(index))
             | PubGrubPriority::Unspecified(Reverse(index))
-            | PubGrubPriority::ConflictEarly(Reverse(index))
             | PubGrubPriority::Singleton(Reverse(index))
             | PubGrubPriority::DirectUrl(Reverse(index)) => Some(*index),
+            PubGrubPriority::ConflictEarly(index) => Some(*index),
             PubGrubPriority::Root => None,
         }
     }
@@ -182,7 +183,7 @@ impl PubGrubPriorities {
         let len = self.package_priority.len();
         match self.package_priority.entry_ref(name) {
             EntryRef::Vacant(entry) => {
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(len)));
+                entry.insert(PubGrubPriority::ConflictEarly(len));
                 true
             }
             EntryRef::Occupied(mut entry) => {
@@ -191,7 +192,7 @@ impl PubGrubPriorities {
                     return false;
                 }
                 let index = Self::get_index(&entry).unwrap_or(len);
-                entry.insert(PubGrubPriority::ConflictEarly(Reverse(index)));
+                entry.insert(PubGrubPriority::ConflictEarly(index));
                 true
             }
         }
@@ -219,7 +220,7 @@ impl PubGrubPriorities {
                 true
             }
             EntryRef::Occupied(mut entry) => {
-                // The ConflictEarly` match avoids infinite loops.
+                // The `ConflictEarly` match avoids infinite loops.
                 if matches!(
                     entry.get(),
                     PubGrubPriority::ConflictLate(_) | PubGrubPriority::ConflictEarly(_)
@@ -251,9 +252,9 @@ pub(crate) enum PubGrubPriority {
     /// conflict before selecting unrelated packages.
     ConflictLate(Reverse<usize>),
 
-    /// Selected version of this package were often rejected, so it's prioritized over
-    /// `ConflictLate`.
-    ConflictEarly(Reverse<usize>),
+    /// Selected versions of this package were often rejected, so it's prioritized over
+    /// `ConflictLate`. Later-discovered packages have priority within this class.
+    ConflictEarly(usize),
 
     /// The version range is constrained to a single version (e.g., with the `==` operator).
     Singleton(Reverse<usize>),
