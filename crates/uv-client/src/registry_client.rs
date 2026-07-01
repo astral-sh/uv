@@ -1070,7 +1070,7 @@ impl RegistryClient {
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.cache_key()),
+                format!("{}.rkyv", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => {
@@ -1100,7 +1100,7 @@ impl RegistryClient {
                     .await
                     .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
 
-                info_span!("parse_metadata21")
+                let metadata = info_span!("parse_metadata21")
                     .in_scope(|| ResolutionMetadata::parse_metadata(bytes.as_ref()))
                     .map_err(|err| {
                         Error::from(ErrorKind::MetadataParseError(
@@ -1108,17 +1108,19 @@ impl RegistryClient {
                             url.to_string(),
                             Box::new(err),
                         ))
-                    })
+                    })?;
+                OwnedArchive::from_unarchived(&metadata)
             };
             let req = self
                 .uncached_client(&url)
                 .get(Url::from(url.clone()))
                 .build()
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
-            Ok(self
+            let archived = self
                 .cached_client()
-                .get_serde_with_retry(req, &cache_entry, cache_control, response_callback)
-                .await?)
+                .get_cacheable_with_retry(req, &cache_entry, cache_control, response_callback)
+                .await?;
+            Ok(OwnedArchive::deserialize(&archived))
         } else {
             // If we lack PEP 658 support, try using HTTP range requests to read only the
             // `.dist-info/METADATA` file from the zip, and if that also fails, download the whole wheel
@@ -1146,7 +1148,7 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.cache_key()),
+            format!("{}.rkyv", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => {
@@ -1221,13 +1223,15 @@ impl RegistryClient {
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                        Error::from(ErrorKind::MetadataParseError(
-                            filename.clone(),
-                            url.to_string(),
-                            Box::new(err),
-                        ))
-                    })
+                    let metadata =
+                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                            Error::from(ErrorKind::MetadataParseError(
+                                filename.clone(),
+                                url.to_string(),
+                                Box::new(err),
+                            ))
+                        })?;
+                    OwnedArchive::from_unarchived(&metadata)
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))
@@ -1235,7 +1239,7 @@ impl RegistryClient {
 
             let result = self
                 .cached_client()
-                .get_serde_with_retry(
+                .get_cacheable_with_retry(
                     req,
                     &cache_entry,
                     cache_control.clone(),
@@ -1245,7 +1249,7 @@ impl RegistryClient {
                 .map_err(crate::Error::from);
 
             match result {
-                Ok(metadata) => return Ok(metadata),
+                Ok(archived) => return Ok(OwnedArchive::deserialize(&archived)),
                 Err(err) => {
                     if err.is_http_range_requests_unsupported(url, index) {
                         // The range request version failed. Fall back to streaming the file to search
@@ -1285,17 +1289,20 @@ impl RegistryClient {
                     .map_err(|err| self.handle_response_errors(err))
                     .into_async_read();
 
-                read_metadata_async_stream(filename, url.as_ref(), reader)
+                let metadata = read_metadata_async_stream(filename, url.as_ref(), reader)
                     .await
-                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))
+                    .map_err(|err| ErrorKind::Metadata(url.to_string(), err))?;
+                OwnedArchive::from_unarchived(&metadata)
             }
             .instrument(info_span!("read_metadata_stream", wheel = %filename))
         };
 
-        self.cached_client()
-            .get_serde_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
+        let archived = self
+            .cached_client()
+            .get_cacheable_with_retry(req, &cache_entry, cache_control, read_metadata_stream)
             .await
-            .map_err(crate::Error::from)
+            .map_err(crate::Error::from)?;
+        Ok(OwnedArchive::deserialize(&archived))
     }
 
     /// Handle a specific `reqwest` error, and convert it to [`io::Error`].

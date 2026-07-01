@@ -16,6 +16,7 @@ use http::StatusCode;
 use indoc::indoc;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use url::Url;
+use walkdir::WalkDir;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -7287,6 +7288,16 @@ fn offline_registry() -> Result<()> {
     ----- stderr -----
     Resolved 6 packages in [TIME]
     "
+    );
+
+    // Registry wheel metadata is cached as a structural archive, rather than as MessagePack that
+    // reparses PEP 508 requirements and markers on every read.
+    assert!(
+        WalkDir::new(context.cache_dir.child("wheels-v6"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry.file_type().is_file()
+                && entry.path().extension().is_some_and(|ext| ext == "rkyv"))
     );
 
     // Resolve with `--offline` with a populated cache.
