@@ -264,4 +264,35 @@ mod tests {
             );
         }
     }
+
+    /// Verify the canonical Azure Blob Storage URL pattern:
+    /// endpoint = `https://myaccount.blob.core.windows.net`, requests go to
+    /// `https://myaccount.blob.core.windows.net/<container>/<blob>`.
+    /// This is the primary real-world shape of `UV_AZURE_ENDPOINT_URL`.
+    #[test]
+    fn test_endpoint_url_matches_azure_blob_storage_pattern() {
+        let endpoint_url = Url::parse("https://myaccount.blob.core.windows.net").unwrap();
+
+        // Container and blob paths under the same account should match.
+        for url in [
+            "https://myaccount.blob.core.windows.net/mycontainer/package.whl",
+            "https://myaccount.blob.core.windows.net/mycontainer/subdir/package.whl",
+            "https://myaccount.blob.core.windows.net/othercontainer/other.whl",
+        ] {
+            assert!(
+                is_endpoint_url(&Url::parse(url).unwrap(), &endpoint_url),
+                "Should match Azure blob URL under the configured account endpoint: {url}"
+            );
+        }
+
+        // A different account on the same domain should not match.
+        assert!(
+            !is_endpoint_url(
+                &Url::parse("https://otheraccount.blob.core.windows.net/mycontainer/package.whl")
+                    .unwrap(),
+                &endpoint_url
+            ),
+            "Should not match a different Azure storage account"
+        );
+    }
 }
