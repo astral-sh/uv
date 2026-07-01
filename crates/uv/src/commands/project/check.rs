@@ -491,6 +491,7 @@ pub(crate) async fn check(
         Some(venv.root().to_owned())
     } else if let Some(project) = &project {
         let extras = extras.with_defaults(DefaultExtras::default());
+        let mut malware_context = project::sync::MalwareCheckContext::from(&malware_settings);
 
         let venv = if let Some(venv) = isolated_venv {
             venv
@@ -646,6 +647,7 @@ pub(crate) async fn check(
                         .build_constraints(project.workspace().install_path()),
                     &base_interpreter,
                     &settings,
+                    &malware_settings,
                     &client_builder,
                     &ty_state,
                     Box::new(SummaryInstallLogger),
@@ -665,6 +667,7 @@ pub(crate) async fn check(
                     }
                     Err(err) => return Err(err.into()),
                 };
+                malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
                     .scripts()
                     .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
@@ -695,7 +698,7 @@ pub(crate) async fn check(
                 DryRun::Disabled,
                 printer,
                 preview,
-                &malware_settings,
+                malware_context,
             )
             .await
             {
