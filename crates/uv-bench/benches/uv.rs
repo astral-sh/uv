@@ -547,6 +547,7 @@ mod resolver {
                 &build_context,
                 concurrency.downloads_semaphore.clone(),
             ),
+            concurrency.downloads,
         )?;
 
         Ok(resolver.resolve().await?)

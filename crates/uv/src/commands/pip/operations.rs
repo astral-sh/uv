@@ -386,6 +386,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 build_dispatch,
                 concurrency.downloads_semaphore.clone(),
             ),
+            concurrency.downloads,
         )?
         .with_reporter(Arc::new(reporter));
 
