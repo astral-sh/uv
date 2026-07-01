@@ -1546,9 +1546,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
         }
 
-        if pubgrub.range_conflicts_with_partial_solution(package, remaining.clone()) {
-            return Ok(true);
-        }
         let checked_range = remaining.clone();
         let mut candidate_versions = Vec::new();
         while let Some(candidate) =
