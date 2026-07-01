@@ -1,7 +1,7 @@
 name = "phase-saving-local-version"
 description = '''
-This test checks that phase-saving revalidates local-version forks after backtracking widens a
-package requirement to include its public version.
+After backtracking widens a package requirement, check again whether a saved local version must
+fork from its public version.
 '''
 
 [resolver_options]

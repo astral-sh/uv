@@ -513,10 +513,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
 
-                    // Reuse an implicit registry version after backtracking. If the range changed,
-                    // only use it as a hint when every preferred candidate conflicts with the
-                    // current partial solution. Candidate evaluation below still reruns
-                    // fork-sensitive checks.
+                    // Reuse a saved registry version after backtracking. If the allowed range
+                    // changed, only try it first after PubGrub has ruled out every preferred
+                    // version. The saved version still goes through the normal checks below.
                     let cache_selected_version = url.is_none() && index.is_none();
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
@@ -535,7 +534,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                         next_id,
                                         &state.pubgrub,
                                         &state.env,
-                                        &mut state.candidate_coverage,
+                                        &mut state.checked_candidates,
                                     )?
                             } else {
                                 false
@@ -911,7 +910,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // there is at least one more fork to visit.
         let package = current_state.next;
         let mut current_state = current_state;
-        current_state.candidate_coverage = FxHashMap::default();
+        current_state.checked_candidates = FxHashMap::default();
         let mut cur_state = Some(current_state);
         let forks_len = forks.len();
         forks
@@ -970,7 +969,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // into `forked_states`, and then only clone it if
         // there is at least one more fork to visit.
         let mut current_state = current_state;
-        current_state.candidate_coverage = FxHashMap::default();
+        current_state.checked_candidates = FxHashMap::default();
         let mut cur_state = Some(current_state);
         let forks_len = forks.len();
         forks.into_iter().enumerate().map(move |(i, fork)| {
@@ -1362,8 +1361,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         debug!("Searching for a compatible version of {package} ({range})");
 
-        // Find a version. A phase-saved version narrows only candidate lookup; candidate
-        // evaluation still receives the full allowed range below.
+        // If a version was saved, look it up alone. Checks below still receive the full allowed
+        // range.
         let select = |range| {
             self.selector.select(
                 name,
@@ -1489,8 +1488,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(Some(ResolverVersion::Unforked(version)))
     }
 
-    /// Return whether every registry candidate preferred over `selected` is already known to be
-    /// statically unavailable or incompatible with the current partial solution.
+    /// Return whether every registry version preferred over `selected` is unavailable or
+    /// conflicts with the current PubGrub state.
     fn all_preferred_versions_conflict(
         &self,
         name: &PackageName,
@@ -1499,7 +1498,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         package: Id<PubGrubPackage>,
         pubgrub: &State<UvDependencyProvider>,
         env: &ResolverEnvironment,
-        candidate_coverage: &mut FxHashMap<Id<PubGrubPackage>, CandidateCoverage>,
+        checked_candidates: &mut FxHashMap<Id<PubGrubPackage>, CheckedCandidates>,
     ) -> Result<bool, ResolveError> {
         let versions_response = self
             .index
@@ -1517,16 +1516,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             range.intersection(&Range::strictly_lower_than(selected.clone()))
         };
 
-        // PubGrub reasons over mathematical version ranges, while package indexes expose a finite
-        // set of actual versions. Remember the selector-compatible registry candidates we already
-        // inspected so a later revisit in the same fork can prove that finite set conflicts
-        // without selecting every candidate again.
-        if let Some(cache) = candidate_coverage.get(&package)
-            && remaining.subset_of(&cache.checked)
+        // PubGrub works with ranges, but package indexes contain a fixed list of versions.
+        // Remember which versions the selector could choose so we can check them together on the
+        // next visit.
+        if let Some(checked) = checked_candidates.get(&package)
+            && remaining.subset_of(&checked.range)
         {
-            let selectable = remaining.intersection(&cache.selectable);
-            if selectable.is_empty()
-                || pubgrub.range_conflicts_with_partial_solution(package, selectable)
+            let versions = remaining.intersection(&checked.versions);
+            if versions.is_empty()
+                || pubgrub.range_conflicts_with_partial_solution(package, versions)
             {
                 return Ok(true);
             }
@@ -1535,8 +1533,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if pubgrub.range_conflicts_with_partial_solution(package, remaining.clone()) {
             return Ok(true);
         }
-        let checked = remaining.clone();
-        let mut selectable_versions = Vec::new();
+        let checked_range = remaining.clone();
+        let mut candidate_versions = Vec::new();
         while let Some(candidate) =
             self.selector
                 .select_no_preference(name, &remaining, version_maps, env)
@@ -1546,7 +1544,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !pubgrub.version_conflicts_with_partial_solution(package, version.clone()) {
                     return Ok(false);
                 }
-                selectable_versions.push(version.clone());
+                candidate_versions.push(version.clone());
             }
             remaining = if highest {
                 remaining.intersection(&Range::strictly_lower_than(version))
@@ -1554,25 +1552,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 remaining.intersection(&Range::strictly_higher_than(version))
             };
         }
-        // Candidate selection visits versions in preference order. Reverse highest-resolution
-        // candidates so the range constructor receives both modes in ascending order and can
-        // append each disjoint singleton without repeatedly shifting existing segments.
+        // `Range` expects ascending bounds. Reverse versions selected from highest to lowest so it
+        // can append them without moving earlier entries.
         if highest {
-            selectable_versions.reverse();
+            candidate_versions.reverse();
         }
-        let selectable = selectable_versions
+        let versions = candidate_versions
             .into_iter()
             .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect::<Range<_>>();
-        candidate_coverage
+        checked_candidates
             .entry(package)
-            .and_modify(|cache| {
-                cache.checked = cache.checked.union(&checked);
-                cache.selectable = cache.selectable.union(&selectable);
+            .and_modify(|checked| {
+                checked.range = checked.range.union(&checked_range);
+                checked.versions = checked.versions.union(&versions);
             })
-            .or_insert(CandidateCoverage {
-                checked,
-                selectable,
+            .or_insert(CheckedCandidates {
+                range: checked_range,
+                versions,
             });
         Ok(true)
     }
@@ -3098,10 +3095,10 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
-    /// Cached registry candidate coverage used to prove a saved version remains maximal.
+    /// Registry versions checked while deciding whether to reuse a saved version.
     ///
-    /// This is scoped to one fork because candidate selection depends on its markers.
-    candidate_coverage: FxHashMap<Id<PubGrubPackage>, CandidateCoverage>,
+    /// This is cleared after a fork because available versions depend on the environment.
+    checked_candidates: FxHashMap<Id<PubGrubPackage>, CheckedCandidates>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3156,7 +3153,7 @@ impl ForkState {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
-            candidate_coverage: FxHashMap::default(),
+            checked_candidates: FxHashMap::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3414,7 +3411,7 @@ impl ForkState {
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
         self.selected_versions.clear();
-        self.candidate_coverage.clear();
+        self.checked_candidates.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
@@ -3701,11 +3698,11 @@ impl ForkState {
 }
 
 #[derive(Clone)]
-struct CandidateCoverage {
-    /// Mathematical ranges for which every actual registry candidate was inspected.
-    checked: Range<Version>,
-    /// Selector-compatible candidates within checked; state-dependent checks are excluded.
-    selectable: Range<Version>,
+struct CheckedCandidates {
+    /// Ranges where every index version was checked.
+    range: Range<Version>,
+    /// Versions that the candidate selector can choose.
+    versions: Range<Version>,
 }
 
 /// The resolution from a single fork including the virtual packages and the edges between them.
