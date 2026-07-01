@@ -321,7 +321,7 @@ jobs:
     name: "python on chainguard-dev"
     runs-on: ubuntu-latest
     container:
-      image: cgr.dev/chainguard/python:latest-dev@sha256:866419cbf80d962a159689e82e1127cdec06564db23bd2dbc10f629bc404c060
+      image: cgr.dev/chainguard/python:latest-dev@sha256:43754593298465877148499d1bfc40433a3250350d6c184ef1a06e3c61549396
       options: --user root --entrypoint /bin/sh
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
