@@ -3443,6 +3443,7 @@ impl ForkState {
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        self.selected_versions.clear();
         self.candidate_viability.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
