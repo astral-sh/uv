@@ -11,12 +11,11 @@ use toml_edit::{
 };
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::{Index, IndexFormat};
-use uv_fs::PortablePath;
+use uv_distribution_types::{Index, IndexFormat, IndexUrl};
+use uv_fs::{PortablePath, is_same_file_allow_missing};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -27,6 +26,21 @@ use crate::pyproject::{DependencyType, Source};
 pub struct PyProjectTomlMut {
     doc: DocumentMut,
     target: DependencyTarget,
+}
+
+fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -> bool {
+    let Ok(existing) = IndexUrl::parse(existing, Some(root_dir)) else {
+        return false;
+    };
+
+    if let (IndexUrl::Path(existing), IndexUrl::Path(incoming)) = (&existing, incoming)
+        && let (Ok(existing), Ok(incoming)) = (existing.to_file_path(), incoming.to_file_path())
+        && let Some(equal) = is_same_file_allow_missing(&existing, &incoming)
+    {
+        return equal;
+    }
+
+    CanonicalUrl::new(existing.url()) == CanonicalUrl::new(incoming.url())
 }
 
 #[derive(Error, Debug)]
@@ -428,7 +442,7 @@ impl PyProjectTomlMut {
     }
 
     /// Add an [`Index`] to `tool.uv.index`.
-    pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+    pub fn add_index(&mut self, index: &Index, root_dir: &Path) -> Result<(), Error> {
         let size = self.doc.len();
         let existing = self
             .doc
@@ -472,10 +486,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                    .is_some_and(|url| {
-                        CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
-                    })
+                    .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
                 {
                     return true;
                 }
@@ -504,14 +515,16 @@ impl PyProjectTomlMut {
             table.insert("name", Value::String(formatted).into());
         }
 
-        // Determine whether the URL is changing so that format can be updated accordingly.
-        let url_changed = table
-            .get("url")
-            .and_then(|item| item.as_str())
-            .is_none_or(|url| url != index.url.without_credentials().as_str());
+        let existing_url = table.get("url").and_then(|item| item.as_str());
+
+        // Update the stored URL independently of whether the index location changed.
+        let url_needs_update =
+            existing_url.is_none_or(|url| url != index.url.without_credentials().as_str());
+        let index_location_changed =
+            existing_url.is_none_or(|url| !index_locations_equal(url, &index.url, root_dir));
 
         // If necessary, update the URL.
-        if url_changed {
+        if url_needs_update {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
@@ -544,9 +557,8 @@ impl PyProjectTomlMut {
             }
         }
 
-        // If the URL changed, sync the format to match the incoming index.
-        // A format is tied to a URL; when the URL changes, the old format may be incompatible.
-        if url_changed {
+        // If the index location changed, sync the format to match the incoming index.
+        if index_location_changed {
             match index.format {
                 IndexFormat::Flat => {
                     if table
@@ -598,8 +610,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+                .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
             {
                 return false;
             }
@@ -1860,6 +1871,7 @@ mod test {
     };
     use anyhow::Result;
     use insta::assert_snapshot;
+    use std::path::Path;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
     use uv_distribution_types::Index;
@@ -2319,12 +2331,6 @@ dependencies = [
     #[test]
     fn add_index_clears_format_on_url_update() {
         let toml = r#"
-[project]
-name = "project"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = []
-
 [[tool.uv.index]]
 name = "index"
 url = "https://example.com/flat"
@@ -2334,15 +2340,9 @@ format = "flat"
         let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
 
         let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
-        doc.add_index(&new_index).unwrap();
+        doc.add_index(&new_index, Path::new(".")).unwrap();
 
         assert_snapshot!(doc.to_string(), @r#"
-
-[project]
-name = "project"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = []
 
 [[tool.uv.index]]
 name = "index"
@@ -2351,38 +2351,58 @@ url = "https://pypi.org/simple"
     }
 
     #[test]
-    fn add_index_preserves_format_when_url_unchanged() {
+    fn add_index_preserves_format_when_url_canonically_unchanged() {
         let toml = r#"
-[project]
-name = "project"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = []
-
 [[tool.uv.index]]
 name = "index"
-url = "https://example.com/flat"
+url = "https://example.com/flat/"
 format = "flat"
 "#;
 
         let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
 
-        // Same URL, same name — URL is not changing so format should be preserved.
+        // The URL spelling changes, but the canonical URL does not, so format should be preserved.
         let new_index = Index::from_str("index=https://example.com/flat").unwrap();
-        doc.add_index(&new_index).unwrap();
+        doc.add_index(&new_index, Path::new(".")).unwrap();
 
         assert_snapshot!(doc.to_string(), @r#"
-
-[project]
-name = "project"
-version = "0.1.0"
-requires-python = ">=3.12"
-dependencies = []
 
 [[tool.uv.index]]
 name = "index"
 url = "https://example.com/flat"
 format = "flat"
 "#);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn add_index_preserves_format_when_windows_path_unchanged() -> Result<()> {
+        let toml = r#"
+[[tool.uv.index]]
+name = "index"
+url = 'C:\links'
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml)?;
+
+        let new_index = Index::from_str(r"index=C:\links")?;
+        doc.add_index(&new_index, &std::env::current_dir()?)?;
+
+        let expected_url = new_index.url.without_credentials();
+        let index = doc.doc["tool"]["uv"]["index"]
+            .as_array_of_tables()
+            .and_then(|indexes| indexes.get(0))
+            .expect("index table");
+        assert_eq!(
+            index.get("url").and_then(|item| item.as_str()),
+            Some(expected_url.as_str())
+        );
+        assert_eq!(
+            index.get("format").and_then(|item| item.as_str()),
+            Some("flat")
+        );
+
+        Ok(())
     }
 }
