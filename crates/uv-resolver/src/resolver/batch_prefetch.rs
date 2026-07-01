@@ -13,7 +13,7 @@ use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
 };
-use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
+use uv_distribution_types::{CompatibleDist, IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -313,10 +313,11 @@ impl BatchPrefetcherRunner {
             );
             prefetch_count += 1;
 
-            if self.index.distributions().register(dist.distribution_id()) {
-                let request = Request::from(dist);
-                self.request_sink.blocking_send(request)?;
-            }
+            let request = match Request::from(dist) {
+                Request::Dist(dist) => Request::SpeculativeDist(dist),
+                _ => unreachable!("batch prefetch only emits registry distributions"),
+            };
+            self.request_sink.blocking_send(request)?;
         }
 
         match prefetch_count {
