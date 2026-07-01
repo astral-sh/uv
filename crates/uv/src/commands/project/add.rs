@@ -26,7 +26,7 @@ use uv_distribution_types::{
     Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
     Requirement, RequirementSource, UnresolvedRequirement,
 };
-use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -688,11 +688,15 @@ pub(crate) async fn add(
 
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
+        let root_dir = match &target {
+            AddTarget::Script(_, _) => CWD.as_path(),
+            AddTarget::Project(project, _) => project.root(),
+        };
         let locations = IndexLocations::new(indexes, Vec::new(), false);
         let mut indexes = locations.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
-            toml.add_index(index)?;
+            toml.add_index(index, root_dir)?;
         }
     }
 

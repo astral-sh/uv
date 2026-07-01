@@ -11255,36 +11255,122 @@ fn add_index_without_trailing_slash() -> Result<()> {
 fn add_index_with_existing_relative_path_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let pyproject_toml = project.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./links-alias"
+        format = "flat"
     "#})?;
 
-    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
-    let packages = context.temp_dir.child("test-index");
+    // Create a non-empty flat index.
+    let packages = project.child("test-index");
     packages.create_dir_all()?;
+    packages.child("placeholder").touch()?;
+    uv_fs::create_symlink(packages.path(), project.child("links-alias").path())?;
 
-    let wheel_src = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
-    fs_err::copy(&wheel_src, &wheel_dst)?;
-
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    let index = format!("local={}", packages.path().display());
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen").arg("--project").arg(project.path()).arg("--index").arg(index), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     ");
+
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "file://[TEMP_DIR]/project/test-index"
+        format = "flat"
+
+        [tool.uv.sources]
+        iniconfig = { index = "local" }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Add an index with an existing relative path to a script outside the working directory.
+#[test]
+fn add_index_with_existing_relative_path_in_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    scripts.create_dir_all()?;
+    let script = scripts.child("main.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "./links"
+        # format = "flat"
+        # ///
+    "#})?;
+
+    let packages = context.temp_dir.child("links");
+    packages.create_dir_all()?;
+    let wheel_src = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, packages.child("ok-1.0.0-py3-none-any.whl"))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen").arg("--script").arg(script.path()).arg("--index").arg("local=./links"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
+    ");
+
+    let script = fs_err::read_to_string(script.path())?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(script, @r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "iniconfig",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "file://[TEMP_DIR]/links"
+        # format = "flat"
+        #
+        # [tool.uv.sources]
+        # iniconfig = { index = "local" }
+        # ///
+        "#);
+    });
 
     Ok(())
 }
