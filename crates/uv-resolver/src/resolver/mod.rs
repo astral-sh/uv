@@ -520,7 +520,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // partial solution. This is safe in universal resolution because we only
                     // cache unforked decisions; any preferred candidate that can fork is neither
                     // unavailable nor known to conflict, so it prevents reuse.
-                    let cache_selected_version = url.is_none() && index.is_none();
+                    // Required-environment coverage depends on the current dependency graph, which
+                    // can change after backtracking. Re-run selection in that case so artifact
+                    // coverage is revalidated.
+                    let cache_selected_version = url.is_none()
+                        && index.is_none()
+                        && (state.env.marker_environment().is_some()
+                            || self.options.artifact_environments.is_empty());
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)

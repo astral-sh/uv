@@ -1,0 +1,35 @@
+name = "phase-saving-required-environment"
+description = '''
+This test checks that phase-saving revalidates required-environment artifact coverage after
+backtracking widens a package requirement.
+'''
+
+[resolver_options]
+universal = true
+required_environments = ['sys_platform == "win32"']
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["parent"]
+
+[packages.parent.versions."1.0.0"]
+requires = ["a"]
+
+[packages.parent.versions."2.0.0"]
+requires = [
+  "a==1.0.0; sys_platform != 'win32'",
+  "late==1.0.0",
+]
+
+[packages.late.versions."1.0.0"]
+requires = ["missing"]
+
+[packages.a.versions."0.9.0"]
+sdist = false
+wheel_tags = ["py3-none-win_amd64"]
+
+[packages.a.versions."1.0.0"]
+sdist = false
+wheel_tags = ["py3-none-manylinux2014_x86_64"]
