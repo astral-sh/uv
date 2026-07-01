@@ -313,11 +313,10 @@ impl BatchPrefetcherRunner {
             );
             prefetch_count += 1;
 
-            let request = match Request::from(dist) {
-                Request::Dist(dist) => Request::SpeculativeDist(dist),
-                _ => unreachable!("batch prefetch only emits registry distributions"),
-            };
-            self.request_sink.blocking_send(request)?;
+            if let Request::Dist(dist) = Request::from(dist) {
+                self.request_sink
+                    .blocking_send(Request::Speculative(dist))?;
+            }
         }
 
         match prefetch_count {

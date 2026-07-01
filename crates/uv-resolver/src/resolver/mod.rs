@@ -128,7 +128,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
-    speculative_metadata_requests: Semaphore,
+    speculative_requests: Semaphore,
     installed_packages: InstalledPackages,
     // Papaya's maps are large on Windows, so box them to keep resolver futures small.
     /// Incompatibilities for packages that are entirely unavailable.
@@ -240,7 +240,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             // Do not let speculative batch prefetching claim more once-map entries than the
             // downloader can actively service. A later active resolver request can then claim an
             // entry before a queued speculative request starts.
-            speculative_metadata_requests: Semaphore::new(concurrent_downloads.max(1)),
+            speculative_requests: Semaphore::new(concurrent_downloads.max(1)),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -2558,9 +2558,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // Fetch distribution metadata from the distribution database.
             Request::Dist(dist) => self.process_dist_request(dist, provider).await,
 
-            Request::SpeculativeDist(dist) => {
+            Request::Speculative(dist) => {
                 let _permit = self
-                    .speculative_metadata_requests
+                    .speculative_requests
                     .acquire()
                     .await
                     .expect("resolver state outlives metadata requests");
@@ -3658,7 +3658,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A speculative request for distribution metadata emitted by batch prefetching.
-    SpeculativeDist(Dist),
+    Speculative(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
@@ -3711,7 +3711,7 @@ impl Display for Request {
             Self::Dist(dist) => {
                 write!(f, "Metadata {dist}")
             }
-            Self::SpeculativeDist(dist) => {
+            Self::Speculative(dist) => {
                 write!(f, "Speculative metadata {dist}")
             }
             Self::Installed(dist) => {
