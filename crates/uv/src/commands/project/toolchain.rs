@@ -1,25 +1,23 @@
 use anyhow::Result;
 
-use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
-};
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::Resolution;
-use uv_normalize::{DefaultExtras, GroupName, PackageName};
+use uv_normalize::{GroupName, PackageName};
 use uv_python::Interpreter;
-use uv_resolver::{Lock, Package};
+use uv_resolver::{Lock, SelectedDependency};
 use uv_workspace::VirtualProject;
 
 use crate::commands::pip::{resolution_markers, resolution_tags};
 
 /// A locked package selected for use as a project tool.
 pub(crate) struct LockedTool<'lock> {
-    package: &'lock Package,
+    dependency: SelectedDependency<'lock>,
     requires_separate_environment: bool,
 }
 
 impl<'lock> LockedTool<'lock> {
-    pub(crate) fn package(&self) -> &'lock Package {
-        self.package
+    pub(crate) fn dependency(&self) -> &SelectedDependency<'lock> {
+        &self.dependency
     }
 
     /// Returns `true` if the tool must be installed outside the selected project environment.
@@ -46,40 +44,36 @@ pub(crate) fn find_locked_tool<'lock>(
             marker_environment.markers(),
         )
         .map_err(anyhow::Error::msg)?;
-    let (package, installed) = if let Some(package) = selection.group(dependency_group) {
-        (package, groups.contains(dependency_group))
-    } else if let Some(package) = selection.production() {
-        (package, groups.prod())
+    let (dependency, installed) = if let Some(dependency) = selection.group(dependency_group) {
+        (dependency.clone(), groups.contains(dependency_group))
+    } else if let Some(dependency) = selection.production() {
+        (dependency.clone(), groups.prod())
     } else {
         return Ok(None);
     };
 
     Ok(Some(LockedTool {
-        package,
+        dependency,
         requires_separate_environment: !installed,
     }))
 }
 
-/// Materialize the exact dependency subgraph rooted at a locked package.
+/// Materialize the exact dependency subgraph for a locked tool selection.
 pub(crate) fn resolution_from_lock(
     project: &VirtualProject,
     lock: &Lock,
-    package: &Package,
+    tool: &LockedTool<'_>,
     interpreter: &Interpreter,
     build_options: &BuildOptions,
 ) -> Result<Resolution> {
     let marker_environment = resolution_markers(None, None, interpreter);
     let tags = resolution_tags(None, None, interpreter)?;
-    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
-    let groups = DependencyGroupsWithDefaults::none();
-    Ok(lock.to_resolution(
+    Ok(lock.to_resolution_from_dependency(
         project.workspace().install_path(),
-        [package],
+        tool.dependency(),
         project.project_name(),
         &marker_environment,
         &tags,
-        &extras,
-        &groups,
         build_options,
         &InstallOptions::default(),
     )?)
