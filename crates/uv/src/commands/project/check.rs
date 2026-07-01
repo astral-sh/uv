@@ -66,6 +66,7 @@ pub(crate) async fn check(
     printer: Printer,
     preview: Preview,
     no_project: bool,
+    no_workspace: bool,
     no_config: bool,
     malware_settings: MalwareCheckSettings,
 ) -> Result<ExitStatus> {
@@ -82,7 +83,10 @@ pub(crate) async fn check(
     } else {
         match VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             cache,
             workspace_cache,
         )

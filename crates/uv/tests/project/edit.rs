@@ -13,6 +13,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 use serde_json::json;
 use std::path::Path;
 use url::Url;
@@ -2888,6 +2889,260 @@ fn add_path_implicit_workspace() -> Result<()> {
     ----- stderr -----
     Checked 1 package in [TIME]
     ");
+
+    Ok(())
+}
+
+/// Add to a standalone workspace member when it has its own lockfile.
+#[test]
+fn add_no_workspace_with_project_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child).arg("--no-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str("root lockfile\n")?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&child).arg("../dependency").arg("--no-workspace").arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), "root lockfile\n");
+    assert_snapshot!(fs_err::read_to_string(child.child("pyproject.toml"))?, @r#"
+    [project]
+    name = "child"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dependency",
+    ]
+
+    [tool.uv.sources]
+    dependency = { path = "../dependency" }
+    "#);
+    assert_snapshot!(fs_err::read_to_string(child.child("uv.lock"))?, @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "child"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "dependency" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "dependency", directory = "../dependency" }]
+
+    [[package]]
+    name = "dependency"
+    version = "0.1.0"
+    source = { directory = "../dependency" }
+    "#);
+
+    Ok(())
+}
+
+/// Preserve the path-dependency behavior when a workspace member has no lockfile of its own.
+#[test]
+fn add_no_workspace_without_project_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    let child = context.temp_dir.child("child");
+    child.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let dependency = context.temp_dir.child("dependency");
+    dependency.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&child).arg("../dependency").arg("--no-workspace").arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    child.child("uv.lock").assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("uv.lock")
+        .assert(predicate::path::is_file());
+    assert_snapshot!(fs_err::read_to_string(child.child("pyproject.toml"))?, @r#"
+    [project]
+    name = "child"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "dependency",
+    ]
+
+    [tool.uv.sources]
+    dependency = { path = "../dependency" }
+    "#);
+
+    Ok(())
+}
+
+/// Treat an existing lockfile at the workspace root as the current project's lockfile.
+#[test]
+fn add_no_workspace_with_workspace_root_lock() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.workspace]
+        members = ["child"]
+    "#})?;
+
+    context
+        .temp_dir
+        .child("child")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    context
+        .temp_dir
+        .child("dependency")
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "dependency"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        package = false
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.add().arg("./dependency").arg("--no-workspace").arg("--no-sync"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    assert_snapshot!(context.read("uv.lock"), @r#"
+    version = 1
+    revision = 3
+    requires-python = ">=3.12"
+
+    [options]
+    exclude-newer = "2024-03-25T00:00:00Z"
+
+    [[package]]
+    name = "dependency"
+    version = "0.1.0"
+    source = { virtual = "dependency" }
+
+    [[package]]
+    name = "root"
+    version = "0.1.0"
+    source = { virtual = "." }
+    dependencies = [
+        { name = "dependency" },
+    ]
+
+    [package.metadata]
+    requires-dist = [{ name = "dependency", virtual = "dependency" }]
+    "#);
 
     Ok(())
 }

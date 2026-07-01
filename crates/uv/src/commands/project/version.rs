@@ -75,6 +75,7 @@ pub(crate) async fn project_version(
     short: bool,
     output_format: VersionFormat,
     project_dir: &Path,
+    no_workspace: bool,
     package: Option<PackageName>,
     explicit_project: bool,
     dry_run: bool,
@@ -102,6 +103,7 @@ pub(crate) async fn project_version(
         project_dir,
         package.as_ref(),
         explicit_project,
+        no_workspace,
         cache,
         workspace_cache,
     )
@@ -413,6 +415,7 @@ async fn find_target(
     project_dir: &Path,
     package: Option<&PackageName>,
     explicit_project: bool,
+    no_workspace: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
 ) -> Result<VirtualProject> {
@@ -420,7 +423,10 @@ async fn find_target(
     let project = if let Some(package) = package {
         VirtualProject::discover_with_package(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             cache,
             workspace_cache,
             package.clone(),
@@ -434,7 +440,10 @@ async fn find_target(
         VirtualProject::Project(
             ProjectWorkspace::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 &project_workspace_cache,
             )

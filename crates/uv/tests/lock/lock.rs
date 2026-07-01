@@ -10756,6 +10756,76 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
     Ok(())
 }
 
+/// Lock a workspace member as a standalone project with `--no-workspace`.
+#[test]
+fn lock_without_workspace() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "root"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        exclude-newer = "2023-03-25T00:00:00Z"
+
+        [tool.uv.workspace]
+        members = ["src"]
+        "#,
+    })?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str("root lockfile\n")?;
+
+    let child = context.temp_dir.child("src");
+    child.child("pyproject.toml").write_str(indoc! {
+        r#"
+        [project]
+        name = "child"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        "#,
+    })?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&child).env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("--no-workspace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), "root lockfile\n");
+    let lock = fs_err::read_to_string(child.child("uv.lock"))?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "child"
+        version = "0.1.0"
+        source = { virtual = "." }
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Lock a workspace with a member that's a peer to the root.
 #[test]
 fn lock_peer_member() -> Result<()> {

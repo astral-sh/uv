@@ -70,6 +70,10 @@ fn upgrade_help() {
     Arguments:
       <PACKAGE>  The package to upgrade
 
+    Options:
+          --no-workspace  Ignore the containing workspace and upgrade the current project as a
+                          standalone project
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
