@@ -6,7 +6,7 @@ use std::io::Read;
 
 #[cfg(feature = "tokio")]
 use encoding_rs_io::DecodeReaderBytes;
-use tempfile::NamedTempFile;
+use tempfile::{NamedTempFile, TempPath};
 use tracing::{debug, warn};
 
 pub use crate::locked_file::*;
@@ -622,8 +622,8 @@ async fn persist_with_retry(
 /// errors.
 ///
 /// This is a synchronous implementation of [`persist_with_retry`].
-pub fn persist_with_retry_sync(
-    from: NamedTempFile,
+pub fn persist_with_retry_sync<F>(
+    from: NamedTempFile<F>,
     to: impl AsRef<Path>,
 ) -> Result<(), std::io::Error> {
     #[cfg(windows)]
@@ -687,6 +687,14 @@ pub fn persist_with_retry_sync(
     {
         fs_err::rename(from, to)
     }
+}
+
+/// Persist a [`TempPath`] with [`persist_with_retry_sync`] without reopening it.
+pub fn persist_temp_path_with_retry_sync(
+    from: TempPath,
+    to: impl AsRef<Path>,
+) -> Result<(), std::io::Error> {
+    persist_with_retry_sync(NamedTempFile::from_parts((), from), to)
 }
 
 /// Iterate over the subdirectories of a directory.

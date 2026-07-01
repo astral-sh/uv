@@ -899,19 +899,15 @@ pub fn create_link_to_executable(link: &Path, executable: &Path) -> Result<(), E
             Err(err) => Err(Error::LinkExecutable(err)),
         }
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
+        use uv_trampoline_builder::write_windows_python_launcher;
 
         // TODO(zanieb): Install GUI launchers as well
-        let launcher = windows_python_launcher(executable, false)?;
-
-        // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
-        // error context anyway
-        #[expect(clippy::disallowed_types)]
-        {
-            std::fs::File::create_new(link)
-                .and_then(|mut file| file.write_all(launcher.as_ref()))
-                .map_err(Error::LinkExecutable)
-        }
+        let temp_file = uv_fs::tempfile_in(link_parent).map_err(Error::LinkExecutable)?;
+        let temp_path = temp_file.into_temp_path();
+        write_windows_python_launcher(&temp_path, executable, false)?;
+        temp_path
+            .persist_noclobber(link)
+            .map_err(|error| Error::LinkExecutable(error.into()))
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }
@@ -929,11 +925,13 @@ pub fn replace_link_to_executable(link: &Path, executable: &Path) -> Result<(), 
     if cfg!(unix) {
         replace_symlink(executable, link).map_err(Error::LinkExecutable)
     } else if cfg!(windows) {
-        use uv_trampoline_builder::windows_python_launcher;
+        use uv_trampoline_builder::write_windows_python_launcher;
 
-        let launcher = windows_python_launcher(executable, false)?;
-
-        uv_fs::write_atomic_sync(link, &*launcher).map_err(Error::LinkExecutable)
+        let temp_file = uv_fs::tempfile_in(link_parent).map_err(Error::LinkExecutable)?;
+        // Close the file for the Windows PE resource APIs.
+        let temp_path = temp_file.into_temp_path();
+        write_windows_python_launcher(&temp_path, executable, false)?;
+        uv_fs::persist_temp_path_with_retry_sync(temp_path, link).map_err(Error::LinkExecutable)
     } else {
         unimplemented!("Only Windows and Unix are supported.")
     }

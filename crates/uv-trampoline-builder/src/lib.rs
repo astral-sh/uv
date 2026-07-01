@@ -432,57 +432,40 @@ pub fn windows_script_launcher(
     Ok(launcher)
 }
 
-/// Construct a Windows Python launcher.
+/// Write a Windows Python launcher to the given path.
 ///
-/// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
-/// and cannot be created on other platforms.
+/// On non-Windows platforms, this always returns [`Error::NotWindows`].
 #[cfg(not(windows))]
-pub fn windows_python_launcher(
+pub fn write_windows_python_launcher(
+    _path: &Path,
     _python_executable: impl AsRef<Path>,
     _is_gui: bool,
-) -> Result<Vec<u8>, Error> {
+) -> Result<(), Error> {
     Err(Error::NotWindows)
 }
 
-/// Construct a Windows Python launcher.
-///
-/// A minimal .exe launcher binary for Python.
-///
-/// Sort of equivalent to a `python` symlink on Unix.
+/// Write a Windows Python launcher to the given path.
 #[cfg(windows)]
-pub fn windows_python_launcher(
+pub fn write_windows_python_launcher(
+    path: &Path,
     python_executable: impl AsRef<Path>,
     is_gui: bool,
-) -> Result<Vec<u8>, Error> {
-    use uv_fs::Simplified;
+) -> Result<(), Error> {
+    let python_path = python_executable.as_ref().simplified_display().to_string();
 
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    fs_err::write(path, get_launcher_bin(is_gui)?)?;
+    write_resources(
+        path,
+        &[
+            (
+                RESOURCE_TRAMPOLINE_KIND,
+                &[LauncherKind::Python.to_resource_value()][..],
+            ),
+            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+        ],
+    )?;
 
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
-
-    // Create temporary file for the launcher
-    let temp_dir = tempfile::TempDir::new()?;
-    let temp_file = temp_dir
-        .path()
-        .join(format!("uv-trampoline-{}.exe", std::process::id()));
-    fs_err::write(&temp_file, launcher_bin)?;
-
-    // Write resources
-    let resources = &[
-        (
-            RESOURCE_TRAMPOLINE_KIND,
-            &[LauncherKind::Python.to_resource_value()][..],
-        ),
-        (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
-    ];
-    write_resources(&temp_file, resources)?;
-
-    // Read back the complete file
-    let launcher = fs_err::read(&temp_file)?;
-    fs_err::remove_file(temp_file)?;
-
-    Ok(launcher)
+    Ok(())
 }
 
 #[cfg(all(test, windows))]
@@ -500,7 +483,7 @@ mod test {
 
     use which::which;
 
-    use super::{Launcher, LauncherKind, windows_python_launcher, windows_script_launcher};
+    use super::{Launcher, LauncherKind, windows_script_launcher, write_windows_python_launcher};
 
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
@@ -741,13 +724,8 @@ if __name__ == "__main__":
         // Locate an arbitrary python installation from PATH
         let python_executable_path = which("python")?;
 
-        // Generate Launcher Payload
-        let console_launcher = windows_python_launcher(&python_executable_path, false)?;
-
         // Create Launcher
-        {
-            File::create(console_bin_path.path())?.write_all(console_launcher.as_ref())?;
-        }
+        write_windows_python_launcher(console_bin_path.path(), &python_executable_path, false)?;
 
         println!(
             "Wrote Python Launcher in {}",
