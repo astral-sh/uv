@@ -19,7 +19,14 @@ jobs:
       - name: "Check project lockfile"
         run: uv lock --check
       - name: "Check script lockfiles"
+        env:
+          UV_PREVIEW_FEATURES: workspace-list-scripts
         run: |
-          while IFS= read -r lockfile; do
-            uv lock --script "${lockfile%.lock}" --check
-          done < <(git ls-files '*.py.lock')
+          scripts="$(uv workspace list --scripts)"
+          while IFS= read -r script; do
+            if [[ ! -f "${script}.lock" ]]; then
+              echo "Missing lockfile for ${script}; run 'uv lock --script ${script}'"
+              exit 1
+            fi
+            uv lock --script "${script}" --check
+          done <<< "${scripts}"
