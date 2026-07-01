@@ -14,7 +14,7 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {
-    pub(crate) fn from_manifest(
+    pub fn from_manifest(
         manifest: &Manifest,
         env: &ResolverEnvironment,
         dependencies: DependencyMode,
