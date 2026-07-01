@@ -10,16 +10,18 @@ use tracing::{debug, warn};
 #[command(next_help_heading = "Cache options")]
 pub struct CacheArgs {
     /// Avoid reading from or writing to the cache, instead using a temporary directory for the
-    /// duration of the operation.
+    /// duration of the operation [env: UV_NO_CACHE=]
     #[arg(
         global = true,
         long,
         short,
         alias = "no-cache-dir",
-        env = EnvVars::UV_NO_CACHE,
-        value_parser = clap::builder::BoolishValueParser::new(),
+        overrides_with("cache")
     )]
     pub no_cache: bool,
+
+    #[arg(global = true, long, overrides_with("no_cache"), hide = true)]
+    pub cache: bool,
 
     /// Path to the cache directory.
     ///
@@ -29,6 +31,37 @@ pub struct CacheArgs {
     /// To view the location of the cache directory, run `uv cache dir`.
     #[arg(global = true, long, env = EnvVars::UV_CACHE_DIR, value_hint = ValueHint::DirPath)]
     pub cache_dir: Option<PathBuf>,
+}
+
+impl CacheArgs {
+    /// Resolve `no_cache` from the CLI flag pair and `UV_NO_CACHE` env var.
+    ///
+    /// CLI flags take precedence over the env var. This does NOT account for
+    /// config file settings — use `CacheSettings::resolve` (in the `uv` crate) for full resolution.
+    pub fn resolved_no_cache(&self) -> bool {
+        if self.no_cache {
+            return true;
+        }
+        if self.cache {
+            return false;
+        }
+        match uv_static::parse_boolish_environment_variable(EnvVars::UV_NO_CACHE) {
+            Ok(value) => value.unwrap_or(false),
+            Err(err) => {
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!(
+                        "error: invalid value for {}, expected a boolish value (true/false, 1/0, yes/no, etc.)",
+                        err.name
+                    );
+                }
+                #[allow(clippy::exit)]
+                {
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
 }
 
 impl Cache {
@@ -82,7 +115,7 @@ impl TryFrom<CacheArgs> for Cache {
     type Error = io::Error;
 
     fn try_from(value: CacheArgs) -> Result<Self, Self::Error> {
-        Self::from_settings(value.no_cache, value.cache_dir)
+        Self::from_settings(value.resolved_no_cache(), value.cache_dir)
     }
 }
 

@@ -379,7 +379,7 @@ fn help_subcommand() {
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
-              duration of the operation
+              duration of the operation.
 
               [env: UV_NO_CACHE=]
 
@@ -663,7 +663,7 @@ fn help_subsubcommand() {
     Cache options:
       -n, --no-cache
               Avoid reading from or writing to the cache, instead using a temporary directory for the
-              duration of the operation
+              duration of the operation.
 
               [env: UV_NO_CACHE=]
 

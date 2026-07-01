@@ -269,7 +269,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
     let discovery_cache = Cache::from_settings(
-        cli.top_level.cache_args.no_cache,
+        cli.top_level.cache_args.resolved_no_cache(),
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
@@ -485,7 +485,8 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 
     // Resolve the cache settings.
-    let cache_settings = CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref());
+    let cache_settings =
+        CacheSettings::resolve(*cli.top_level.cache_args, filesystem.as_ref(), &environment);
 
     // Set and finalize the global preview configuration.
     uv_preview::set(globals.preview)?;

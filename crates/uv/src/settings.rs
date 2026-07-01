@@ -418,13 +418,20 @@ pub(crate) struct CacheSettings {
 }
 
 impl CacheSettings {
-    /// Resolve the [`CacheSettings`] from the CLI and filesystem configuration.
-    pub(crate) fn resolve(args: CacheArgs, workspace: Option<&FilesystemOptions>) -> Self {
+    /// Resolve the [`CacheSettings`] from the CLI, environment, and filesystem configuration.
+    ///
+    /// Precedence: CLI flags > `UV_NO_CACHE` env var > config file > default (`false`).
+    pub(crate) fn resolve(
+        args: CacheArgs,
+        workspace: Option<&FilesystemOptions>,
+        environment: &EnvironmentOptions,
+    ) -> Self {
         Self {
-            no_cache: args.no_cache
-                || workspace
-                    .and_then(|workspace| workspace.globals.no_cache)
-                    .unwrap_or(false),
+            no_cache: flag(args.cache, args.no_cache, "cache")
+                .map(|cache| !cache)
+                .combine(environment.no_cache.value)
+                .combine(workspace.and_then(|workspace| workspace.globals.no_cache))
+                .unwrap_or(false),
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
@@ -5158,7 +5165,6 @@ fn parse_failure(name: &str, expected: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn upgrade_settings_target_only_requested_package() -> anyhow::Result<()> {
         let package = PackageName::from_str("anyio")?;
@@ -5174,5 +5180,39 @@ mod tests {
         assert!(!settings.settings.upgrade.is_all());
         assert_eq!(settings.settings.upgrade.packages(), Some(&expected));
         Ok(())
+    }
+
+    fn workspace_with_no_cache(no_cache: bool) -> FilesystemOptions {
+        let toml = format!("no-cache = {no_cache}");
+        let options: Options = toml::from_str(&toml).unwrap();
+        FilesystemOptions::from(options)
+    }
+
+    #[test]
+    fn cache_settings_cache_flag_overrides_config() {
+        // --cache (the hidden positive flag) should override no-cache=true in config.
+        let args = CacheArgs {
+            no_cache: false,
+            cache: true,
+            cache_dir: None,
+        };
+        let workspace = workspace_with_no_cache(true);
+        let environment = EnvironmentOptions::new().unwrap();
+        let resolved = CacheSettings::resolve(args, Some(&workspace), &environment);
+        assert!(!resolved.no_cache);
+    }
+
+    #[test]
+    fn cache_settings_no_cache_flag_with_config_false() {
+        // --no-cache should take effect even when config says false.
+        let args = CacheArgs {
+            no_cache: true,
+            cache: false,
+            cache_dir: None,
+        };
+        let workspace = workspace_with_no_cache(false);
+        let environment = EnvironmentOptions::new().unwrap();
+        let resolved = CacheSettings::resolve(args, Some(&workspace), &environment);
+        assert!(resolved.no_cache);
     }
 }
