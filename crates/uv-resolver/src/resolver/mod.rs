@@ -513,12 +513,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
 
-                    // An implicit registry candidate is stable for a given range. Avoid
-                    // repeating candidate selection when PubGrub revisits an identical decision
-                    // after backtracking. If the range changed, reuse the previous version only
-                    // when every preferred candidate is already known to conflict with the current
-                    // partial solution. Selector-compatible candidates with state-dependent
-                    // incompatibilities prevent reuse until PubGrub has ruled them out.
+                    // Reuse an implicit registry version after backtracking. If the range changed,
+                    // only use it as a hint when every preferred candidate conflicts with the
+                    // current partial solution. Candidate evaluation below still reruns
+                    // fork-sensitive checks.
                     let cache_selected_version = url.is_none() && index.is_none();
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
@@ -546,9 +544,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     } else {
                         None
                     };
-                    // Treat a reusable version as a candidate lookup hint, then run it through the
-                    // normal evaluation path. Fork checks depend on the current solver state and
-                    // must not be cached with the version-selection proof.
                     let decision = self.choose_version(
                         next_package,
                         next_id,
@@ -3709,10 +3704,7 @@ impl ForkState {
 struct CandidateCoverage {
     /// Mathematical ranges for which every actual registry candidate was inspected.
     checked: Range<Version>,
-    /// Selector-compatible candidates within checked.
-    ///
-    /// State-dependent checks, such as Requires-Python and platform forks, are intentionally not
-    /// cached here.
+    /// Selector-compatible candidates within checked; state-dependent checks are excluded.
     selectable: Range<Version>,
 }
 
