@@ -140,11 +140,16 @@ impl std::fmt::Display for MissingPythonHint {
                 )
             }
             Self::DownloadsManual(request) => {
+                let canonical = request.to_canonical_string();
+                let arg = if canonical.contains(' ') {
+                    format!("'{}'", uv_shell::escape_posix_for_single_quotes(&canonical))
+                } else {
+                    canonical
+                };
                 write!(
                     f,
-                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {}` to install the required version",
+                    "A managed Python download is available{}, but Python downloads are set to 'manual', use `uv python install {arg}` to install the required version",
                     Self::for_request(request),
-                    request.to_canonical_string(),
                 )
             }
             Self::DownloadsNever(request) => {
