@@ -15621,6 +15621,92 @@ fn install_missing_python_with_target() {
     );
 }
 
+/// If there are no Python interpreters available and downloads are disabled, `uv pip install`
+/// into a `--target` directory should fail with a clear hint pointing at the cause, rather
+/// than a generic "no interpreter found" error.
+#[test]
+#[cfg(not(windows))]
+fn install_missing_python_with_target_downloads_disabled() {
+    let context = uv_test::test_context_with_versions!(&[]);
+
+    if context.venv.path().exists() {
+        fs_err::remove_dir_all(context.venv.path()).unwrap();
+    }
+
+    let target_dir = context.temp_dir.child("target-dir");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("--target").arg(target_dir.path())
+        .env_remove("VIRTUAL_ENV"),  // ← stop uv following the env var to the deleted venv
+    @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in virtual environments, managed installations, or search path
+
+    hint: A managed Python download is available, but Python downloads are set to 'never'
+    ");
+}
+
+/// If the target directory has insufficient disk space, `uv pip install --target`
+/// should fail with a clear error indicating the cause (No space left on device),
+/// rather than a confusing or generic failure message.
+///
+/// This test mounts a 16KB tmpfs over the target directory using an unprivileged
+/// mount namespace (Linux only). Any package will exceed 16KB and trigger ENOSPC
+/// during wheel extraction.
+#[test]
+#[cfg(target_os = "linux")]
+fn install_target_no_space_left_on_device() {
+    let ns_check = std::process::Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "true"])
+        .output();
+    let Ok(ns_output) = ns_check else {
+        return;
+    };
+    if !ns_output.status.success() {
+        return;
+    }
+
+    let uv_bin = get_bin!(); // ← the macro gives us the path
+    let context = TestContext::new_with_bin("3.12", uv_bin.clone()); // ← pass it here
+
+    let target_dir = context.temp_dir.child("tiny-target");
+    fs_err::create_dir_all(target_dir.path()).unwrap();
+
+    let cmd = format!(
+        "mount -t tmpfs -o size=16k tmpfs {target} && \
+         {uv} pip install certifi \
+             --target {target} \
+             --no-cache \
+             --link-mode copy",
+        target = target_dir.path().display(),
+        uv = uv_bin.display(), // ← use the local variable, not context.uv_bin
+    );
+
+    let output = std::process::Command::new("unshare")
+        .args(["--user", "--map-root-user", "--mount", "sh", "-c", &cmd])
+        .env("UV_PYTHON_DOWNLOADS", "never")
+        .env("UV_NO_PROGRESS", "1")
+        .env("UV_PYTHON", context.python_path())
+        .output()
+        .expect("failed to spawn unshare");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !output.status.success(),
+        "expected uv to fail with ENOSPC, but it succeeded\nstderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("No space left on device") || stderr.contains("os error 28"),
+        "expected 'No space left on device' in stderr, got:\n{stderr}"
+    );
+}
+
 #[cfg(feature = "test-python-managed")]
 #[test]
 fn install_missing_python_version_with_target() {
