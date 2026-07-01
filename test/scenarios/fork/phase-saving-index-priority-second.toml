@@ -1,0 +1,19 @@
+name = "phase-saving-index-priority-second"
+description = "The lower-priority index forces backtracking after selecting the higher version."
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["parent"]
+
+[packages.parent.versions."1.0.0"]
+requires = ["a"]
+
+[packages.parent.versions."2.0.0"]
+requires = ["a==2.0.0", "late==1.0.0"]
+
+[packages.a.versions."2.0.0"]
+
+[packages.late.versions."1.0.0"]
+requires = ["missing"]

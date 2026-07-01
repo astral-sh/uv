@@ -1,0 +1,34 @@
+name = "phase-saving-local-version"
+description = '''
+After backtracking widens a package requirement, check again whether a saved local version must
+fork from its public version.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires = ["parent"]
+
+[packages.parent.versions."1.0.0"]
+requires = ["torch==1.0.0"]
+
+[packages.parent.versions."2.0.0"]
+requires = [
+  "torch==1.0.0+cpu",
+  "late==1.0.0",
+]
+
+[packages.late.versions."1.0.0"]
+requires = ["missing"]
+
+[packages.torch.versions."1.0.0"]
+sdist = false
+wheel_tags = ["py3-none-macosx_10_0_x86_64"]
+
+[packages.torch.versions."1.0.0+cpu"]
+sdist = false
+wheel_tags = ["py3-none-manylinux2014_x86_64"]
