@@ -7,7 +7,6 @@ use std::task::{Context, Poll};
 
 use futures::{FutureExt, TryStreamExt};
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
-use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
@@ -17,6 +16,7 @@ use uv_cache_info::{CacheInfo, Timestamp};
 use uv_client::{
     CacheControl, CachedClientError, Connectivity, DataWithCachePolicy, RegistryClient,
 };
+use uv_configuration::{DownloadPriority, PrioritySemaphore};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::{
     BuildInfo, BuildableSource, BuiltDist, Dist, DistRef, File, HashPolicy, Hashed, IndexUrl,
@@ -63,7 +63,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn new(
         client: &'a RegistryClient,
         build_context: &'a Context,
-        downloads_semaphore: Arc<Semaphore>,
+        downloads_semaphore: Arc<PrioritySemaphore>,
     ) -> Self {
         Self {
             build_context,
@@ -122,7 +122,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: HashPolicy<'_>,
     ) -> Result<LocalWheel, Error> {
         match dist {
-            Dist::Built(built) => self.get_wheel(built, hashes).await,
+            Dist::Built(built) => {
+                self.get_wheel(built, hashes, DownloadPriority::Active)
+                    .await
+            }
             Dist::Source(source) => self.build_wheel(source, tags, hashes).await,
         }
     }
@@ -165,7 +168,10 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         match dist {
-            Dist::Built(built) => self.get_wheel_metadata(built, hashes).await,
+            Dist::Built(built) => {
+                self.get_wheel_metadata_with_priority(built, hashes, DownloadPriority::Active)
+                    .await
+            }
             Dist::Source(source) => {
                 self.build_wheel_metadata(&BuildableSource::Dist(source), hashes)
                     .await
@@ -181,6 +187,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
+        priority: DownloadPriority,
     ) -> Result<LocalWheel, Error> {
         match dist {
             BuiltDist::Registry(wheels) => {
@@ -226,6 +233,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &wheel_entry,
                         dist,
                         hashes,
+                        priority,
                     )
                     .await
                 {
@@ -264,6 +272,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 &wheel_entry,
                                 dist,
                                 hashes,
+                                priority,
                             )
                             .await?;
 
@@ -303,6 +312,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &wheel_entry,
                         dist,
                         hashes,
+                        priority,
                     )
                     .await
                 {
@@ -341,6 +351,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 &wheel_entry,
                                 dist,
                                 hashes,
+                                priority,
                             )
                             .await?;
                         Ok(LocalWheel {
@@ -555,14 +566,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
     }
 
-    /// Fetch the wheel metadata from the index, or from the cache if possible.
+    /// Fetch wheel metadata at the given [`DownloadPriority`], or from the cache if possible.
     ///
     /// While hashes will be generated in some cases, hash-checking is _not_ enforced and should
     /// instead be enforced by the caller.
-    async fn get_wheel_metadata(
+    pub async fn get_wheel_metadata_with_priority(
         &self,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
+        priority: DownloadPriority,
     ) -> Result<ArchiveMetadata, Error> {
         // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
@@ -579,7 +591,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         //
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
-            let wheel = self.get_wheel(dist, hashes).await?;
+            let wheel = self.get_wheel(dist, hashes, priority).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) = self
                 .build_context
@@ -608,7 +620,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let result = self
             .client
-            .managed(|client| {
+            .managed_with_priority(priority, |client| {
                 client
                     .wheel_metadata(
                         dist,
@@ -632,7 +644,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 // If the request failed due to an error that could be resolved by
                 // downloading the wheel directly, try that.
-                let wheel = self.get_wheel(dist, hashes).await?;
+                let wheel = self.get_wheel(dist, hashes, priority).await?;
                 let metadata = wheel.metadata()?;
                 let hashes = wheel.hashes;
                 Ok(ArchiveMetadata {
@@ -703,6 +715,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
+        priority: DownloadPriority,
     ) -> Result<Archive, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
@@ -823,7 +836,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let archive = self
             .client
-            .managed(|client| {
+            .managed_with_priority(priority, |client| {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
@@ -846,7 +859,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(async |client| {
+                .managed_with_priority(priority, async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
@@ -878,6 +891,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
+        priority: DownloadPriority,
     ) -> Result<Archive, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         #[cfg(windows)]
@@ -999,7 +1013,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         let archive = self
             .client
-            .managed(|client| {
+            .managed_with_priority(priority, |client| {
                 client.cached_client().get_serde_with_retry(
                     req,
                     &http_entry,
@@ -1022,7 +1036,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(async |client| {
+                .managed_with_priority(priority, async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
@@ -1245,12 +1259,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 /// A wrapper around `RegistryClient` that manages a concurrency limit.
 pub struct ManagedClient<'a> {
     pub unmanaged: &'a RegistryClient,
-    control: Arc<Semaphore>,
+    control: Arc<PrioritySemaphore>,
 }
 
 impl<'a> ManagedClient<'a> {
     /// Create a new `ManagedClient` using the given client and concurrency semaphore.
-    fn new(client: &'a RegistryClient, control: Arc<Semaphore>) -> Self {
+    fn new(client: &'a RegistryClient, control: Arc<PrioritySemaphore>) -> Self {
         ManagedClient {
             unmanaged: client,
             control,
@@ -1265,7 +1279,20 @@ impl<'a> ManagedClient<'a> {
     where
         F: Future<Output = T>,
     {
-        let _permit = self.control.acquire().await.unwrap();
+        self.managed_with_priority(DownloadPriority::Active, f)
+            .await
+    }
+
+    /// Perform a request using the client at the given [`DownloadPriority`].
+    pub async fn managed_with_priority<F, T>(
+        &self,
+        priority: DownloadPriority,
+        f: impl FnOnce(&'a RegistryClient) -> F,
+    ) -> T
+    where
+        F: Future<Output = T>,
+    {
+        let _permit = self.control.acquire(priority).await;
         f(self.unmanaged).await
     }
 
@@ -1276,7 +1303,10 @@ impl<'a> ManagedClient<'a> {
     ///
     /// This method serves as an escape hatch for functions that may want to send multiple requests
     /// in parallel.
-    pub async fn manual<F, T>(&'a self, f: impl FnOnce(&'a RegistryClient, &'a Semaphore) -> F) -> T
+    pub async fn manual<F, T>(
+        &'a self,
+        f: impl FnOnce(&'a RegistryClient, &'a PrioritySemaphore) -> F,
+    ) -> T
     where
         F: Future<Output = T>,
     {

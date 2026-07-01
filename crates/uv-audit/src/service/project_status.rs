@@ -3,11 +3,10 @@
 //! [PEP 792]: https://peps.python.org/pep-0792/
 
 use futures::{StreamExt as _, stream};
-use tokio::sync::Semaphore;
 use tracing::trace;
 
 use uv_client::{MetadataFormat, RegistryClient};
-use uv_configuration::Concurrency;
+use uv_configuration::{Concurrency, PrioritySemaphore};
 use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl};
 use uv_normalize::PackageName;
 use uv_pypi_types::{ProjectStatus as PypiProjectStatus, Status};
@@ -62,11 +61,11 @@ impl<'a> ProjectStatusAudit<'a> {
         &self,
         name: &PackageName,
         index: &IndexUrl,
-        semaphore: &Semaphore,
+        semaphore: &PrioritySemaphore,
     ) -> Option<Finding> {
         let results = match self
             .client
-            .simple_detail(
+            .simple_detail_with_priority(
                 name,
                 Some(IndexMetadataRef::from(index)),
                 self.capabilities,

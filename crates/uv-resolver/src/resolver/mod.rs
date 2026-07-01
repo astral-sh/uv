@@ -20,7 +20,7 @@ use tokio::sync::{Semaphore, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
-use uv_configuration::{Constraints, Excludes, Overrides};
+use uv_configuration::{Constraints, DownloadPriority, Excludes, Overrides};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase};
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, Identifier, IncompatibleDist,
@@ -2471,6 +2471,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         dist: Dist,
         provider: &Provider,
+        priority: DownloadPriority,
     ) -> Result<Option<Response>, ResolveError> {
         if let Some(version) = dist.version() {
             if let Some(index) = dist.index() {
@@ -2516,7 +2517,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
 
         let metadata = provider
-            .get_or_build_wheel_metadata(&dist)
+            .get_or_build_wheel_metadata(&dist, priority)
             .boxed_local()
             .await?;
 
@@ -2556,7 +2557,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Fetch distribution metadata from the distribution database.
-            Request::Dist(dist) => self.process_dist_request(dist, provider).await,
+            Request::Dist(dist) => {
+                self.process_dist_request(dist, provider, DownloadPriority::Active)
+                    .await
+            }
 
             Request::Speculative(dist) => {
                 let _permit = self
@@ -2567,7 +2571,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if !self.index.distributions().register(dist.distribution_id()) {
                     return Ok(None);
                 }
-                self.process_dist_request(dist, provider).await
+                self.process_dist_request(
+                    Dist::Built(dist),
+                    provider,
+                    DownloadPriority::Speculative,
+                )
+                .await
             }
 
             Request::Installed(dist) => {
@@ -2738,7 +2747,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let response = match dist {
                         ResolvedDist::Installable { dist, .. } => {
                             let metadata = provider
-                                .get_or_build_wheel_metadata(&dist)
+                                .get_or_build_wheel_metadata(&dist, DownloadPriority::Active)
                                 .boxed_local()
                                 .await?;
 
@@ -3658,7 +3667,7 @@ pub(crate) enum Request {
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A speculative request for distribution metadata emitted by batch prefetching.
-    Speculative(Dist),
+    Speculative(BuiltDist),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
