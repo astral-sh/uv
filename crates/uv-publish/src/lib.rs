@@ -26,8 +26,8 @@ use url::Url;
 use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
-    RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
+    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, OwnedArchive, RegistryClientBuilder,
+    RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -967,16 +967,16 @@ pub async fn check_url(
         .wrap_existing(client)?;
 
     debug!("Checking for {filename} in the registry");
-    let response = match registry_client
-        .simple_detail(
+    let simple_metadata = match registry_client
+        .simple_detail_for_index(
             filename.name(),
-            Some(index_url.into()),
+            index_url,
             index_capabilities,
             download_concurrency,
         )
         .await
     {
-        Ok(response) => response,
+        Ok(simple_metadata) => simple_metadata,
         Err(err) => {
             return match err.kind() {
                 uv_client::ErrorKind::RemotePackageNotFound(_) => {
@@ -990,10 +990,7 @@ pub async fn check_url(
             };
         }
     };
-    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
-        unreachable!("We queried a single index, we must get a single response");
-    };
-    let simple_metadata = OwnedArchive::deserialize(simple_metadata);
+    let simple_metadata = OwnedArchive::deserialize(&simple_metadata);
     let Some(metadatum) = simple_metadata
         .iter()
         .find(|metadatum| &metadatum.version == filename.version())
