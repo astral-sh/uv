@@ -436,6 +436,38 @@ pub enum ErrorKind {
     #[error("Package `{0}` was not found in the registry")]
     RemotePackageNotFound(PackageName),
 
+    #[error(
+        "Locked artifact `{filename}` from `{canonical}` has no digest and cannot be fetched through proxy index `{proxy}`; regenerate the lockfile"
+    )]
+    ProxyArtifactMissingDigest {
+        filename: String,
+        canonical: IndexUrl,
+        proxy: IndexUrl,
+    },
+
+    #[error("Artifact `{filename}` from `{canonical}` was not found on proxy index `{proxy}`")]
+    ProxyArtifactNotFound {
+        filename: String,
+        canonical: IndexUrl,
+        proxy: IndexUrl,
+    },
+
+    #[error(
+        "Artifact `{filename}` from proxy index `{proxy}` does not match the locked digest from `{canonical}`"
+    )]
+    ProxyArtifactDigestMismatch {
+        filename: String,
+        canonical: IndexUrl,
+        proxy: IndexUrl,
+    },
+
+    #[error("Proxy artifact `{filename}` from `{proxy}` uses unsupported local URL `{url}`")]
+    ProxyArtifactLocalUrl {
+        filename: String,
+        proxy: IndexUrl,
+        url: DisplaySafeUrl,
+    },
+
     /// The package was not found in the local (file-based) index.
     #[error("Package `{0}` was not found in the local index")]
     LocalPackageNotFound(PackageName),

@@ -6279,6 +6279,7 @@ dependencies = [
  "uv-distribution-filename",
  "uv-distribution-types",
  "uv-errors",
+ "uv-extract",
  "uv-fs",
  "uv-git",
  "uv-metadata",
