@@ -520,13 +520,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     // partial solution. This is safe in universal resolution because we only
                     // cache unforked decisions; any preferred candidate that can fork is neither
                     // unavailable nor known to conflict, so it prevents reuse.
-                    // Required-environment coverage depends on the current dependency graph, which
-                    // can change after backtracking. Re-run selection in that case so artifact
-                    // coverage is revalidated.
-                    let cache_selected_version = url.is_none()
-                        && index.is_none()
-                        && (state.env.marker_environment().is_some()
-                            || self.options.artifact_environments.is_empty());
+                    let cache_selected_version = url.is_none() && index.is_none();
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
@@ -554,23 +548,47 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     } else {
                         None
                     };
-                    let decision = if let Some(version) = reusable_version {
+                    // Artifact coverage depends on the current dependency graph, which can change
+                    // after backtracking. Re-run selection for only the saved version so its fork
+                    // checks are revalidated without scanning the full allowed range again.
+                    let revalidation_range = if state.env.marker_environment().is_none()
+                        && !self.options.artifact_environments.is_empty()
+                    {
+                        reusable_version
+                            .as_ref()
+                            .map(|version| Range::singleton(version.clone()))
+                    } else {
+                        None
+                    };
+                    let decision = if revalidation_range.is_none()
+                        && let Some(version) = reusable_version
+                    {
                         Some(ResolverVersion::Unforked(version))
                     } else {
-                        let decision = self.choose_version(
-                            next_package,
-                            next_id,
-                            index.map(IndexMetadata::url),
-                            range,
-                            &mut state.pins,
-                            &preferences,
-                            &state.fork_urls,
-                            &state.env,
-                            &state.python_requirement,
-                            &state.pubgrub,
-                            &mut visited,
-                            request_sink,
-                        )?;
+                        let decision = {
+                            let mut choose_version = |selection_range| {
+                                self.choose_version(
+                                    next_package,
+                                    next_id,
+                                    index.map(IndexMetadata::url),
+                                    selection_range,
+                                    &mut state.pins,
+                                    &preferences,
+                                    &state.fork_urls,
+                                    &state.env,
+                                    &state.python_requirement,
+                                    &state.pubgrub,
+                                    &mut visited,
+                                    request_sink,
+                                )
+                            };
+                            let mut decision =
+                                choose_version(revalidation_range.as_ref().unwrap_or(range))?;
+                            if revalidation_range.is_some() && decision.is_none() {
+                                decision = choose_version(range)?;
+                            }
+                            decision
+                        };
 
                         if cache_selected_version
                             && let Some(ResolverVersion::Unforked(version)) = &decision
