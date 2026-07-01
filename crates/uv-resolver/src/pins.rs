@@ -2,6 +2,7 @@ use rustc_hash::FxHashMap;
 
 use uv_distribution_types::{CompatibleDist, DistributionId, Identifier, ResolvedDist};
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 use crate::candidate_selector::Candidate;
 
@@ -11,6 +12,8 @@ struct FilePin {
     dist: ResolvedDist,
     /// The concrete distribution whose metadata was used during resolution.
     metadata_id: DistributionId,
+    /// The environments supported by the selected distribution.
+    implied_markers: MarkerTree,
 }
 
 /// A set of package versions pinned to specific files.
@@ -34,6 +37,7 @@ impl FilePins {
             .or_insert_with(|| FilePin {
                 dist: dist.for_installation().to_owned(),
                 metadata_id: dist.for_resolution().distribution_id(),
+                implied_markers: dist.implied_markers(),
             });
     }
 
@@ -57,5 +61,16 @@ impl FilePins {
         self.0
             .get(&(name.clone(), version.clone()))
             .map(|pin| (&pin.dist, &pin.metadata_id))
+    }
+
+    /// Return the environments supported by the pinned distribution.
+    pub(crate) fn implied_markers(
+        &self,
+        name: &PackageName,
+        version: &uv_pep440::Version,
+    ) -> Option<MarkerTree> {
+        self.0
+            .get(&(name.clone(), version.clone()))
+            .map(|pin| pin.implied_markers)
     }
 }

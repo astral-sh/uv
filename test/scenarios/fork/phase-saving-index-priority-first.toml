@@ -1,0 +1,10 @@
+name = "phase-saving-index-priority-first"
+description = "The higher-priority index contains the lower version."
+
+[expected]
+satisfiable = true
+
+[root]
+requires = []
+
+[packages.a.versions."1.0.0"]

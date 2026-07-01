@@ -1,0 +1,32 @@
+name = "phase-saving-requires-python"
+description = '''
+After backtracking widens a package requirement, keep the fork required by a package's Python
+version constraint.
+'''
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires_python = ">=3.12"
+requires = ["parent"]
+
+[packages.parent.versions."1.0.0"]
+requires = ["foo"]
+
+[packages.parent.versions."2.0.0"]
+requires = [
+  "foo==1.0.0",
+  "late==1.0.0",
+]
+
+[packages.foo.versions."1.0.0"]
+
+[packages.foo.versions."2.0.0"]
+requires_python = ">=3.13"
+
+[packages.late.versions."1.0.0"]
+requires = ["missing"]

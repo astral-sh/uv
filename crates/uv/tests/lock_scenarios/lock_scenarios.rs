@@ -3357,6 +3357,594 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     Ok(())
 }
 
+/// After backtracking widens a package requirement, check again whether a saved local version must
+/// fork from its public version.
+///
+///
+/// ```text
+/// phase-saving-local-version
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// ├── parent
+/// │   ├── parent-1.0.0
+/// │   │   └── requires torch==1.0.0
+/// │   │       ├── satisfied by torch-1.0.0
+/// │   │       └── satisfied by torch-1.0.0+cpu
+/// │   └── parent-2.0.0
+/// │       ├── requires late==1.0.0
+/// │       │   └── satisfied by late-1.0.0
+/// │       └── requires torch==1.0.0+cpu
+/// │           └── satisfied by torch-1.0.0+cpu
+/// └── torch
+///     ├── torch-1.0.0
+///     └── torch-1.0.0+cpu
+/// ```
+#[test]
+fn phase_saving_local_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-local-version.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''parent''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+            "sys_platform == 'darwin'",
+        ]
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "torch", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "torch", version = "1.0.0+cpu", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/parent-1.0.0.tar.gz", hash = "sha256:dfdc98da0cb358bca8a0179fdd008f91554df6372a315663429a7e031187abff", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-any.whl", hash = "sha256:ab4b17140d9229a0aa4cec233d049135af783e8860562b6820c24d5af5c164d8", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }]
+
+        [[package]]
+        name = "torch"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/torch-1.0.0-py3-none-macosx_10_0_x86_64.whl", hash = "sha256:709a76c166bb5f6d5a49f6f1e18b27e4e6bd091cc5f4c16fc910cb5935acd62f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "torch"
+        version = "1.0.0+cpu"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/torch-1.0.0+cpu-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a060635f53f33b89d2d72a6dca05d44d2d45c135d172dc1bc89f4b068bbfe7f7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// After backtracking widens a package requirement, check again that the selected files support every
+/// required environment.
+///
+///
+/// ```text
+/// phase-saving-required-environment
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── a
+/// │   ├── a-0.9.0
+/// │   └── a-1.0.0
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// └── parent
+///     ├── parent-1.0.0
+///     │   └── requires a
+///     │       ├── satisfied by a-0.9.0
+///     │       └── satisfied by a-1.0.0
+///     └── parent-2.0.0
+///         ├── requires a==1.0.0 ; sys_platform != 'win32'
+///         │   └── satisfied by a-1.0.0
+///         └── requires late==1.0.0
+///             └── satisfied by late-1.0.0
+/// ```
+#[test]
+fn phase_saving_required_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-required-environment.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''parent''',
+        ]
+        requires-python = ">=3.12"
+        [tool.uv]
+        required-environments = [
+          '''sys_platform == 'win32'''',
+        ]
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
+        ]
+        required-markers = [
+            "sys_platform == 'win32'",
+        ]
+
+        [[package]]
+        name = "a"
+        version = "0.9.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-0.9.0-py3-none-win_amd64.whl", hash = "sha256:d5cbc3502e518901a44fcf6560565530ac77e5d994bc3181a68e9e4c0f8a05f2", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:9c2c85239e2d6fe0ceeca5211b4b0ce1f02d6bd52967398bd55791d2d41e479a", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "a", version = "0.9.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'win32'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'win32'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/parent-1.0.0.tar.gz", hash = "sha256:e58f7845e014962152b8f15c4603fb804c8162b9281ddbe23cc101aa911b3275", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-any.whl", hash = "sha256:2a2d74615c39fc52c4d5076007a1f680a5bc26551f2980ad42b6242f568eea60", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// After backtracking widens a package requirement, keep the fork required by a package's Python
+/// version constraint.
+///
+///
+/// ```text
+/// phase-saving-requires-python
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── foo
+/// │   ├── foo-1.0.0
+/// │   └── foo-2.0.0
+/// │       └── requires python>=3.13 (incompatible with environment)
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// └── parent
+///     ├── parent-1.0.0
+///     │   └── requires foo
+///     │       ├── satisfied by foo-1.0.0
+///     │       └── satisfied by foo-2.0.0
+///     └── parent-2.0.0
+///         ├── requires foo==1.0.0
+///         │   └── satisfied by foo-1.0.0
+///         └── requires late==1.0.0
+///             └── satisfied by late-1.0.0
+/// ```
+#[test]
+fn phase_saving_requires_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-requires-python.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''parent''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.13'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:4d4cf959f969e0a39663aca6064428819f1e1c6be60d9a35164801ce17950ed4", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:df9a39d54a6d71872deb1537d7e331de0ede3b725d630a050fee3efd3fe5145b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-2.0.0.tar.gz", hash = "sha256:7f469469bd699483be052cfa623e942c393cf0a6ebf3ea3e3da79183230720ba", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-2.0.0-py3-none-any.whl", hash = "sha256:6c776b7fcba8f4982f23be5c8d1c4cdfdc95aeb8178cb21fb1017dd261f0405b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "foo", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.13'" },
+            { name = "foo", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.13'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/parent-1.0.0.tar.gz", hash = "sha256:7e2cabeee40c9e8babaf3e513e3a5475bd5e86a5cb1b36a74448b2c9bc4dc879", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-any.whl", hash = "sha256:1186d554a97e92e7ea5039b82e9cbc5055385f23394410f152a630bd564cf7a7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// This test checks that phase-saving preserves universal forks after backtracking.
+///
+///
+/// ```text
+/// phase-saving
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires baz
+/// │   │   └── satisfied by baz-1.0.0
+/// │   └── requires foo
+/// │       ├── satisfied by foo-1.0.0
+/// │       └── satisfied by foo-2.0.0
+/// ├── bar
+/// │   ├── bar-1.0.0
+/// │   └── bar-2.0.0
+/// ├── baz
+/// │   └── baz-1.0.0
+/// │       ├── requires bar==1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by bar-1.0.0
+/// │       └── requires bar==2 ; sys_platform != 'linux'
+/// │           └── satisfied by bar-2.0.0
+/// └── foo
+///     ├── foo-1.0.0
+///     │   ├── requires bar==1 ; sys_platform == 'linux'
+///     │   │   └── satisfied by bar-1.0.0
+///     │   └── requires bar==2 ; sys_platform != 'linux'
+///     │       └── satisfied by bar-2.0.0
+///     └── foo-2.0.0
+///         └── requires bar==2
+///             └── satisfied by bar-2.0.0
+/// ```
+#[test]
+fn phase_saving() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''foo''',
+          '''baz''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:d373f4858d602855ef53231a7f24ebff4e67e1fe30a2e810ee2b2a29b9d1a50a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-1.0.0-py3-none-any.whl", hash = "sha256:2fbf0e0a7dd4f48a8b1c2148f73ba0c314699d0bfa0a8ec9b9bcb8105882e9fc", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "bar"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:fa9a4faf506228722784ed740a362bccd96913f4f98a4e10d45ab79d8abb270a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/bar-2.0.0-py3-none-any.whl", hash = "sha256:563b1af3238a4ad819f2b95b74f940319a2ef30ed7991a2416fa98aa115da87d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "baz"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/baz-1.0.0.tar.gz", hash = "sha256:cd4bd6d8d98df82464c3de47bd1c0d1fd3b5b8d13ce934f20cf72d4d7a4458d7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/baz-1.0.0-py3-none-any.whl", hash = "sha256:32eb7602c0ca51b0ffb5e40ad804254a73117157e64c9edb697d1540b3f10bdf", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:b7939168304bd17ae9606ea29edf36907eea6e1a10116335e927986680fd25a8", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:b96e9e502ccd1918e47b93ecb446956c037f6855a7edadca5bc9365803cd106f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "baz" },
+            { name = "foo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "baz" },
+            { name = "foo" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// This test contains a bistable resolution scenario when not using ahead-of-time
 /// splitting of resolution forks: We meet one of two fork points depending on the
 /// preferences, creating a resolution whose preferences lead us the other fork
