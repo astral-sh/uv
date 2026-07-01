@@ -851,15 +851,6 @@ wheels = [
 ]
 
 [[package]]
-name = "defusedxml"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
-]
-
-[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2406,15 +2397,6 @@ wheels = [
 ]
 
 [[package]]
-name = "odfpy"
-version = "1.4.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "defusedxml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/97/73/8ade73f6749177003f7ce3304f524774adda96e6aaab30ea79fd8fda7934/odfpy-1.4.1.tar.gz", hash = "sha256:db766a6e59c5103212f3cc92ec8dd50a0f3a02790233ed0b52148b70d3c438ec", size = 717045, upload-time = "2020-01-18T16:55:48.852Z" }
-
-[[package]]
 name = "openpyxl"
 version = "3.1.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2461,7 +2443,6 @@ all = [
     { name = "matplotlib" },
     { name = "numba" },
     { name = "numexpr" },
-    { name = "odfpy" },
     { name = "openpyxl" },
     { name = "psycopg2" },
     { name = "pyarrow" },
@@ -2502,7 +2483,6 @@ computation = [
     { name = "xarray" },
 ]
 excel = [
-    { name = "odfpy" },
     { name = "openpyxl" },
     { name = "python-calamine" },
     { name = "pyxlsb" },
@@ -2609,8 +2589,6 @@ requires-dist = [
     { name = "numexpr", marker = "extra == 'performance'", specifier = ">=2.10.2" },
     { name = "numpy", marker = "python_full_version < '3.14'", specifier = ">=1.26.0" },
     { name = "numpy", marker = "python_full_version >= '3.14'", specifier = ">=2.3.3" },
-    { name = "odfpy", marker = "extra == 'all'", specifier = ">=1.4.1" },
-    { name = "odfpy", marker = "extra == 'excel'", specifier = ">=1.4.1" },
     { name = "openpyxl", marker = "extra == 'all'", specifier = ">=3.1.5" },
     { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1.5" },
     { name = "psycopg2", marker = "extra == 'all'", specifier = ">=2.9.10" },

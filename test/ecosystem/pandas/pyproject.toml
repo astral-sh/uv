@@ -59,6 +59,8 @@ repository = 'https://github.com/pandas-dev/pandas'
 matplotlib = "pandas:plotting._matplotlib"
 
 [project.optional-dependencies]
+# `odfpy` is omitted from the `excel` and `all` extras because it only ships a
+# source distribution whose metadata requires executing a build backend.
 test = ['hypothesis>=6.116.0', 'pytest>=8.3.4,<9.1', 'pytest-xdist>=3.6.1']
 pyarrow = ['pyarrow>=13.0.0']
 performance = ['bottleneck>=1.4.2', 'numba>=0.60.0', 'numexpr>=2.10.2']
@@ -66,7 +68,7 @@ computation = ['scipy>=1.14.1', 'xarray>=2024.10.0']
 fss = ['fsspec>=2024.10.0']
 aws = ['s3fs>=2024.10.0']
 gcp = ['gcsfs>=2024.10.0']
-excel = ['odfpy>=1.4.1', 'openpyxl>=3.1.5', 'python-calamine>=0.3.0', 'pyxlsb>=1.0.10', 'xlrd>=2.0.1', 'xlsxwriter>=3.2.0']
+excel = ['openpyxl>=3.1.5', 'python-calamine>=0.3.0', 'pyxlsb>=1.0.10', 'xlrd>=2.0.1', 'xlsxwriter>=3.2.0']
 parquet = ['pyarrow>=13.0.0']
 feather = ['pyarrow>=13.0.0']
 iceberg = ['pyiceberg>=0.8.1']
@@ -96,7 +98,6 @@ all = ['adbc-driver-postgresql>=1.2.0',
        'matplotlib>=3.9.3',
        'numba>=0.60.0',
        'numexpr>=2.10.2',
-       'odfpy>=1.4.1',
        'openpyxl>=3.1.5',
        'psycopg2>=2.9.10',
        'pyarrow>=13.0.0',

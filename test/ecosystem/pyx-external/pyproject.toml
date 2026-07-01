@@ -11,7 +11,8 @@ dependencies = [
   "annotated-types==0.7.0",
   "anyio==4.13.0",
   "asgi-correlation-id==4.3.4",
-  "atlas-provider-sqlalchemy==0.5.0",
+  # `atlas-provider-sqlalchemy` is omitted because it depends on the
+  # sdist-only `clickhouse-sqlalchemy`, whose metadata requires a build.
   "auditwheel==6.6.0",
   "aws-lambda-powertools==3.27.0",
   "awslambdaric==4.0.0",

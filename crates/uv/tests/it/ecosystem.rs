@@ -35,18 +35,19 @@ fn black() -> Result<()> {
 // Source: astral-sh/pyx at 5752f1cd9766b9df934658ceaeb10eb37986e54d.
 //
 // This fixture combines the external project and dependency-group requirements
-// from every workspace member, while omitting the private workspace packages.
+// from every workspace member, while omitting the private workspace packages
+// and `atlas-provider-sqlalchemy`, which requires building a transitive sdist.
 // The Python patch constraint is widened from ==3.14.5 to ==3.14.* so the test
 // can use the available 3.14 patch release on every platform.
 #[test]
 fn pyx_external() -> Result<()> {
-    lock_ecosystem_package("3.14", "pyx-external")
+    lock_ecosystem_package_without_build("3.14", "pyx-external")
 }
 
 // Source: https://github.com/python-poetry/poetry/blob/811a12dae0fe81f199e3f1b88b8b8be9eed543c2/pyproject.toml
 #[test]
 fn poetry() -> Result<()> {
-    lock_ecosystem_package("3.12", "poetry")
+    lock_ecosystem_package_without_build("3.12", "poetry")
 }
 
 // Source: https://github.com/home-assistant/core/blob/7c5fcec062e1d2cfaa794a169fafa629a70bbc9e/pyproject.toml
@@ -94,13 +95,13 @@ fn airflow() -> Result<()> {
 // Source: https://github.com/pandas-dev/pandas/blob/8188eb1d65d6250c9916e54a0fa417d46af3296a/pyproject.toml
 //
 // The dynamically derived project version is replaced with the version from
-// the pinned release. The dependency declarations are unchanged.
+// the pinned release. The sdist-only `odfpy` dependency is omitted.
 #[test]
 fn pandas() -> Result<()> {
     if skip_slow_ecosystem_test_on_non_linux_ci() {
         return Ok(());
     }
-    lock_ecosystem_package("3.14", "pandas")
+    lock_ecosystem_package_without_build("3.14", "pandas")
 }
 
 // Source: https://github.com/jupyterlab/jupyterlab/blob/665f9b7f77fb6d720d9cfa76c38fdd1d9823cd07/pyproject.toml
@@ -112,19 +113,19 @@ fn jupyterlab() -> Result<()> {
     if skip_slow_ecosystem_test_on_non_linux_ci() {
         return Ok(());
     }
-    lock_ecosystem_package("3.12", "jupyterlab")
+    lock_ecosystem_package_without_build("3.12", "jupyterlab")
 }
 
 // Source: https://github.com/microsoft/semantic-kernel/blob/cd1b0205fa424aa75b7bc1cc8ea7c071dc5e93a9/python/pyproject.toml
 //
 // The dynamically derived project version is replaced with the version from
-// the pinned release. The dependency declarations are unchanged.
+// the pinned release. The sdist-only `pybars4` dependency is omitted.
 #[test]
 fn semantic_kernel() -> Result<()> {
     if skip_slow_ecosystem_test_on_non_linux_ci() {
         return Ok(());
     }
-    lock_ecosystem_package("3.12", "semantic-kernel")
+    lock_ecosystem_package_without_build("3.12", "semantic-kernel")
 }
 
 fn skip_slow_ecosystem_test_on_non_linux_ci() -> bool {
@@ -135,6 +136,15 @@ fn skip_slow_ecosystem_test_on_non_linux_ci() -> bool {
 /// is, there should be a directory at `./test/ecosystem/{name}` from the
 /// root of the `uv` repository.
 fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
+    lock_ecosystem_package_with_args(python_version, name, &[])
+}
+
+/// Lock an ecosystem package while preventing build backend execution.
+fn lock_ecosystem_package_without_build(python_version: &str, name: &str) -> Result<()> {
+    lock_ecosystem_package_with_args(python_version, name, &["--no-build"])
+}
+
+fn lock_ecosystem_package_with_args(python_version: &str, name: &str, args: &[&str]) -> Result<()> {
     let mut context = uv_test::test_context!(python_version);
     context.copy_ecosystem_project(name);
 
@@ -145,6 +155,7 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
 
     let mut command = context.lock();
     command.env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER);
+    command.args(args);
 
     let (snapshot, _) = uv_test::run_and_format(
         &mut command,

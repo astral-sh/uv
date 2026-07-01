@@ -45,8 +45,9 @@ dependencies = [
     "opentelemetry-api ~= 1.24",
     "opentelemetry-sdk ~= 1.24",
     "prance >= 23.6.21,< 25.4.9",
+    # `pybars4` is omitted because it and `pymeta3` only ship source
+    # distributions whose metadata requires executing a build backend.
     # templating
-    "pybars4 ~= 0.9",
     "jinja2 ~= 3.1",
     "nest-asyncio ~= 1.6",
     "scipy>=1.15.1",
