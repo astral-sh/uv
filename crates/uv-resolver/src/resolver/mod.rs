@@ -1543,13 +1543,22 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .select_no_preference(name, &remaining, version_maps, env)
         {
             let version = candidate.version().clone();
-            if let CandidateDist::Compatible(dist) = candidate.dist()
-                && Self::check_requires_python(dist, python_requirement).is_none()
-            {
-                if !pubgrub.version_conflicts_with_partial_solution(package, version.clone()) {
+            if let CandidateDist::Compatible(dist) = candidate.dist() {
+                let incompatible_python = Self::check_requires_python(dist, python_requirement);
+                if let Some((requires_python, _)) = &incompatible_python
+                    && matches!(self.options.fork_strategy, ForkStrategy::RequiresPython)
+                    && env.marker_environment().is_none()
+                    && !fork_version_by_python_requirement(requires_python, python_requirement, env)
+                        .is_empty()
+                {
                     return Ok(false);
                 }
-                viable_versions.push(version.clone());
+                if incompatible_python.is_none() {
+                    if !pubgrub.version_conflicts_with_partial_solution(package, version.clone()) {
+                        return Ok(false);
+                    }
+                    viable_versions.push(version.clone());
+                }
             }
             remaining = if highest {
                 remaining.intersection(&Range::strictly_lower_than(version))
