@@ -11,9 +11,11 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, RequiresPython};
+use uv_distribution_types::{IndexCapabilities, InstalledDist, Requirement, RequiresPython};
 use uv_fs::Simplified;
+use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep440::{Operator, Version};
 use uv_python::LenientImplementationName;
 use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
@@ -238,18 +240,24 @@ pub(crate) async fn list(
             String::new()
         };
 
-        let with_requirements = show_with
-            .then(|| {
+        let site_packages = if show_with {
+            Some(SitePackages::from_environment(tool_env.environment())?)
+        } else {
+            None
+        };
+
+        let with_requirements = site_packages
+            .as_ref()
+            .map(|site_packages| {
                 tool.requirements()
                     .iter()
                     .filter(|req| req.name != name)
+                    .map(|req| format_with_requirement(req, site_packages))
                     .peekable()
             })
             .take_if(|requirements| requirements.peek().is_some())
-            .map(|requirements| {
-                let requirements = requirements
-                    .map(|req| format!("{}{}", req.name, req.source))
-                    .join(", ");
+            .map(|mut requirements| {
+                let requirements = requirements.join(", ");
                 format!(" [with: {requirements}]")
             })
             .unwrap_or_default();
@@ -296,4 +304,39 @@ pub(crate) async fn list(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn format_with_requirement(requirement: &Requirement, site_packages: &SitePackages) -> String {
+    let source = requirement.source.to_string();
+
+    let Some(version) = site_packages
+        .get_packages(&requirement.name)
+        .into_iter()
+        .next()
+        .map(InstalledDist::version)
+    else {
+        return format!("{}{}", requirement.name, source);
+    };
+
+    if source.is_empty() || is_exact_version(requirement, version) {
+        format!("{}=={}", requirement.name, version)
+    } else {
+        format!("{}{} (installed: {})", requirement.name, source, version)
+    }
+}
+
+fn is_exact_version(requirement: &Requirement, version: &Version) -> bool {
+    let Some(specifiers) = requirement.source.version_specifiers() else {
+        return false;
+    };
+
+    let mut specifiers = specifiers.iter();
+
+    let Some(specifier) = specifiers.next() else {
+        return false;
+    };
+
+    specifiers.next().is_none()
+        && *specifier.operator() == Operator::Equal
+        && specifier.version() == version
 }
