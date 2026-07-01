@@ -966,6 +966,84 @@ fn multiple_extras_required() {
     context.assert_installed("c", "1.0.0");
 }
 
+/// The higher-priority index contains the lower version.
+///
+/// ```text
+/// phase-saving-index-priority-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// └── a
+///     └── a-1.0.0
+/// ```
+#[test]
+fn phase_saving_index_priority_first() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-index-priority-first.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        , @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
+
+    Usage: uv pip install --cache-dir [CACHE_DIR] --index-url <INDEX_URL> <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
+
+    For more information, try '--help'.
+    ");
+}
+
+/// The lower-priority index forces backtracking after selecting the higher version.
+///
+/// ```text
+/// phase-saving-index-priority-second
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── a
+/// │   └── a-2.0.0
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// └── parent
+///     ├── parent-1.0.0
+///     │   └── requires a
+///     │       └── satisfied by a-2.0.0
+///     └── parent-2.0.0
+///         ├── requires a==2.0.0
+///         │   └── satisfied by a-2.0.0
+///         └── requires late==1.0.0
+///             └── satisfied by late-1.0.0
+/// ```
+#[test]
+fn phase_saving_index_priority_second() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-index-priority-second.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("parent")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==2.0.0
+     + parent==1.0.0
+    ");
+}
+
 /// The user requires two incompatible, existing versions of package `a`
 ///
 /// ```text
