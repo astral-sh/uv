@@ -8,7 +8,7 @@ use crate::metadata::MetadataError;
 use uv_cache::Error as CacheError;
 use uv_client::WrappedReqwestError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
-use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendError};
+use uv_distribution_types::{IndexUrl, InstalledDist, InstalledDistError, IsBuildBackendError};
 use uv_fs::Simplified;
 use uv_git::GitError;
 use uv_normalize::PackageName;
@@ -44,6 +44,19 @@ pub enum Error {
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(DisplaySafeUrl),
+    #[error("Proxy artifact `{filename}` uses unsupported local URL `{url}`")]
+    ProxyArtifactLocalUrl {
+        filename: String,
+        url: DisplaySafeUrl,
+    },
+    #[error(
+        "Locked artifact `{filename}` from `{canonical}` has no digest and cannot be fetched through proxy index `{proxy}`; regenerate the lockfile"
+    )]
+    ProxyArtifactMissingDigest {
+        filename: String,
+        canonical: IndexUrl,
+        proxy: IndexUrl,
+    },
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
