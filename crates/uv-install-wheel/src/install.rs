@@ -1,7 +1,7 @@
 //! Like `wheel.rs`, but for installing wheels that have already been unzipped, rather than
 //! reading from a zip file.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use fs_err::File;
@@ -17,6 +17,29 @@ use crate::wheel::{
     read_record, write_installer_metadata, write_record, write_script_entrypoints,
 };
 use crate::{Error, Layout};
+
+/// Return the path at which the wheel's `.dist-info` directory will be installed.
+pub fn installed_dist_info_path(
+    layout: &Layout,
+    wheel: impl AsRef<Path>,
+) -> Result<PathBuf, Error> {
+    let (dist_info_prefix, site_packages) = wheel_destination(layout, wheel.as_ref())?;
+    Ok(site_packages.join(format!("{dist_info_prefix}.dist-info")))
+}
+
+fn wheel_destination<'layout>(
+    layout: &'layout Layout,
+    wheel: &Path,
+) -> Result<(String, &'layout Path), Error> {
+    let dist_info_prefix = find_dist_info(wheel)?;
+    let wheel_file_path = wheel.join(format!("{dist_info_prefix}.dist-info/WHEEL"));
+    let wheel_text = fs_err::read_to_string(wheel_file_path)?;
+    let site_packages = match WheelFile::parse(&wheel_text)?.lib_kind() {
+        LibKind::Pure => &layout.scheme.purelib,
+        LibKind::Plat => &layout.scheme.platlib,
+    };
+    Ok((dist_info_prefix, site_packages))
+}
 
 /// Install the given wheel to the given venv
 ///
@@ -39,8 +62,9 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     link_mode: LinkMode,
     state: &InstallState,
 ) -> Result<(), Error> {
-    let dist_info_prefix = find_dist_info(&wheel)?;
-    let metadata = dist_info_metadata(&dist_info_prefix, &wheel)?;
+    let wheel = wheel.as_ref();
+    let (dist_info_prefix, site_packages) = wheel_destination(layout, wheel)?;
+    let metadata = dist_info_metadata(&dist_info_prefix, wheel)?;
     let Metadata10 { name, version } = Metadata10::parse_pkg_info(&metadata)
         .map_err(|err| Error::InvalidWheel(err.to_string()))?;
 
@@ -61,32 +85,18 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     // https://packaging.python.org/en/latest/specifications/binary-distribution-format/#installing-a-wheel-distribution-1-0-py32-none-any-whl
     // > 1.a Parse distribution-1.0.dist-info/WHEEL.
     // > 1.b Check that installer is compatible with Wheel-Version. Warn if minor version is greater, abort if major version is greater.
-    let wheel_file_path = wheel
-        .as_ref()
-        .join(format!("{dist_info_prefix}.dist-info/WHEEL"));
-    let wheel_text = fs_err::read_to_string(wheel_file_path)?;
-    let lib_kind = WheelFile::parse(&wheel_text)?.lib_kind();
-
     // > 1.c If Root-Is-Purelib == ‘true’, unpack archive into purelib (site-packages).
     // > 1.d Else unpack archive into platlib (site-packages).
     trace!(?name, "Extracting wheel files");
-    let site_packages = match lib_kind {
-        LibKind::Pure => &layout.scheme.purelib,
-        LibKind::Plat => &layout.scheme.platlib,
-    };
-    link_wheel_files(link_mode, site_packages, &wheel, state, filename)?;
+    link_wheel_files(link_mode, site_packages, wheel, state, filename)?;
     trace!(?name, "Extracted wheel files");
 
     // Read the RECORD file.
-    let mut record_file = File::open(
-        wheel
-            .as_ref()
-            .join(format!("{dist_info_prefix}.dist-info/RECORD")),
-    )?;
+    let mut record_file = File::open(wheel.join(format!("{dist_info_prefix}.dist-info/RECORD")))?;
     let mut record = read_record(&mut record_file)?;
 
     let (console_scripts, gui_scripts) =
-        parse_scripts(&wheel, &dist_info_prefix, None, layout.python_version.1)?;
+        parse_scripts(wheel, &dist_info_prefix, None, layout.python_version.1)?;
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
         trace!(?name, "No entrypoints");

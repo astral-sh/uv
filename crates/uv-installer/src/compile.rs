@@ -22,12 +22,17 @@ const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
 const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
 
+type WorkerOutcome = std::thread::Result<Result<(), CompileError>>;
+type WorkerHandle = oneshot::Receiver<WorkerOutcome>;
+
 #[derive(Debug, Error)]
 pub enum CompileError {
     #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),
     #[error("Failed to send task to worker")]
     WorkerDisappeared(SendError<PathBuf>),
+    #[error("Failed to identify Python source files")]
+    SourceFiles(#[source] anyhow::Error),
     #[error("The task executor is broken, did some other task panic?")]
     Join,
     #[error("Failed to start Python interpreter to run compile script")]
@@ -57,6 +62,100 @@ pub enum CompileError {
     StartupTimeout(Duration),
     #[error("Got invalid value from environment for {var}: {message}.")]
     EnvironmentError { var: &'static str, message: String },
+}
+
+fn compile_timeout() -> Result<Option<Duration>, CompileError> {
+    let timeout = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
+        Ok(value) => match value.as_str() {
+            "0" => None,
+            _ => match value.parse::<u64>().map(Duration::from_secs) {
+                Ok(duration) => Some(duration),
+                Err(_) => {
+                    return Err(CompileError::EnvironmentError {
+                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
+                        message: format!("Expected an integer number of seconds, got \"{value}\""),
+                    });
+                }
+            },
+        },
+        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
+    };
+    if let Some(duration) = timeout {
+        debug!(
+            "Using bytecode compilation timeout of {}s",
+            duration.as_secs()
+        );
+    } else {
+        debug!("Disabling bytecode compilation timeout");
+    }
+    Ok(timeout)
+}
+
+fn spawn_workers(
+    dir: &Path,
+    python_executable: &Path,
+    pip_compileall_py: &Path,
+    receiver: &Receiver<PathBuf>,
+    worker_count: usize,
+    timeout: Option<Duration>,
+) -> Vec<WorkerHandle> {
+    debug!("Starting {} bytecode compilation workers", worker_count);
+    let mut worker_handles = Vec::with_capacity(worker_count);
+    for _ in 0..worker_count {
+        let (tx, rx) = oneshot::channel();
+
+        let worker = worker(
+            dir.to_path_buf(),
+            python_executable.to_path_buf(),
+            pip_compileall_py.to_path_buf(),
+            receiver.clone(),
+            timeout,
+        );
+
+        // Spawn each worker on a dedicated thread.
+        std::thread::Builder::new()
+            .name("uv-compile".to_owned())
+            .spawn(move || {
+                // Report panics back to the main thread.
+                let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("Failed to build runtime")
+                        .block_on(worker)
+                }));
+
+                // This may fail if the main thread returned early due to an error.
+                let _ = tx.send(result);
+            })
+            .expect("Failed to start compilation worker");
+
+        worker_handles.push(rx);
+    }
+    worker_handles
+}
+
+async fn wait_for_workers(
+    worker_handles: Vec<WorkerHandle>,
+    send_error: Option<SendError<PathBuf>>,
+) -> Result<(), CompileError> {
+    // Make sure all workers exit regularly, avoid hiding errors.
+    for result in futures::future::join_all(worker_handles).await {
+        match result {
+            // A worker thread panicked or exited without reporting its result.
+            Err(_) | Ok(Err(_)) => return Err(CompileError::Join),
+            Ok(Ok(Err(compile_error))) => return Err(compile_error),
+            Ok(Ok(Ok(()))) => {}
+        }
+    }
+
+    if let Some(send_error) = send_error {
+        // This is suspicious: Why did the channel stop working, but all workers exited
+        // successfully?
+        return Err(CompileError::WorkerDisappeared(send_error));
+    }
+
+    Ok(())
 }
 
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
@@ -89,64 +188,15 @@ pub async fn compile_tree(
     // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
     let pip_compileall_py = tempdir.path().join("pip_compileall.py");
-
-    let timeout: Option<Duration> = match env::var(EnvVars::UV_COMPILE_BYTECODE_TIMEOUT) {
-        Ok(value) => match value.as_str() {
-            "0" => None,
-            _ => match value.parse::<u64>().map(Duration::from_secs) {
-                Ok(duration) => Some(duration),
-                Err(_) => {
-                    return Err(CompileError::EnvironmentError {
-                        var: EnvVars::UV_COMPILE_BYTECODE_TIMEOUT,
-                        message: format!("Expected an integer number of seconds, got \"{value}\""),
-                    });
-                }
-            },
-        },
-        Err(_) => Some(DEFAULT_COMPILE_TIMEOUT),
-    };
-    if let Some(duration) = timeout {
-        debug!(
-            "Using bytecode compilation timeout of {}s",
-            duration.as_secs()
-        );
-    } else {
-        debug!("Disabling bytecode compilation timeout");
-    }
-
-    debug!("Starting {} bytecode compilation workers", worker_count);
-    let mut worker_handles = Vec::new();
-    for _ in 0..worker_count {
-        let (tx, rx) = oneshot::channel();
-
-        let worker = worker(
-            dir.to_path_buf(),
-            python_executable.to_path_buf(),
-            pip_compileall_py.clone(),
-            receiver.clone(),
-            timeout,
-        );
-
-        // Spawn each worker on a dedicated thread.
-        std::thread::Builder::new()
-            .name("uv-compile".to_owned())
-            .spawn(move || {
-                // Report panics back to the main thread.
-                let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .expect("Failed to build runtime")
-                        .block_on(worker)
-                }));
-
-                // This may fail if the main thread returned early due to an error.
-                let _ = tx.send(result);
-            })
-            .expect("Failed to start compilation worker");
-
-        worker_handles.push(async { rx.await.unwrap() });
-    }
+    let timeout = compile_timeout()?;
+    let worker_handles = spawn_workers(
+        dir,
+        python_executable,
+        &pip_compileall_py,
+        &receiver,
+        worker_count,
+        timeout,
+    );
     // Make sure the channel gets closed when all workers exit.
     drop(receiver);
 
@@ -191,21 +241,75 @@ pub async fn compile_tree(
     // up to worker_count * 10 items in the queue.
     drop(sender);
 
-    // Make sure all workers exit regularly, avoid hiding errors.
-    for result in futures::future::join_all(worker_handles).await {
-        match result {
-            // There spawning earlier errored due to a panic in a task.
-            Err(_) => return Err(CompileError::Join),
-            // The worker reports an error.
-            Ok(Err(compile_error)) => return Err(compile_error),
-            Ok(Ok(())) => {}
-        }
+    wait_for_workers(worker_handles, send_error).await?;
+
+    Ok(source_files)
+}
+
+/// Bytecode compile the given Python source files using a pool of Python interpreters.
+///
+/// All paths must be absolute. Compilation errors are muted (like pip), while failures to launch
+/// or communicate with the Python workers are returned.
+#[instrument(skip(files, python_executable))]
+pub async fn compile_files(
+    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
+    python_executable: &Path,
+    concurrency: &Concurrency,
+    cache: &Path,
+) -> Result<usize, CompileError> {
+    let mut files = files.into_iter();
+    let mut initial_files = Vec::with_capacity(concurrency.installs);
+    for file in files.by_ref().take(concurrency.installs) {
+        initial_files.push(file.map_err(CompileError::SourceFiles)?);
+    }
+    if initial_files.is_empty() {
+        return Ok(0);
     }
 
-    if let Some(send_error) = send_error {
-        // This is suspicious: Why did the channel stop working, but all workers exited
-        // successfully?
-        return Err(CompileError::WorkerDisappeared(send_error));
+    let worker_count = initial_files.len();
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
+
+    // Running Python with an actual file will produce better error messages.
+    let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
+    let pip_compileall_py = tempdir.path().join("pip_compileall.py");
+    let timeout = compile_timeout()?;
+    let worker_handles = spawn_workers(
+        cache,
+        python_executable,
+        &pip_compileall_py,
+        &receiver,
+        worker_count,
+        timeout,
+    );
+    drop(receiver);
+
+    let mut send_error = None;
+    let mut source_error = None;
+    let mut source_files = 0;
+    for file in initial_files.into_iter().map(Ok).chain(files) {
+        let file = match file {
+            Ok(file) => file,
+            Err(err) => {
+                source_error = Some(err);
+                break;
+            }
+        };
+        debug_assert!(
+            file.is_absolute(),
+            "compileall doesn't work with relative paths: `{}`",
+            file.display()
+        );
+        source_files += 1;
+        if let Err(err) = sender.send(file).await {
+            send_error = Some(err);
+            break;
+        }
+    }
+    drop(sender);
+
+    wait_for_workers(worker_handles, send_error).await?;
+    if let Some(source_error) = source_error {
+        return Err(CompileError::SourceFiles(source_error));
     }
 
     Ok(source_files)

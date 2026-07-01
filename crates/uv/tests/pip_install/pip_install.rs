@@ -1,5 +1,6 @@
+use std::fmt::Write;
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Result, anyhow};
@@ -55,6 +56,47 @@ fn write_tar_gz(file: File, entries: &[(&str, &str)]) -> Result<()> {
     Ok(())
 }
 
+fn write_many_files_wheel(path: &Path, source_files: usize) -> Result<()> {
+    let mut writer = ZipFileWriter::new(Vec::new());
+    let mut record = String::new();
+
+    for index in 0..source_files {
+        let name = format!("large_wheel/module_{index:05}.py");
+        let entry = ZipEntryBuilder::new(name.clone().into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, b"VALUE = 1\n"))?;
+        writeln!(record, "{name},,")?;
+    }
+
+    let metadata = indoc! {"
+        Metadata-Version: 2.1
+        Name: large-wheel
+        Version: 1.0.0
+    "};
+    let wheel = indoc! {"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: py3-none-any
+    "};
+    for (name, contents) in [
+        ("large_wheel-1.0.0.dist-info/METADATA", metadata),
+        ("large_wheel-1.0.0.dist-info/WHEEL", wheel),
+    ] {
+        let entry = ZipEntryBuilder::new(name.into(), Compression::Stored);
+        block_on(writer.write_entry_whole(entry, contents.as_bytes()))?;
+        writeln!(record, "{name},,")?;
+    }
+    record.push_str("large_wheel-1.0.0.dist-info/RECORD,,\n");
+    let entry = ZipEntryBuilder::new(
+        "large_wheel-1.0.0.dist-info/RECORD".into(),
+        Compression::Stored,
+    );
+    block_on(writer.write_entry_whole(entry, record.as_bytes()))?;
+
+    fs_err::write(path, block_on(writer.close())?)?;
+    Ok(())
+}
+
 #[test]
 fn missing_requirements_txt() {
     let context = uv_test::test_context!("3.12");
@@ -97,6 +139,174 @@ fn empty_requirements_txt() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Compile only distributions installed by the current operation.
+#[test]
+fn compile_bytecode_for_installed_distributions() -> Result<()> {
+    const SOURCE_FILES: usize = 16;
+
+    let context = uv_test::test_context!("3.12");
+    let wheel = context.temp_dir.join("large_wheel-1.0.0-py3-none-any.whl");
+    // This exceeds the one-worker compilation queue capacity, exercising producer backpressure.
+    write_many_files_wheel(&wheel, SOURCE_FILES)?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("anyio==3.7.1")
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+    Bytecode compiled 45 files in [TIME]
+     + anyio==3.7.1
+     + idna==3.6
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("anyio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+    assert!(
+        context
+            .site_packages()
+            .join("idna")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+    assert!(
+        !context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .env(EnvVars::UV_CONCURRENT_INSTALLS, "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 16 files in [TIME]
+     + large-wheel==1.0.0 (from file://[TEMP_DIR]/large_wheel-1.0.0-py3-none-any.whl)
+    "
+    );
+
+    let compiled = WalkDir::new(context.site_packages().join("large_wheel"))
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")
+        })
+        .count();
+    assert_eq!(compiled, SOURCE_FILES);
+    assert!(
+        !context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .exists()
+    );
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--reinstall-package")
+        .arg("sniffio")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     ~ sniffio==1.3.1
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    Ok(())
+}
+
+/// Compile symlinked source files installed by the current operation.
+#[test]
+#[cfg(unix)]
+fn compile_bytecode_with_symlink_link_mode() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--compile-bytecode")
+        .arg("--link-mode")
+        .arg("symlink"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    assert!(
+        context
+            .site_packages()
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 }
 
 #[test]
