@@ -16,7 +16,7 @@ use papaya::{HashMap, ResizeMode};
 use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::sync::oneshot;
+use tokio::sync::{Semaphore, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
@@ -128,6 +128,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
+    speculative_requests: Option<Semaphore>,
     installed_packages: InstalledPackages,
     // Papaya's maps are large on Windows, so box them to keep resolver futures small.
     /// Incompatibilities for packages that are entirely unavailable.
@@ -175,6 +176,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         build_context: &'a Context,
         installed_packages: InstalledPackages,
         database: DistributionDatabase<'a, Context>,
+        concurrent_downloads: usize,
     ) -> Result<Self, ResolveError> {
         let provider = DefaultResolverProvider::new(
             database,
@@ -204,6 +206,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             build_context.locations(),
             provider,
             installed_packages,
+            concurrent_downloads,
         ))
     }
 }
@@ -227,12 +230,18 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         locations: &IndexLocations,
         provider: Provider,
         installed_packages: InstalledPackages,
+        concurrent_downloads: usize,
     ) -> Self {
         let state = ResolverState {
             index: index.clone(),
             git: git.clone(),
             capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(&options, &manifest, &env),
+            // Do not let speculative batch prefetching claim more once-map entries than the
+            // downloader can actively service. Reserve one download slot for active resolver
+            // requests; if there is only one slot, disable speculative requests entirely.
+            speculative_requests: speculative_request_limit(concurrent_downloads)
+                .map(Semaphore::new),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -2459,6 +2468,72 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok::<(), ResolveError>(())
     }
 
+    async fn process_dist_request<Provider: ResolverProvider>(
+        &self,
+        dist: Dist,
+        provider: &Provider,
+    ) -> Result<Option<Response>, ResolveError> {
+        if let Some(version) = dist.version() {
+            if let Some(index) = dist.index() {
+                // Check the implicit indexes for pre-provided metadata.
+                let versions_response = self.index.implicit().get(dist.name());
+                if let Some(VersionsResponse::Found(version_maps)) = versions_response.as_deref() {
+                    for version_map in version_maps {
+                        if version_map.index() == Some(index) {
+                            let Some(metadata) = version_map.get_metadata(version) else {
+                                continue;
+                            };
+                            debug!("Found registry-provided metadata for: {dist}");
+                            return Ok(Some(Response::Dist {
+                                dist,
+                                metadata: MetadataResponse::Found(
+                                    ArchiveMetadata::from_metadata23(metadata),
+                                ),
+                            }));
+                        }
+                    }
+                }
+
+                // Check the explicit indexes for pre-provided metadata.
+                let versions_response = self
+                    .index
+                    .explicit()
+                    .get(&(dist.name().clone(), index.clone()));
+                if let Some(VersionsResponse::Found(version_maps)) = versions_response.as_deref() {
+                    for version_map in version_maps {
+                        let Some(metadata) = version_map.get_metadata(version) else {
+                            continue;
+                        };
+                        debug!("Found registry-provided metadata for: {dist}");
+                        return Ok(Some(Response::Dist {
+                            dist,
+                            metadata: MetadataResponse::Found(ArchiveMetadata::from_metadata23(
+                                metadata,
+                            )),
+                        }));
+                    }
+                }
+            }
+        }
+
+        let metadata = provider
+            .get_or_build_wheel_metadata(&dist)
+            .boxed_local()
+            .await?;
+
+        if let MetadataResponse::Found(metadata) = &metadata {
+            if &metadata.metadata.name != dist.name() {
+                return Err(ResolveError::MismatchedPackageName {
+                    request: "distribution metadata",
+                    expected: dist.name().clone(),
+                    actual: metadata.metadata.name.clone(),
+                });
+            }
+        }
+
+        Ok(Some(Response::Dist { dist, metadata }))
+    }
+
     #[instrument(skip_all, fields(%request))]
     async fn process_request<Provider: ResolverProvider>(
         &self,
@@ -2482,70 +2557,20 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
 
             // Fetch distribution metadata from the distribution database.
-            Request::Dist(dist) => {
-                if let Some(version) = dist.version() {
-                    if let Some(index) = dist.index() {
-                        // Check the implicit indexes for pre-provided metadata.
-                        let versions_response = self.index.implicit().get(dist.name());
-                        if let Some(VersionsResponse::Found(version_maps)) =
-                            versions_response.as_deref()
-                        {
-                            for version_map in version_maps {
-                                if version_map.index() == Some(index) {
-                                    let Some(metadata) = version_map.get_metadata(version) else {
-                                        continue;
-                                    };
-                                    debug!("Found registry-provided metadata for: {dist}");
-                                    return Ok(Some(Response::Dist {
-                                        dist,
-                                        metadata: MetadataResponse::Found(
-                                            ArchiveMetadata::from_metadata23(metadata),
-                                        ),
-                                    }));
-                                }
-                            }
-                        }
+            Request::Dist(dist) => self.process_dist_request(dist, provider).await,
 
-                        // Check the explicit indexes for pre-provided metadata.
-                        let versions_response = self
-                            .index
-                            .explicit()
-                            .get(&(dist.name().clone(), index.clone()));
-                        if let Some(VersionsResponse::Found(version_maps)) =
-                            versions_response.as_deref()
-                        {
-                            for version_map in version_maps {
-                                let Some(metadata) = version_map.get_metadata(version) else {
-                                    continue;
-                                };
-                                debug!("Found registry-provided metadata for: {dist}");
-                                return Ok(Some(Response::Dist {
-                                    dist,
-                                    metadata: MetadataResponse::Found(
-                                        ArchiveMetadata::from_metadata23(metadata),
-                                    ),
-                                }));
-                            }
-                        }
-                    }
+            Request::Speculative(dist) => {
+                let Some(speculative_requests) = &self.speculative_requests else {
+                    return Ok(None);
+                };
+                let _permit = speculative_requests
+                    .acquire()
+                    .await
+                    .expect("resolver state outlives metadata requests");
+                if !self.index.distributions().register(dist.distribution_id()) {
+                    return Ok(None);
                 }
-
-                let metadata = provider
-                    .get_or_build_wheel_metadata(&dist)
-                    .boxed_local()
-                    .await?;
-
-                if let MetadataResponse::Found(metadata) = &metadata {
-                    if &metadata.metadata.name != dist.name() {
-                        return Err(ResolveError::MismatchedPackageName {
-                            request: "distribution metadata",
-                            expected: dist.name().clone(),
-                            actual: metadata.metadata.name.clone(),
-                        });
-                    }
-                }
-
-                Ok(Some(Response::Dist { dist, metadata }))
+                self.process_dist_request(dist, provider).await
             }
 
             Request::Installed(dist) => {
@@ -3635,6 +3660,8 @@ pub(crate) enum Request {
     Package(PackageName, Option<IndexMetadata>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
+    /// A speculative request for distribution metadata emitted by batch prefetching.
+    Speculative(Dist),
     /// A request to fetch the metadata from an already-installed distribution.
     Installed(InstalledDist),
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
@@ -3686,6 +3713,9 @@ impl Display for Request {
             }
             Self::Dist(dist) => {
                 write!(f, "Metadata {dist}")
+            }
+            Self::Speculative(dist) => {
+                write!(f, "Speculative metadata {dist}")
             }
             Self::Installed(dist) => {
                 write!(f, "Installed metadata {dist}")
@@ -4320,6 +4350,25 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     }
 
     environments.remove(&id).unwrap_or(MarkerTree::FALSE)
+}
+
+/// Limit speculative requests while reserving download capacity for active resolver requests.
+fn speculative_request_limit(concurrent_downloads: usize) -> Option<usize> {
+    let limit = concurrent_downloads.saturating_sub(1);
+    (limit > 0).then_some(limit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::speculative_request_limit;
+
+    #[test]
+    fn reserve_download_for_active_requests() {
+        assert_eq!(speculative_request_limit(0), None);
+        assert_eq!(speculative_request_limit(1), None);
+        assert_eq!(speculative_request_limit(2), Some(1));
+        assert_eq!(speculative_request_limit(50), Some(49));
+    }
 }
 
 #[derive(Debug, Default, Clone)]
