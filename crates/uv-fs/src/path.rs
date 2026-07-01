@@ -123,12 +123,30 @@ pub trait PythonExt {
     fn escape_for_python(&self) -> String;
 }
 
+/// Escape a [`str`] for use inside a double-quoted Python string.
+pub fn escape_for_python(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '\\' => escaped.push_str(r"\\"),
+            '"' => escaped.push_str(r#"\""#),
+            character if character.is_ascii_control() => {
+                let byte = character as u8;
+                escaped.push_str(r"\x");
+                escaped.push(HEX[(byte >> 4) as usize] as char);
+                escaped.push(HEX[(byte & 0xf) as usize] as char);
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
 impl<T: AsRef<Path>> PythonExt for T {
     fn escape_for_python(&self) -> String {
-        self.as_ref()
-            .to_string_lossy()
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
+        escape_for_python(&self.as_ref().to_string_lossy())
     }
 }
 
@@ -679,6 +697,14 @@ mod tests {
                 "./wheel cache/wheel-0.42.0.tar.gz"
             );
         }
+    }
+
+    #[test]
+    fn test_escape_for_python() {
+        assert_eq!(
+            escape_for_python("quote\" slash\\ nul\0 tab\t newline\n carriage\r"),
+            r#"quote\" slash\\ nul\x00 tab\x09 newline\x0a carriage\x0d"#
+        );
     }
 
     #[test]

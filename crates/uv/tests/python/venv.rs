@@ -1796,6 +1796,13 @@ fn verify_pyvenv_cfg_relocatable() {
     // be generated when --relocatable is used.
     let activate_csh = scripts.child("activate.csh");
     activate_csh.assert(predicates::path::missing());
+
+    // Regression test for https://github.com/astral-sh/uv/issues/19606.
+    let activate_xsh = scripts.child("activate.xsh");
+    activate_xsh.assert(predicates::path::is_file());
+    activate_xsh.assert(predicates::str::contains(
+        r"dirname(dirname(realpath(__file__)))",
+    ));
 }
 
 /// With `UV_VENV_RELOCATABLE=1`, the virtual environment is relocatable.
