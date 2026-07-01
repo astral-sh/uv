@@ -46,18 +46,18 @@ jobs:
       - run: uvx ty check python/uv
       - name: "Check scrolls"
         env:
-          # Let ty infer the Python version from each script environment instead of the root project.
+          # TODO: Remove once ty infers Python versions from script environments instead of the root project.
           TY_CONFIG_FILE: /dev/null
+          UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
         run: |
-          # TODO: Replace this with `uv workspace list-scripts` once available.
-          mapfile -t scripts < <(git grep -l '^# /// script$' -- '*.py')
+          mapfile -t scripts < <(uv workspace list --scripts)
           for script in "${scripts[@]}"; do
             echo "Checking ${script}"
             check_args=(--script "${script}")
             if [[ -f "${script}.lock" ]]; then
               check_args+=(--locked)
             fi
-            uv --preview-features check-command check "${check_args[@]}"
+            uv check "${check_args[@]}"
           done
 
   shellcheck:
