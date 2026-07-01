@@ -18,12 +18,13 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
-use uv_distribution_types::Requirement;
+use uv_distribution_types::{Requirement, RequiresPython};
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
-use uv_resolver::Manifest;
+use uv_resolver::{ExcludeNewer, Manifest};
+use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
@@ -297,6 +298,27 @@ fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(&run));
 }
 
+fn resolve_in_memory_transformers_universal(c: &mut Criterion<WallTime>) {
+    c.bench_function("resolve_in_memory_transformers_universal", |b| {
+        let run = setup_ecosystem("transformers", ">=3.9.0");
+        b.iter(&run);
+    });
+}
+
+fn resolve_in_memory_home_assistant_universal(c: &mut Criterion<WallTime>) {
+    c.bench_function("resolve_in_memory_home_assistant_universal", |b| {
+        let run = setup_ecosystem("home-assistant-core", ">=3.12.0");
+        b.iter(&run);
+    });
+}
+
+fn resolve_in_memory_warehouse_universal(c: &mut Criterion<WallTime>) {
+    c.bench_function("resolve_in_memory_warehouse_universal", |b| {
+        let run = setup_ecosystem("warehouse", "==3.11.*");
+        b.iter(&run);
+    });
+}
+
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![
         Requirement::from(uv_pep508::Requirement::from_str("apache-airflow[all]==2.9.3").unwrap()),
@@ -328,11 +350,106 @@ criterion_group!(
     install_wheel_many_files,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
+    resolve_in_memory_transformers_universal,
+    resolve_in_memory_home_assistant_universal,
+    resolve_in_memory_warehouse_universal,
     resolve_warm_airflow
 );
 criterion_main!(uv);
 
 fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
+    setup_with(
+        manifest,
+        universal,
+        false,
+        None,
+        uv_pypi_types::Conflicts::empty(),
+        exclude_newer(2024, 9, 1),
+        Some(&resolver::TAGS),
+    )
+}
+
+/// Create a resolver input from one of the projects used by the ecosystem lock tests.
+fn setup_ecosystem(name: &str, requires_python: &str) -> impl Fn() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../test/ecosystem")
+        .join(name)
+        .canonicalize()
+        .expect("ecosystem fixture exists");
+    let cache = Cache::from_path("../../.cache");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let workspace_cache = WorkspaceCache::default();
+    let project = runtime
+        .block_on(ProjectWorkspace::discover(
+            &root,
+            &DiscoveryOptions::default(),
+            &cache,
+            &workspace_cache,
+        ))
+        .expect("ecosystem fixture is a valid project");
+    let workspace = project.workspace();
+
+    // `uv lock` expands every workspace member to all of its extras, and separately includes all
+    // dependency groups. Do that before the measured region so the benchmark isolates the solve.
+    let mut requirements = workspace.members_requirements().collect::<Vec<_>>();
+    for requirement in &mut requirements {
+        let member = workspace
+            .packages()
+            .get(&requirement.name)
+            .expect("requirement is a workspace member");
+        requirement.extras = member
+            .pyproject_toml()
+            .project
+            .as_ref()
+            .and_then(|project| project.optional_dependencies.as_ref())
+            .into_iter()
+            .flat_map(|extras| extras.keys().cloned())
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+    }
+    requirements.extend(workspace.group_requirements());
+
+    let manifest = Manifest::simple(requirements);
+    let conflicts = workspace.conflicts().expect("valid ecosystem conflicts");
+    let requires_python = RequiresPython::from_specifiers(
+        &uv_pep440::VersionSpecifiers::from_str(requires_python)
+            .expect("valid ecosystem requires-python"),
+    );
+
+    setup_with(
+        manifest,
+        true,
+        true,
+        Some(requires_python),
+        conflicts,
+        exclude_newer(2024, 8, 8),
+        None,
+    )
+}
+
+fn exclude_newer(year: i16, month: i8, day: i8) -> ExcludeNewer {
+    ExcludeNewer::global(
+        jiff::civil::Date::new(year, month, day)
+            .unwrap()
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .unwrap()
+            .timestamp()
+            .into(),
+    )
+}
+
+fn setup_with(
+    manifest: Manifest,
+    universal: bool,
+    reuse_index: bool,
+    requires_python: Option<RequiresPython>,
+    conflicts: uv_pypi_types::Conflicts,
+    exclude_newer: ExcludeNewer,
+    tags: Option<&'static uv_platform_tags::Tags>,
+) -> impl Fn() {
     let runtime = tokio::runtime::Builder::new_current_thread()
         // CodSpeed limits the total number of threads to 500
         .max_blocking_threads(256)
@@ -350,6 +467,7 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
     let client = RegistryClientBuilder::new(BaseClientBuilder::default(), cache.clone())
         .build()
         .expect("failed to build registry client");
+    let index = uv_resolver::InMemoryIndex::default();
 
     // Prime the cache: First run for performance the network operation, the second run primes
     // reading from the cache from the first run. If they are already primed, we only lose ~1s for
@@ -362,6 +480,11 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
                 black_box(&client),
                 &interpreter,
                 universal,
+                reuse_index.then_some(&index),
+                requires_python.as_ref(),
+                conflicts.clone(),
+                exclude_newer.clone(),
+                tags,
             ))
             .unwrap();
     }
@@ -382,6 +505,11 @@ fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
                 black_box(&client),
                 &interpreter,
                 universal,
+                reuse_index.then_some(&index),
+                requires_python.as_ref(),
+                conflicts.clone(),
+                exclude_newer.clone(),
+                tags,
             ))
             .unwrap();
     }
@@ -441,7 +569,7 @@ mod resolver {
         Arch::Aarch64,
     );
 
-    static TAGS: LazyLock<Tags> = LazyLock::new(|| {
+    pub(crate) static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
             &PLATFORM,
             (3, 11),
@@ -458,6 +586,11 @@ mod resolver {
         client: &RegistryClient,
         interpreter: &Interpreter,
         universal: bool,
+        index: Option<&InMemoryIndex>,
+        requires_python: Option<&RequiresPython>,
+        conflicts: Conflicts,
+        exclude_newer: ExcludeNewer,
+        tags: Option<&Tags>,
     ) -> Result<ResolverOutput> {
         let build_isolation = BuildIsolation::default();
         let extra_build_requires = ExtraBuildRequires::default();
@@ -466,18 +599,12 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let config_settings_package = PackageConfigSettings::default();
-        let exclude_newer = ExcludeNewer::global(
-            jiff::civil::date(2024, 9, 1)
-                .to_zoned(jiff::tz::TimeZone::UTC)
-                .unwrap()
-                .timestamp()
-                .into(),
-        );
         let build_constraints = Constraints::default();
         let flat_index = FlatIndex::default();
         let hashes = HashStrategy::default();
         let state = SharedState::default();
-        let index = InMemoryIndex::default();
+        let owned_index = InMemoryIndex::default();
+        let index = index.unwrap_or(&owned_index);
         let index_locations = IndexLocations::default();
         let installed_packages = EmptyInstalledPackages;
         let options = OptionsBuilder::new()
@@ -485,13 +612,14 @@ mod resolver {
             .build();
         let sources = NoSources::default();
         let dependency_metadata = DependencyMetadata::default();
-        let conflicts = Conflicts::empty();
         let workspace_cache = WorkspaceCache::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
                 interpreter,
-                RequiresPython::greater_than_equal_version(&Version::new([3, 11])),
+                requires_python.cloned().unwrap_or_else(|| {
+                    RequiresPython::greater_than_equal_version(&Version::new([3, 11]))
+                }),
             )
         } else {
             PythonRequirement::from_interpreter(interpreter)
@@ -536,9 +664,9 @@ mod resolver {
             markers,
             interpreter.markers(),
             conflicts,
-            Some(&TAGS),
+            tags,
             &flat_index,
-            &index,
+            index,
             &hashes,
             &build_context,
             installed_packages,
