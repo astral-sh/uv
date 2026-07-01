@@ -63,20 +63,9 @@ impl From<VersionSpecifier> for Ranges<Version> {
                 if version.any_prerelease() {
                     // If V is a pre-release, we allow pre-releases of the same version.
                     Self::strictly_lower_than(version)
-                } else if let Some(post) = version.post() {
-                    // If V is a post-release (e.g., `<0.12.0.post2`), we want to:
-                    // - Exclude pre-releases of the base version (e.g., `0.12.0a1`)
-                    // - Include the final release (e.g., `0.12.0`)
-                    // - Include earlier post-releases (e.g., `0.12.0.post1`)
-                    //
-                    // The range is: `(-∞, base.min0) ∪ [base, V.post)`
-                    // where `base` is the version without the post-release component.
-                    let base = version.clone().with_post(None);
-                    // Everything below the base version's pre-releases
-                    let lower = Self::strictly_lower_than(base.clone().with_min(Some(0)));
-                    // From base (inclusive) up to but not including V
-                    let upper = Self::from_range_bounds(base..version.with_post(Some(post)));
-                    lower.union(&upper)
+                } else if version.is_post() {
+                    // Exclude pre-releases of V by ending before its earliest pre-release.
+                    Self::strictly_lower_than(version.with_dev(Some(0)))
                 } else {
                     // V is not a pre-release or post-release, so exclude pre-releases of the
                     // specified version by using a "min" sentinel that sorts before all
@@ -91,8 +80,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
 
                 if let Some(dev) = version.dev() {
                     Self::higher_than(version.with_dev(Some(dev + 1)))
-                } else if let Some(post) = version.post() {
-                    Self::higher_than(version.with_post(Some(post + 1)))
+                } else if version.is_post() {
+                    Self::strictly_higher_than(version.with_local(LocalVersion::Max))
                 } else {
                     Self::strictly_higher_than(version.with_max(Some(0)))
                 }
@@ -499,8 +488,31 @@ impl From<UpperBound> for Bound<Version> {
 mod tests {
     use super::*;
 
-    /// Test that `<V.postN` excludes pre-releases of the base version but includes
-    /// earlier post-releases and the final release.
+    #[test]
+    fn post_release_exclusive_ordering() {
+        for (specifier, version, expected) in [
+            ("<1.0.post1", "1.0a1", true),
+            ("<1.0.post1", "1.0.post1.dev1", false),
+            (">1.0.post0", "1.0.post0+local", false),
+            (">1.0.post0", "1.0.post1.dev0", true),
+            (">1.0.post0", "1.0.post1.dev1", true),
+        ] {
+            let parsed_specifier = specifier
+                .parse::<VersionSpecifier>()
+                .expect("valid specifier");
+            let range = Ranges::<Version>::from(parsed_specifier);
+            let parsed_version = version.parse::<Version>().expect("valid version");
+
+            assert_eq!(
+                range.contains(&parsed_version),
+                expected,
+                "expected `{specifier}` to contain `{version}`: {expected}"
+            );
+        }
+    }
+
+    /// Test that `<V.postN` includes versions before the specified post-release but excludes
+    /// pre-releases of the specified post-release.
     ///
     /// See: <https://github.com/astral-sh/uv/issues/16868>
     #[test]
@@ -512,25 +524,25 @@ mod tests {
         let v = "0.11.0".parse::<Version>().unwrap();
         assert!(range.contains(&v), "should include 0.11.0");
 
-        // Should exclude pre-releases of the base release.
+        // Should include pre-releases of the base release.
         let v = "0.12.0a1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+        assert!(range.contains(&v), "should include 0.12.0a1");
 
         let v = "0.12.0b1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0b1");
+        assert!(range.contains(&v), "should include 0.12.0b1");
 
         let v = "0.12.0rc1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0rc1");
+        assert!(range.contains(&v), "should include 0.12.0rc1");
 
         let v = "0.12.0.dev0".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0.dev0");
+        assert!(range.contains(&v), "should include 0.12.0.dev0");
 
-        // Should also exclude post-releases of pre-releases.
+        // Should also include post-releases of pre-releases.
         let v = "0.12.0a1.post1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1.post1");
+        assert!(range.contains(&v), "should include 0.12.0a1.post1");
 
         let v = "0.12.0b1.post1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0b1.post1");
+        assert!(range.contains(&v), "should include 0.12.0b1.post1");
 
         // Should include the final release.
         let v = "0.12.0".parse::<Version>().unwrap();
@@ -539,6 +551,10 @@ mod tests {
         // Should include earlier post-releases.
         let v = "0.12.0.post1".parse::<Version>().unwrap();
         assert!(range.contains(&v), "should include 0.12.0.post1");
+
+        // Should exclude pre-releases of the specified post-release.
+        let v = "0.12.0.post2.dev1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post2.dev1");
 
         // Should exclude the specified post-release.
         let v = "0.12.0.post2".parse::<Version>().unwrap();
@@ -606,13 +622,17 @@ mod tests {
         let v = "0.11.0".parse::<Version>().unwrap();
         assert!(range.contains(&v), "should include 0.11.0");
 
-        // Should exclude pre-releases of the base release.
+        // Should include pre-releases of the base release.
         let v = "0.12.0a1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+        assert!(range.contains(&v), "should include 0.12.0a1");
 
         // Should include the final release (0.12.0 < 0.12.0.post0).
         let v = "0.12.0".parse::<Version>().unwrap();
         assert!(range.contains(&v), "should include 0.12.0");
+
+        // Should exclude pre-releases of post0.
+        let v = "0.12.0.post0.dev1".parse::<Version>().unwrap();
+        assert!(!range.contains(&v), "should exclude 0.12.0.post0.dev1");
 
         // Should exclude post0 and later.
         let v = "0.12.0.post0".parse::<Version>().unwrap();
