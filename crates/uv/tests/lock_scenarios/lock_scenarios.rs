@@ -3357,6 +3357,152 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     Ok(())
 }
 
+/// This test checks that phase-saving revalidates required-environment artifact coverage after
+/// backtracking widens a package requirement.
+///
+///
+/// ```text
+/// phase-saving-required-environment
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── a
+/// │   ├── a-0.9.0
+/// │   └── a-1.0.0
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// └── parent
+///     ├── parent-1.0.0
+///     │   └── requires a
+///     │       ├── satisfied by a-0.9.0
+///     │       └── satisfied by a-1.0.0
+///     └── parent-2.0.0
+///         ├── requires a==1.0.0 ; sys_platform != 'win32'
+///         │   └── satisfied by a-1.0.0
+///         └── requires late==1.0.0
+///             └── satisfied by late-1.0.0
+/// ```
+#[test]
+fn phase_saving_required_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-required-environment.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''parent''',
+        ]
+        requires-python = ">=3.12"
+        [tool.uv]
+        required-environments = [
+          '''sys_platform == 'win32'''',
+        ]
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'win32'",
+            "sys_platform == 'win32'",
+        ]
+        required-markers = [
+            "sys_platform == 'win32'",
+        ]
+
+        [[package]]
+        name = "a"
+        version = "0.9.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'win32'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-0.9.0-py3-none-win_amd64.whl", hash = "sha256:d5cbc3502e518901a44fcf6560565530ac77e5d994bc3181a68e9e4c0f8a05f2", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'win32'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:9c2c85239e2d6fe0ceeca5211b4b0ce1f02d6bd52967398bd55791d2d41e479a", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "a", version = "0.9.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'win32'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'win32'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/parent-1.0.0.tar.gz", hash = "sha256:e58f7845e014962152b8f15c4603fb804c8162b9281ddbe23cc101aa911b3275", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-any.whl", hash = "sha256:2a2d74615c39fc52c4d5076007a1f680a5bc26551f2980ad42b6242f568eea60", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// This test checks that phase-saving preserves universal forks after backtracking.
 ///
 ///
