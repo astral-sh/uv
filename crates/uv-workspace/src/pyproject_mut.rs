@@ -2329,29 +2329,7 @@ dependencies = [
     }
 
     #[test]
-    fn add_index_clears_format_on_url_update() {
-        let toml = r#"
-[[tool.uv.index]]
-name = "index"
-url = "https://example.com/flat"
-format = "flat"
-"#;
-
-        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
-
-        let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
-        doc.add_index(&new_index, Path::new(".")).unwrap();
-
-        assert_snapshot!(doc.to_string(), @r#"
-
-[[tool.uv.index]]
-name = "index"
-url = "https://pypi.org/simple"
-"#);
-    }
-
-    #[test]
-    fn add_index_preserves_format_when_url_canonically_unchanged() {
+    fn add_index_syncs_format_on_url_update() {
         let toml = r#"
 [[tool.uv.index]]
 name = "index"
@@ -2362,8 +2340,8 @@ format = "flat"
         let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
 
         // The URL spelling changes, but the canonical URL does not, so format should be preserved.
-        let new_index = Index::from_str("index=https://example.com/flat").unwrap();
-        doc.add_index(&new_index, Path::new(".")).unwrap();
+        let equivalent_index = Index::from_str("index=https://example.com/flat").unwrap();
+        doc.add_index(&equivalent_index, Path::new(".")).unwrap();
 
         assert_snapshot!(doc.to_string(), @r#"
 
@@ -2371,6 +2349,16 @@ format = "flat"
 name = "index"
 url = "https://example.com/flat"
 format = "flat"
+"#);
+
+        let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
+        doc.add_index(&new_index, Path::new(".")).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[[tool.uv.index]]
+name = "index"
+url = "https://pypi.org/simple"
 "#);
     }
 

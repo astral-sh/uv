@@ -11271,15 +11271,10 @@ fn add_index_with_existing_relative_path_index() -> Result<()> {
         format = "flat"
     "#})?;
 
-    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
+    // Create a non-empty flat index.
     let packages = project.child("test-index");
     packages.create_dir_all()?;
-
-    let wheel_src = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
-    fs_err::copy(&wheel_src, &wheel_dst)?;
+    packages.child("placeholder").touch()?;
     uv_fs::create_symlink(packages.path(), project.child("links-alias").path())?;
 
     let index = format!("local={}", packages.path().display());
