@@ -1020,7 +1020,7 @@
           "default": "simple"
         },
         "ignore-error-codes": {
-          "description": "Status codes that uv should ignore when deciding whether\nto continue searching in the next index after a failure.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
+          "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
           "default": null,
           "items": {
