@@ -1713,7 +1713,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::PypiSimpleDetail;
+    use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail, ResolutionMetadata};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
@@ -1747,6 +1747,58 @@ mod tests {
             .await;
 
         server
+    }
+
+    #[test]
+    fn simple_metadata_rkyv_round_trip() -> Result<(), Error> {
+        let response = r#"
+        {
+          "files": [
+            {
+              "core-metadata": true,
+              "filename": "demo-1.0-py3-none-any.whl",
+              "hashes": {"sha256": "1234"},
+              "url": "https://example.com/demo-1.0-py3-none-any.whl"
+            }
+          ],
+          "core-metadata": {
+            "1.0": {
+              "requires-python": ">=3.8",
+              "requires-dist": [
+                "anyio>=4; python_version >= '3.9' and sys_platform == 'linux'",
+                "direct @ https://example.com/direct-1.0-py3-none-any.whl?token=value#sha256=1234"
+              ],
+              "provides-extra": ["async"]
+            }
+          }
+        }
+        "#;
+        let data: PyxSimpleDetail = serde_json::from_str(response)?;
+        let base = DisplaySafeUrl::parse("https://example.com/simple/demo/")?;
+        let metadata = SimpleDetailMetadata::from_pyx_files(
+            data.files,
+            data.core_metadata,
+            &PackageName::from_str("demo")?,
+            data.project_status,
+            &base,
+        );
+
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&metadata)?;
+        let archived =
+            rkyv::access::<rkyv::Archived<SimpleDetailMetadata>, rkyv::rancor::Error>(&bytes)?;
+        let archived_metadata = archived
+            .datum(0)
+            .and_then(|datum| datum.metadata.as_ref())
+            .ok_or("expected core metadata for demo 1.0")?;
+        let metadata =
+            rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived_metadata)?;
+
+        assert_eq!(metadata.name.as_ref(), "demo");
+        assert_eq!(metadata.version.to_string(), "1.0");
+        assert_eq!(metadata.requires_dist.len(), 2);
+        assert_eq!(metadata.requires_dist[0].name.as_ref(), "anyio");
+        assert_eq!(metadata.requires_dist[1].name.as_ref(), "direct");
+        Ok(())
     }
 
     fn no_index_client(flat_indexes: Vec<Index>) -> Result<RegistryClient, Error> {

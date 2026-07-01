@@ -24,6 +24,7 @@ mod metadata;
 mod module_name;
 mod parsed_url;
 mod project_status;
+mod rkyv_support;
 mod scheme;
 mod simple_json;
 mod supported_environments;

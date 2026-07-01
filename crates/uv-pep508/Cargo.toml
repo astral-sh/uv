@@ -54,6 +54,6 @@ schemars = ["dep:schemars"]
 # be supported.
 non-pep508-extensions = []
 default = []
-rkyv = ["dep:rkyv"]
+rkyv = ["dep:rkyv", "uv-redacted/rkyv"]
 # Match the API of the published crate, for compatibility.
 serde = []

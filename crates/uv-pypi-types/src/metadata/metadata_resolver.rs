@@ -270,6 +270,7 @@ impl ResolutionMetadata {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::str::FromStr;
 
     use uv_normalize::PackageName;
@@ -277,6 +278,33 @@ mod tests {
 
     use super::*;
     use crate::MetadataError;
+
+    #[test]
+    fn rkyv_round_trip() -> Result<(), Box<dyn Error>> {
+        let content = br"Metadata-Version: 2.3
+Name: demo
+Version: 1.0
+Requires-Python: >=3.8
+Requires-Dist: anyio>=4; python_version >= '3.9' and sys_platform == 'linux'
+Requires-Dist: direct @ https://example.com/direct-1.0-py3-none-any.whl?token=value#sha256=1234
+Provides-Extra: async
+";
+        let expected = ResolutionMetadata::parse_metadata(content)?;
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&expected)?;
+        let archived =
+            rkyv::access::<rkyv::Archived<ResolutionMetadata>, rkyv::rancor::Error>(&bytes)?;
+
+        assert_eq!(archived.requires_dist.len(), 2);
+
+        let actual = rkyv::deserialize::<ResolutionMetadata, rkyv::rancor::Error>(archived)?;
+        assert_eq!(actual.name, expected.name);
+        assert_eq!(actual.version, expected.version);
+        assert_eq!(actual.requires_dist, expected.requires_dist);
+        assert_eq!(actual.requires_python, expected.requires_python);
+        assert_eq!(actual.provides_extra, expected.provides_extra);
+        assert_eq!(actual.dynamic, expected.dynamic);
+        Ok(())
+    }
 
     #[test]
     fn test_parse_metadata() {

@@ -52,6 +52,8 @@ use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 mod cursor;
 pub mod marker;
 mod origin;
+#[cfg(feature = "rkyv")]
+mod rkyv_support;
 #[cfg(feature = "non-pep508-extensions")]
 mod unnamed;
 mod verbatim_url;
@@ -121,6 +123,10 @@ impl<E: Error + Debug, T: Pep508Url<Err = E>> std::error::Error for Pep508Error<
 
 /// A PEP 508 dependency specifier.
 #[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
 pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// The distribution name such as `requests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
@@ -137,7 +143,28 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     /// Those are a nested and/or tree.
     pub marker: MarkerTree,
     /// The source file containing the requirement.
+    ///
+    /// Origins are not part of Core Metadata and are intentionally omitted from archives.
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Skip))]
     pub origin: Option<RequirementOrigin>,
+}
+
+#[cfg(feature = "rkyv")]
+impl<T> Debug for ArchivedRequirement<T>
+where
+    T: Pep508Url + rkyv::Archive,
+    T::Archived: Debug,
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Requirement")
+            .field("name", &self.name)
+            .field("extras", &self.extras)
+            .field("version_or_url", &self.version_or_url)
+            .field("marker", &self.marker)
+            .field("origin", &self.origin)
+            .finish()
+    }
 }
 
 impl<T: Pep508Url> Requirement<T> {
@@ -405,11 +432,32 @@ pub struct Extras(Vec<ExtraName>);
 
 /// The actual version specifier or URL to install.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
 pub enum VersionOrUrl<T: Pep508Url = VerbatimUrl> {
     /// A PEP 440 version specifier set
     VersionSpecifier(VersionSpecifiers),
     /// A installable URL
     Url(T),
+}
+
+#[cfg(feature = "rkyv")]
+impl<T> Debug for ArchivedVersionOrUrl<T>
+where
+    T: Pep508Url + rkyv::Archive,
+    T::Archived: Debug,
+{
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VersionSpecifier(specifier) => formatter
+                .debug_tuple("VersionSpecifier")
+                .field(specifier)
+                .finish(),
+            Self::Url(url) => formatter.debug_tuple("Url").field(url).finish(),
+        }
+    }
 }
 
 impl<T: Pep508Url> Display for VersionOrUrl<T> {
@@ -1030,45 +1078,11 @@ fn parse_pep508_requirement<T: Pep508Url>(
     })
 }
 
-#[cfg(feature = "rkyv")]
-/// An [`rkyv`] implementation for [`Requirement`].
-impl<T: Pep508Url + Display> rkyv::Archive for Requirement<T> {
-    type Archived = rkyv::string::ArchivedString;
-    type Resolver = rkyv::string::StringResolver;
-
-    #[inline]
-    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
-        let as_str = self.to_string();
-        rkyv::string::ArchivedString::resolve_from_str(&as_str, resolver, out);
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<T: Pep508Url + Display, S> rkyv::Serialize<S> for Requirement<T>
-where
-    S: rkyv::rancor::Fallible + rkyv::ser::Allocator + rkyv::ser::Writer + ?Sized,
-    S::Error: rkyv::rancor::Source,
-{
-    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        let as_str = self.to_string();
-        rkyv::string::ArchivedString::serialize_from_str(&as_str, serializer)
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<T: Pep508Url + Display, D: rkyv::rancor::Fallible + ?Sized>
-    rkyv::Deserialize<Requirement<T>, D> for rkyv::string::ArchivedString
-{
-    fn deserialize(&self, _deserializer: &mut D) -> Result<Requirement<T>, D::Error> {
-        // SAFETY: We only serialize valid requirements.
-        Ok(Requirement::<T>::from_str(self.as_str()).unwrap())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     //! Half of these tests are copied from <https://github.com/pypa/packaging/pull/624>
 
+    use std::error::Error;
     use std::str::FromStr;
 
     use insta::assert_snapshot;
@@ -1087,6 +1101,34 @@ mod tests {
         Requirement::<VerbatimUrl>::from_str(input)
             .unwrap_err()
             .to_string()
+    }
+
+    #[cfg(feature = "rkyv")]
+    #[test]
+    fn rkyv_requirement_round_trip_is_structural() -> Result<(), Box<dyn Error>> {
+        for input in [
+            "demo",
+            "demo ; python_version < '0'",
+            "demo[async,security]>=1.2,<2 ; (python_version >= '3.8' and sys_platform == 'linux') or extra != 'security'",
+            "demo ; python_version in '3.9 3.10.0 3.11'",
+            "demo ; 'dev' in dependency_groups and 'nux' in os_name",
+            "demo @ https://example.com/demo-1.0.0-py3-none-any.whl?token=value#sha256=1234 ; os_name == 'posix'",
+        ] {
+            let expected = Requirement::<VerbatimUrl>::from_str(input)?;
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&expected)?;
+            let archived = rkyv::access::<
+                rkyv::Archived<Requirement<VerbatimUrl>>,
+                rkyv::rancor::Error,
+            >(&bytes)?;
+
+            // Requirements are archived field-by-field rather than as PEP 508 strings.
+            assert_eq!(archived.extras.len(), expected.extras.len());
+
+            let actual =
+                rkyv::deserialize::<Requirement<VerbatimUrl>, rkyv::rancor::Error>(archived)?;
+            assert_eq!(actual, expected);
+        }
+        Ok(())
     }
 
     #[cfg(feature = "non-pep508-extensions")]

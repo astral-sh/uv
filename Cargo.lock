@@ -6647,6 +6647,7 @@ name = "uv-git-types"
 version = "0.0.59"
 dependencies = [
  "percent-encoding",
+ "rkyv",
  "serde",
  "thiserror",
  "tracing",
@@ -7088,8 +7089,10 @@ name = "uv-redacted"
 version = "0.0.59"
 dependencies = [
  "ref-cast",
+ "rkyv",
  "schemars",
  "serde",
+ "serde_json",
  "thiserror",
  "url",
 ]

@@ -164,6 +164,11 @@ impl Display for CanonicalMarkerValueExtra {
 ///
 /// Used for PEP 751 markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),

@@ -2,10 +2,14 @@ use ref_cast::RefCast;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::{Debug, Display};
+#[cfg(feature = "rkyv")]
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+#[cfg(feature = "rkyv")]
+use url::{Host, Position};
 
 const SENSITIVE_QUERY_PARAMETERS: &[&str] = &[
     "X-Amz-Credential",
@@ -63,6 +67,143 @@ pub enum DisplaySafeUrlError {
 #[cfg_attr(feature = "schemars", schemars(transparent))]
 #[repr(transparent)]
 pub struct DisplaySafeUrl(Url);
+
+#[cfg(feature = "rkyv")]
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+enum UrlHostRkyv {
+    None,
+    Domain,
+    Ipv4(Ipv4Addr),
+    Ipv6(Ipv6Addr),
+}
+
+#[cfg(feature = "rkyv")]
+#[derive(serde::Serialize)]
+enum SerdeUrlHost {
+    None,
+    Domain,
+    Ipv4(Ipv4Addr),
+    Ipv6(Ipv6Addr),
+}
+
+#[cfg(feature = "rkyv")]
+impl From<UrlHostRkyv> for SerdeUrlHost {
+    fn from(host: UrlHostRkyv) -> Self {
+        match host {
+            UrlHostRkyv::None => Self::None,
+            UrlHostRkyv::Domain => Self::Domain,
+            UrlHostRkyv::Ipv4(address) => Self::Ipv4(address),
+            UrlHostRkyv::Ipv6(address) => Self::Ipv6(address),
+        }
+    }
+}
+
+#[cfg(feature = "rkyv")]
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+#[doc(hidden)]
+/// The parsed components of a [`DisplaySafeUrl`], stored without reparsing its serialization.
+pub struct DisplaySafeUrlRkyv {
+    serialization: String,
+    scheme_end: u32,
+    username_end: u32,
+    host_start: u32,
+    host_end: u32,
+    host: UrlHostRkyv,
+    port: Option<u16>,
+    path_start: u32,
+    query_start: Option<u32>,
+    fragment_start: Option<u32>,
+}
+
+#[cfg(feature = "rkyv")]
+impl DisplaySafeUrlRkyv {
+    fn from_url(url: &DisplaySafeUrl) -> Self {
+        let index = |position| u32::try_from(url[..position].len()).unwrap_or(u32::MAX);
+        let host = match url.host() {
+            None => UrlHostRkyv::None,
+            Some(Host::Domain(_)) => UrlHostRkyv::Domain,
+            Some(Host::Ipv4(address)) => UrlHostRkyv::Ipv4(address),
+            Some(Host::Ipv6(address)) => UrlHostRkyv::Ipv6(address),
+        };
+
+        Self {
+            serialization: url.as_str().to_string(),
+            scheme_end: index(Position::AfterScheme),
+            username_end: index(Position::AfterUsername),
+            host_start: index(Position::BeforeHost),
+            host_end: index(Position::AfterHost),
+            host,
+            port: url.port(),
+            path_start: index(Position::BeforePath),
+            query_start: url
+                .query()
+                .map(|_| index(Position::BeforeQuery).saturating_sub(1)),
+            fragment_start: url
+                .fragment()
+                .map(|_| index(Position::BeforeFragment).saturating_sub(1)),
+        }
+    }
+
+    fn into_url<E>(self) -> Result<DisplaySafeUrl, E>
+    where
+        E: rkyv::rancor::Source,
+    {
+        use rkyv::rancor::ResultExt;
+
+        // `Url::deserialize_internal` accepts its parsed component tuple through Serde. Build the
+        // in-memory value directly; this does not format or parse JSON text.
+        let value = serde_json::to_value((
+            self.serialization,
+            self.scheme_end,
+            self.username_end,
+            self.host_start,
+            self.host_end,
+            SerdeUrlHost::from(self.host),
+            self.port,
+            self.path_start,
+            self.query_start,
+            self.fragment_start,
+        ))
+        .into_error()?;
+        DisplaySafeUrl::deserialize_internal(value).into_error()
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for DisplaySafeUrl {
+    type Archived = <DisplaySafeUrlRkyv as rkyv::Archive>::Archived;
+    type Resolver = <DisplaySafeUrlRkyv as rkyv::Archive>::Resolver;
+
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        DisplaySafeUrlRkyv::from_url(self).resolve(resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S> rkyv::Serialize<S> for DisplaySafeUrl
+where
+    S: rkyv::rancor::Fallible + ?Sized,
+    DisplaySafeUrlRkyv: rkyv::Serialize<S>,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        DisplaySafeUrlRkyv::from_url(self).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D> rkyv::Deserialize<DisplaySafeUrl, D> for ArchivedDisplaySafeUrlRkyv
+where
+    D: rkyv::rancor::Fallible + ?Sized,
+    D::Error: rkyv::rancor::Source,
+    Self: rkyv::Deserialize<DisplaySafeUrlRkyv, D>,
+{
+    fn deserialize(&self, deserializer: &mut D) -> Result<DisplaySafeUrl, D::Error> {
+        let url: DisplaySafeUrlRkyv = rkyv::Deserialize::deserialize(self, deserializer)?;
+        url.into_url()
+    }
+}
 
 /// Check if a path or fragment contains a credential-like pattern (`:` followed by `@`).
 ///
@@ -376,7 +517,30 @@ fn display_with_redacted_credentials(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "rkyv")]
+    use std::error::Error;
+
     use super::*;
+
+    #[cfg(feature = "rkyv")]
+    #[test]
+    fn rkyv_round_trip() -> Result<(), Box<dyn Error>> {
+        for input in [
+            "https://user:password@example.com:8443/path?query=value#fragment",
+            "https://127.0.0.1/simple/",
+            "https://[2001:db8::1]/simple/",
+            "file:///Users/ferris/project.whl",
+            "mailto:ferris@example.com?subject=hello#fragment",
+        ] {
+            let expected = DisplaySafeUrl::parse(input)?;
+            let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&expected)?;
+            let archived =
+                rkyv::access::<rkyv::Archived<DisplaySafeUrl>, rkyv::rancor::Error>(&bytes)?;
+            let actual = rkyv::deserialize::<DisplaySafeUrl, rkyv::rancor::Error>(archived)?;
+            assert_eq!(actual, expected);
+        }
+        Ok(())
+    }
 
     #[test]
     fn from_url_no_credentials() {

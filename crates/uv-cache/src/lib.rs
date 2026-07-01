@@ -1201,7 +1201,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v21",
+            Self::Simple => "simple-v22",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v6",

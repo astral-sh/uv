@@ -51,6 +51,14 @@ pub enum MarkerWarningKind {
 
 /// Those environment markers with a PEP 440 version as value such as `python_version`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(
+    feature = "rkyv",
+    rkyv(attr(expect(clippy::enum_variant_names)), derive(Debug))
+)]
 pub enum MarkerValueVersion {
     /// `implementation_version`
     ImplementationVersion,
@@ -72,6 +80,11 @@ impl Display for MarkerValueVersion {
 
 /// Those environment markers with an arbitrary string as value such as `sys_platform`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum MarkerValueString {
     /// `implementation_name`
     ImplementationName,
@@ -129,6 +142,11 @@ impl Display for MarkerValueString {
 ///
 /// Contains PEP 751 lockfile markers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum MarkerValueList {
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
@@ -220,6 +238,11 @@ impl Display for MarkerValue {
 
 /// How to compare key and value, such as by `==`, `>` or `not in`
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum MarkerOperator {
     /// `==`
     Equal,
@@ -463,6 +486,11 @@ impl Deref for StringVersion {
 
 /// The [`ExtraName`] value used in `extra` and `extras` markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum MarkerValueExtra {
     /// A valid [`ExtraName`].
     Extra(ExtraName),
@@ -499,6 +527,11 @@ impl Display for MarkerValueExtra {
 
 /// Represents one clause such as `python_version > "3.8"`.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 #[allow(missing_docs)]
 pub enum MarkerExpression {
     /// A version expression, e.g. `<version key> <version op> <quoted PEP 440 version>`.
@@ -528,6 +561,10 @@ pub enum MarkerExpression {
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
+        #[cfg_attr(
+            feature = "rkyv",
+            rkyv(with = crate::rkyv_support::ArcStrAsString)
+        )]
         value: ArcStr,
     },
     /// `'...' in <key>`, a PEP 751 expression.
@@ -559,6 +596,11 @@ pub(crate) enum MarkerExpressionKind {
 
 /// The operator for an extra expression, either '==' or '!='.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum ExtraOperator {
     /// `==`
     Equal,
@@ -598,6 +640,11 @@ impl Display for ExtraOperator {
 
 /// The operator for a container expression, either 'in' or 'not in'.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum ContainerOperator {
     /// `in`
     In,
@@ -799,6 +846,84 @@ impl FromStr for MarkerTree {
 
     fn from_str(markers: &str) -> Result<Self, Self::Err> {
         parse::parse_markers(markers, &mut TracingReporter)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+#[doc(hidden)]
+/// A semantic archive representation that does not persist process-local [`NodeId`] values.
+pub enum MarkerTreeRkyv {
+    /// A marker that is always true.
+    True,
+    /// A marker that is always false.
+    False,
+    /// A non-trivial marker represented in disjunctive normal form.
+    Dnf(Vec<Vec<MarkerExpression>>),
+}
+
+#[cfg(feature = "rkyv")]
+impl MarkerTreeRkyv {
+    fn from_tree(tree: MarkerTree) -> Self {
+        if tree.is_true() {
+            Self::True
+        } else if tree.is_false() {
+            Self::False
+        } else {
+            Self::Dnf(tree.to_dnf())
+        }
+    }
+
+    fn into_tree(self) -> MarkerTree {
+        match self {
+            Self::True => MarkerTree::TRUE,
+            Self::False => MarkerTree::FALSE,
+            Self::Dnf(dnf) => {
+                let mut tree = MarkerTree::FALSE;
+                for conjunction in dnf {
+                    let mut clause = MarkerTree::TRUE;
+                    for expression in conjunction {
+                        clause.and(MarkerTree::expression(expression));
+                    }
+                    tree.or(clause);
+                }
+                tree
+            }
+        }
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for MarkerTree {
+    type Archived = <MarkerTreeRkyv as rkyv::Archive>::Archived;
+    type Resolver = <MarkerTreeRkyv as rkyv::Archive>::Resolver;
+
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        MarkerTreeRkyv::from_tree(*self).resolve(resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S> rkyv::Serialize<S> for MarkerTree
+where
+    S: rkyv::rancor::Fallible + ?Sized,
+    MarkerTreeRkyv: rkyv::Serialize<S>,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        MarkerTreeRkyv::from_tree(*self).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D> rkyv::Deserialize<MarkerTree, D> for ArchivedMarkerTreeRkyv
+where
+    D: rkyv::rancor::Fallible + ?Sized,
+    Self: rkyv::Deserialize<MarkerTreeRkyv, D>,
+{
+    fn deserialize(&self, deserializer: &mut D) -> Result<MarkerTree, D::Error> {
+        let tree: MarkerTreeRkyv = rkyv::Deserialize::deserialize(self, deserializer)?;
+        Ok(tree.into_tree())
     }
 }
 

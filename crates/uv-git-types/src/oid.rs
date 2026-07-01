@@ -11,6 +11,11 @@ use thiserror::Error;
 /// If Git's SHA-256 support becomes more widespread in the future (in particular if GitHub ever
 /// adds support), we might need to make this an enum.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct GitOid {
     bytes: [u8; 40],
 }

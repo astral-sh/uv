@@ -29,6 +29,11 @@ static UV_GIT_LFS: LazyLock<GitLfs> = LazyLock::new(|| {
 
 /// Configuration for Git LFS (Large File Storage) support.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum GitLfs {
     /// Git LFS is disabled (default).
     #[default]
@@ -100,6 +105,72 @@ pub struct GitUrl {
     precise: Option<GitOid>,
     /// Git LFS configuration for this repository.
     lfs: GitLfs,
+}
+
+#[cfg(feature = "rkyv")]
+#[derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[rkyv(derive(Debug))]
+#[doc(hidden)]
+/// The persisted fields of a [`GitUrl`], excluding its derived repository identity.
+pub struct GitUrlRkyv {
+    url: DisplaySafeUrl,
+    reference: GitReference,
+    precise: Option<GitOid>,
+    lfs: GitLfs,
+}
+
+#[cfg(feature = "rkyv")]
+impl GitUrlRkyv {
+    fn from_url(url: &GitUrl) -> Self {
+        Self {
+            url: url.url.clone(),
+            reference: url.reference.clone(),
+            precise: url.precise,
+            lfs: url.lfs,
+        }
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for GitUrl {
+    type Archived = <GitUrlRkyv as rkyv::Archive>::Archived;
+    type Resolver = <GitUrlRkyv as rkyv::Archive>::Resolver;
+
+    fn resolve(&self, resolver: Self::Resolver, out: rkyv::Place<Self::Archived>) {
+        GitUrlRkyv::from_url(self).resolve(resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S> rkyv::Serialize<S> for GitUrl
+where
+    S: rkyv::rancor::Fallible + ?Sized,
+    GitUrlRkyv: rkyv::Serialize<S>,
+{
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        GitUrlRkyv::from_url(self).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D> rkyv::Deserialize<GitUrl, D> for ArchivedGitUrlRkyv
+where
+    D: rkyv::rancor::Fallible + ?Sized,
+    D::Error: rkyv::rancor::Source,
+    Self: rkyv::Deserialize<GitUrlRkyv, D>,
+{
+    fn deserialize(&self, deserializer: &mut D) -> Result<GitUrl, D::Error> {
+        use rkyv::rancor::ResultExt;
+
+        let archived: GitUrlRkyv = rkyv::Deserialize::deserialize(self, deserializer)?;
+        GitUrl::from_fields(
+            archived.url,
+            archived.reference,
+            archived.precise,
+            archived.lfs,
+        )
+        .into_error()
+    }
 }
 
 impl GitUrl {

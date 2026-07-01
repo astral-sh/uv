@@ -22,6 +22,11 @@ use crate::Pep508Url;
 ///
 /// The original string is not preserved after serialization/deserialization.
 #[derive(Debug, Clone, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub struct VerbatimUrl {
     /// The parsed URL.
     url: DisplaySafeUrl,
@@ -29,9 +34,11 @@ pub struct VerbatimUrl {
     ///
     /// Even if originally set, this will be [`None`] after
     /// serialization/deserialization.
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Skip))]
     given: Option<ArcStr>,
     /// Given value is a [`Pep508Url`] which contained variable references which were successfully
     /// expanded.
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Skip))]
     expanded: bool,
 }
 

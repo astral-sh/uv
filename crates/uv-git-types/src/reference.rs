@@ -16,6 +16,11 @@ const GIT_REFERENCE_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
 
 /// A reference to commit or commit-ish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)
+)]
+#[cfg_attr(feature = "rkyv", rkyv(derive(Debug)))]
 pub enum GitReference {
     /// A specific branch.
     Branch(String),
