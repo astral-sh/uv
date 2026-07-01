@@ -4,6 +4,7 @@ extend-exclude = [
     "test/ecosystem/**",
     "test/requirements/**/*.in",
     "crates/uv-build-frontend/src/pipreqs/mapping",
+    "crates/uv-performance-memory-allocator/mimalloc/**",
 ]
 ignore-hidden = false
 
