@@ -50,15 +50,11 @@ jobs:
           TY_CONFIG_FILE: /dev/null
           UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
         run: |
-          mapfile -t scripts < <(uv workspace list --scripts)
-          for script in "${scripts[@]}"; do
+          scripts="$(uv workspace list --scripts)"
+          while IFS= read -r script; do
             echo "Checking ${script}"
-            check_args=(--script "${script}")
-            if [[ -f "${script}.lock" ]]; then
-              check_args+=(--locked)
-            fi
-            uv check "${check_args[@]}"
-          done
+            uv check --script "${script}" --locked
+          done <<< "${scripts}"
 
   shellcheck:
     timeout-minutes: 10
