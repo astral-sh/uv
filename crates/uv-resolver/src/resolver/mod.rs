@@ -128,7 +128,7 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     workspace_members: BTreeSet<PackageName>,
     selector: CandidateSelector,
     index: InMemoryIndex,
-    speculative_requests: Semaphore,
+    speculative_requests: Option<Semaphore>,
     installed_packages: InstalledPackages,
     // Papaya's maps are large on Windows, so box them to keep resolver futures small.
     /// Incompatibilities for packages that are entirely unavailable.
@@ -238,9 +238,10 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             capabilities: capabilities.clone(),
             selector: CandidateSelector::for_resolution(&options, &manifest, &env),
             // Do not let speculative batch prefetching claim more once-map entries than the
-            // downloader can actively service. A later active resolver request can then claim an
-            // entry before a queued speculative request starts.
-            speculative_requests: Semaphore::new(concurrent_downloads.max(1)),
+            // downloader can actively service. Reserve one download slot for active resolver
+            // requests; if there is only one slot, disable speculative requests entirely.
+            speculative_requests: speculative_request_limit(concurrent_downloads)
+                .map(Semaphore::new),
             dependency_mode: options.dependency_mode,
             urls: Urls::from_manifest(&manifest, &env, git, options.dependency_mode),
             indexes: Indexes::from_manifest(&manifest, &env, options.dependency_mode),
@@ -2559,8 +2560,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             Request::Dist(dist) => self.process_dist_request(dist, provider).await,
 
             Request::Speculative(dist) => {
-                let _permit = self
-                    .speculative_requests
+                let Some(speculative_requests) = &self.speculative_requests else {
+                    return Ok(None);
+                };
+                let _permit = speculative_requests
                     .acquire()
                     .await
                     .expect("resolver state outlives metadata requests");
@@ -4347,6 +4350,25 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     }
 
     environments.remove(&id).unwrap_or(MarkerTree::FALSE)
+}
+
+/// Limit speculative requests while reserving download capacity for active resolver requests.
+fn speculative_request_limit(concurrent_downloads: usize) -> Option<usize> {
+    let limit = concurrent_downloads.saturating_sub(1);
+    (limit > 0).then_some(limit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::speculative_request_limit;
+
+    #[test]
+    fn reserve_download_for_active_requests() {
+        assert_eq!(speculative_request_limit(0), None);
+        assert_eq!(speculative_request_limit(1), None);
+        assert_eq!(speculative_request_limit(2), Some(1));
+        assert_eq!(speculative_request_limit(50), Some(49));
+    }
 }
 
 #[derive(Debug, Default, Clone)]
