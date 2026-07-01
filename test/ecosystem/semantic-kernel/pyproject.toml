@@ -1,0 +1,257 @@
+[project]
+name = "semantic-kernel"
+version = "1.43.1"
+description = "Semantic Kernel Python SDK"
+authors = [{ name = "Microsoft", email = "SK-Support@microsoft.com"}]
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+urls.homepage = "https://learn.microsoft.com/en-us/semantic-kernel/overview/"
+urls.source = "https://github.com/microsoft/semantic-kernel/tree/main/python"
+urls.release_notes = "https://github.com/microsoft/semantic-kernel/releases?q=tag%3Apython-1&expanded=true"
+urls.issues = "https://github.com/microsoft/semantic-kernel/issues"
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Framework :: Pydantic :: 2",
+  "Typing :: Typed",
+]
+dependencies = [
+    # azure agents
+    "azure-ai-projects ~= 1.0.0b12",
+    "azure-ai-agents >= 1.2.0b3",
+    "aiohttp ~= 3.8",
+    "cloudevents ~=1.0",
+    "pydantic >=2.0,!=2.10.0,!=2.10.1,!=2.10.2,!=2.10.3,<2.14",
+    "pydantic-settings ~= 2.0",
+    "defusedxml ~= 0.7",
+    # azure identity
+    "azure-identity >= 1.13",
+    # embeddings
+    "numpy >= 1.25.0; python_version < '3.12'",
+    "numpy >= 1.26.0; python_version >= '3.12'",
+    # openai connector
+    "openai >= 2.0.0",
+    # openapi and swagger
+    "openapi_core >= 0.18,<0.20",
+    "websockets >= 13, < 16",
+    "aiortc>=1.9.0",
+    # OpenTelemetry
+    "opentelemetry-api ~= 1.24",
+    "opentelemetry-sdk ~= 1.24",
+    "prance >= 23.6.21,< 25.4.9",
+    # `pybars4` is omitted because it and `pymeta3` only ship source
+    # distributions whose metadata requires executing a build backend.
+    # templating
+    "jinja2 ~= 3.1",
+    "nest-asyncio ~= 1.6",
+    "scipy>=1.15.1",
+    "websockets >= 13, < 16",
+    "aiortc>=1.9.0",
+    # Protobuf
+    # explicit typing extensions
+    "typing-extensions>=4.13",
+    "mcp>=1.26.0",
+]
+
+### Optional dependencies
+[project.optional-dependencies]
+anthropic = [
+    "anthropic ~= 0.32"
+]
+autogen = [
+    "autogen-agentchat >= 0.2, <0.4"
+]
+aws = [
+    "boto3>=1.36.4,<1.43.0",
+]
+azure = [
+    "azure-ai-inference >= 1.0.0b6",
+    "azure-core-tracing-opentelemetry >= 1.0.0b11",
+    "azure-search-documents >= 11.6.0b4, < 12.0.0",
+    "azure-cosmos ~= 4.7"
+]
+chroma = [
+    "chromadb >= 0.5,< 1.4"
+]
+copilotstudio = [
+    "microsoft-agents-copilotstudio-client >= 0.3.1",
+    "microsoft-agents-activity >= 0.3.1"
+]
+faiss = [
+    "faiss-cpu>=1.10.0"
+]
+google = [
+    "google-cloud-aiplatform>=1.114,<1.134",
+    "google-genai >= 1.51,< 1.75"
+]
+hugging_face = [
+    "transformers[torch] ~= 4.28",
+    "sentence-transformers >= 2.2,< 6.0",
+    "torch == 2.8.0"
+]
+mcp = [
+    "mcp>=1.8",
+]
+milvus = [
+    "pymilvus >= 2.3,< 2.7",
+    "milvus >= 2.3,<2.3.8; platform_system != 'Windows'"
+]
+mistralai = [
+    "mistralai >= 1.2,< 2.4.6"
+]
+mongo = [
+    "pymongo >= 4.8.0, < 4.16",
+    "motor >= 3.3.2,< 3.8.0"
+]
+notebooks = [
+    "ipykernel >= 6.29,< 8.0"
+]
+ollama = [
+    "ollama ~= 0.4"
+]
+onnx = [
+  # onnxruntime>=1.24.0 dropped Python 3.10 support; pin to last compatible version for 3.10.
+  "onnxruntime==1.22.1; python_version == '3.10'",
+  "onnxruntime>=1.24.3; python_version > '3.10'",
+  "onnxruntime-genai==0.9.0"
+]
+oracledb = [
+    "oracledb >= 3.4.1"
+]
+pandas = [
+    "pandas ~= 2.2"
+]
+pinecone = [
+    "pinecone[asyncio, grpc] ~= 7.0"
+]
+postgres = [
+    "psycopg[binary,pool] ~= 3.2"
+]
+qdrant = [
+    "qdrant-client ~= 1.9"
+]
+redis = [
+    "redis[hiredis] >= 6,< 8",
+    "types-redis ~= 4.6.0.20240425",
+    "redisvl ~= 0.4"
+]
+realtime = [
+    "websockets >= 13, < 16",
+    "aiortc>=1.9.0",
+]
+sql = [
+    "pyodbc >= 5.2"
+]
+usearch = [
+    "usearch ~= 2.16",
+    "pyarrow >= 12.0,< 22.0"
+]
+weaviate = [
+    "weaviate-client>=4.17.0,<5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit ~= 3.7",
+    "ipykernel >= 6.29,< 8.0",
+    "nbconvert ~= 7.16",
+    "pytest ~= 8.2",
+    "pytest-xdist[psutil] ~= 3.6",
+    "pytest-cov >= 5.0",
+    "pytest-asyncio ~= 0.24",
+    "pytest-timeout>=2.3.1",
+    "snoop ~= 0.4",
+    "mypy >= 1.10",
+    "types-PyYAML ~= 6.0.12.20240311",
+    "ruff ~= 0.9"
+]
+
+[tool.uv]
+prerelease = "if-necessary-or-explicit"
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'"
+]
+
+[tool.pytest.ini_options]
+testpaths = 'tests'
+addopts = "-ra -q -r fEX"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    'ignore:.*FunctionChoiceBehavior.*:DeprecationWarning'
+]
+timeout = 120
+markers = [
+    "ollama: mark a test as requiring the Ollama service (use \"not ollama\" to skip those tests)",
+    "onnx: mark a test as requiring the Onnx service (use \"not onnx\" to skip those tests)"
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+include = ["*.py", "*.pyi", "**/pyproject.toml", "*.ipynb"]
+preview = true
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+unfixable = []
+select = [
+    "D", #pydocstyle checks
+    "E", #error checks
+    "F", #pyflakes checks
+    "I", #isort
+    "CPY", #copyright
+    "ISC", #implicit string concat
+    "INP", #implicit namespace package
+    "RSE", #raise exception parantheses check
+    "RET", #flake8-return check
+    "SIM", #flake8-simplify check
+    "TD", #todos
+    "FIX", #fixme checks
+    "ERA", #remove connected out code
+    "RUF" #RUF specific rules
+]
+ignore = [
+    "D100", #allow missing docstring in public module
+    "D104", #allow missing docstring in public package
+    "D418", #allow docstring on overloaded function
+    "TD003", #allow missing link to todo issue
+    "FIX002" #allow todo
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore all directories named `tests` and `samples`.
+"tests/**" = ["D", "INP", "TD", "ERA001", "RUF"]
+"samples/**" = ["D", "INP", "ERA001", "RUF"]
+# Ignore all files that end in `_test.py`.
+"*_test.py" = ["D"]
+"*.ipynb" = ["CPY", "E501"]
+
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "^# Copyright \\(c\\) Microsoft\\. All rights reserved\\."
+min-file-size = 1
+
+[tool.bandit]
+targets = ["semantic_kernel"]
+exclude_dirs = ["tests", "samples/demos/mcp_with_oauth"]
+
+[tool.flit.module]
+name = "semantic_kernel"
+
+[build-system]
+requires = ["flit-core >= 3.9,<4.0"]
+build-backend = "flit_core.buildapi"
