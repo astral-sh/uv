@@ -399,6 +399,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         }
 
                         Self::reprioritize_conflicts(&mut state);
+                        Self::restart_after_conflicts(&mut state);
 
                         trace!(
                             "Assigned packages: {}",
@@ -869,6 +870,56 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     state.priorities.get(&state.pubgrub.package_store[package])
                 );
             }
+        }
+    }
+
+    /// Restart from the earliest package decision after a sustained run of conflicts.
+    ///
+    /// This preserves PubGrub's learned incompatibilities. Saved versions also remain available,
+    /// but are revalidated against the stronger learned state before reuse.
+    fn restart_after_conflicts(state: &mut ForkState) {
+        const RESTART_CONFLICTS: u32 = 128;
+        const MAX_RESTART_DECISIONS: usize = 64;
+
+        if state.conflict_tracker.restarted
+            || state.conflict_tracker.conflicts_since_restart < RESTART_CONFLICTS
+        {
+            return;
+        }
+
+        // Restart only when conflicts are dense relative to the current search depth. Restarting
+        // a deep, mostly linear solve throws away useful ordering work; a shallow solve with at
+        // least two conflicts per decision is much more likely to be trapped in a local cycle.
+        let decision_count = state.pubgrub.partial_solution.extract_solution().count();
+        if decision_count > MAX_RESTART_DECISIONS {
+            return;
+        }
+
+        let first_decision =
+            state
+                .pubgrub
+                .partial_solution
+                .extract_solution()
+                .find_map(|(package, _)| {
+                    state.pubgrub.package_store[package]
+                        .name_no_root()
+                        .is_some()
+                        .then_some(package)
+                });
+        let Some(first_decision) = first_decision else {
+            return;
+        };
+
+        if state.pubgrub.backtrack_package(first_decision).is_some() {
+            state.next = state.pubgrub.root_package;
+            state.priorities.reset_conflicts();
+            state.conflict_tracker.activity.clear();
+            state.conflict_tracker.affected.clear();
+            state.conflict_tracker.prioritize.clear();
+            state.conflict_tracker.culprit.clear();
+            state.conflict_tracker.deprioritize.clear();
+            state.conflict_tracker.conflicts_since_restart = 0;
+            state.conflict_tracker.restarted = true;
         }
     }
 
@@ -3404,6 +3455,10 @@ impl ForkState {
                 *activity = activity.saturating_add(1);
             }
             self.conflict_tracker.conflicts = self.conflict_tracker.conflicts.saturating_add(1);
+            self.conflict_tracker.conflicts_since_restart = self
+                .conflict_tracker
+                .conflicts_since_restart
+                .saturating_add(1);
             if self.conflict_tracker.conflicts.is_multiple_of(32) {
                 self.conflict_tracker.activity.retain(|_, activity| {
                     *activity = (*activity + 1) / 2;
@@ -4567,6 +4622,10 @@ struct ConflictTracker {
     activity: FxHashMap<PackageName, u32>,
     /// Number of real conflicts recorded for activity decay.
     conflicts: u32,
+    /// Number of real conflicts since the last cold restart.
+    conflicts_since_restart: u32,
+    /// Whether this fork has already performed its one cold restart.
+    restarted: bool,
     /// How often a decision on the package was discarded due to another package decided earlier.
     affected: FxHashMap<Id<PubGrubPackage>, usize>,
     /// Package(s) to be prioritized after the next unit propagation

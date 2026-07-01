@@ -260,6 +260,19 @@ impl PubGrubPriorities {
             }
         }
     }
+
+    /// Drop dynamic conflict ordering while preserving deterministic discovery order.
+    pub(crate) fn reset_conflicts(&mut self) {
+        for priority in self.package_priority.values_mut() {
+            let index = match *priority {
+                PubGrubPriority::ConflictLate(index) | PubGrubPriority::ConflictEarly(index) => {
+                    index
+                }
+                _ => continue,
+            };
+            *priority = PubGrubPriority::Unspecified(index);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
