@@ -522,10 +522,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.selected_versions.get(&next_id)
                     {
                         let can_reuse = selected_range == range
-                            || if !matches!(
-                                self.selector.index_strategy(),
-                                IndexStrategy::UnsafeFirstMatch
-                            ) && let Some(name) = next_package.name()
+                            || if let Some(name) = next_package.name()
+                                && !uses_index_priority(
+                                    *self.selector.index_strategy(),
+                                    self.options.torch_backend.as_ref(),
+                                    name,
+                                )
                             {
                                 range.contains(version)
                                     && preferences.get(name).is_empty()
@@ -4457,6 +4459,44 @@ fn find_environments(id: Id<PubGrubPackage>, state: &State<UvDependencyProvider>
     }
 
     environments.remove(&id).unwrap_or(MarkerTree::FALSE)
+}
+
+/// Return whether candidate preference is index-first instead of version-first.
+fn uses_index_priority(
+    index_strategy: IndexStrategy,
+    torch_backend: Option<&TorchStrategy>,
+    package_name: &PackageName,
+) -> bool {
+    matches!(index_strategy, IndexStrategy::UnsafeFirstMatch)
+        || torch_backend.is_some_and(|torch_backend| torch_backend.applies_to(package_name))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use uv_torch::{TorchBackend, TorchSource};
+
+    use super::*;
+
+    #[test]
+    fn torch_backend_uses_index_priority_for_torch_packages() {
+        let torch_backend = TorchStrategy::Backend {
+            backend: TorchBackend::Cpu,
+            source: TorchSource::PyTorch,
+        };
+
+        assert!(uses_index_priority(
+            IndexStrategy::FirstIndex,
+            Some(&torch_backend),
+            &PackageName::from_str("torch").expect("torch should be a valid package name"),
+        ));
+        assert!(!uses_index_priority(
+            IndexStrategy::FirstIndex,
+            Some(&torch_backend),
+            &PackageName::from_str("numpy").expect("numpy should be a valid package name"),
+        ));
+    }
 }
 
 #[derive(Debug, Default, Clone)]
