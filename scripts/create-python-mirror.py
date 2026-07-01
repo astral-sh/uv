@@ -29,11 +29,13 @@ from tqdm import tqdm
 
 SELF_DIR = Path(__file__).parent
 REPO_ROOT = SELF_DIR.parent
-VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / "download-metadata.json"
+DOWNLOAD_METADATA_FILENAME = "download-metadata.json"
+VERSIONS_FILE = REPO_ROOT / "crates" / "uv-python" / DOWNLOAD_METADATA_FILENAME
 PREFIXES = [
     "https://github.com/astral-sh/python-build-standalone/releases/download/",
     "https://downloads.python.org/pypy/",
 ]
+NONE_SPECIFIED = "NONE_SPECIFIED"
 
 
 logging.basicConfig(
@@ -62,7 +64,7 @@ def sha256_checksum(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-def collect_metadata_from_git_history() -> List[Dict]:
+def collect_metadata_from_git_history() -> List[Tuple[str, Dict]]:
     """Collect all metadata entries from the history of the VERSIONS_FILE."""
     metadata = []
     try:
@@ -74,7 +76,7 @@ def collect_metadata_from_git_history() -> List[Dict]:
                 blob = commit.tree / str(VERSIONS_FILE.relative_to(REPO_ROOT))
                 content = blob.data_stream.read().decode()
                 data = json.loads(content)
-                metadata.extend(data.values())
+                metadata.extend(data.items())
             except KeyError:
                 logger.warning(
                     f"File {VERSIONS_FILE} not found in commit {commit.hexsha}. Skipping."
@@ -102,33 +104,33 @@ def check_arch(entry, arch):
 def match_version(entry, pattern):
     """Checks whether pattern matches against the entries version."""
     vers = f"{entry['major']}.{entry['minor']}.{entry['patch']}"
-    if entry["prerelease"] != "":
+    if "prerelease" in entry and entry["prerelease"] != "":
         vers += f"-{entry['prerelease']}"
     return pattern.match(vers) is not None
 
 
 def filter_metadata(
-    metadata: List[Dict],
+    metadata: List[Tuple[str, Dict]],
     name: Optional[str],
     arch: Optional[str],
     os: Optional[str],
     version: Optional[re.Pattern],
-) -> List[Dict]:
+) -> List[Tuple[str, Dict]]:
     """Filter the metadata based on name, architecture, and OS, ensuring unique URLs."""
     filtered = [
         entry
         for entry in metadata
-        if (not name or entry["name"] == name)
-        and (not arch or check_arch(entry["arch"], arch))
-        and (not os or entry["os"] == os)
-        and (not version or match_version(entry, version))
+        if (not name or entry[1]["name"] == name)
+        and (not arch or check_arch(entry[1]["arch"], arch))
+        and (not os or entry[1]["os"] == os)
+        and (not version or match_version(entry[1], version))
     ]
     # Use a set to ensure unique URLs
     unique_urls = set()
     unique_filtered = []
     for entry in filtered:
-        if entry["url"] not in unique_urls:
-            unique_urls.add(entry["url"])
+        if entry[1]["url"] not in unique_urls:
+            unique_urls.add(entry[1]["url"])
             unique_filtered.append(entry)
     return unique_filtered
 
@@ -222,6 +224,28 @@ async def download_files(
         return success_count, errors
 
 
+def update_mirror_url(mirror_url: str, filtered_metadata: List[Tuple[str, Dict]]):
+    """Updates the given filtered_metadata to point at the given mirror_url"""
+    if not mirror_url.endswith("/"):
+        mirror_url += "/"
+    for entry in filtered_metadata:
+        for prefix in PREFIXES:
+            entry[1]["url"] = entry[1]["url"].replace(prefix, mirror_url)
+
+
+def write_metadata(
+    save_metadata: str, target: str, filtered_metadata: List[Tuple[str, Dict]]
+):
+    """Save the filtered_metadata to the given save_metadata path or to target if NONE_SPECIFIED"""
+
+    metadata_output = Path(target) / DOWNLOAD_METADATA_FILENAME
+    if save_metadata != NONE_SPECIFIED:
+        metadata_output = Path(save_metadata)
+    Path(metadata_output).parent.mkdir(parents=True, exist_ok=True)
+    with open(metadata_output, "w") as f:
+        json.dump(dict(filtered_metadata), f, indent=2)
+
+
 def parse_arguments():
     """Parse command-line arguments using argparse."""
     parser = argparse.ArgumentParser(description="Download and mirror Python builds.")
@@ -247,6 +271,15 @@ def parse_arguments():
         default=SELF_DIR / "mirror",
         help="Directory to store the downloaded files.",
     )
+    parser.add_argument(
+        "--save-metadata",
+        nargs="?",
+        const=NONE_SPECIFIED,
+        help="File to save metadata. Defaults to 'target' if no value provided.",
+    )
+    parser.add_argument(
+        "--mirror-url", help="Saved metadata has URLs updated to this root path."
+    )
     return parser.parse_args()
 
 
@@ -258,13 +291,13 @@ def main():
         metadata = collect_metadata_from_git_history()
     else:
         with open(VERSIONS_FILE) as f:
-            metadata = list(json.load(f).values())
+            metadata: List[Tuple[str, Dict]] = list(json.load(f).items())
 
     version = re.compile(args.version) if args.version else None
     filtered_metadata = filter_metadata(
         metadata, args.name, args.arch, args.os, version
     )
-    urls = {(entry["url"], entry["sha256"]) for entry in filtered_metadata}
+    urls = {(entry[1]["url"], entry[1]["sha256"]) for entry in filtered_metadata}
 
     if not urls:
         logger.error("No URLs found.")
@@ -281,8 +314,17 @@ def main():
             print("Failed downloads:")
             for url, error in errors:
                 print(f"- {url}: {error}")
+
+        example_mirror = f"file://{target.absolute()}"
+        if args.mirror_url:
+            update_mirror_url(args.mirror_url, filtered_metadata)
+            example_mirror = args.mirror_url
+
+        if args.save_metadata is not None:
+            write_metadata(args.save_metadata, args.target, filtered_metadata)
+
         print(
-            f"Example usage: `UV_PYTHON_INSTALL_MIRROR='file://{target.absolute()}' uv python install 3.13`"
+            f"Example usage: `UV_PYTHON_INSTALL_MIRROR='{example_mirror}' uv python install 3.13`"
         )
     except Exception as e:
         logger.error(f"Error during download: {e}")
