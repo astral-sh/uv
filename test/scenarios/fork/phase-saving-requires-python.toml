@@ -1,7 +1,7 @@
 name = "phase-saving-requires-python"
 description = '''
-This test checks that phase-saving preserves a Requires-Python fork after backtracking widens a
-package requirement.
+After backtracking widens a package requirement, keep the fork required by a package's Python
+version constraint.
 '''
 
 [resolver_options]

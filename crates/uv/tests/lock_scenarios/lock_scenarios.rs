@@ -3357,8 +3357,8 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     Ok(())
 }
 
-/// This test checks that phase-saving revalidates local-version forks after backtracking widens a
-/// package requirement to include its public version.
+/// After backtracking widens a package requirement, check again whether a saved local version must
+/// fork from its public version.
 ///
 ///
 /// ```text
@@ -3496,8 +3496,8 @@ fn phase_saving_local_version() -> Result<()> {
     Ok(())
 }
 
-/// This test checks that phase-saving revalidates required-environment artifact coverage after
-/// backtracking widens a package requirement.
+/// After backtracking widens a package requirement, check again that the selected files support every
+/// required environment.
 ///
 ///
 /// ```text
@@ -3642,8 +3642,8 @@ fn phase_saving_required_environment() -> Result<()> {
     Ok(())
 }
 
-/// This test checks that phase-saving preserves a Requires-Python fork after backtracking widens a
-/// package requirement.
+/// After backtracking widens a package requirement, keep the fork required by a package's Python
+/// version constraint.
 ///
 ///
 /// ```text
