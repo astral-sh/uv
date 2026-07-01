@@ -526,7 +526,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             state.selected_versions.get(&next_id)
                     {
                         let can_reuse = selected_range == range
-                            || if let Some(name) = next_package.name() {
+                            || if !version.is_local()
+                                && let Some(name) = next_package.name()
+                            {
                                 range.contains(version)
                                     && preferences.get(name).is_empty()
                                     && (self.exclusions.reinstall(name)

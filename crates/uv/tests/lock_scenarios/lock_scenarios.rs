@@ -3357,6 +3357,145 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     Ok(())
 }
 
+/// This test checks that phase-saving revalidates local-version forks after backtracking widens a
+/// package requirement to include its public version.
+///
+///
+/// ```text
+/// phase-saving-local-version
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires parent
+/// │       ├── satisfied by parent-1.0.0
+/// │       └── satisfied by parent-2.0.0
+/// ├── late
+/// │   └── late-1.0.0
+/// │       └── requires missing
+/// │           └── unsatisfied: no versions for package
+/// ├── parent
+/// │   ├── parent-1.0.0
+/// │   │   └── requires torch==1.0.0
+/// │   │       ├── satisfied by torch-1.0.0
+/// │   │       └── satisfied by torch-1.0.0+cpu
+/// │   └── parent-2.0.0
+/// │       ├── requires late==1.0.0
+/// │       │   └── satisfied by late-1.0.0
+/// │       └── requires torch==1.0.0+cpu
+/// │           └── satisfied by torch-1.0.0+cpu
+/// └── torch
+///     ├── torch-1.0.0
+///     └── torch-1.0.0+cpu
+/// ```
+#[test]
+fn phase_saving_local_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/phase-saving-local-version.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''parent''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+            "sys_platform == 'darwin'",
+        ]
+
+        [[package]]
+        name = "parent"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "torch", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "torch", version = "1.0.0+cpu", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'darwin'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/parent-1.0.0.tar.gz", hash = "sha256:dfdc98da0cb358bca8a0179fdd008f91554df6372a315663429a7e031187abff", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/parent-1.0.0-py3-none-any.whl", hash = "sha256:ab4b17140d9229a0aa4cec233d049135af783e8860562b6820c24d5af5c164d8", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "parent" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "parent" }]
+
+        [[package]]
+        name = "torch"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/torch-1.0.0-py3-none-macosx_10_0_x86_64.whl", hash = "sha256:709a76c166bb5f6d5a49f6f1e18b27e4e6bd091cc5f4c16fc910cb5935acd62f", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "torch"
+        version = "1.0.0+cpu"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'darwin'",
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/torch-1.0.0+cpu-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a060635f53f33b89d2d72a6dca05d44d2d45c135d172dc1bc89f4b068bbfe7f7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// This test checks that phase-saving revalidates required-environment artifact coverage after
 /// backtracking widens a package requirement.
 ///
