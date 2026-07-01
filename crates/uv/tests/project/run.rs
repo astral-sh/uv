@@ -7165,3 +7165,60 @@ fn run_centralized_environment_no_sync_uses_incompatible_python() -> Result<()> 
     "#);
     Ok(())
 }
+
+#[test]
+fn run_centralized_environment_path_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filtered_centralized_environment_hashes();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+    "#})?;
+    context
+        .sync()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // Point the path file at an environment outside the centralized store using a relative path.
+    let environment = context.temp_dir.child(".venv");
+    uv_fs::remove_virtualenv(environment.path())?;
+    let external = context.temp_dir.child("external");
+    context
+        .venv()
+        .arg(external.path())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    environment.write_str("external")?;
+
+    // The path file selects an interpreter; the workspace and interpreter select the cached root.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--preview-features")
+        .arg("centralized-project-envs")
+        .arg("--no-sync")
+        .arg("--python")
+        .arg("3.11")
+        .arg("python")
+        .arg("-c")
+        .arg("import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    warning: Using incompatible environment (`project-cp3.12.[X]-[HASH]`) due to `--no-sync` (The project environment's Python version does not satisfy the request: `Python 3.11`)
+    "#);
+    Ok(())
+}

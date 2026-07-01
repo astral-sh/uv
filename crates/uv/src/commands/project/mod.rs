@@ -1116,7 +1116,7 @@ pub(crate) fn centralized_environments_enabled(
 }
 
 /// Return whether `path` is a link into the current cache's environment bucket.
-pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
+fn is_centralized_environment_link(path: &Path, cache: &Cache) -> bool {
     let Ok(target) = fs_err::read_link(path) else {
         return false;
     };
@@ -1137,6 +1137,34 @@ pub(crate) fn is_centralized_environment_link(path: &Path, cache: &Cache) -> boo
         fs_err::canonicalize(&environments)
             .is_ok_and(|environments| starts_with(&target, &environments))
     })
+}
+
+/// Read a path file that refers to a project environment.
+pub(crate) fn read_project_environment_path_file(path: &Path) -> Option<PathBuf> {
+    let target = PathBuf::from(fs_err::read_to_string(path).ok()?);
+    Some(if target.is_absolute() {
+        target
+    } else {
+        path.parent().unwrap_or(Path::new("")).join(target)
+    })
+}
+
+/// Return whether `path` is a path file into the current cache's environment bucket.
+fn is_centralized_environment_path_file(path: &Path, cache: &Cache) -> bool {
+    let Ok(target) = fs_err::read_to_string(path).map(PathBuf::from) else {
+        return false;
+    };
+    let Ok(environments) = std::path::absolute(cache.bucket(CacheBucket::Environments)) else {
+        return false;
+    };
+    target.is_absolute()
+        && verbatim_path(&target).starts_with(verbatim_path(&environments).as_ref())
+}
+
+/// Return whether `path` refers to an environment in the current cache's environment bucket.
+pub(crate) fn is_centralized_environment_reference(path: &Path, cache: &Cache) -> bool {
+    is_centralized_environment_link(path, cache)
+        || is_centralized_environment_path_file(path, cache)
 }
 
 /// Return the centralized environment path for a given workspace and interpreter.
@@ -1211,38 +1239,57 @@ pub(crate) fn update_project_environment_link(
     link_error_reporting: LinkErrorReporting,
 ) -> bool {
     let link = workspace.install_path().join(".venv");
-    let report_error = |message: &str, err: &std::io::Error| match link_error_reporting {
-        LinkErrorReporting::User => {
-            warn_user_once!("{message} at `{}`: {err}", link.user_display());
-        }
-        LinkErrorReporting::Log => warn!("{message} at `{}`: {err}", link.user_display()),
+    let report_error = |message: std::fmt::Arguments<'_>| match link_error_reporting {
+        LinkErrorReporting::User => warn_user_once!("{message}"),
+        LinkErrorReporting::Log => warn!("{message}"),
     };
 
     if fs_err::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_dir()) {
         if uv_fs::is_virtualenv_base(&link) {
             if let Err(err) = uv_fs::remove_virtualenv(&link) {
-                report_error("Failed to remove existing local virtual environment", &err);
+                report_error(format_args!(
+                    "Failed to remove existing local virtual environment: {err}"
+                ));
                 return false;
             }
         } else {
             // On Windows, copying a junction can produce an empty directory.
             #[cfg(windows)]
             if let Err(err) = fs_err::remove_dir(&link) {
-                report_error("Failed to create link to project environment", &err);
+                report_error(format_args!(
+                    "Failed to create link to project environment: {err}"
+                ));
                 return false;
             }
         }
     }
 
-    // TODO(tk): When directory links are unavailable, write `.venv` as a file containing the
-    // environment path.
-    match uv_fs::replace_symlink(environment.root(), &link) {
-        Ok(()) => true,
-        Err(err) => {
-            report_error("Failed to create link to project environment", &err);
-            false
-        }
+    let Err(link_error) = uv_fs::replace_symlink(environment.root(), &link) else {
+        return true;
+    };
+    warn!("Failed to create link to project environment: {link_error}");
+
+    let Some(target) = environment.root().to_str() else {
+        report_error(format_args!(
+            "Failed to write the environment path to `{}`: the path is not valid Unicode",
+            link.simplified_display()
+        ));
+        return false;
+    };
+
+    if let Err(err) = uv_fs::write_atomic_sync(&link, target.as_bytes()) {
+        report_error(format_args!(
+            "Failed to write the environment path to `{}`: {err}",
+            link.simplified_display()
+        ));
+        return false;
     }
+
+    report_error(format_args!(
+        "Failed to create link to project environment; wrote the environment path to `{}` instead",
+        link.simplified_display()
+    ));
+    false
 }
 
 /// An interpreter suitable for the project.
@@ -1286,7 +1333,12 @@ impl ProjectInterpreter {
         // the cache root instead of trusting the link target.
         if centralized {
             let project_environment_path = workspace.install_path().join(".venv");
-            if let Ok(candidate) = PythonEnvironment::from_root(&project_environment_path, cache) {
+            if let Ok(candidate) = PythonEnvironment::from_root(
+                read_project_environment_path_file(&project_environment_path)
+                    .as_deref()
+                    .unwrap_or(&project_environment_path),
+                cache,
+            ) {
                 let root = centralized_environment_root(
                     workspace,
                     candidate.interpreter(),
@@ -1305,18 +1357,26 @@ impl ProjectInterpreter {
                     return Ok(Self::Environment(environment));
                 }
             }
-        } else if let Some(environment) = discover_project_environment(
-            &environment_selection
+        } else {
+            let project_environment_path = environment_selection
                 .explicit_path()
-                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf),
-            python_request.as_ref(),
-            python_preference,
-            requires_python.as_ref(),
-            keep_incompatible,
-            centralized,
-            cache,
-        )? {
-            return Ok(Self::Environment(environment));
+                .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf);
+            // A centralized path file is not a local environment. Ignore its target so disabling
+            // the feature recreates `.venv` locally.
+            if !(environment_selection.is_default()
+                && is_centralized_environment_path_file(&project_environment_path, cache))
+                && let Some(environment) = discover_project_environment(
+                    &project_environment_path,
+                    python_request.as_ref(),
+                    python_preference,
+                    requires_python.as_ref(),
+                    keep_incompatible,
+                    centralized,
+                    cache,
+                )?
+            {
+                return Ok(Self::Environment(environment));
+            }
         }
 
         let reporter = PythonDownloadReporter::single(printer);
@@ -1735,12 +1795,12 @@ impl ProjectEnvironment {
                         .explicit_path()
                         .map_or_else(|| workspace.install_path().join(".venv"), Path::to_path_buf)
                 };
-                let centralized_environment_link =
-                    !centralized && is_centralized_environment_link(&root, cache);
+                let centralized_environment_reference =
+                    !centralized && is_centralized_environment_reference(&root, cache);
 
                 // Avoid removing things that are not virtual environments and are outside the
                 // environment cache.
-                let replace_environment = if centralized_environment_link {
+                let replace_environment = if centralized_environment_reference {
                     true
                 } else {
                     match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
@@ -1817,9 +1877,8 @@ impl ProjectEnvironment {
                 }
 
                 if replace_environment {
-                    // `clear_virtualenv` follows directory links, so unlink centralized links
-                    // directly to preserve their cached targets.
-                    let removed = if centralized_environment_link {
+                    // Remove centralized references directly to preserve their cached targets.
+                    let removed = if centralized_environment_reference {
                         match uv_fs::remove_virtualenv(&root) {
                             Ok(()) => true,
                             Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
@@ -1829,7 +1888,7 @@ impl ProjectEnvironment {
                         uv_fs::clear_virtualenv(&root).map_err(uv_virtualenv::Error::from)?
                     };
                     if removed {
-                        let removed_entry = if centralized_environment_link {
+                        let removed_entry = if centralized_environment_reference {
                             "link to project environment"
                         } else {
                             "virtual environment"
