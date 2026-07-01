@@ -515,14 +515,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                     // Reuse a saved registry version after backtracking. If the allowed range
                     // changed, only try it first after PubGrub has ruled out every preferred
-                    // version. The saved version still goes through the normal checks below.
+                    // version. Candidate compatibility is stable within a fork; required-
+                    // environment reachability is revalidated below.
                     let cache_selected_version = url.is_none() && index.is_none();
                     let reusable_version = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
                     {
                         let can_reuse = selected_range == range
-                            || if let Some(name) = next_package.name()
+                            || if !version.is_local()
+                                && let Some(name) = next_package.name()
                                 && !uses_index_priority(
                                     *self.selector.index_strategy(),
                                     self.options.torch_backend.as_ref(),
@@ -549,21 +551,41 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     } else {
                         None
                     };
-                    let decision = self.choose_version(
-                        next_package,
-                        next_id,
-                        index.map(IndexMetadata::url),
-                        range,
-                        reusable_version.as_ref(),
-                        &mut state.pins,
-                        &preferences,
-                        &state.fork_urls,
-                        &state.env,
-                        &state.python_requirement,
-                        &state.pubgrub,
-                        &mut visited,
-                        request_sink,
-                    )?;
+                    let saved_decision = reusable_version.and_then(|version| {
+                        let Some(name) = next_package.name() else {
+                            return Some(ResolverVersion::Unforked(version));
+                        };
+                        let implied_markers = state.pins.implied_markers(name, &version)?;
+                        Some(
+                            self.fork_version_for_required_environment(
+                                &version,
+                                implied_markers,
+                                next_id,
+                                name,
+                                &state.env,
+                                &state.pubgrub,
+                            )
+                            .unwrap_or(ResolverVersion::Unforked(version)),
+                        )
+                    });
+                    let decision = if let Some(decision) = saved_decision {
+                        Some(decision)
+                    } else {
+                        self.choose_version(
+                            next_package,
+                            next_id,
+                            index.map(IndexMetadata::url),
+                            range,
+                            &mut state.pins,
+                            &preferences,
+                            &state.fork_urls,
+                            &state.env,
+                            &state.python_requirement,
+                            &state.pubgrub,
+                            &mut visited,
+                            request_sink,
+                        )?
+                    };
 
                     if cache_selected_version
                         && let Some(ResolverVersion::Unforked(version)) = &decision
@@ -1137,7 +1159,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         index: Option<&IndexUrl>,
         range: &Range<Version>,
-        saved_version: Option<&Version>,
         pins: &mut FilePins,
         preferences: &Preferences,
         fork_urls: &ForkUrls,
@@ -1180,7 +1201,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         name,
                         index,
                         range,
-                        saved_version,
                         preferences,
                         env,
                         python_requirement,
@@ -1322,7 +1342,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         index: Option<&IndexUrl>,
         range: &Range<Version>,
-        saved_version: Option<&Version>,
         preferences: &Preferences,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
@@ -1369,28 +1388,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         debug!("Searching for a compatible version of {package} ({range})");
 
-        // If a version was saved, look it up alone. Checks below still receive the full allowed
-        // range.
-        let select = |range| {
-            self.selector.select(
-                name,
-                range,
-                version_maps,
-                preferences,
-                &self.installed_packages,
-                &self.exclusions,
-                index,
-                env,
-                self.tags.as_ref(),
-            )
-        };
-        let candidate = if let Some(saved_version) = saved_version {
-            let saved_range = Range::singleton(saved_version.clone());
-            select(&saved_range).or_else(|| select(range))
-        } else {
-            select(range)
-        };
-        let Some(candidate) = candidate else {
+        let Some(candidate) = self.selector.select(
+            name,
+            range,
+            version_maps,
+            preferences,
+            &self.installed_packages,
+            &self.exclusions,
+            index,
+            env,
+            self.tags.as_ref(),
+        ) else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
         };
@@ -1610,6 +1618,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
+        let implied_markers = dist.implied_markers();
+
+        if let Some(forked) = self.fork_version_for_required_environment(
+            candidate.version(),
+            implied_markers,
+            id,
+            name,
+            env,
+            pubgrub,
+        ) {
+            return Ok(Some(forked));
+        }
+
         // This only applies to universal resolutions.
         if env.marker_environment().is_some() {
             return Ok(None);
@@ -1617,55 +1638,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // If the package is already compatible with all environments (as is the case for
         // packages that include a source distribution), we don't need to fork.
-        if dist.implied_markers().is_true() {
+        if implied_markers.is_true() {
             return Ok(None);
-        }
-
-        // If the caller marked an environment as requiring artifact coverage, ensure it has
-        // coverage.
-        for marker in self.options.artifact_environments.iter().copied() {
-            // If the platform is part of the current environment...
-            if env.included_by_marker(marker) {
-                // But isn't supported by the distribution...
-                if dist.implied_markers().is_disjoint(marker)
-                    && !find_environments(id, pubgrub).is_disjoint(marker)
-                {
-                    // Then we need to fork.
-                    let Some((left, right)) = fork_version_by_marker(env, marker) else {
-                        return Ok(Some(ResolverVersion::Unavailable(
-                            candidate.version().clone(),
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                IncompatibleWheel::MissingPlatform(marker),
-                            )),
-                        )));
-                    };
-
-                    debug!(
-                        "Forking on required platform `{}` for {}=={} ({})",
-                        marker.try_to_string().unwrap_or_else(|| "true".to_string()),
-                        name,
-                        candidate.version(),
-                        [&left, &right]
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                    let forks = vec![
-                        VersionFork {
-                            env: left,
-                            id,
-                            version: None,
-                        },
-                        VersionFork {
-                            env: right,
-                            id,
-                            version: None,
-                        },
-                    ];
-                    return Ok(Some(ResolverVersion::Forked(forks)));
-                }
-            }
         }
 
         // For now, we only apply this to local versions.
@@ -1704,7 +1678,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // ...and the non-local version has greater platform support...
         let mut remainder = {
             let mut remainder = base_dist.implied_markers();
-            remainder.and(dist.implied_markers().negate());
+            remainder.and(implied_markers.negate());
             remainder
         };
         if remainder.is_false() {
@@ -1720,7 +1694,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         // Similarly, if the local distribution is incompatible with the current environment, then
         // use the base distribution instead (but don't fork).
-        if !env.included_by_marker(dist.implied_markers()) {
+        if !env.included_by_marker(implied_markers) {
             let filename = match dist.for_installation() {
                 ResolvedDistRef::InstallableRegistrySourceDist { sdist, .. } => sdist
                     .filename()
@@ -1770,9 +1744,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 operator: MarkerOperator::Equal,
                 value,
             });
-            if dist.implied_markers().is_disjoint(sys_platform)
-                && !remainder.is_disjoint(sys_platform)
-            {
+            if implied_markers.is_disjoint(sys_platform) && !remainder.is_disjoint(sys_platform) {
                 remainder.or(sys_platform);
             }
         }
@@ -1815,6 +1787,62 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             },
         ];
         Ok(Some(ResolverVersion::Forked(forks)))
+    }
+
+    /// Check required-environment coverage for a version.
+    fn fork_version_for_required_environment(
+        &self,
+        version: &Version,
+        implied_markers: MarkerTree,
+        id: Id<PubGrubPackage>,
+        name: &PackageName,
+        env: &ResolverEnvironment,
+        pubgrub: &State<UvDependencyProvider>,
+    ) -> Option<ResolverVersion> {
+        if env.marker_environment().is_some() || implied_markers.is_true() {
+            return None;
+        }
+
+        for marker in self.options.artifact_environments.iter().copied() {
+            if env.included_by_marker(marker)
+                && implied_markers.is_disjoint(marker)
+                && !find_environments(id, pubgrub).is_disjoint(marker)
+            {
+                let Some((left, right)) = fork_version_by_marker(env, marker) else {
+                    return Some(ResolverVersion::Unavailable(
+                        version.clone(),
+                        UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                            IncompatibleWheel::MissingPlatform(marker),
+                        )),
+                    ));
+                };
+
+                debug!(
+                    "Forking on required platform `{}` for {}=={} ({})",
+                    marker.try_to_string().unwrap_or_else(|| "true".to_string()),
+                    name,
+                    version,
+                    [&left, &right]
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return Some(ResolverVersion::Forked(vec![
+                    VersionFork {
+                        env: left,
+                        id,
+                        version: None,
+                    },
+                    VersionFork {
+                        env: right,
+                        id,
+                        version: None,
+                    },
+                ]));
+            }
+        }
+        None
     }
 
     /// Visit a selected candidate.
