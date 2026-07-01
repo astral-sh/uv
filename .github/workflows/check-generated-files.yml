@@ -19,24 +19,35 @@ env:
 
 jobs:
   cargo-dev-generate-all:
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     name: "cargo dev generate-all"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          artifact-cache-scope: github-linux-dev
+          target-path: ${{ github.workspace }}/target/debug
       - name: "Generate all"
         run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
         run: cargo dev generate-sysconfig-metadata --mode check
-      - name: "Install Rustfmt"
-        run: rustup component add rustfmt
       - name: "Check Packse scenario tests"
         run: cargo dev generate-scenario-tests --mode check
       - name: "Check JSON schema"
         if: ${{ inputs.schema-changed == 'true' }}
         run: cargo dev generate-json-schema --mode check
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug

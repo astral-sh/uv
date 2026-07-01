@@ -1,11 +1,16 @@
 on:
   workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
 jobs:
   docs:
-    timeout-minutes: 10
+    timeout-minutes: 20
     name: "mkdocs"
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +23,12 @@ jobs:
           version: "0.11.25"
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          artifact-cache-scope: github-linux-dev
+          target-path: ${{ github.workspace }}/target/debug
       - name: "Generate reference documentation"
         run: |
           cargo dev generate-options-reference
@@ -29,3 +37,11 @@ jobs:
 
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml
+
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug

@@ -1,5 +1,10 @@
 on:
   workflow_call:
+    inputs:
+      save-rust-cache:
+        required: false
+        type: string
+        default: "true"
 
 permissions: {}
 
@@ -11,15 +16,28 @@ env:
 
 jobs:
   cargo-publish-dry-run:
-    timeout-minutes: 20
+    timeout-minutes: 30
     runs-on: depot-ubuntu-24.04-8
     name: "cargo publish dry-run"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          artifact-cache-scope: depot-linux-publish
+          target-path: ${{ github.workspace }}/target/debug
       - name: "cargo publish dry-run"
         run: cargo publish --workspace --dry-run
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug

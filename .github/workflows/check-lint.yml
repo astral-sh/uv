@@ -92,26 +92,38 @@ jobs:
 
   clippy-ubuntu:
     name: "clippy on linux"
-    timeout-minutes: 10
+    timeout-minutes: 20
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Check uv_build dependencies"
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
+        with:
+          artifact-cache-scope: github-linux-clippy
+          target-path: ${{ github.workspace }}/target/debug
       - name: "Install Rust toolchain"
-        run: rustup component add clippy
+        run: rustup show
       - name: "Clippy"
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: ${{ github.workspace }}/target/debug
   clippy-windows:
     name: "clippy on windows"
     timeout-minutes: 15

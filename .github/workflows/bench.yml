@@ -98,16 +98,21 @@ jobs:
     name: "simulated"
     runs-on: depot-ubuntu-24.04-4
     if: ${{ github.repository == 'astral-sh/uv' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: "Checkout Branch"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: "Setup srs"
+        id: srs
+        uses: ./.github/actions/setup-srs
         with:
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          artifact-cache-scope: depot-linux-bench
+          target-path: |
+            ${{ github.workspace }}/target/debug
+            ${{ github.workspace }}/target/profiling
 
       - name: "Install Rust toolchain"
         run: rustup show
@@ -134,3 +139,16 @@ jobs:
           run: cargo codspeed run
           mode: simulation
           token: ${{ secrets.CODSPEED_TOKEN }}
+
+      - name: "Save srs build cache"
+        if: ${{ inputs.save-rust-cache == 'true' }}
+        uses: ./.github/actions/save-srs-cache
+        with:
+          artifact-cache-hit: ${{ steps.srs.outputs.artifact-cache-hit }}
+          artifact-cache-primary-key: ${{ steps.srs.outputs.artifact-cache-primary-key }}
+          save-artifact-cache: "true"
+          target-cache-hit: ${{ steps.srs.outputs.target-cache-hit }}
+          target-cache-primary-key: ${{ steps.srs.outputs.target-cache-primary-key }}
+          target-path: |
+            ${{ github.workspace }}/target/debug
+            ${{ github.workspace }}/target/profiling
