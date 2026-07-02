@@ -1822,6 +1822,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &globals.concurrency,
                 &cache,
                 globals.preview,
+                false,
                 printer,
             )
             .await
@@ -1857,6 +1858,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 &globals.concurrency,
                 &cache,
                 globals.preview,
+                args.uninstall,
                 printer,
             )
             .await
@@ -1868,7 +1870,14 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             let args = settings::PythonUninstallSettings::resolve(args, filesystem);
             show_settings!(args);
 
-            commands::python_uninstall(args.install_dir, args.targets, args.all, printer).await
+            commands::python_uninstall(
+                args.install_dir,
+                args.targets,
+                args.all,
+                args.outdated,
+                printer,
+            )
+            .await
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Find(args),
