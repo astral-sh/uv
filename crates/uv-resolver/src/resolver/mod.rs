@@ -3259,7 +3259,7 @@ impl ForkState {
         } else {
             versions
         };
-        let conflict = pubgrub.add_package_version_set_dependencies(
+        let conflict = pubgrub.add_package_version_dependencies(
             *next,
             for_version.clone(),
             versions,
