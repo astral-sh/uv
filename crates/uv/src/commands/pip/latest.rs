@@ -1,7 +1,7 @@
-use tokio::sync::Semaphore;
 use tracing::debug;
 
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_configuration::PrioritySemaphore;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
@@ -102,7 +102,7 @@ impl LatestClient<'_> {
         &self,
         package: &PackageName,
         index: Option<&IndexUrl>,
-        download_concurrency: &Semaphore,
+        download_concurrency: &PrioritySemaphore,
     ) -> Result<Option<DistFilename>, uv_client::Error> {
         debug!("Fetching latest version of: `{package}`");
 
@@ -122,7 +122,7 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .simple_detail(
+            .simple_detail_with_priority(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
@@ -175,7 +175,7 @@ impl LatestClient<'_> {
         if index.is_none() {
             for entry in self
                 .client
-                .find_links_entries(package, download_concurrency)
+                .find_links_entries_with_priority(package, download_concurrency)
                 .await?
             {
                 let (filename, file, index) = entry.into_parts();

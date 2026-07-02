@@ -341,6 +341,7 @@ impl BuildContext for BuildDispatch<'_> {
                 self.concurrency.downloads_semaphore.clone(),
             )
             .with_build_stack(build_stack),
+            self.concurrency.downloads,
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(

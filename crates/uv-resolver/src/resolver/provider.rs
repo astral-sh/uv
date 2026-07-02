@@ -4,7 +4,7 @@ use std::sync::Arc;
 use reqwest::StatusCode;
 
 use uv_client::MetadataFormat;
-use uv_configuration::BuildOptions;
+use uv_configuration::{BuildOptions, DownloadPriority};
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
@@ -98,6 +98,7 @@ pub trait ResolverProvider {
     fn get_or_build_wheel_metadata<'io>(
         &'io self,
         dist: &'io Dist,
+        priority: DownloadPriority,
     ) -> impl Future<Output = WheelMetadataResult> + 'io;
 
     /// Get the metadata for an installed distribution.
@@ -183,7 +184,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple_detail(
+                client.simple_detail_with_priority(
                     package_name,
                     index.map(IndexMetadataRef::from),
                     self.capabilities,
@@ -272,12 +273,24 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Fetch the metadata for a distribution, building it if necessary.
-    async fn get_or_build_wheel_metadata<'io>(&'io self, dist: &'io Dist) -> WheelMetadataResult {
-        match self
-            .fetcher
-            .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
-            .await
-        {
+    async fn get_or_build_wheel_metadata<'io>(
+        &'io self,
+        dist: &'io Dist,
+        priority: DownloadPriority,
+    ) -> WheelMetadataResult {
+        let result = match dist {
+            Dist::Built(built) => {
+                self.fetcher
+                    .get_wheel_metadata_with_priority(built, self.hasher.get(dist), priority)
+                    .await
+            }
+            Dist::Source(_) => {
+                self.fetcher
+                    .get_or_build_wheel_metadata(dist, self.hasher.get(dist))
+                    .await
+            }
+        };
+        match result {
             Ok(metadata) => Ok(MetadataResponse::Found(metadata)),
             Err(err) => match err {
                 uv_distribution::Error::Client(client) => {

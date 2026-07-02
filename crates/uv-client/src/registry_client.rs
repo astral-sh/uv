@@ -11,14 +11,13 @@ use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, Semaphore, SemaphorePermit};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::{CredentialsCache, Indexes, PyxTokenStore};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
-use uv_configuration::IndexStrategy;
-use uv_configuration::KeyringProviderType;
+use uv_configuration::{DownloadPriority, IndexStrategy, KeyringProviderType, PrioritySemaphore};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
@@ -47,6 +46,24 @@ use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, Error, ErrorKind, FlatIndexClient, RedirectClientWithMiddleware,
 };
+
+#[derive(Clone, Copy)]
+enum DownloadConcurrency<'a> {
+    Semaphore(&'a Semaphore),
+    Priority(&'a PrioritySemaphore),
+}
+
+impl<'a> DownloadConcurrency<'a> {
+    async fn acquire(self) -> SemaphorePermit<'a> {
+        match self {
+            Self::Semaphore(semaphore) => semaphore
+                .acquire()
+                .await
+                .expect("download semaphore is never closed"),
+            Self::Priority(semaphore) => semaphore.acquire(DownloadPriority::Active).await,
+        }
+    }
+}
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -310,13 +327,46 @@ impl RegistryClient {
     /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the PyPI JSON API implements.
-    #[instrument(skip_all, fields(package = % package_name))]
     pub async fn simple_detail<'index>(
         &'index self,
         package_name: &PackageName,
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        self.simple_detail_with_concurrency(
+            package_name,
+            index,
+            capabilities,
+            DownloadConcurrency::Semaphore(download_concurrency),
+        )
+        .await
+    }
+
+    /// Fetch package metadata using the priority-aware shared download limit.
+    pub async fn simple_detail_with_priority<'index>(
+        &'index self,
+        package_name: &PackageName,
+        index: Option<IndexMetadataRef<'index>>,
+        capabilities: &IndexCapabilities,
+        download_concurrency: &PrioritySemaphore,
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        self.simple_detail_with_concurrency(
+            package_name,
+            index,
+            capabilities,
+            DownloadConcurrency::Priority(download_concurrency),
+        )
+        .await
+    }
+
+    #[instrument(skip_all, fields(package = % package_name))]
+    async fn simple_detail_with_concurrency<'index>(
+        &'index self,
+        package_name: &PackageName,
+        index: Option<IndexMetadataRef<'index>>,
+        capabilities: &IndexCapabilities,
+        download_concurrency: DownloadConcurrency<'_>,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
@@ -437,6 +487,32 @@ impl RegistryClient {
         &self,
         package_name: &PackageName,
         download_concurrency: &Semaphore,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        self.find_links_entries_with_concurrency(
+            package_name,
+            DownloadConcurrency::Semaphore(download_concurrency),
+        )
+        .await
+    }
+
+    /// Fetch `--find-links` entries using the priority-aware shared download limit.
+    pub async fn find_links_entries_with_priority(
+        &self,
+        package_name: &PackageName,
+        download_concurrency: &PrioritySemaphore,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        self.find_links_entries_with_concurrency(
+            package_name,
+            DownloadConcurrency::Priority(download_concurrency),
+        )
+        .await
+    }
+
+    #[instrument(skip_all, fields(package = % package_name))]
+    async fn find_links_entries_with_concurrency(
+        &self,
+        package_name: &PackageName,
+        download_concurrency: DownloadConcurrency<'_>,
     ) -> Result<Vec<FlatIndexEntry>, Error> {
         Ok(futures::stream::iter(self.indexes.flat_indexes())
             .map(async |index| {
