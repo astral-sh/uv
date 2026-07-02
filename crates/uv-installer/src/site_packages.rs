@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::iter::Flatten;
 use std::path::PathBuf;
 
@@ -59,30 +58,12 @@ impl SitePackages {
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages.as_ref()) {
-                Ok(read_dir) => {
-                    // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = read_dir
-                        .filter_map(|read_dir| match read_dir {
-                            Ok(entry) => match entry.file_type() {
-                                Ok(file_type) => (file_type.is_dir()
-                                    || entry
-                                        .path()
-                                        .extension()
-                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
-                                .then_some(Ok(entry.path())),
-                                Err(err) => Some(Err(err)),
-                            },
-                            Err(err) => Some(Err(err)),
-                        })
-                        .collect::<Result<_, std::io::Error>>()
-                        .with_context(|| {
-                            format!(
-                                "Failed to read site-packages directory contents: {}",
-                                site_packages.user_display()
-                            )
-                        })?;
-                    dist_likes
-                }
+                Ok(read_dir) => sorted_dist_like_paths(read_dir).with_context(|| {
+                    format!(
+                        "Failed to read site-packages directory contents: {}",
+                        site_packages.user_display()
+                    )
+                })?,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
                         interpreter: interpreter.clone(),
@@ -624,6 +605,25 @@ impl IntoIterator for SitePackages {
     }
 }
 
+fn sorted_dist_like_paths(read_dir: fs::ReadDir) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut paths = read_dir
+        .filter_map(|read_dir| match read_dir {
+            Ok(entry) => match entry.file_type() {
+                Ok(file_type) => (file_type.is_dir()
+                    || entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
+                .then_some(Ok(entry.path())),
+                Err(err) => Some(Err(err)),
+            },
+            Err(err) => Some(Err(err)),
+        })
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    paths.sort_unstable();
+    Ok(paths)
+}
+
 #[derive(Debug)]
 pub enum SitePackagesDiagnostic {
     MetadataUnavailable {
@@ -744,5 +744,41 @@ impl InstalledPackagesProvider for SitePackages {
 
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::sorted_dist_like_paths;
+
+    #[test]
+    fn sorted_dist_like_paths_filters_and_sorts() -> Result<()> {
+        let site_packages = tempfile::tempdir()?;
+        fs_err::create_dir(site_packages.path().join("z_package-1.0.0.dist-info"))?;
+        fs_err::create_dir(site_packages.path().join("a_package"))?;
+        fs_err::write(site_packages.path().join("editable.egg-link"), "")?;
+        fs_err::write(site_packages.path().join("module.py"), "")?;
+        fs_err::write(site_packages.path().join("metadata.egg-info"), "")?;
+
+        let paths = sorted_dist_like_paths(fs_err::read_dir(site_packages.path())?)?;
+        let names = paths
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "a_package".to_string(),
+                "editable.egg-link".to_string(),
+                "metadata.egg-info".to_string(),
+                "z_package-1.0.0.dist-info".to_string(),
+            ]
+        );
+
+        Ok(())
     }
 }
