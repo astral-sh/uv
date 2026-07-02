@@ -684,7 +684,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Add the dependencies to the state.
-                        state.add_package_version_dependencies(next_id, &version, dependencies);
+                        state.add_package_version_dependencies(
+                            next_id,
+                            &version,
+                            dependencies,
+                            &self.index,
+                            &self.installed_packages,
+                        );
                     }
                     ForkedDependencies::Forked {
                         mut forks,
@@ -933,7 +939,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })?;
 
                 // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(package, version, fork.dependencies);
+                forked_state.add_package_version_dependencies(
+                    package,
+                    version,
+                    fork.dependencies,
+                    &self.index,
+                    &self.installed_packages,
+                );
 
                 Ok(forked_state)
             })
@@ -1103,7 +1115,54 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     // TODO(konsti): re-enable tracing. This trace is crucial to understanding the
     // tracing-durations-export diagrams, but it took ~5% resolver thread runtime for apache-airflow
     // when I last measured.
-    #[cfg_attr(feature = "tracing-durations-export", instrument(skip_all, fields(%package)))]
+    /// All versions that resolution could select for the package: all indexes, including
+    /// versions that are yanked or otherwise unavailable, plus installed versions that may be
+    /// missing from the indexes. A superset of the selectable versions is sound for
+    /// simplification, it only keeps some unneeded segments.
+    ///
+    /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
+    /// package is not a registry package.
+    fn known_versions<'a>(
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
+        known_versions: &'a mut FxHashMap<PackageName, Arc<[Version]>>,
+        package: &PubGrubPackage,
+    ) -> Option<&'a [Version]> {
+        let name = package.name_no_root()?;
+        // Versions of packages from a URL or the workspace are not registry versions.
+        if fork_urls.get(name).is_some() {
+            return None;
+        }
+        if !known_versions.contains_key(name) {
+            let response = if let Some(index_metadata) = fork_indexes.get(name) {
+                index
+                    .explicit()
+                    .get(&(name.clone(), index_metadata.url().clone()))?
+            } else {
+                index.implicit().get(name)?
+            };
+            let VersionsResponse::Found(ref version_maps) = *response else {
+                return None;
+            };
+            let mut versions: Vec<Version> = version_maps
+                .iter()
+                .flat_map(|version_map| version_map.versions().cloned())
+                .chain(
+                    installed_packages
+                        .get_packages(name)
+                        .iter()
+                        .map(|dist| dist.version().clone()),
+                )
+                .collect();
+            versions.sort_unstable();
+            versions.dedup();
+            known_versions.insert(name.clone(), versions.into());
+        }
+        Some(&known_versions[name][..])
+    }
+
     fn choose_version(
         &self,
         package: &PubGrubPackage,
@@ -2977,6 +3036,11 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    /// All known versions for each package, from the version maps and the installed packages,
+    /// used to keep the version sets in the partial solution minimal.
+    ///
+    /// Per fork, since the index for a package can differ between forks.
+    known_versions: FxHashMap<PackageName, Arc<[Version]>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3031,6 +3095,7 @@ impl ForkState {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
+            known_versions: FxHashMap::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3140,11 +3205,13 @@ impl ForkState {
     }
 
     /// Add the dependencies for the selected version of the current package.
-    fn add_package_version_dependencies(
+    fn add_package_version_dependencies<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
     ) {
         for dependency in &dependencies {
             let PubGrubDependency {
@@ -3167,9 +3234,35 @@ impl ForkState {
             );
         }
 
-        let conflict = self.pubgrub.add_package_version_dependencies(
-            self.next,
+        let Self {
+            pubgrub,
+            next,
+            fork_urls,
+            fork_indexes,
+            known_versions,
+            ..
+        } = &mut *self;
+        // Widen the version whose dependencies we are adding to the largest set that contains
+        // no other known version: If these dependencies conflict, resolution rejects the whole
+        // set instead of accumulating one hole per rejected version, and the incompatibilities
+        // of adjacent versions merge into contiguous sets. This keeps the version sets minimal.
+        let versions = Range::singleton(for_version.clone());
+        let versions = if let Some(known_versions) = ResolverState::<InstalledPackages>::known_versions(
+            index,
+            installed_packages,
+            fork_urls,
+            fork_indexes,
+            known_versions,
+            &pubgrub.package_store[*next],
+        ) {
+            versions.widen_versions(known_versions)
+        } else {
+            versions
+        };
+        let conflict = pubgrub.add_package_version_set_dependencies(
+            *next,
             for_version.clone(),
+            versions,
             dependencies.into_iter().map(|dependency| {
                 let PubGrubDependency {
                     package,

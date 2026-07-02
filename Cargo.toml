@@ -457,3 +457,7 @@ codegen-units = 1
 # The profile that 'cargo dist' will build with.
 [profile.dist]
 inherits = "release"
+
+[patch.crates-io]
+astral-pubgrub = { path = "../pubgrub" }
+astral-version-ranges = { path = "../pubgrub/version-ranges" }
