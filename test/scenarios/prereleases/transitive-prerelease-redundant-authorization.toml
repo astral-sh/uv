@@ -1,0 +1,20 @@
+name = "transitive-prerelease-redundant-authorization"
+description = "A transitive pre-release requirement that does not narrow the active version range does not change pre-release admission."
+
+[root]
+requires = ["a", "c>=1.0"]
+
+[expected]
+satisfiable = true
+explanation = "The transitive requirement on `c>=0.5a1` is already satisfied by the root requirement on `c>=1.0`, so the stable release remains preferred."
+
+[expected.packages]
+a = "1.0.0"
+c = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=0.5a1"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]

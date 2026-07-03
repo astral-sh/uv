@@ -3503,6 +3503,54 @@ fn transitive_prerelease_authorizes_newer_prerelease() {
     context.assert_installed("c", "2.0.0a1");
 }
 
+/// A transitive pre-release requirement that does not narrow the active version range does not change pre-release admission.
+///
+/// ```text
+/// transitive-prerelease-redundant-authorization
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires c>=1.0
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c>=0.5a1
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_redundant_authorization() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/transitive-prerelease-redundant-authorization.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("c>=1.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + c==1.0.0
+    ");
+
+    // The transitive requirement on `c>=0.5a1` is already satisfied by the root requirement on `c>=1.0`, so the stable release remains preferred.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "1.0.0");
+}
+
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
 ///
 /// ```text
