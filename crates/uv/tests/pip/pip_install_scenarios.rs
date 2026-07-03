@@ -2655,6 +2655,172 @@ fn package_prereleases_specifier_boundary() {
     context.assert_installed("a", "0.2.0a1");
 }
 
+/// A same-distribution admission batch remains order-independent after rejecting an earlier parent version.
+///
+/// ```text
+/// prerelease-base-extra-authorization-after-backtrack
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires d==1.0.0
+/// │       └── satisfied by d-1.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   ├── requires c>=1.0
+/// │   │   │   ├── satisfied by c-1.0.0
+/// │   │   │   ├── satisfied by c-1.0.0[extra]
+/// │   │   │   ├── satisfied by c-2.0.0a1
+/// │   │   │   └── satisfied by c-2.0.0a1[extra]
+/// │   │   └── requires c[extra]>=0.5a1
+/// │   │       ├── satisfied by c-1.0.0
+/// │   │       ├── satisfied by c-1.0.0[extra]
+/// │   │       ├── satisfied by c-2.0.0a1
+/// │   │       └── satisfied by c-2.0.0a1[extra]
+/// │   └── a-2.0.0
+/// │       ├── requires c>=1.0
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   ├── satisfied by c-1.0.0[extra]
+/// │       │   ├── satisfied by c-2.0.0a1
+/// │       │   └── satisfied by c-2.0.0a1[extra]
+/// │       └── requires d==2.0.0
+/// │           └── satisfied by d-2.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   ├── c-1.0.0[extra]
+/// │   ├── c-2.0.0a1
+/// │   └── c-2.0.0a1[extra]
+/// └── d
+///     ├── d-1.0.0
+///     └── d-2.0.0
+/// ```
+#[test]
+fn prerelease_base_extra_authorization_after_backtrack() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-base-extra-authorization-after-backtrack.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("d==1.0.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + c==2.0.0a1
+     + d==1.0.0
+    ");
+
+    // After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` share admission and select `c==2.0.0a1`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("d", "1.0.0");
+}
+
+/// Base and extra requirements share pre-release admission when the explicit extra requirement appears first.
+///
+/// ```text
+/// prerelease-base-extra-authorization-explicit-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c[extra]>=0.5a1
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   ├── satisfied by c-1.0.0[extra]
+/// │   │   ├── satisfied by c-2.0.0a1
+/// │   │   └── satisfied by c-2.0.0a1[extra]
+/// │   └── requires c>=1.0
+/// │       ├── satisfied by c-1.0.0
+/// │       ├── satisfied by c-1.0.0[extra]
+/// │       ├── satisfied by c-2.0.0a1
+/// │       └── satisfied by c-2.0.0a1[extra]
+/// └── c
+///     ├── c-1.0.0
+///     ├── c-1.0.0[extra]
+///     ├── c-2.0.0a1
+///     └── c-2.0.0a1[extra]
+/// ```
+#[test]
+fn prerelease_base_extra_authorization_explicit_first() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-base-extra-authorization-explicit-first.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c[extra]>=0.5a1")
+        .arg("c>=1.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // Requirements on a distribution and one of its extras select the same version, so they share pre-release admission regardless of declaration order.
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// Base and extra requirements share pre-release admission when the plain base requirement appears first.
+///
+/// ```text
+/// prerelease-base-extra-authorization-plain-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=1.0
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   ├── satisfied by c-1.0.0[extra]
+/// │   │   ├── satisfied by c-2.0.0a1
+/// │   │   └── satisfied by c-2.0.0a1[extra]
+/// │   └── requires c[extra]>=0.5a1
+/// │       ├── satisfied by c-1.0.0
+/// │       ├── satisfied by c-1.0.0[extra]
+/// │       ├── satisfied by c-2.0.0a1
+/// │       └── satisfied by c-2.0.0a1[extra]
+/// └── c
+///     ├── c-1.0.0
+///     ├── c-1.0.0[extra]
+///     ├── c-2.0.0a1
+///     └── c-2.0.0a1[extra]
+/// ```
+#[test]
+fn prerelease_base_extra_authorization_plain_first() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-base-extra-authorization-plain-first.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c>=1.0")
+        .arg("c[extra]>=0.5a1")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // Requirements on a distribution and one of its extras select the same version, so they share pre-release admission regardless of declaration order.
+    context.assert_installed("c", "2.0.0a1");
+}
+
 /// A capped pre-release branch cannot authorize an unrelated pre-release in a higher active range.
 ///
 /// ```text

@@ -42,16 +42,16 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 By default, uv respects pre-release identifiers in both direct and transitive requirements. A
 requirement like `flask>=2.0.0rc1` enables matching Flask pre-releases when it contributes to
-candidate selection. Requirements on the same dependency target from one dependency batch share
-their final opt-in region, so their declaration order does not affect admission. The opt-in is
-limited to the batch's combined bounds and is removed if the resolver backtracks away from the
-package version that introduced it.
+candidate selection. Requirements on the same distribution target from one dependency batch share
+their final opt-in region, including requirements that select an extra or apply within the same
+marker fork, so their declaration order does not affect admission. The opt-in is limited to the
+batch's combined bounds and is removed if the resolver backtracks away from the package version that
+introduced it.
 
 Separate dependency batches are handled prospectively. A newly activated pre-release requirement
 that is already satisfied by the active logical range does not retroactively expand that range's
 admission policy. If it narrows the range, its admission policy participates in the resulting
-intersection. Plain, extra, and marker-specific requirements are linked but distinct dependency
-targets and therefore also interact prospectively.
+intersection.
 
 For requirements without a pre-release identifier, uv prefers stable candidates. If every stable
 candidate is rejected during resolution, uv falls back to a pre-release without restarting. This

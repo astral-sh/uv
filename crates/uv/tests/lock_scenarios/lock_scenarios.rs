@@ -4760,6 +4760,250 @@ fn fork_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// Base and marker requirements share pre-release admission within the marker fork when the explicit requirement appears first.
+///
+/// ```text
+/// prerelease-base-marker-authorization-explicit-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=0.5a1 ; sys_platform == 'linux'
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=1.0
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-base-marker-authorization-explicit-first.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''c>=0.5a1 ; sys_platform == 'linux'''',
+          '''c>=1.0''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "c", specifier = ">=1.0" },
+            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=0.5a1" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Base and marker requirements share pre-release admission within the marker fork when the plain requirement appears first.
+///
+/// ```text
+/// prerelease-base-marker-authorization-plain-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=1.0
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=0.5a1 ; sys_platform == 'linux'
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-base-marker-authorization-plain-first.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''c>=1.0''',
+          '''c>=0.5a1 ; sys_platform == 'linux'''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0a1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "c", specifier = ">=1.0" },
+            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=0.5a1" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Pre-release admission on a marker proxy does not survive backtracking to a plain alternate parent.
 ///
 /// ```text

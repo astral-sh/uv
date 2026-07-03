@@ -327,16 +327,16 @@ a pre-release, whether the requirement is direct or transitive. For example, a d
 `flask>=2.0.0rc1` enables matching Flask pre-releases when that dependency contributes to candidate
 selection.
 
-Requirements for the same dependency target that are declared together by the project or by one
-selected package version share their final pre-release authorization. Declaration order therefore
-does not affect a requirement set such as `flask>=2` and `flask>=1.0rc1`.
+Requirements for the same distribution target that are declared together by the project or by one
+selected package version share their final pre-release authorization. This includes requirements
+that select an extra or apply only within the same marker fork. Declaration order therefore does not
+affect a requirement set such as `flask>=2` and `flask[async]>=1.0rc1`.
 
 Authorization is prospective across separate dependency batches, such as requirements activated by
 different package versions. If an active `flask>=2` range is already established, a separately
 discovered `flask>=1.0rc1` requirement that does not narrow that range does not expand its
 pre-release authorization. A newly activated requirement that does narrow the range contributes its
-authorization through the resulting intersection as usual. Plain, extra, and marker-specific
-requirements are linked but distinct dependency targets, so they also interact prospectively.
+authorization through the resulting intersection as usual.
 
 The authorization is limited to the combined bounds of the dependency batch that introduced it. For
 example, `>=2.0.0rc1,<3` does not enable a `3.1.0b1` candidate that is admitted by some other

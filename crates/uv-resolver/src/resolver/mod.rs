@@ -3153,17 +3153,25 @@ impl ForkState {
             .iter()
             .any(|dependency| dependency.version.prerelease_region().is_some())
         {
-            // Requirements for the same dependency target are conjunctive. Compute their shared
-            // pre-release admission region, then attach it to every original edge. The shared
-            // region is contained by every requirement, so whichever edge narrows the solution
-            // first carries the same candidate-selection policy. Keeping the logical ranges
-            // separate preserves PubGrub's precise derivation chains for contradictory
+            // Requirements for the same distribution target are conjunctive. Compute their shared
+            // pre-release admission region, then attach it to every original edge. Extra and
+            // marker packages select the same version as their base package, so they share its
+            // selection target within this already fork-filtered dependency batch. Dependency
+            // groups remain distinct because they do not require the base package.
+            //
+            // The shared region is contained by every requirement, so whichever edge narrows the
+            // solution first carries the same candidate-selection policy. Keeping the logical
+            // ranges separate preserves PubGrub's precise derivation chains for contradictory
             // requirements.
             let mut dependency_groups: FxHashMap<PubGrubPackage, (Range<Version>, usize)> =
                 FxHashMap::default();
             for dependency in &dependencies {
+                let selection_package = dependency
+                    .package
+                    .base_package()
+                    .unwrap_or_else(|| dependency.package.clone());
                 dependency_groups
-                    .entry(dependency.package.clone())
+                    .entry(selection_package)
                     .and_modify(|(combined, count)| {
                         *combined = combined.intersection(&dependency.version);
                         *count += 1;
@@ -3172,7 +3180,11 @@ impl ForkState {
             }
 
             for dependency in &mut dependencies {
-                let Some((combined, count)) = dependency_groups.get(&dependency.package) else {
+                let selection_package = dependency
+                    .package
+                    .base_package()
+                    .unwrap_or_else(|| dependency.package.clone());
+                let Some((combined, count)) = dependency_groups.get(&selection_package) else {
                     continue;
                 };
                 if *count > 1

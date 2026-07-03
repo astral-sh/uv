@@ -1,0 +1,18 @@
+name = "prerelease-base-extra-authorization-plain-first"
+description = "Base and extra requirements share pre-release admission when the plain base requirement appears first."
+
+[root]
+requires = ["c>=1.0", "c[extra]>=0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "Requirements on a distribution and one of its extras select the same version, so they share pre-release admission regardless of declaration order."
+
+[expected.packages]
+c = "2.0.0a1"
+
+[packages.c.versions."1.0.0".extras]
+extra = []
+
+[packages.c.versions."2.0.0a1".extras]
+extra = []
