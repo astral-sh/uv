@@ -40,36 +40,24 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
-By default, uv will accept pre-release versions during dependency resolution in two cases:
+By default, uv respects pre-release identifiers in both direct and transitive requirements. A
+requirement like `flask>=2.0.0rc1` enables matching Flask pre-releases while that requirement is
+active. The opt-in is limited to the requirement's bounds and is removed if the resolver backtracks
+away from the dependency that introduced it.
 
-1. If the package is a direct dependency, and its version markers include a pre-release specifier
-   (e.g., `flask>=2.0.0rc1`).
-2. If _all_ published versions of a package are pre-releases.
-
-If dependency resolution fails due to a transitive pre-release, uv will prompt the user to re-run
-with `--prerelease allow`, to allow pre-releases for all dependencies.
-
-Alternatively, you can add the transitive dependency to your `requirements.in` file with pre-release
-specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
-
-In sum, uv needs to know upfront whether the resolver should accept pre-releases for a given
-package. Meanwhile `pip`, respects pre-release identifiers in transitive dependencies, and allows
-pre-releases of transitive dependencies if no stable versions match the dependency requirements.
+For requirements without a pre-release identifier, uv prefers stable candidates. If every stable
+candidate is rejected during resolution, uv falls back to a pre-release without restarting. This is
+the same intended behavior as `pip`: explicit pre-release requirements are honored transitively, and
+otherwise pre-releases are eligible when no stable candidate can complete the resolution.
 
 !!! note
 
     Prior to pip 26.0, this behavior was not consistent.
 
-Pre-releases are
-[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
-model, and are a frequent source of bugs in packaging tools. uv's pre-release handling is
-_intentionally_ limited and _intentionally_ requires user opt-in for pre-releases, to ensure
-correctness.
-
-In the future, uv _may_ support pre-release identifiers in transitive dependencies. However, it's
-likely contingent on evolution in the Python packaging specifications. The existing PEPs
-[do not cover "dependency resolution"](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17)
-and are instead focused on behavior for a _single_ version specifier.
+The Python packaging specifications define pre-release behavior for a single specifier, but
+[do not fully specify dependency resolution](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17).
+uv models pre-release authorization as part of each active version range so that conflict learning
+and backtracking preserve the requirement that granted it.
 
 ## Packages that exist on multiple indexes
 

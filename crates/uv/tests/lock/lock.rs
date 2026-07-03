@@ -10079,6 +10079,54 @@ fn lock_resolution_mode() -> Result<()> {
     Ok(())
 }
 
+/// Accept the removed `explicit` pre-release mode in existing lockfiles, configuration, and CLI
+/// arguments, while treating it as `if-necessary-or-explicit`.
+#[test]
+fn lock_legacy_explicit_prerelease_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        prerelease = "explicit"
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "explicit"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--prerelease=explicit"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, filtering out wheels that target an ABI that is non-overlapping
 /// with the `Requires-Python` constraint.
 #[test]

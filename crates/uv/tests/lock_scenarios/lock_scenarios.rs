@@ -4760,6 +4760,137 @@ fn fork_requires_python() -> Result<()> {
     Ok(())
 }
 
+/// A transitive pre-release authorization applies only to the universal-resolution fork in which its marker is active.
+///
+/// ```text
+/// transitive-prerelease-authorization-forks
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires c>=2.0.0b1 ; sys_platform == 'linux'
+/// │       │   └── satisfied by c-2.0.0b1
+/// │       └── requires c==1.0.0 ; sys_platform != 'linux'
+/// │           └── satisfied by c-1.0.0
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0b1
+/// ```
+#[test]
+fn transitive_prerelease_authorization_forks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/transitive-prerelease-authorization-forks.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''a''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release.
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform != 'linux'",
+            "sys_platform == 'linux'",
+        ]
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        dependencies = [
+            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "c", version = "2.0.0b1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:2d3e3f46d2ff4afceeec095a0799195534a719527d94152663853b00f6462bd2", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:392d0dd8be953713399938d2dacc8a361d99eb376285adfa4f0f0e4d448ace2a", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "c"
+        version = "2.0.0b1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0b1.tar.gz", hash = "sha256:6c4537b683c9ac2640452883415184b7615e6a0675bbbd49c2e019b307df02e7", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-2.0.0b1-py3-none-any.whl", hash = "sha256:4afb52babcf2d595eccb483f1b6a641ca25daa2015cd97c519eb9357cc9d69a7", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "a" }]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Check that we only include wheels that match the required Python version
 ///
 /// ```text

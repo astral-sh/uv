@@ -1,0 +1,23 @@
+name = "package-lowest-prereleases"
+description = "The default resolution strategy prefers stable releases, then falls back to a pre-release when no stable release is available."
+
+[root]
+requires = ["a>=0", "b>=0"]
+
+[expected]
+satisfiable = true
+explanation = "The default resolution strategy selects the latest stable version of `a` and, because `b` has no stable releases, its latest pre-release."
+
+[expected.packages]
+a = "2.0.0"
+b = "1.0.0rc2"
+
+[packages.a.versions."1.0.0rc1"]
+
+[packages.a.versions."1.0.0"]
+
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0rc1"]
+
+[packages.b.versions."1.0.0rc2"]

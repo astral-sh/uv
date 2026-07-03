@@ -321,23 +321,23 @@ lower bounds.
 
 ## Pre-release handling
 
-By default, uv will accept pre-release versions during dependency resolution in two cases:
+By default, uv considers stable releases and pre-releases authorized by an active requirement in
+normal version order. A requirement authorizes pre-releases when one of its version specifiers names
+a pre-release, whether the requirement is direct or transitive. For example, a dependency on
+`flask>=2.0.0rc1` enables matching Flask pre-releases while that dependency is active.
 
-1. If the package is a direct dependency, and its version specifiers include a pre-release specifier
-   (e.g., `flask>=2.0.0rc1`).
-1. If _all_ published versions of a package are pre-releases.
+The authorization is limited to the bounds of the requirement that introduced it. For example,
+`>=2.0.0rc1,<3` does not enable a `3.1.0b1` candidate that is admitted by some other requirement.
+Exclusions do not enable pre-releases, and authorization introduced by a package version disappears
+if the resolver backtracks away from that version.
 
-If dependency resolution fails due to a transitive pre-release, uv will prompt use of
-`--prerelease allow` to allow pre-releases for all dependencies.
+For requirements that do not authorize a pre-release, uv considers pre-releases only after no stable
+candidate can satisfy the active constraints. This fallback is based on the current resolver state:
+if every stable candidate is rejected during resolution, uv can continue with a pre-release without
+restarting.
 
-Alternatively, the transitive dependency can be added as a [constraint](#dependency-constraints) or
-direct dependency (i.e. in `requirements.in` or `pyproject.toml`) with a pre-release version
-specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
-
-Pre-releases are
-[notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
-model, and are a frequent source of bugs in other packaging tools. uv's pre-release handling is
-_intentionally_ limited and requires user opt-in for pre-releases to ensure correctness.
+Use `--prerelease allow` to consider every pre-release in normal version order, or
+`--prerelease disallow` to reject all pre-releases, including those named by a requirement.
 
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).
@@ -434,10 +434,11 @@ for the same dependency.
 Scoped overrides currently support registry version specifiers only. Direct URL and path sources,
 including Git sources, and explicit indexes are not supported.
 
-Pre-release and yanked-version permissions are determined before uv knows which scoped overrides
-will apply. As a result, an explicit pre-release or yanked-version pin in any scoped override opts
-that package into the corresponding candidate-selection behavior for the entire resolution, even if
-the scope is not selected.
+Pre-release authorization from a scoped override applies only while that override is active. A
+pre-release marker in an override that is not selected does not affect candidate selection.
+Yanked-version permissions are still determined before uv knows which scoped overrides will apply,
+so an exact yanked-version pin in any scoped override opts that package into yanked-version
+selection for the entire resolution, even if the scope is not selected.
 
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced

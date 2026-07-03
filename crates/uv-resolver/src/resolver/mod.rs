@@ -522,7 +522,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let decision = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
-                        && selected_range == range
+                        && selected_range.selection_eq(range)
                     {
                         Some(ResolverVersion::Unforked(version.clone()))
                     } else {
@@ -1083,7 +1083,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             // Unit propagation often leaves a package's range unchanged. Although prefetching the
             // same package and range is idempotent, selecting its candidate is not free.
-            if pre_visited.get(&id) == Some(range) {
+            if pre_visited
+                .get(&id)
+                .is_some_and(|previous| previous.selection_eq(range))
+            {
                 continue;
             }
             pre_visited.insert(id, range.clone());

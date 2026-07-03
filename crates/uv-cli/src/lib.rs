@@ -6292,9 +6292,9 @@ pub struct ToolUpgradeArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
+    /// requirement that names a pre-release. It considers other pre-releases only when no stable
+    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7616,9 +7616,9 @@ pub struct ResolverArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
+    /// requirement that names a pre-release. It considers other pre-releases only when no stable
+    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7861,9 +7861,9 @@ pub struct ResolverInstallerArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
+    /// requirement that names a pre-release. It considers other pre-releases only when no stable
+    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,

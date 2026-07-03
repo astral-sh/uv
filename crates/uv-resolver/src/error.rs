@@ -25,7 +25,7 @@ use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
-use crate::prerelease::AllowPrerelease;
+use crate::prerelease::PrereleaseMode;
 use crate::pubgrub::{
     PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, Range,
     report_derivation_tree,
@@ -664,12 +664,7 @@ impl NoSolutionError {
         tree = collapse_unavailable_versions(tree);
         tree = collapse_redundant_depends_on_no_versions(tree);
 
-        tree = simplify_derivation_tree_ranges(
-            tree,
-            &self.included_versions,
-            &self.selector,
-            &self.env,
-        );
+        tree = simplify_derivation_tree_ranges(tree, &self.included_versions, &self.selector);
 
         // This needs to be applied _after_ simplification of the ranges
         tree = collapse_redundant_no_versions(tree);
@@ -1282,7 +1277,7 @@ pub struct SentinelRange<'range>(&'range Ranges<Version>);
 
 impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
     fn from(range: &'range Range<Version>) -> Self {
-        Self(range.raw_versions())
+        Self(range.versions())
     }
 }
 
@@ -1521,51 +1516,34 @@ fn simplify_derivation_tree_ranges(
     tree: ErrorTree,
     included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
-    resolver_environment: &ResolverEnvironment,
 ) -> ErrorTree {
     map_derivation_tree(
         tree,
         |mut external| {
             match &mut external {
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                    if let Some(simplified) = simplify_range(
-                        versions1,
-                        package1,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions1, package1, included_versions, candidate_selector)
+                    {
                         *versions1 = simplified;
                     }
-                    if let Some(simplified) = simplify_range(
-                        versions2,
-                        package2,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions2, package2, included_versions, candidate_selector)
+                    {
                         *versions2 = simplified;
                     }
                 }
                 External::NoVersions(package, versions) => {
-                    if let Some(simplified) = simplify_range(
-                        versions,
-                        package,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions, package, included_versions, candidate_selector)
+                    {
                         *versions = simplified;
                     }
                 }
                 External::Custom(package, versions, _) => {
-                    if let Some(simplified) = simplify_range(
-                        versions,
-                        package,
-                        included_versions,
-                        candidate_selector,
-                        resolver_environment,
-                    ) {
+                    if let Some(simplified) =
+                        simplify_range(versions, package, included_versions, candidate_selector)
+                    {
                         *versions = simplified;
                     }
                 }
@@ -1585,7 +1563,6 @@ fn simplify_derivation_tree_ranges(
                                 &package,
                                 included_versions,
                                 candidate_selector,
-                                resolver_environment,
                             )
                             .unwrap_or(versions),
                         ),
@@ -1595,7 +1572,6 @@ fn simplify_derivation_tree_ranges(
                                 &package,
                                 included_versions,
                                 candidate_selector,
-                                resolver_environment,
                             )
                             .unwrap_or(versions),
                         ),
@@ -1616,14 +1592,13 @@ fn simplify_range(
     package: &PubGrubPackage,
     included_versions: &FxHashMap<PackageName, BTreeSet<Version>>,
     candidate_selector: &CandidateSelector,
-    resolver_environment: &ResolverEnvironment,
 ) -> Option<Range<Version>> {
     // If there's not a package name or included versions, we can't simplify anything
     let name = package.name()?;
     let versions = included_versions.get(name)?;
 
     // If this is a full range, there's nothing to simplify
-    if range.raw_versions() == &Ranges::full() {
+    if range.versions() == &Ranges::full() {
         return None;
     }
 
@@ -1635,10 +1610,7 @@ fn simplify_range(
     }
 
     // Check if pre-releases are allowed
-    let prereleases_not_allowed = candidate_selector
-        .prerelease_strategy()
-        .allows(name, resolver_environment)
-        != AllowPrerelease::Yes;
+    let prereleases_not_allowed = candidate_selector.prerelease_mode() == PrereleaseMode::Disallow;
 
     let any_prerelease = range.iter().any(|(start, end)| {
         let is_pre1 = match start {

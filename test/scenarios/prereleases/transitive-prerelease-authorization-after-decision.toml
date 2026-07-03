@@ -1,0 +1,28 @@
+name = "transitive-prerelease-authorization-after-decision"
+description = "A transitive pre-release authorization discovered after the target was decided causes the target to be reconsidered without restarting resolution."
+
+[root]
+requires = ["a", "b"]
+
+[expected]
+satisfiable = true
+explanation = "The later dependency on `c>=2.0.0a1` narrows the active range and moves `c` to the required pre-release."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "2.0.0a1"
+d = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c"]
+
+[packages.b.versions."1.0.0"]
+requires = ["d"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]
+
+[packages.d.versions."1.0.0"]
+requires = ["c>=2.0.0a1"]
