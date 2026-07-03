@@ -3147,26 +3147,62 @@ impl ForkState {
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
-        dependencies: Vec<PubGrubDependency>,
+        mut dependencies: Vec<PubGrubDependency>,
     ) {
-        for dependency in &dependencies {
-            let PubGrubDependency {
-                package,
-                version,
-                parent: _,
-                source: _,
-            } = dependency;
+        if dependencies
+            .iter()
+            .any(|dependency| dependency.version.prerelease_region().is_some())
+        {
+            // Requirements for the same dependency target are conjunctive. Compute their shared
+            // pre-release admission region, then attach it to every original edge. The shared
+            // region is contained by every requirement, so whichever edge narrows the solution
+            // first carries the same candidate-selection policy. Keeping the logical ranges
+            // separate preserves PubGrub's precise derivation chains for contradictory
+            // requirements.
+            let mut dependency_groups: FxHashMap<PubGrubPackage, (Range<Version>, usize)> =
+                FxHashMap::default();
+            for dependency in &dependencies {
+                dependency_groups
+                    .entry(dependency.package.clone())
+                    .and_modify(|(combined, count)| {
+                        *combined = combined.intersection(&dependency.version);
+                        *count += 1;
+                    })
+                    .or_insert_with(|| (dependency.version.clone(), 1));
+            }
 
-            let Some(base_package) = package.base_package() else {
+            for dependency in &mut dependencies {
+                let Some((combined, count)) = dependency_groups.get(&dependency.package) else {
+                    continue;
+                };
+                if *count > 1
+                    && let Some(prerelease_region) = combined.prerelease_region()
+                {
+                    dependency.version =
+                        dependency.version.with_prerelease_region(prerelease_region);
+                }
+            }
+        }
+
+        for dependency in &dependencies {
+            // This incompatibility is a package-identity optimization rather than a declared
+            // dependency. Attaching admission metadata to it would outlive the parent version
+            // that introduced the requirement. When admission is present, let the declared edge
+            // select the proxy first; its exact dependencies then constrain the base package.
+            if dependency.version.prerelease_region().is_some() {
+                continue;
+            }
+
+            let Some(base_package) = dependency.package.base_package() else {
                 continue;
             };
 
-            let proxy_package = self.pubgrub.package_store.alloc(package.clone());
+            let proxy_package = self.pubgrub.package_store.alloc(dependency.package.clone());
             let base_package_id = self.pubgrub.package_store.alloc(base_package.clone());
             self.pubgrub.add_proxy_package_incompatibility(
                 proxy_package,
                 base_package_id,
-                version.clone(),
+                dependency.version.clone(),
             );
         }
 

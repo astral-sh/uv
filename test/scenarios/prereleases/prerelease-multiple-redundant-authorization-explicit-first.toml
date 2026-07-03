@@ -1,0 +1,18 @@
+name = "prerelease-multiple-redundant-authorization-explicit-first"
+description = "Multiple plain requirements share pre-release admission when the explicit requirement appears first."
+
+[root]
+requires = ["c>=0.5a1", "c<3.0", "c>=1.0"]
+
+[expected]
+satisfiable = true
+explanation = "The final admission region is shared by every same-package requirement, so `c==2.0.0a1` is selected independently of requirement order."
+
+[expected.packages]
+c = "2.0.0a1"
+
+[packages.c.versions."1.5.0"]
+
+[packages.c.versions."2.0.0a1"]
+
+[packages.c.versions."3.0.0"]

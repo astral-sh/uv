@@ -2863,6 +2863,122 @@ fn prerelease_equivalent_authorization_plain_first() {
     context.assert_installed("c", "2.0.0a1");
 }
 
+/// A pre-release extra requirement from a rejected parent does not affect a live plain extra requirement.
+///
+/// ```text
+/// prerelease-extra-authorization-backtracks
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires d==1.0.0
+/// │       └── satisfied by d-1.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires c[extra]>=1.0
+/// │   │       ├── satisfied by c-1.0.0
+/// │   │       ├── satisfied by c-1.0.0[extra]
+/// │   │       ├── satisfied by c-2.0.0a1
+/// │   │       └── satisfied by c-2.0.0a1[extra]
+/// │   └── a-2.0.0
+/// │       ├── requires c[extra]>=1.0
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   ├── satisfied by c-1.0.0[extra]
+/// │       │   ├── satisfied by c-2.0.0a1
+/// │       │   └── satisfied by c-2.0.0a1[extra]
+/// │       ├── requires c[extra]>=0.5a1
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   ├── satisfied by c-1.0.0[extra]
+/// │       │   ├── satisfied by c-2.0.0a1
+/// │       │   └── satisfied by c-2.0.0a1[extra]
+/// │       └── requires d==2.0.0
+/// │           └── satisfied by d-2.0.0
+/// ├── c
+/// │   ├── c-1.0.0
+/// │   ├── c-1.0.0[extra]
+/// │   ├── c-2.0.0a1
+/// │   └── c-2.0.0a1[extra]
+/// └── d
+///     ├── d-1.0.0
+///     └── d-2.0.0
+/// ```
+#[test]
+fn prerelease_extra_authorization_backtracks() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/prerelease-extra-authorization-backtracks.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("d==1.0.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + c==1.0.0
+     + d==1.0.0
+    ");
+
+    // The parent version whose `c[extra]` requirements share pre-release admission conflicts with `d==1.0.0`, so the selected alternate parent's plain requirement selects stable `c==1.0.0`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "1.0.0");
+    context.assert_installed("d", "1.0.0");
+}
+
+/// Requirements on the same extra combine pre-release admission before constraining the base package.
+///
+/// ```text
+/// prerelease-extra-authorization
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c[extra]>=1.0
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   ├── satisfied by c-1.0.0[extra]
+/// │   │   ├── satisfied by c-2.0.0a1
+/// │   │   └── satisfied by c-2.0.0a1[extra]
+/// │   └── requires c[extra]>=0.5a1
+/// │       ├── satisfied by c-1.0.0
+/// │       ├── satisfied by c-1.0.0[extra]
+/// │       ├── satisfied by c-2.0.0a1
+/// │       └── satisfied by c-2.0.0a1[extra]
+/// └── c
+///     ├── c-1.0.0
+///     ├── c-1.0.0[extra]
+///     ├── c-2.0.0a1
+///     └── c-2.0.0a1[extra]
+/// ```
+#[test]
+fn prerelease_extra_authorization() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/prerelease-extra-authorization.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c[extra]>=1.0")
+        .arg("c[extra]>=0.5a1")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // The requirements on `c[extra]` share pre-release admission, and the selected proxy version pins the base package to the same version.
+    context.assert_installed("c", "2.0.0a1");
+}
+
 /// A pre-release is selected when PubGrub rejects every stable candidate in the active range.
 ///
 /// ```text
@@ -2918,6 +3034,104 @@ fn prerelease_fallback_after_stable_rejected() {
     context.assert_installed("c", "1.5.0a1");
 }
 
+/// Multiple plain requirements share pre-release admission when the explicit requirement appears first.
+///
+/// ```text
+/// prerelease-multiple-redundant-authorization-explicit-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=0.5a1
+/// │   │   ├── satisfied by c-1.5.0
+/// │   │   ├── satisfied by c-2.0.0a1
+/// │   │   └── satisfied by c-3.0.0
+/// │   ├── requires c<3.0
+/// │   │   ├── satisfied by c-1.5.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=1.0
+/// │       ├── satisfied by c-1.5.0
+/// │       ├── satisfied by c-2.0.0a1
+/// │       └── satisfied by c-3.0.0
+/// └── c
+///     ├── c-1.5.0
+///     ├── c-2.0.0a1
+///     └── c-3.0.0
+/// ```
+#[test]
+fn prerelease_multiple_redundant_authorization_explicit_first() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/prerelease-multiple-redundant-authorization-explicit-first.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c>=0.5a1")
+        .arg("c<3.0")
+        .arg("c>=1.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // The final admission region is shared by every same-package requirement, so `c==2.0.0a1` is selected independently of requirement order.
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// A pre-release requirement shares admission with multiple plain requirements in the same root dependency batch.
+///
+/// ```text
+/// prerelease-multiple-redundant-authorization
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=1.0
+/// │   │   ├── satisfied by c-1.5.0
+/// │   │   ├── satisfied by c-2.0.0a1
+/// │   │   └── satisfied by c-3.0.0
+/// │   ├── requires c<3.0
+/// │   │   ├── satisfied by c-1.5.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=0.5a1
+/// │       ├── satisfied by c-1.5.0
+/// │       ├── satisfied by c-2.0.0a1
+/// │       └── satisfied by c-3.0.0
+/// └── c
+///     ├── c-1.5.0
+///     ├── c-2.0.0a1
+///     └── c-3.0.0
+/// ```
+#[test]
+fn prerelease_multiple_redundant_authorization() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/prerelease-multiple-redundant-authorization.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c>=1.0")
+        .arg("c<3.0")
+        .arg("c>=0.5a1")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // The final admission region is shared by every same-package requirement, so the broader pre-release requirement authorizes `c==2.0.0a1` even when it appears last.
+    context.assert_installed("c", "2.0.0a1");
+}
+
 /// A broader pre-release requirement contributes admission when it appears before a narrower plain requirement.
 ///
 /// ```text
@@ -2957,6 +3171,48 @@ fn prerelease_redundant_authorization_explicit_first() {
     ");
 
     // The broader requirement on `c>=0.5a1` admits matching pre-releases after the active range is narrowed by `c>=1.0`.
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// Root requirements combine pre-release admission when a narrower plain requirement appears first.
+///
+/// ```text
+/// prerelease-redundant-authorization-plain-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=1.0
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=0.5a1
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn prerelease_redundant_authorization_plain_first() {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-redundant-authorization-plain-first.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c>=1.0")
+        .arg("c>=0.5a1")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + c==2.0.0a1
+    ");
+
+    // Requirements in the same root dependency batch are combined before resolution, so `c>=0.5a1` admits matching pre-releases regardless of requirement order.
     context.assert_installed("c", "2.0.0a1");
 }
 
@@ -3629,7 +3885,103 @@ fn transitive_prerelease_authorizes_newer_prerelease() {
     context.assert_installed("c", "2.0.0a1");
 }
 
-/// A transitive pre-release requirement contributes admission even when it does not narrow the active version range.
+/// Requirements from one parent combine pre-release admission when the explicit requirement appears first.
+///
+/// ```text
+/// transitive-prerelease-equivalent-authorization-explicit-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires c>0.5a1,>=1.0
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   └── satisfied by c-2.0.0a1
+/// │       └── requires c>=1.0
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_equivalent_authorization_explicit_first() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-equivalent-authorization-explicit-first.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + c==2.0.0a1
+    ");
+
+    // Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// Requirements from one parent combine pre-release admission when the plain requirement appears first.
+///
+/// ```text
+/// transitive-prerelease-equivalent-authorization-plain-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires c>=1.0
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   └── satisfied by c-2.0.0a1
+/// │       └── requires c>0.5a1,>=1.0
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_equivalent_authorization_plain_first() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-equivalent-authorization-plain-first.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + c==2.0.0a1
+    ");
+
+    // Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases regardless of order.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// A transitive pre-release requirement that does not narrow the active version range does not change pre-release admission.
 ///
 /// ```text
 /// transitive-prerelease-redundant-authorization
@@ -3669,12 +4021,12 @@ fn transitive_prerelease_redundant_authorization() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The active transitive requirement on `c>=0.5a1` admits matching pre-releases even though the root requirement on `c>=1.0` is narrower.
+    // The transitive requirement on `c>=0.5a1` is already satisfied by the root requirement on `c>=1.0`, so the stable release remains preferred.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
 }
 
 /// The user requires a package where recent versions require a Python version greater than the current version, but an older version is compatible.
