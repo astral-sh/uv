@@ -304,8 +304,12 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
+            // Determine which flag the error is associated with. If `--from` was provided, the
+            // error likely refers to the package specified via `--from`; otherwise, refer to
+            // `--with`.
+            let flag = if from.is_some() { "--from" } else { "--with" };
             let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
+                .context(format!("Failed to resolve `{flag}` requirement"));
             eprint!("{err:?}");
             return Ok(ExitStatus::Failure);
         }
