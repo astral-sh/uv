@@ -16132,7 +16132,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
 #[test]
 fn compile_lowest_prereleases() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/package-lowest-prereleases.toml");
+    let server = PackseServer::new("prereleases/package-stable-prerelease-candidates.toml");
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str(indoc! {r"

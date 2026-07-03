@@ -328,19 +328,13 @@ override that names a pre-release instead authorizes matching pre-releases to pa
 version order. This makes those pre-releases eligible; it does not guarantee that one will be
 selected.
 
-Requirements for the same distribution that are introduced together by the project or by one
-selected package version are registered as one dependency batch within the same resolver fork. Their
-declaration order does not affect pre-release authorization, including requirements for extras and
-marker variants. Across separately discovered dependency batches, however, package
+Requirements for the same distribution that appear together in the project or in the metadata for a
+selected package version are considered together. Their declaration order does not affect
+pre-release authorization, including requirements for extras and marker variants. Across
+requirements discovered at different points in resolution, however, package
 [priority](../pip/compatibility.md#package-priority) can affect which valid candidate is selected. A
 compatible stable version selected before a later pre-release requirement may remain selected, while
 discovering the authorizing requirement first can select a newer pre-release.
-
-Explicit pre-release authorization is represented in the resolver as part of the dependency graph.
-The authorizing edge targets a proxy package that selects with pre-releases enabled, then pins the
-real package to the same version. PubGrub can therefore reconsider an earlier stable decision
-without restarting resolution. If the parent version that introduced the requirement is rejected
-during backtracking, its authorization is rejected with it.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.

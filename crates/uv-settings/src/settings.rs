@@ -870,7 +870,7 @@ pub struct ResolverInstallerSchema {
     ///
     /// By default, uv will prefer stable candidates, but accept pre-releases when no stable
     /// candidate satisfies the active constraints or when an active direct or transitive
-    /// requirement contains an explicit pre-release marker (`if-necessary-or-explicit`).
+    /// requirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).
     #[option(
         default = "\"if-necessary-or-explicit\"",
         value_type = "str",
@@ -1618,7 +1618,7 @@ pub struct PipOptions {
     ///
     /// By default, uv will prefer stable candidates, but accept pre-releases when no stable
     /// candidate satisfies the active constraints or when an active direct or transitive
-    /// requirement contains an explicit pre-release marker (`if-necessary-or-explicit`).
+    /// requirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).
     #[option(
         default = "\"if-necessary-or-explicit\"",
         value_type = "str",

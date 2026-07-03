@@ -20,7 +20,7 @@ pub enum PrereleaseMode {
     IfNecessary,
 
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active direct or transitive requirement contains an explicit pre-release marker.
+    /// when an active direct or transitive requirement contains an explicit pre-release specifier.
     #[default]
     #[serde(alias = "explicit")]
     #[cfg_attr(feature = "clap", value(alias("explicit")))]
@@ -52,7 +52,7 @@ pub(crate) enum PrereleaseStrategy {
     IfNecessary,
 
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active requirement contains an explicit pre-release marker.
+    /// when an active requirement contains an explicit pre-release specifier.
     IfNecessaryOrExplicit(ForkSet),
 }
 

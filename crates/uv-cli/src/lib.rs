@@ -6294,7 +6294,7 @@ pub struct ToolUpgradeArgs {
     ///
     /// By default, uv will prefer stable candidates, but accept pre-releases when no stable
     /// candidate satisfies the active constraints or when an active direct or transitive
-    /// requirement contains an explicit pre-release marker (`if-necessary-or-explicit`).
+    /// requirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7616,7 +7616,7 @@ pub struct ResolverArgs {
     ///
     /// By default, uv will prefer stable candidates, but accept pre-releases when no stable
     /// candidate satisfies the active constraints or when an active direct or transitive
-    /// requirement contains an explicit pre-release marker (`if-necessary-or-explicit`).
+    /// requirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7861,7 +7861,7 @@ pub struct ResolverInstallerArgs {
     ///
     /// By default, uv will prefer stable candidates, but accept pre-releases when no stable
     /// candidate satisfies the active constraints or when an active direct or transitive
-    /// requirement contains an explicit pre-release marker (`if-necessary-or-explicit`).
+    /// requirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,

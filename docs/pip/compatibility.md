@@ -47,23 +47,17 @@ override that names a pre-release instead authorizes matching pre-releases to pa
 version order. This makes those pre-releases eligible; it does not guarantee that one will be
 selected.
 
-Requirements for the same distribution that are introduced together by the project or by one
-selected package version are registered as one dependency batch within the same resolver fork. Their
-declaration order does not affect pre-release authorization, including requirements for extras and
-marker variants.
+Requirements for the same distribution that appear together in the project or in the metadata for a
+selected package version are considered together. Their declaration order does not affect
+pre-release authorization, including requirements for extras and marker variants.
 
-Requirements discovered in separate dependency batches can affect which valid candidate is selected
-according to uv's ordinary [package priorities](#package-priority). For example, with `c==1.0` and
-`c==2.0a1` available, `c>=1` can retain `c==1.0` if it is resolved before a separately discovered
-`a -> c>=0.5a1` edge. If the authorizing edge is active before `c` is selected, `c==2.0a1` is
-eligible in normal version order. A later requirement that excludes the selected stable version
-still forces reconsideration. In every case, the selected version satisfies all active requirements.
-
-Pre-release authorization is part of the PubGrub solution. An explicit requirement targets a proxy
-package that selects with pre-releases enabled, then pins the real package to the same version. This
-lets PubGrub reconsider an earlier stable decision without restarting resolution. If the parent
-version that introduced the requirement is rejected during backtracking, that authorization is
-removed as well, avoiding global enablement from an abandoned dependency path.
+Requirements discovered at different points in resolution can affect which valid candidate is
+selected according to uv's ordinary [package priorities](#package-priority). For example, with
+`c==1.0` and `c==2.0a1` available, `c>=1` can retain `c==1.0` if it is resolved before a separately
+discovered `a -> c>=0.5a1` edge. If the authorizing edge is active before `c` is selected,
+`c==2.0a1` is eligible in normal version order. A later requirement that excludes the selected
+stable version still forces reconsideration. In every case, the selected version satisfies all
+active requirements.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
@@ -75,8 +69,11 @@ candidates first, or `--prerelease disallow` to exclude them entirely.
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.pages.dev/limitations/prerelease_versions) to model
 because candidate availability must remain stable while PubGrub learns incompatibilities. uv keeps
-pre-releases in the candidate universe and expresses explicit authorization as a virtual solver
-package, so learned incompatibilities remain valid across backtracking.
+pre-releases in the candidate universe and models explicit authorization as a virtual solver package
+that enables pre-releases and pins the real package to the same version. This lets PubGrub
+reconsider an earlier stable decision without restarting, while rejecting the parent that introduced
+the requirement removes its authorization during backtracking without invalidating learned
+incompatibilities.
 
 ## Packages that exist on multiple indexes
 

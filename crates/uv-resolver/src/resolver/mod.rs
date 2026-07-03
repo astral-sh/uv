@@ -3000,8 +3000,8 @@ pub(crate) struct ForkState {
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
     /// The last range scheduled for prefetch for each undecided package.
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
-    /// The last version selected for each package, range, and pre-release policy in a specific
-    /// environment.
+    /// The last version selected for each package, range, and explicit pre-release authorization
+    /// state in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, bool, Version)>,
     /// The marker expression that created this state.
     ///
