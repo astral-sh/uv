@@ -109,13 +109,13 @@ impl SimpleDetailHTML {
         );
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
-        let mut requires_python_interner = RequiresPythonInterner::default();
+        let mut interner = RequiresPythonInterner::default();
         let mut files: Vec<PypiFile> = dom
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| is_tag(link, b"a"))
-            .map(|link| Self::parse_anchor(link, &mut requires_python_interner))
+            .map(|link| Self::parse_anchor(link, &mut interner))
             .filter_map(|result| match result {
                 Ok(None) => None,
                 Ok(Some(file)) => Some(Ok(file)),
@@ -205,7 +205,7 @@ impl SimpleDetailHTML {
     /// Returns `None` if the `<a>` doesn't have an `href` attribute.
     fn parse_anchor(
         link: &HTMLTag,
-        requires_python_interner: &mut RequiresPythonInterner,
+        interner: &mut RequiresPythonInterner,
     ) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
         let Some(href) = attribute(link, "href").filter(|href| !href.is_empty()) else {
@@ -269,7 +269,7 @@ impl SimpleDetailHTML {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            Some(requires_python_interner.parse(requires_python.as_ref()))
+            Some(interner.parse(requires_python.as_ref()))
         } else {
             None
         };

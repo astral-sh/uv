@@ -117,10 +117,10 @@ where
     D: Deserializer<'de>,
 {
     let files = Vec::<PypiFileWire<'de>>::deserialize(deserializer)?;
-    let mut requires_python_interner = RequiresPythonInterner::default();
+    let mut interner = RequiresPythonInterner::default();
     Ok(files
         .into_iter()
-        .map(|file| file.into_file(&mut requires_python_interner))
+        .map(|file| file.into_file(&mut interner))
         .collect())
 }
 
@@ -130,8 +130,8 @@ impl<'de> Deserialize<'de> for PypiFile {
         D: Deserializer<'de>,
     {
         let file = PypiFileWire::deserialize(deserializer)?;
-        let mut requires_python_interner = RequiresPythonInterner::default();
-        Ok(file.into_file(&mut requires_python_interner))
+        let mut interner = RequiresPythonInterner::default();
+        Ok(file.into_file(&mut interner))
     }
 }
 
@@ -266,10 +266,10 @@ where
     D: Deserializer<'de>,
 {
     let files = Vec::<PyxFileWire<'de>>::deserialize(deserializer)?;
-    let mut requires_python_interner = RequiresPythonInterner::default();
+    let mut interner = RequiresPythonInterner::default();
     Ok(files
         .into_iter()
-        .map(|file| file.into_file(&mut requires_python_interner))
+        .map(|file| file.into_file(&mut interner))
         .collect())
 }
 
@@ -279,8 +279,8 @@ impl<'de> Deserialize<'de> for PyxFile {
         D: Deserializer<'de>,
     {
         let file = PyxFileWire::deserialize(deserializer)?;
-        let mut requires_python_interner = RequiresPythonInterner::default();
-        Ok(file.into_file(&mut requires_python_interner))
+        let mut interner = RequiresPythonInterner::default();
+        Ok(file.into_file(&mut interner))
     }
 }
 
