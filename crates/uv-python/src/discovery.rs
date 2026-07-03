@@ -3658,6 +3658,13 @@ impl fmt::Display for PythonNotFound {
             PythonRequest::Directory(_) => {
                 write!(f, "No interpreter found in {}", self.request)
             }
+            PythonRequest::ExecutableName(_) => {
+                write!(
+                    f,
+                    "No interpreter found for {} in {sources}. Supported request formats: `3.12`, `3.12.6`, `python3.12`, `cpython-3.12`, or `pypy3.8`",
+                    self.request
+                )
+            }
             _ => {
                 write!(f, "No interpreter found for {} in {sources}", self.request)
             }

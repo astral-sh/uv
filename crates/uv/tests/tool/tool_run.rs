@@ -2405,7 +2405,7 @@ fn tool_run_python_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for executable name `@311` in [PYTHON SOURCES]
+    error: No interpreter found for executable name `@311` in [PYTHON SOURCES]. Supported request formats: `3.12`, `3.12.6`, `python3.12`, `cpython-3.12`, or `pypy3.8`
     ");
 
     // Request a version in the tool and `-p`

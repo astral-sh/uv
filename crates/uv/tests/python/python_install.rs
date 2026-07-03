@@ -308,7 +308,7 @@ fn python_install_automatic() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]
+    error: No interpreter found for executable name `foobar` in [PYTHON SOURCES]. Supported request formats: `3.12`, `3.12.6`, `python3.12`, `cpython-3.12`, or `pypy3.8`
     ");
 
     // Create a "broken" Python executable in the test context `bin`
