@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;

@@ -218,8 +218,7 @@ dependencies = [
 [[package]]
 name = "astral-pubgrub"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c79d771681f6c21ebe25dda598774b6e6badca8b720ce2168df7788b2821c46d"
+source = "git+https://github.com/astral-sh/pubgrub?rev=78525a0a13af957ec933af1431356edf338670b5#78525a0a13af957ec933af1431356edf338670b5"
 dependencies = [
  "astral-version-ranges",
  "indexmap",
@@ -293,8 +292,7 @@ dependencies = [
 [[package]]
 name = "astral-version-ranges"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "086f936efdefab117f5a72367fb3d68c4fded8ba5a7008e3c63365eecf723822"
+source = "git+https://github.com/astral-sh/pubgrub?rev=78525a0a13af957ec933af1431356edf338670b5#78525a0a13af957ec933af1431356edf338670b5"
 dependencies = [
  "smallvec",
 ]
