@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::FromStr};
+use std::{borrow::Cow, str::FromStr, sync::Arc};
 
 use jiff::Timestamp;
 use tl::{HTMLTag, Node, Parser};
@@ -242,7 +242,11 @@ impl SimpleDetailHTML {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            Some(LenientVersionSpecifiers::from_str(&requires_python).map(VersionSpecifiers::from))
+            Some(
+                LenientVersionSpecifiers::from_str(&requires_python)
+                    .map(VersionSpecifiers::from)
+                    .map(Arc::new),
+            )
         } else {
             None
         };

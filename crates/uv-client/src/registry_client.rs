@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -28,7 +27,7 @@ use uv_distribution_types::{
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::ProjectStatus;
@@ -1469,8 +1468,6 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
-        let mut requires_python_cache: FxHashMap<Arc<VersionSpecifiers>, ()> = FxHashMap::default();
-
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
 
@@ -1487,9 +1484,7 @@ impl SimpleDetailMetadata {
                         continue;
                     }
                 };
-            let file = match File::try_from_pypi_with(file, &base, |requires_python| {
-                intern_requires_python(&mut requires_python_cache, requires_python)
-            }) {
+            let file = match File::try_from_pypi(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1540,16 +1535,12 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
-        let mut requires_python_cache: FxHashMap<Arc<VersionSpecifiers>, ()> = FxHashMap::default();
-
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
 
         // Group the distributions by version and kind
         for file in files {
-            let file = match File::try_from_pyx_with(file, &base, |requires_python| {
-                intern_requires_python(&mut requires_python_cache, requires_python)
-            }) {
+            let file = match File::try_from_pyx(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1625,20 +1616,6 @@ impl SimpleDetailMetadata {
             project_status,
             base.as_url(),
         ))
-    }
-}
-
-fn intern_requires_python(
-    cache: &mut FxHashMap<Arc<VersionSpecifiers>, ()>,
-    requires_python: VersionSpecifiers,
-) -> Arc<VersionSpecifiers> {
-    match cache.entry(Arc::new(requires_python)) {
-        Entry::Occupied(entry) => Arc::clone(entry.key()),
-        Entry::Vacant(entry) => {
-            let requires_python = Arc::clone(entry.key());
-            entry.insert(());
-            requires_python
-        }
     }
 }
 

@@ -50,15 +50,6 @@ impl File {
         file: uv_pypi_types::PypiFile,
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
-        Self::try_from_pypi_with(file, base, Arc::new)
-    }
-
-    /// Like [`File::try_from_pypi`], with a caller-provided `requires-python` interner.
-    pub fn try_from_pypi_with(
-        file: uv_pypi_types::PypiFile,
-        base: &SmallString,
-        intern_requires_python: impl FnOnce(VersionSpecifiers) -> Arc<VersionSpecifiers>,
-    ) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
                 .core_metadata
@@ -69,8 +60,7 @@ impl File {
             requires_python: file
                 .requires_python
                 .transpose()
-                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?
-                .map(intern_requires_python),
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
@@ -82,15 +72,6 @@ impl File {
     pub fn try_from_pyx(
         file: uv_pypi_types::PyxFile,
         base: &SmallString,
-    ) -> Result<Self, FileConversionError> {
-        Self::try_from_pyx_with(file, base, Arc::new)
-    }
-
-    /// Like [`File::try_from_pyx`], with a caller-provided `requires-python` interner.
-    pub fn try_from_pyx_with(
-        file: uv_pypi_types::PyxFile,
-        base: &SmallString,
-        intern_requires_python: impl FnOnce(VersionSpecifiers) -> Arc<VersionSpecifiers>,
     ) -> Result<Self, FileConversionError> {
         let filename = if let Some(filename) = file.filename {
             filename
@@ -125,8 +106,7 @@ impl File {
             requires_python: file
                 .requires_python
                 .transpose()
-                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?
-                .map(intern_requires_python),
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
