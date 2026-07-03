@@ -156,7 +156,23 @@ impl FromStr for VersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_version_specifiers(s).map(Self::from_unsorted)
+        let separator_count = s.bytes().filter(|byte| *byte == b',').count();
+        if separator_count == 0 {
+            if s.is_empty() {
+                return Ok(Self::empty());
+            }
+            return VersionSpecifier::from_str(s)
+                .map(Self::from)
+                .map_err(|err| VersionSpecifiersParseError {
+                    inner: Box::new(VersionSpecifiersParseErrorInner {
+                        err,
+                        line: s.to_string(),
+                        start: 0,
+                        end: s.len(),
+                    }),
+                });
+        }
+        parse_version_specifiers(s, separator_count + 1).map(Self::from_unsorted)
     }
 }
 
@@ -937,11 +953,9 @@ impl From<ParseErrorKind> for VersionSpecifierParseError {
 /// Parse a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
 fn parse_version_specifiers(
     spec: &str,
+    specifier_count: usize,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
-    let mut version_ranges = Vec::new();
-    if spec.is_empty() {
-        return Ok(version_ranges);
-    }
+    let mut version_ranges = Vec::with_capacity(specifier_count);
     let mut start: usize = 0;
     let separator = ",";
     for version_range_spec in spec.split(separator) {
