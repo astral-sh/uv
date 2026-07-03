@@ -323,6 +323,14 @@ impl RequirementsTxt {
             content
         };
 
+        // Detect if the file looks like a uv lockfile rather than a requirements file.
+        if content.starts_with("version = ") {
+            return Err(RequirementsTxtFileError {
+                file: requirements_txt.to_path_buf(),
+                error: RequirementsTxtParserError::LooksLikeLockfile,
+            });
+        }
+
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(
             &content,
@@ -1210,6 +1218,8 @@ pub enum RequirementsTxtParserError {
     ClientBuild(DisplaySafeUrl, Box<ClientBuildError>),
     #[cfg(feature = "http")]
     InvalidUrl(String, DisplaySafeUrlError),
+    /// The file looks like a uv lockfile, not a requirements file.
+    LooksLikeLockfile,
 }
 
 impl Display for RequirementsTxtParserError {
@@ -1274,6 +1284,9 @@ impl Display for RequirementsTxtParserError {
                     "Remote requirements URL contains non-unicode characters: {}",
                     url.display(),
                 )
+            }
+            Self::LooksLikeLockfile => {
+                write!(f, "File looks like a uv lockfile, not a requirements file")
             }
             #[cfg(feature = "http")]
             Self::Reqwest(url, _err) => {
@@ -1447,6 +1460,13 @@ impl Display for RequirementsTxtFileError {
                     f,
                     "Remote requirements URL contains non-unicode characters: {}",
                     url.display(),
+                )
+            }
+            RequirementsTxtParserError::LooksLikeLockfile => {
+                write!(
+                    f,
+                    "`{}` is a uv lockfile, not a requirements file. Use `uv sync` or `uv lock` instead",
+                    self.file.user_display(),
                 )
             }
             #[cfg(feature = "http")]
@@ -2024,6 +2044,38 @@ mod test {
             filters => filters
         }, {
             insta::assert_snapshot!(errors, @"Requirement `file.txt` in `<REQUIREMENTS_TXT>` looks like a requirements file but was passed as a package name. Did you mean `-r file.txt`?");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn lockfile_detected() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            version = 1
+
+            [[distribution]]
+            name = "flask"
+            version = "3.0.0"
+            source = "registry+https://pypi.org/simple"
+            sdist = "flask-3.0.0.tar.gz"
+            wheels = ["flask-3.0.0-py3-none-any.whl"]
+        "})?;
+
+        let error = RequirementsTxt::parse(requirements_txt.path(), temp_dir.path())
+            .await
+            .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"`<REQUIREMENTS_TXT>` is a uv lockfile, not a requirements file. Use `uv sync` or `uv lock` instead");
         });
 
         Ok(())
