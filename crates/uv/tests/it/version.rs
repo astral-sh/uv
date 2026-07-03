@@ -2269,7 +2269,7 @@ fn version_get_fallback_missing_strict() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
+    error: No `pyproject.toml` found in current directory or any parent directory. To create one, run `uv init` or see https://docs.astral.sh/uv/guides/projects/
     ");
 
     Ok(())
@@ -2286,7 +2286,7 @@ fn version_get_missing_with_hint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
+    error: No `pyproject.toml` found in current directory or any parent directory. To create one, run `uv init` or see https://docs.astral.sh/uv/guides/projects/
 
     hint: If you meant to view uv's version, use `uv self version` instead
     ");

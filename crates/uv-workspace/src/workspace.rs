@@ -184,7 +184,7 @@ impl Error for WorkspaceError {
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceErrorKind {
     // Workspace structure errors.
-    #[error("No `pyproject.toml` found in current directory or any parent directory")]
+    #[error("No `pyproject.toml` found in current directory or any parent directory. To create one, run `uv init` or see https://docs.astral.sh/uv/guides/projects/")]
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),

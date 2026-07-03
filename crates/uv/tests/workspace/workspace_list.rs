@@ -228,7 +228,7 @@ fn workspace_list_no_project() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `pyproject.toml` found in current directory or any parent directory
+    error: No `pyproject.toml` found in current directory or any parent directory. To create one, run `uv init` or see https://docs.astral.sh/uv/guides/projects/
     "
     );
 }
