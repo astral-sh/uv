@@ -3027,6 +3027,54 @@ fn tool_run_from_at() {
 }
 
 #[test]
+fn tool_run_from_shorthand() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let mut command = context.command();
+    command
+        .arg("tool")
+        .arg("uvx")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("simple-launcher/simple_launcher")
+        .env(EnvVars::UV_SHOW_RESOLUTION, "1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str());
+
+    uv_snapshot!(context.filters(), command, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from the simple launcher!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .arg("simple-launcher/simple_launcher")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hi from the simple launcher!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+}
+
+#[test]
 fn tool_run_verbatim_name() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()

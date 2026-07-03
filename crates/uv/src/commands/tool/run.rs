@@ -92,6 +92,16 @@ fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
     })
 }
 
+/// Parse the `package/command` shorthand into its package and command components.
+fn parse_package_command(target: &str) -> Option<(&str, &str)> {
+    let (package, command) = target.split_once('/')?;
+    if command.is_empty() || command.contains('/') || command.contains('\\') {
+        return None;
+    }
+    PackageName::from_str(package).ok()?;
+    Some((package, command))
+}
+
 /// Run a command.
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
@@ -156,6 +166,15 @@ pub(crate) async fn run(
         return Err(anyhow::anyhow!(
             "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
         ));
+    };
+
+    // Treat `package/command` as shorthand for `--from package command`.
+    let (target, from) = if from.is_none()
+        && let Some((package, command)) = parse_package_command(target)
+    {
+        (command, Some(package.to_string()))
+    } else {
+        (target, from)
     };
 
     if let Some(ref from) = from {
@@ -1254,5 +1273,40 @@ impl uv_errors::Hint for ToolRunScriptError {
                 format!("{invocation} --from {package_name} {target}").green(),
             ),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_package_command;
+
+    #[test]
+    fn parse_package_command_valid() {
+        assert_eq!(parse_package_command("foo/bar"), Some(("foo", "bar")));
+        assert_eq!(
+            parse_package_command("foo-bar/bar_baz"),
+            Some(("foo-bar", "bar_baz"))
+        );
+    }
+
+    #[test]
+    fn parse_package_command_rejects_requirements_and_paths() {
+        for target in [
+            "foo",
+            "/foo",
+            "foo/",
+            "foo/bar/baz",
+            r"foo/bar\baz",
+            "./foo",
+            "../foo",
+            "C:/foo",
+            "https://example.com/foo",
+            "git+https://example.com/foo",
+            "foo@latest/bar",
+            "foo[extra]/bar",
+            "foo==1/bar",
+        ] {
+            assert_eq!(parse_package_command(target), None, "target: {target}");
+        }
     }
 }

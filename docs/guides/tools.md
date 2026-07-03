@@ -72,6 +72,13 @@ provided by `httpie`:
 $ uvx --from httpie http
 ```
 
+As a shorthand, separate the package name and command with a `/`:
+
+```console
+$ uvx httpie/http
+$ uv tool run httpie/http
+```
+
 ## Requesting specific versions
 
 To run a tool at a specific version, use `command@<version>`:
