@@ -1196,7 +1196,9 @@ impl CacheBucket {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/build/cache_prune.rs`.
             Self::SourceDistributions => "sdists-v9",
-            Self::FlatIndex => "flat-index-v2",
+            // Note that when bumping this, you'll also need to bump it
+            // in `crates/uv/tests/lock/lock.rs`.
+            Self::FlatIndex => "flat-index-v3",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
