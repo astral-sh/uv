@@ -378,14 +378,27 @@ pub fn tempfile_in(path: &Path) -> std::io::Result<NamedTempFile> {
     tempfile::Builder::new().tempfile_in(path)
 }
 
+/// Return a [`NamedTempFile`] in the specified directory without blocking the async runtime.
+///
+/// Creating a temporary file opens a file, which can block. This offloads that work to a blocking
+/// thread so it does not stall the async runtime.
+#[cfg(feature = "tokio")]
+pub async fn tempfile_in_async(path: &Path) -> std::io::Result<NamedTempFile> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || tempfile_in(&path))
+        .await
+        .map_err(std::io::Error::other)?
+}
+
 /// Write `data` to `path` atomically using a temporary file and atomic rename.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic(path: impl AsRef<Path>, data: impl AsRef<[u8]>) -> std::io::Result<()> {
-    let temp_file = tempfile_in(
+    let temp_file = tempfile_in_async(
         path.as_ref()
             .parent()
             .expect("Write path must have a parent"),
-    )?;
+    )
+    .await?;
     fs_err::tokio::write(&temp_file, &data).await?;
     persist_with_retry(temp_file, path.as_ref()).await
 }
@@ -979,6 +992,28 @@ mod tests {
 
         assert!(!clear_virtualenv(&environment)?);
         assert!(environment.is_dir());
+        Ok(())
+    }
+
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn tempfile_in_async_creates_file_in_directory() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+
+        let temp_file = tempfile_in_async(tempdir.path()).await?;
+        assert!(temp_file.path().is_file());
+        assert_eq!(temp_file.path().parent(), Some(tempdir.path()));
+
+        // The async wrapper must produce a file with the same permissions as the
+        // synchronous `tempfile_in`.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let sync_file = tempfile_in(tempdir.path())?;
+            let expected = fs_err::metadata(sync_file.path())?.permissions().mode() & 0o777;
+            let actual = fs_err::metadata(temp_file.path())?.permissions().mode() & 0o777;
+            assert_eq!(actual, expected);
+        }
         Ok(())
     }
 }
