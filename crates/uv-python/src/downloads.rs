@@ -14,6 +14,7 @@ use owo_colors::OwoColorize;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::Deserialize;
+use serde::de;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -202,8 +203,34 @@ fn effective_cpython_mirror(astral_mirror_url: Option<&str>) -> String {
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: Cow<'static, str>,
-    sha256: Option<Cow<'static, str>>,
+    sha256: Option<Sha256Digest>,
     build: Option<&'static str>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+struct Sha256Digest(Cow<'static, str>);
+
+impl Sha256Digest {
+    fn new(value: Cow<'static, str>) -> Result<Self, &'static str> {
+        if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            Ok(Self(value))
+        } else {
+            Err("expected SHA-256 digest to be exactly 64 hexadecimal characters")
+        }
+    }
+
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for Sha256Digest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::new(Cow::Owned(String::deserialize(deserializer)?)).map_err(de::Error::custom)
+    }
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -956,7 +983,7 @@ struct JsonPythonDownload {
     patch: u8,
     prerelease: Option<String>,
     url: String,
-    sha256: Option<String>,
+    sha256: Option<Sha256Digest>,
     variant: Option<String>,
     build: Option<String>,
 }
@@ -1117,8 +1144,8 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub(crate) fn sha256(&self) -> Option<&Cow<'static, str>> {
-        self.sha256.as_ref()
+    pub(crate) fn sha256(&self) -> Option<&str> {
+        self.sha256.as_ref().map(Sha256Digest::as_str)
     }
 
     pub fn build(&self) -> Option<&'static str> {
@@ -1200,7 +1227,7 @@ impl ManagedPythonDownload {
         {
             let python_builds_dir = PathBuf::from(python_builds_dir);
             fs_err::create_dir_all(&python_builds_dir)?;
-            let hash_prefix = match self.sha256.as_deref() {
+            let hash_prefix = match self.sha256.as_ref().map(Sha256Digest::as_str) {
                 Some(sha) => {
                     // Shorten the hash to avoid too-long-filename errors
                     &sha[..9]
@@ -1432,7 +1459,7 @@ impl ManagedPythonDownload {
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
         // Check the hash
-        if let Some(expected) = self.sha256.as_deref() {
+        if let Some(expected) = self.sha256.as_ref().map(Sha256Digest::as_str) {
             let actual = HashDigest::from(hashers.pop().unwrap()).digest;
             if !actual.eq_ignore_ascii_case(expected) {
                 return Err(Error::HashMismatch {
@@ -1618,7 +1645,6 @@ fn parse_json_downloads(
             };
 
             let url = Cow::Owned(entry.url);
-            let sha256 = entry.sha256.map(Cow::Owned);
             let build = entry
                 .build
                 .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
@@ -1631,7 +1657,7 @@ fn parse_json_downloads(
                     variant,
                 ),
                 url,
-                sha256,
+                sha256: entry.sha256,
                 build,
             })
         })
@@ -1798,6 +1824,62 @@ mod tests {
     use uv_platform::{Arch, Libc, Os, Platform};
 
     use super::*;
+
+    fn python_download_json_with_sha256(sha256: &str) -> String {
+        format!(
+            r#"
+            {{
+                "cpython-3.14.0-darwin-aarch64-none": {{
+                    "name": "cpython",
+                    "arch": {{
+                        "family": "aarch64",
+                        "variant": null
+                    }},
+                    "os": "darwin",
+                    "libc": "none",
+                    "major": 3,
+                    "minor": 14,
+                    "patch": 0,
+                    "prerelease": "",
+                    "url": "https://custom.com/cpython-3.14.0-darwin-aarch64-none.tar.gz",
+                    "sha256": "{sha256}",
+                    "variant": null,
+                    "build": "20251028"
+                }}
+            }}
+            "#
+        )
+    }
+
+    #[test]
+    fn json_python_download_rejects_short_sha256() {
+        let err = serde_json::from_str::<HashMap<String, JsonPythonDownload>>(
+            &python_download_json_with_sha256("abc123"),
+        )
+        .expect_err("short SHA-256 digest should be rejected");
+
+        assert!(
+            err.to_string()
+                .contains("expected SHA-256 digest to be exactly 64 hexadecimal characters"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn json_python_download_rejects_non_hex_sha256() {
+        let err = serde_json::from_str::<HashMap<String, JsonPythonDownload>>(
+            &python_download_json_with_sha256(
+                "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+            ),
+        )
+        .expect_err("non-hex SHA-256 digest should be rejected");
+
+        assert!(
+            err.to_string()
+                .contains("expected SHA-256 digest to be exactly 64 hexadecimal characters"),
+            "{err}"
+        );
+    }
 
     /// Parse a request with all of its fields.
     #[test]
@@ -2245,7 +2327,12 @@ mod tests {
         ManagedPythonDownload {
             key,
             url: Cow::Borrowed(url),
-            sha256: Some(Cow::Borrowed("abc123")),
+            sha256: Some(
+                Sha256Digest::new(Cow::Borrowed(
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                ))
+                .unwrap(),
+            ),
             build: Some("20240713"),
         }
     }
