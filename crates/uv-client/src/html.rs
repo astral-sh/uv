@@ -1,6 +1,7 @@
 use std::{borrow::Cow, str::FromStr, sync::Arc};
 
 use jiff::Timestamp;
+use rustc_hash::FxHashMap;
 use tl::{HTMLTag, Node, Parser};
 use tracing::{debug, instrument, warn};
 
@@ -10,6 +11,28 @@ use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Stat
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
+
+type RequiresPythonResult = Result<Arc<VersionSpecifiers>, uv_pep440::VersionSpecifiersParseError>;
+
+#[derive(Default)]
+struct RequiresPythonInterner {
+    values: FxHashMap<SmallString, RequiresPythonResult>,
+}
+
+impl RequiresPythonInterner {
+    fn parse(&mut self, value: &str) -> RequiresPythonResult {
+        if let Some(requires_python) = self.values.get(value) {
+            return requires_python.clone();
+        }
+
+        let requires_python = LenientVersionSpecifiers::from_str(value)
+            .map(VersionSpecifiers::from)
+            .map(Arc::new);
+        self.values
+            .insert(SmallString::from(value), requires_python.clone());
+        requires_python
+    }
+}
 
 /// Return `true` if this tag has the given HTML element name.
 fn is_tag(tag: &HTMLTag<'_>, name: &[u8]) -> bool {
@@ -86,12 +109,13 @@ impl SimpleDetailHTML {
         );
 
         // Parse each `<a>` tag, to extract the filename, hash, and URL.
+        let mut requires_python_interner = RequiresPythonInterner::default();
         let mut files: Vec<PypiFile> = dom
             .nodes()
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| is_tag(link, b"a"))
-            .map(|link| Self::parse_anchor(link))
+            .map(|link| Self::parse_anchor(link, &mut requires_python_interner))
             .filter_map(|result| match result {
                 Ok(None) => None,
                 Ok(Some(file)) => Some(Ok(file)),
@@ -179,7 +203,10 @@ impl SimpleDetailHTML {
     /// Parse a [`PypiFile`] from an `<a>` tag.
     ///
     /// Returns `None` if the `<a>` doesn't have an `href` attribute.
-    fn parse_anchor(link: &HTMLTag) -> Result<Option<PypiFile>, Error> {
+    fn parse_anchor(
+        link: &HTMLTag,
+        requires_python_interner: &mut RequiresPythonInterner,
+    ) -> Result<Option<PypiFile>, Error> {
         // Extract the href.
         let Some(href) = attribute(link, "href").filter(|href| !href.is_empty()) else {
             return Ok(None);
@@ -242,11 +269,7 @@ impl SimpleDetailHTML {
         {
             let requires_python = std::str::from_utf8(requires_python.as_bytes())?;
             let requires_python = html_escape::decode_html_entities(requires_python);
-            Some(
-                LenientVersionSpecifiers::from_str(&requires_python)
-                    .map(VersionSpecifiers::from)
-                    .map(Arc::new),
-            )
+            Some(requires_python_interner.parse(requires_python.as_ref()))
         } else {
             None
         };
