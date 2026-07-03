@@ -13,7 +13,8 @@ pub enum PrereleaseMode {
     IfNecessary,
 
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active direct or transitive requirement contains an explicit pre-release marker.
+    /// when a direct or transitive dependency batch that contributes to candidate selection
+    /// contains an explicit pre-release marker.
     #[default]
     #[serde(alias = "explicit")]
     #[cfg_attr(feature = "clap", value(alias("explicit")))]

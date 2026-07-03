@@ -41,14 +41,23 @@ information, see [Configuration files](../concepts/configuration-files.md).
 ## Pre-release compatibility
 
 By default, uv respects pre-release identifiers in both direct and transitive requirements. A
-requirement like `flask>=2.0.0rc1` enables matching Flask pre-releases while that requirement is
-active. The opt-in is limited to the requirement's bounds and is removed if the resolver backtracks
-away from the dependency that introduced it.
+requirement like `flask>=2.0.0rc1` enables matching Flask pre-releases when it contributes to
+candidate selection. Requirements on the same dependency target from one dependency batch share
+their final opt-in region, so their declaration order does not affect admission. The opt-in is
+limited to the batch's combined bounds and is removed if the resolver backtracks away from the
+package version that introduced it.
+
+Separate dependency batches are handled prospectively. A newly activated pre-release requirement
+that is already satisfied by the active logical range does not retroactively expand that range's
+admission policy. If it narrows the range, its admission policy participates in the resulting
+intersection. Plain, extra, and marker-specific requirements are linked but distinct dependency
+targets and therefore also interact prospectively.
 
 For requirements without a pre-release identifier, uv prefers stable candidates. If every stable
-candidate is rejected during resolution, uv falls back to a pre-release without restarting. This is
-the same intended behavior as `pip`: explicit pre-release requirements are honored transitively, and
-otherwise pre-releases are eligible when no stable candidate can complete the resolution.
+candidate is rejected during resolution, uv falls back to a pre-release without restarting. This
+follows the same overall policy as `pip`: explicit pre-release requirements are honored
+transitively, and otherwise pre-releases are eligible when no stable candidate can complete the
+resolution.
 
 !!! note
 
@@ -56,8 +65,9 @@ otherwise pre-releases are eligible when no stable candidate can complete the re
 
 The Python packaging specifications define pre-release behavior for a single specifier, but
 [do not fully specify dependency resolution](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17).
-uv models pre-release authorization as part of each active version range so that conflict learning
-and backtracking preserve the requirement that granted it.
+uv models pre-release authorization as candidate-selection metadata on dependency ranges. Logical
+set operations remain independent of that metadata, while conflict learning and backtracking retain
+the dependency batch that granted it.
 
 ## Packages that exist on multiple indexes
 

@@ -421,7 +421,7 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv considers pre-releases within the bounds of any active direct or transitive\nrequirement that names a pre-release. It considers other pre-releases only when no stable\ncandidate can satisfy the active constraints (`if-necessary-or-explicit`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv considers pre-releases within the combined bounds of a direct or transitive\ndependency batch that contributes to candidate selection and names a pre-release. It\nconsiders other pre-releases only when no stable candidate can satisfy the active constraints\n(`if-necessary-or-explicit`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
@@ -1581,7 +1581,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv considers pre-releases within the bounds of any active direct or transitive\nrequirement that names a pre-release. It considers other pre-releases only when no stable\ncandidate can satisfy the active constraints (`if-necessary-or-explicit`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv considers pre-releases within the combined bounds of a direct or transitive\ndependency batch that contributes to candidate selection and names a pre-release. It\nconsiders other pre-releases only when no stable candidate can satisfy the active constraints\n(`if-necessary-or-explicit`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
@@ -1709,7 +1709,7 @@
           "const": "if-necessary"
         },
         {
-          "description": "Allow pre-release versions when no stable candidate satisfies the active constraints, or\nwhen an active direct or transitive requirement contains an explicit pre-release marker.",
+          "description": "Allow pre-release versions when no stable candidate satisfies the active constraints, or\nwhen a direct or transitive dependency batch that contributes to candidate selection\ncontains an explicit pre-release marker.",
           "type": "string",
           "const": "if-necessary-or-explicit"
         }

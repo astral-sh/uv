@@ -6292,9 +6292,10 @@ pub struct ToolUpgradeArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
-    /// requirement that names a pre-release. It considers other pre-releases only when no stable
-    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the combined bounds of a direct or transitive
+    /// dependency batch that contributes to candidate selection and names a pre-release. It
+    /// considers other pre-releases only when no stable candidate can satisfy the active constraints
+    /// (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7616,9 +7617,10 @@ pub struct ResolverArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
-    /// requirement that names a pre-release. It considers other pre-releases only when no stable
-    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the combined bounds of a direct or transitive
+    /// dependency batch that contributes to candidate selection and names a pre-release. It
+    /// considers other pre-releases only when no stable candidate can satisfy the active constraints
+    /// (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
@@ -7861,9 +7863,10 @@ pub struct ResolverInstallerArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv considers pre-releases within the bounds of any active direct or transitive
-    /// requirement that names a pre-release. It considers other pre-releases only when no stable
-    /// candidate can satisfy the active constraints (`if-necessary-or-explicit`).
+    /// By default, uv considers pre-releases within the combined bounds of a direct or transitive
+    /// dependency batch that contributes to candidate selection and names a pre-release. It
+    /// considers other pre-releases only when no stable candidate can satisfy the active constraints
+    /// (`if-necessary-or-explicit`).
     #[arg(
         long,
         value_enum,
