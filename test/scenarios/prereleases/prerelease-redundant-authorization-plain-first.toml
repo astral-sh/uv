@@ -1,0 +1,16 @@
+name = "prerelease-redundant-authorization-plain-first"
+description = "Root requirements share pre-release authorization when a narrower plain requirement appears first."
+
+[root]
+requires = ["c>=1.0", "c>=0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "Requirements in the same root dependency batch are combined before resolution, so `c>=0.5a1` authorizes matching pre-releases regardless of requirement order."
+
+[expected.packages]
+c = "2.0.0a1"
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]

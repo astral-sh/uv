@@ -40,9 +40,24 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
-By default, uv prefers stable versions. A pre-release is considered when no stable candidate
-satisfies the active constraints, or when an active direct or transitive requirement contains a
-pre-release specifier (e.g., `flask>=2.0.0rc1`).
+By default, uv prefers stable versions for requirements that do not name a pre-release. If every
+stable candidate that satisfies the active constraints is rejected during resolution, uv falls back
+to a pre-release without restarting. An applicable direct or transitive requirement, constraint, or
+override that names a pre-release instead authorizes matching pre-releases to participate in normal
+version order. This makes those pre-releases eligible; it does not guarantee that one will be
+selected.
+
+Requirements for the same distribution that are introduced together by the project or by one
+selected package version are registered as one dependency batch within the same resolver fork. Their
+declaration order does not affect pre-release authorization, including requirements for extras and
+marker variants.
+
+Requirements discovered in separate dependency batches can affect which valid candidate is selected
+according to uv's ordinary [package priorities](#package-priority). For example, with `c==1.0` and
+`c==2.0a1` available, `c>=1` can retain `c==1.0` if it is resolved before a separately discovered
+`a -> c>=0.5a1` edge. If the authorizing edge is active before `c` is selected, `c==2.0a1` is
+eligible in normal version order. A later requirement that excludes the selected stable version
+still forces reconsideration. In every case, the selected version satisfies all active requirements.
 
 Pre-release authorization is part of the PubGrub solution. An explicit requirement targets a proxy
 package that selects with pre-releases enabled, then pins the real package to the same version. This
