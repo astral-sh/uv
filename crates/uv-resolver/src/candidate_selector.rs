@@ -828,10 +828,17 @@ mod tests {
     }
 }
 
+/// Controls which release classes are visible during one candidate-selection pass.
+///
+/// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
+/// an incompatible stable candidate does not prevent falling back to a pre-release.
 #[derive(Debug, Clone, Copy)]
 enum PrereleaseCandidates {
+    /// Consider versions with or without a pre-release component.
     All,
+    /// Consider only versions without a pre-release component.
     Stable,
+    /// Consider only versions with a pre-release component.
     Prerelease,
 }
 
