@@ -69,7 +69,7 @@ impl PrereleaseStrategy {
             PrereleaseMode::IfNecessary => Self::IfNecessary,
             PrereleaseMode::IfNecessaryOrExplicit => {
                 let mut packages = ForkSet::default();
-                for requirement in manifest.candidate_selection_requirements(env, dependencies) {
+                for requirement in manifest.requirements(env, dependencies) {
                     let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                         continue;
                     };
