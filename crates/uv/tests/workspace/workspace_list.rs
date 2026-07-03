@@ -251,8 +251,12 @@ fn workspace_list_scripts() -> Result<()> {
     project.child("scripts/nested.py").write_str(script)?;
     project.child(".github/hidden.py").write_str(script)?;
 
-    // Extensionless scripts are not discovered.
-    project.child("tool").write_str(script)?;
+    project
+        .child("tool")
+        .write_str(&format!("#!/usr/bin/env python\n{script}"))?;
+
+    // Extensionless files without a shebang aren't scanned, even if they're ASCII.
+    project.child("no-shebang").write_str(script)?;
 
     // PEP 723 examples in documentation are not Python scripts.
     project
@@ -287,6 +291,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
@@ -303,6 +308,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     ");
@@ -317,6 +323,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
@@ -335,6 +342,7 @@ fn workspace_list_scripts() -> Result<()> {
     .github/hidden.py
     script.py
     scripts/nested.py
+    tool
 
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -134,12 +135,15 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
             continue;
         }
 
-        let contents = fs_err::read(entry.path()).with_context(|| {
+        let Some(contents) = read_script_candidate(entry.path()).with_context(|| {
             format!(
                 "Failed to read candidate PEP 723 script: {}",
                 entry.path().simplified_display()
             )
-        })?;
+        })?
+        else {
+            continue;
+        };
         if Pep723Metadata::parse(&contents)
             .with_context(|| {
                 format!(
@@ -157,16 +161,106 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     Ok(scripts)
 }
 
-/// Return whether a path uses a conventional Python script filename.
+/// Read a candidate script.
+///
+/// Extensionless candidates are only read past their prefix when they begin with a shebang.
+fn read_script_candidate(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    if path.extension().is_some() {
+        return fs_err::read(path).map(Some);
+    }
+
+    let mut file = fs_err::File::open(path)?;
+    read_extensionless_script(&mut file)
+}
+
+/// Read an extensionless script, if it starts with a shebang and is valid UTF-8 text.
+fn read_extensionless_script(mut reader: impl Read) -> io::Result<Option<Vec<u8>>> {
+    const READ_BUFFER_SIZE: usize = 8 * 1024;
+
+    let mut prefix = [0; 2];
+    match reader.read_exact(&mut prefix) {
+        Ok(()) if &prefix == b"#!" => {}
+        Ok(()) => return Ok(None),
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(err) => return Err(err),
+    }
+
+    let mut contents = prefix.to_vec();
+    let mut valid_utf8_len = contents.len();
+    let mut buffer = [0u8; READ_BUFFER_SIZE];
+    loop {
+        let count = match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => count,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        };
+
+        let chunk = &buffer[..count];
+        if chunk.contains(&0) {
+            return Ok(None);
+        }
+        contents.extend_from_slice(chunk);
+        match std::str::from_utf8(&contents[valid_utf8_len..]) {
+            Ok(_) => valid_utf8_len = contents.len(),
+            Err(err) if err.error_len().is_some() => return Ok(None),
+            Err(err) => valid_utf8_len += err.valid_up_to(),
+        }
+    }
+
+    Ok((valid_utf8_len == contents.len()).then_some(contents))
+}
+
+/// Return whether a path could contain a Python script.
 ///
 /// PEP 723 does not require a specific filename, and uv can run explicitly requested scripts with
 /// arbitrary extensions or no extension. For discovery, restrict the search to Python extensions
-/// to avoid treating metadata examples embedded in documentation as scripts. This could be expanded
-/// if arbitrary script filenames can be distinguished without introducing false positives.
+/// and extensionless files to avoid treating metadata examples embedded in documentation as scripts.
+/// Extensionless candidates are further restricted to shebang scripts and checked for binary
+/// content as they are read.
 fn is_python_script_path(path: &Path) -> bool {
-    path.extension().is_some_and(|extension| {
-        extension.to_str().is_some_and(|extension| {
-            extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
-        })
+    path.extension().is_none_or(|extension| {
+        extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Cursor, Read};
+
+    use super::read_extensionless_script;
+
+    struct ErrorReader;
+
+    impl Read for ErrorReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("read past binary marker"))
+        }
+    }
+
+    #[test]
+    fn extensionless_script_stops_at_non_shebang() -> io::Result<()> {
+        let reader = Cursor::new(b"# ").chain(ErrorReader);
+        assert!(read_extensionless_script(reader)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn extensionless_script_stops_at_binary_content() -> io::Result<()> {
+        for marker in [0, 0xff] {
+            let reader = Cursor::new([b'#', b'!', marker]).chain(ErrorReader);
+            assert!(read_extensionless_script(reader)?.is_none());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn extensionless_script_handles_split_utf8() -> io::Result<()> {
+        let reader = Cursor::new(b"#!\xc3").chain(Cursor::new(b"\xa9"));
+        assert_eq!(
+            read_extensionless_script(reader)?,
+            Some(b"#!\xc3\xa9".to_vec())
+        );
+        Ok(())
+    }
 }
