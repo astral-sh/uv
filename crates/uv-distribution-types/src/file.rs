@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ pub struct File {
     pub dist_info_metadata: bool,
     pub filename: SmallString,
     pub hashes: HashDigests,
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<Arc<VersionSpecifiers>>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
     // annoying to do so with rkyv. Since we only use this field for doing
@@ -49,6 +50,15 @@ impl File {
         file: uv_pypi_types::PypiFile,
         base: &SmallString,
     ) -> Result<Self, FileConversionError> {
+        Self::try_from_pypi_with(file, base, Arc::new)
+    }
+
+    /// Like [`File::try_from_pypi`], with a caller-provided `requires-python` interner.
+    pub fn try_from_pypi_with(
+        file: uv_pypi_types::PypiFile,
+        base: &SmallString,
+        intern_requires_python: impl FnOnce(VersionSpecifiers) -> Arc<VersionSpecifiers>,
+    ) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
                 .core_metadata
@@ -59,7 +69,8 @@ impl File {
             requires_python: file
                 .requires_python
                 .transpose()
-                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?
+                .map(intern_requires_python),
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),
@@ -71,6 +82,15 @@ impl File {
     pub fn try_from_pyx(
         file: uv_pypi_types::PyxFile,
         base: &SmallString,
+    ) -> Result<Self, FileConversionError> {
+        Self::try_from_pyx_with(file, base, Arc::new)
+    }
+
+    /// Like [`File::try_from_pyx`], with a caller-provided `requires-python` interner.
+    pub fn try_from_pyx_with(
+        file: uv_pypi_types::PyxFile,
+        base: &SmallString,
+        intern_requires_python: impl FnOnce(VersionSpecifiers) -> Arc<VersionSpecifiers>,
     ) -> Result<Self, FileConversionError> {
         let filename = if let Some(filename) = file.filename {
             filename
@@ -105,7 +125,8 @@ impl File {
             requires_python: file
                 .requires_python
                 .transpose()
-                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
+                .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?
+                .map(intern_requires_python),
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: FileLocation::new(file.url, base),

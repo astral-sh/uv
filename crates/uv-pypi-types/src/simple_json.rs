@@ -22,6 +22,7 @@ pub struct PypiSimpleDetail {
     #[serde(default)]
     pub project_status: ProjectStatus,
     /// The list of [`PypiFile`]s available for download.
+    #[serde(deserialize_with = "deserialize_pypi_files")]
     pub files: Vec<PypiFile>,
 }
 
@@ -41,74 +42,231 @@ pub struct PypiFile {
     pub yanked: Option<Box<Yanked>>,
 }
 
+#[derive(Deserialize)]
+#[serde(field_identifier, rename_all = "kebab-case")]
+enum FileField {
+    #[serde(alias = "dist-info-metadata", alias = "data-dist-info-metadata")]
+    CoreMetadata,
+    Filename,
+    Hashes,
+    RequiresPython,
+    Size,
+    UploadTime,
+    Url,
+    Yanked,
+    Zstd,
+    #[serde(other)]
+    Ignore,
+}
+
+type RequiresPythonResult = Result<VersionSpecifiers, VersionSpecifiersParseError>;
+type RequiresPythonCache = FxHashMap<SmallString, RequiresPythonResult>;
+
+/// Deserialize files while parsing each distinct `requires-python` value only once.
+fn deserialize_pypi_files<'de, D>(deserializer: D) -> Result<Vec<PypiFile>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut requires_python_cache = RequiresPythonCache::default();
+    serde::de::DeserializeSeed::deserialize(
+        PypiFilesSeed {
+            requires_python_cache: &mut requires_python_cache,
+        },
+        deserializer,
+    )
+}
+
+struct RequiresPythonSeed<'a> {
+    cache: &'a mut RequiresPythonCache,
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for RequiresPythonSeed<'_> {
+    type Value = Option<RequiresPythonResult>;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_option(RequiresPythonOptionVisitor { cache: self.cache })
+    }
+}
+
+struct RequiresPythonOptionVisitor<'a> {
+    cache: &'a mut RequiresPythonCache,
+}
+
+impl<'de> serde::de::Visitor<'de> for RequiresPythonOptionVisitor<'_> {
+    type Value = Option<RequiresPythonResult>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a Python version specifier or null")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer
+            .deserialize_str(RequiresPythonStringVisitor { cache: self.cache })
+            .map(Some)
+    }
+}
+
+struct RequiresPythonStringVisitor<'a> {
+    cache: &'a mut RequiresPythonCache,
+}
+
+impl serde::de::Visitor<'_> for RequiresPythonStringVisitor<'_> {
+    type Value = RequiresPythonResult;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a Python version specifier")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
+        if let Some(requires_python) = self.cache.get(value) {
+            return Ok(requires_python.clone());
+        }
+
+        let requires_python =
+            LenientVersionSpecifiers::from_str(value).map(VersionSpecifiers::from);
+        self.cache
+            .insert(SmallString::from(value), requires_python.clone());
+        Ok(requires_python)
+    }
+}
+
+struct PypiFileSeed<'a> {
+    requires_python_cache: &'a mut RequiresPythonCache,
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for PypiFileSeed<'_> {
+    type Value = PypiFile;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_map(PypiFileVisitor {
+            requires_python_cache: self.requires_python_cache,
+        })
+    }
+}
+
+struct PypiFilesSeed<'a> {
+    requires_python_cache: &'a mut RequiresPythonCache,
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for PypiFilesSeed<'_> {
+    type Value = Vec<PypiFile>;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct FilesVisitor<'a> {
+            requires_python_cache: &'a mut RequiresPythonCache,
+        }
+
+        impl<'de> serde::de::Visitor<'de> for FilesVisitor<'_> {
+            type Value = Vec<PypiFile>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a list of PyPI file metadata")
+            }
+
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut files = Vec::with_capacity(sequence.size_hint().unwrap_or(0));
+                while let Some(file) = sequence.next_element_seed(PypiFileSeed {
+                    requires_python_cache: &mut *self.requires_python_cache,
+                })? {
+                    files.push(file);
+                }
+                Ok(files)
+            }
+        }
+
+        deserializer.deserialize_seq(FilesVisitor {
+            requires_python_cache: self.requires_python_cache,
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for PypiFile {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        struct FileVisitor;
+        let mut requires_python_cache = RequiresPythonCache::default();
+        deserializer.deserialize_map(PypiFileVisitor {
+            requires_python_cache: &mut requires_python_cache,
+        })
+    }
+}
 
-        impl<'de> serde::de::Visitor<'de> for FileVisitor {
-            type Value = PypiFile;
+struct PypiFileVisitor<'a> {
+    requires_python_cache: &'a mut RequiresPythonCache,
+}
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a map containing file metadata")
-            }
+impl<'de> serde::de::Visitor<'de> for PypiFileVisitor<'_> {
+    type Value = PypiFile;
 
-            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-            where
-                M: serde::de::MapAccess<'de>,
-            {
-                let mut core_metadata = None;
-                let mut filename = None;
-                let mut hashes = None;
-                let mut requires_python = None;
-                let mut size = None;
-                let mut upload_time = None;
-                let mut url = None;
-                let mut yanked = None;
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a map containing file metadata")
+    }
 
-                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
-                    match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
-                            if core_metadata.is_none() =>
-                        {
-                            core_metadata = access.next_value()?;
-                        }
-                        "filename" => filename = Some(access.next_value()?),
-                        "hashes" => hashes = Some(access.next_value()?),
-                        "requires-python" => {
-                            requires_python =
-                                access.next_value::<Option<Cow<'_, str>>>()?.map(|s| {
-                                    LenientVersionSpecifiers::from_str(s.as_ref())
-                                        .map(VersionSpecifiers::from)
-                                });
-                        }
-                        "size" => size = Some(access.next_value()?),
-                        "upload-time" => upload_time = Some(access.next_value()?),
-                        "url" => url = Some(access.next_value()?),
-                        "yanked" => yanked = Some(access.next_value()?),
-                        _ => {
-                            let _: serde::de::IgnoredAny = access.next_value()?;
-                        }
-                    }
+    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
+    where
+        M: serde::de::MapAccess<'de>,
+    {
+        let mut core_metadata = None;
+        let mut filename = None;
+        let mut hashes = None;
+        let mut requires_python = None;
+        let mut size = None;
+        let mut upload_time = None;
+        let mut url = None;
+        let mut yanked = None;
+
+        while let Some(key) = access.next_key::<FileField>()? {
+            match key {
+                FileField::CoreMetadata if core_metadata.is_none() => {
+                    core_metadata = access.next_value()?;
                 }
-
-                Ok(PypiFile {
-                    core_metadata,
-                    filename: filename
-                        .ok_or_else(|| serde::de::Error::missing_field("filename"))?,
-                    hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
-                    requires_python,
-                    size,
-                    upload_time,
-                    url: url.ok_or_else(|| serde::de::Error::missing_field("url"))?,
-                    yanked,
-                })
+                FileField::Filename => filename = Some(access.next_value()?),
+                FileField::Hashes => hashes = Some(access.next_value()?),
+                FileField::RequiresPython => {
+                    requires_python = access.next_value_seed(RequiresPythonSeed {
+                        cache: &mut *self.requires_python_cache,
+                    })?;
+                }
+                FileField::Size => size = Some(access.next_value()?),
+                FileField::UploadTime => upload_time = Some(access.next_value()?),
+                FileField::Url => url = Some(access.next_value()?),
+                FileField::Yanked => yanked = Some(access.next_value()?),
+                _ => {
+                    let _: serde::de::IgnoredAny = access.next_value()?;
+                }
             }
         }
 
-        deserializer.deserialize_map(FileVisitor)
+        Ok(PypiFile {
+            core_metadata,
+            filename: filename.ok_or_else(|| serde::de::Error::missing_field("filename"))?,
+            hashes: hashes.ok_or_else(|| serde::de::Error::missing_field("hashes"))?,
+            requires_python,
+            size,
+            upload_time,
+            url: url.ok_or_else(|| serde::de::Error::missing_field("url"))?,
+            yanked,
+        })
     }
 }
 
@@ -169,27 +327,25 @@ impl<'de> Deserialize<'de> for PyxFile {
                 let mut yanked = None;
                 let mut zstd = None;
 
-                while let Some(key) = access.next_key::<Cow<'_, str>>()? {
-                    match &*key {
-                        "core-metadata" | "dist-info-metadata" | "data-dist-info-metadata"
-                            if core_metadata.is_none() =>
-                        {
+                while let Some(key) = access.next_key::<FileField>()? {
+                    match key {
+                        FileField::CoreMetadata if core_metadata.is_none() => {
                             core_metadata = access.next_value()?;
                         }
-                        "filename" => filename = Some(access.next_value()?),
-                        "hashes" => hashes = Some(access.next_value()?),
-                        "requires-python" => {
+                        FileField::Filename => filename = Some(access.next_value()?),
+                        FileField::Hashes => hashes = Some(access.next_value()?),
+                        FileField::RequiresPython => {
                             requires_python =
-                                access.next_value::<Option<Cow<'_, str>>>()?.map(|s| {
-                                    LenientVersionSpecifiers::from_str(s.as_ref())
+                                access.next_value::<Option<Cow<'_, str>>>()?.map(|value| {
+                                    LenientVersionSpecifiers::from_str(value.as_ref())
                                         .map(VersionSpecifiers::from)
                                 });
                         }
-                        "size" => size = access.next_value()?,
-                        "upload-time" => upload_time = Some(access.next_value()?),
-                        "url" => url = Some(access.next_value()?),
-                        "yanked" => yanked = Some(access.next_value()?),
-                        "zstd" => {
+                        FileField::Size => size = access.next_value()?,
+                        FileField::UploadTime => upload_time = Some(access.next_value()?),
+                        FileField::Url => url = Some(access.next_value()?),
+                        FileField::Yanked => yanked = Some(access.next_value()?),
+                        FileField::Zstd => {
                             zstd = Some(access.next_value()?);
                         }
                         _ => {

@@ -10,7 +10,7 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
@@ -27,7 +27,7 @@ use uv_distribution_types::{
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::ProjectStatus;
@@ -1468,6 +1468,7 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+        let mut requires_python_cache: FxHashSet<Arc<VersionSpecifiers>> = FxHashSet::default();
 
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
@@ -1485,7 +1486,9 @@ impl SimpleDetailMetadata {
                         continue;
                     }
                 };
-            let file = match File::try_from_pypi(file, &base) {
+            let file = match File::try_from_pypi_with(file, &base, |requires_python| {
+                intern_requires_python(&mut requires_python_cache, requires_python)
+            }) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1536,13 +1539,16 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+        let mut requires_python_cache: FxHashSet<Arc<VersionSpecifiers>> = FxHashSet::default();
 
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
 
         // Group the distributions by version and kind
         for file in files {
-            let file = match File::try_from_pyx(file, &base) {
+            let file = match File::try_from_pyx_with(file, &base, |requires_python| {
+                intern_requires_python(&mut requires_python_cache, requires_python)
+            }) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1618,6 +1624,19 @@ impl SimpleDetailMetadata {
             project_status,
             base.as_url(),
         ))
+    }
+}
+
+fn intern_requires_python(
+    cache: &mut FxHashSet<Arc<VersionSpecifiers>>,
+    requires_python: VersionSpecifiers,
+) -> Arc<VersionSpecifiers> {
+    if let Some(requires_python) = cache.get(&requires_python) {
+        Arc::clone(requires_python)
+    } else {
+        let requires_python = Arc::new(requires_python);
+        cache.insert(Arc::clone(&requires_python));
+        requires_python
     }
 }
 
@@ -1719,16 +1738,17 @@ impl Connectivity {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::sync::Arc;
 
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::PypiSimpleDetail;
+    use uv_pypi_types::{PypiSimpleDetail, PyxSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
     use crate::{
-        BaseClientBuilder, Connectivity, RegistryClient, RegistryClientBuilder,
+        BaseClientBuilder, Connectivity, OwnedArchive, RegistryClient, RegistryClientBuilder,
         SimpleDetailMetadata, SimpleDetailMetadatum, html::SimpleDetailHTML,
     };
     use uv_cache::Cache;
@@ -1741,6 +1761,163 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
+
+    fn assert_shared_requires_python(metadata: &SimpleDetailMetadata) {
+        let requires_python: Vec<_> = metadata
+            .iter()
+            .flat_map(|datum| {
+                datum.files.wheels.iter().map(|wheel| &wheel.file).chain(
+                    datum
+                        .files
+                        .source_dists
+                        .iter()
+                        .map(|source_dist| &source_dist.file),
+                )
+            })
+            .filter_map(|file| file.requires_python.as_ref())
+            .collect();
+        let first = requires_python
+            .first()
+            .expect("test metadata should contain requires-python specifiers");
+        assert!(
+            requires_python
+                .iter()
+                .all(|requires_python| Arc::ptr_eq(first, requires_python))
+        );
+    }
+
+    #[test]
+    fn pypi_file_order_and_requires_python_sharing() {
+        let response = r#"
+        {
+          "files": [
+            {"filename": "benchmark-2.0.0.tar.gz", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-2.0.0.tar.gz"},
+            {"filename": "benchmark-1.0.0-2-py3-none-any.whl", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-1.0.0-2-py3-none-any.whl"},
+            {"filename": "benchmark-2.0.0-2-py3-none-any.whl", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-2.0.0-2-py3-none-any.whl"},
+            {"filename": "benchmark-1.0.0.tar.gz", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-1.0.0.tar.gz"},
+            {"filename": "benchmark-2.0.0-1-py3-none-any.whl", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-2.0.0-1-py3-none-any.whl"},
+            {"filename": "benchmark-1.0.0-1-py3-none-any.whl", "hashes": {}, "requires-python": ">=3.8", "url": "benchmark-1.0.0-1-py3-none-any.whl"}
+          ]
+        }
+        "#;
+        let data: PypiSimpleDetail =
+            serde_json::from_str(response).expect("test response should be valid");
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/benchmark/")
+            .expect("test URL should be valid");
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
+            data.files,
+            &PackageName::from_str("benchmark").expect("test package name should be valid"),
+            data.project_status,
+            &base,
+        );
+
+        let filenames: Vec<_> = simple_metadata
+            .iter()
+            .flat_map(|datum| {
+                let version = datum.version.to_string();
+                datum
+                    .files
+                    .wheels
+                    .iter()
+                    .map(|wheel| wheel.file.filename.as_ref())
+                    .chain(
+                        datum
+                            .files
+                            .source_dists
+                            .iter()
+                            .map(|source_dist| source_dist.file.filename.as_ref()),
+                    )
+                    .map(move |filename| format!("{version}: {filename}"))
+            })
+            .collect();
+        insta::assert_debug_snapshot!(filenames, @r#"
+        [
+            "1.0.0: benchmark-1.0.0-1-py3-none-any.whl",
+            "1.0.0: benchmark-1.0.0-2-py3-none-any.whl",
+            "1.0.0: benchmark-1.0.0.tar.gz",
+            "2.0.0: benchmark-2.0.0-1-py3-none-any.whl",
+            "2.0.0: benchmark-2.0.0-2-py3-none-any.whl",
+            "2.0.0: benchmark-2.0.0.tar.gz",
+        ]
+        "#);
+
+        assert_shared_requires_python(&simple_metadata);
+        let archived =
+            OwnedArchive::from_unarchived(&simple_metadata).expect("test metadata should archive");
+        assert_shared_requires_python(&OwnedArchive::deserialize(&archived));
+    }
+
+    #[test]
+    fn pyx_file_msgpack_deserialization() {
+        let response = serde_json::json!({
+            "files": [
+                {
+                    "data-dist-info-metadata": true,
+                    "filename": "benchmark-1.0.0-py3-none-any.whl",
+                    "hashes": {},
+                    "requires-python": ">=3.8",
+                    "size": 42,
+                    "url": "benchmark-1.0.0-py3-none-any.whl",
+                    "yanked": false,
+                },
+                {
+                    "filename": "benchmark-1.0.0.tar.gz",
+                    "hashes": {},
+                    "requires-python": ">=3.8",
+                    "url": "benchmark-1.0.0.tar.gz",
+                }
+            ]
+        });
+        let encoded = rmp_serde::to_vec_named(&response)
+            .expect("test response should serialize to MessagePack");
+        let detail: PyxSimpleDetail =
+            rmp_serde::from_slice(&encoded).expect("test MessagePack response should be valid");
+        let file = detail
+            .files
+            .first()
+            .expect("test response should have a file");
+        let requires_python = file
+            .requires_python
+            .as_ref()
+            .and_then(|requires_python| requires_python.as_ref().ok())
+            .expect("test file should have a valid requires-python specifier");
+
+        insta::assert_debug_snapshot!(
+            (
+                file.filename.as_deref(),
+                requires_python.to_string(),
+                file.size,
+                file.core_metadata.as_ref(),
+            ),
+            @r#"
+        (
+            Some(
+                "benchmark-1.0.0-py3-none-any.whl",
+            ),
+            ">=3.8",
+            Some(
+                42,
+            ),
+            Some(
+                Bool(
+                    true,
+                ),
+            ),
+        )
+        "#
+        );
+
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/benchmark/")
+            .expect("test URL should be valid");
+        let simple_metadata = SimpleDetailMetadata::from_pyx_files(
+            detail.files,
+            detail.core_metadata,
+            &PackageName::from_str("benchmark").expect("test package name should be valid"),
+            detail.project_status,
+            &base,
+        );
+        assert_shared_requires_python(&simple_metadata);
+    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;
