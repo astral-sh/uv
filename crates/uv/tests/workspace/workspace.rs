@@ -2518,3 +2518,28 @@ fn workspace_unmanaged_member_no_project() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure a clear error when `pyproject.toml` exists as a directory rather than a file.
+#[test]
+fn pyproject_toml_is_directory() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a directory named `pyproject.toml` in the temp directory root.
+    let pyproject_dir = context.temp_dir.child("pyproject.toml");
+    fs_err::create_dir(&pyproject_dir)?;
+
+    // Create a subdirectory with no real pyproject.toml.
+    let subdir = context.temp_dir.child("subdir");
+    fs_err::create_dir(&subdir)?;
+
+    uv_snapshot!(context.filters(), context.lock().current_dir(&subdir), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pyproject.toml` at `[TEMP_DIR]/pyproject.toml` is a directory, expected a file
+    ");
+
+    Ok(())
+}

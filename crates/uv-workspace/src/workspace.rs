@@ -186,6 +186,8 @@ pub enum WorkspaceErrorKind {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]
     MissingPyprojectToml,
+    #[error("`pyproject.toml` at `{}` is a directory, expected a file", _0.simplified_display())]
+    PyprojectTomlIsDirectory(PathBuf),
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
     #[error("No `project` table found in: {}", _0.simplified_display())]
@@ -316,11 +318,25 @@ impl Workspace {
             .clone();
         let path = normalize_path(&path);
 
-        let project_path = path
+        let (pyproject_path, project_path) = path
             .ancestors()
-            .find(|path| path.join("pyproject.toml").is_file())
-            .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?
-            .to_path_buf();
+            .find_map(|path| {
+                let candidate = path.join("pyproject.toml");
+                if candidate.is_file() {
+                    Some((candidate, path.to_path_buf()))
+                } else if candidate.is_dir() {
+                    // Return the dir path so we can give a specific error below
+                    Some((candidate, path.to_path_buf()))
+                } else {
+                    None
+                }
+            })
+            .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?;
+
+        // Check for the case where `pyproject.toml` exists as a directory.
+        if pyproject_path.is_dir() {
+            return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path).into());
+        }
 
         // Fast path: The workspace was already fully discovered.
         // It's possible that there are two separate discoveries for the same workspace going on
@@ -333,7 +349,6 @@ impl Workspace {
             return workspace;
         }
 
-        let pyproject_path = project_path.join("pyproject.toml");
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceErrorKind::Toml(pyproject_path.clone(), Box::new(err)))?;
@@ -1523,8 +1538,16 @@ impl ProjectWorkspace {
                     .and_then(Path::parent)
                     .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
-            .find(|path| path.join("pyproject.toml").is_file())
+            .find(|path| {
+                let candidate = path.join("pyproject.toml");
+                candidate.is_file() || candidate.is_dir()
+            })
             .ok_or_else(|| WorkspaceErrorKind::MissingPyprojectToml)?;
+
+        let pyproject_path = project_root.join("pyproject.toml");
+        if pyproject_path.is_dir() {
+            return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path).into());
+        }
 
         debug!(
             "Found project root: `{}`",
@@ -1547,6 +1570,10 @@ impl ProjectWorkspace {
 
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
+
+        if pyproject_path.is_dir() {
+            return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path).into());
+        }
 
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
@@ -2016,8 +2043,16 @@ impl VirtualProject {
                     .and_then(Path::parent)
                     .is_none_or(|stop_discovery_at| stop_discovery_at != *path)
             })
-            .find(|path| path.join("pyproject.toml").is_file())
+            .find(|path| {
+                let candidate = path.join("pyproject.toml");
+                candidate.is_file() || candidate.is_dir()
+            })
             .ok_or(WorkspaceErrorKind::MissingPyprojectToml)?;
+
+        let pyproject_path = project_root.join("pyproject.toml");
+        if pyproject_path.is_dir() {
+            return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path).into());
+        }
 
         debug!(
             "Found project root: `{}`",
@@ -2047,6 +2082,11 @@ impl VirtualProject {
 
         // Read the current `pyproject.toml`.
         let pyproject_path = project_root.join("pyproject.toml");
+
+        if pyproject_path.is_dir() {
+            return Err(WorkspaceErrorKind::PyprojectTomlIsDirectory(pyproject_path).into());
+        }
+
         let contents = fs_err::tokio::read_to_string(&pyproject_path).await?;
         let pyproject_toml = PyProjectToml::from_string(contents, &pyproject_path)
             .map_err(|err| WorkspaceErrorKind::Toml(pyproject_path.clone(), Box::new(err)))?;
