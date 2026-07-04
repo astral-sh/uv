@@ -314,14 +314,17 @@ pub(crate) async fn sync(
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     )
-                    .report(operations::Error::OutdatedEnvironment(changelog))
+                    .report(
+                        operations::Error::OutdatedEnvironment(changelog),
+                        printer.stderr_important(),
+                    )?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     )
-                    .report(err)
+                    .report(err, printer.stderr_important())?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -370,7 +373,7 @@ pub(crate) async fn sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
@@ -458,14 +461,17 @@ pub(crate) async fn sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(operations::Error::OutdatedEnvironment(changelog))
+            .report(
+                operations::Error::OutdatedEnvironment(changelog),
+                printer.stderr_important(),
+            )?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),

@@ -275,7 +275,7 @@ pub(crate) async fn lock(
         }
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
+                .report(err, printer.stderr_important())?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => Err(err.into()),

@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -77,11 +78,16 @@ impl OperationDiagnostic {
 
     /// Attempt to report an error with rich diagnostic context.
     ///
-    /// Returns `Some` if the error was not handled.
-    pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
+    /// Returns `Some` if the error was not handled, or an error if the diagnostic could not be
+    /// written to the provided stream.
+    pub(crate) fn report(
+        self,
+        err: pip::operations::Error,
+        mut stream: impl Write,
+    ) -> Result<Option<pip::operations::Error>, std::fmt::Error> {
         let result = match err {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                no_solution(&err, self.context);
+                no_solution(&err, self.context, &mut stream)?;
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
@@ -90,7 +96,7 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                requested_dist_error(kind, dist, &chain, err);
+                requested_dist_error(kind, dist, &chain, err, &mut stream)?;
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dependencies(
@@ -99,11 +105,17 @@ impl OperationDiagnostic {
                 version,
                 chain,
             )) => {
-                dependencies_error(error, &name, &version, &chain);
+                dependencies_error(error, &name, &version, &chain, &mut stream)?;
                 None
             }
             pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
-                dist_error(kind, dist, &DerivationChain::default(), Arc::new(*err));
+                dist_error(
+                    kind,
+                    dist,
+                    &DerivationChain::default(),
+                    Arc::new(*err),
+                    &mut stream,
+                )?;
                 None
             }
             pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
@@ -112,14 +124,14 @@ impl OperationDiagnostic {
                 chain,
                 err,
             )) => {
-                dist_error(kind, dist, &chain, Arc::new(*err));
+                dist_error(kind, dist, &chain, Arc::new(*err), &mut stream)?;
                 None
             }
             pip::operations::Error::Requirements(err) => {
                 if let Some(context) = self.context {
                     let err = miette::Report::msg(format!("{err}"))
                         .context(format!("Failed to resolve {context} requirement"));
-                    anstream::eprint!("{err:?}");
+                    write!(stream, "{err:?}")?;
                     None
                 } else {
                     Some(pip::operations::Error::Requirements(err))
@@ -128,11 +140,11 @@ impl OperationDiagnostic {
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
                 if !self.system_certs && err.is_ssl() =>
             {
-                system_certs_hint(err);
+                system_certs_hint(err, &mut stream)?;
                 None
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
-                anstream::eprintln!("{}", err);
+                writeln!(stream, "{err}")?;
                 None
             }
             err => Some(err),
@@ -141,10 +153,10 @@ impl OperationDiagnostic {
         // Render the caller-provided hints after the error output.
         if result.is_none() {
             let hints: Hints<'_> = self.hints.into_iter().collect();
-            anstream::eprint!("{hints}");
+            write!(stream, "{hints}")?;
         }
 
-        result
+        Ok(result)
     }
 }
 
@@ -156,7 +168,8 @@ fn dist_error(
     dist: Box<Dist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-) {
+    stream: &mut impl Write,
+) -> std::fmt::Result {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
@@ -169,8 +182,8 @@ fn dist_error(
 
     let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    write!(stream, "{report:?}")?;
+    write!(stream, "{hints}")
 }
 
 /// Render a requested distribution failure (read, download or build) with a help message.
@@ -181,7 +194,8 @@ fn requested_dist_error(
     dist: Box<RequestedDist>,
     chain: &DerivationChain,
     cause: Arc<uv_distribution::Error>,
-) {
+    stream: &mut impl Write,
+) -> std::fmt::Result {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
@@ -194,8 +208,8 @@ fn requested_dist_error(
 
     let hints = dist_hints(dist.name(), dist.version(), chain, cause.hints());
     let report = miette::Report::new(Diagnostic { kind, dist, cause });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    write!(stream, "{report:?}")?;
+    write!(stream, "{hints}")
 }
 
 /// Render an error in fetching a package's dependencies.
@@ -206,7 +220,8 @@ fn dependencies_error(
     name: &PackageName,
     version: &Version,
     chain: &DerivationChain,
-) {
+    stream: &mut impl Write,
+) -> std::fmt::Result {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("Failed to resolve dependencies for `{}` ({})", name.cyan(), format!("v{version}").cyan())]
     #[diagnostic()]
@@ -223,27 +238,31 @@ fn dependencies_error(
         version: version.clone(),
         cause: error,
     });
-    anstream::eprint!("{report:?}");
-    anstream::eprint!("{hints}");
+    write!(stream, "{report:?}")?;
+    write!(stream, "{hints}")
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
-fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+fn no_solution(
+    err: &uv_resolver::NoSolutionError,
+    context: Option<&'static str>,
+    stream: &mut impl Write,
+) -> std::fmt::Result {
     let header = if let Some(context) = context {
         err.header().with_context(context)
     } else {
         err.header()
     };
     let report = miette::Report::msg(err.report().to_string()).context(header);
-    anstream::eprint!("{report:?}");
+    write!(stream, "{report:?}")?;
     let hints = err.hints();
-    anstream::eprint!("{hints}");
+    write!(stream, "{hints}")
 }
 
 /// Render a TLS error with a hint to enable native TLS.
 // https://github.com/rust-lang/rust/issues/147648
 #[allow(unused_assignments)]
-fn system_certs_hint(err: uv_client::Error) {
+fn system_certs_hint(err: uv_client::Error, stream: &mut impl Write) -> std::fmt::Result {
     #[derive(Debug, miette::Diagnostic)]
     #[diagnostic()]
     struct Error {
@@ -274,7 +293,7 @@ fn system_certs_hint(err: uv_client::Error) {
             "--system-certs".green()
         ),
     });
-    anstream::eprint!("{report:?}");
+    write!(stream, "{report:?}")
 }
 
 /// Walk an error chain and collect hint strings from all known error types.
@@ -472,7 +491,26 @@ mod tests {
 
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
-    use super::hints_for_error;
+    use super::{OperationDiagnostic, hints_for_error};
+    use crate::commands::pip;
+
+    #[test]
+    fn propagates_writer_errors() {
+        struct FailingWriter;
+
+        impl std::fmt::Write for FailingWriter {
+            fn write_str(&mut self, _value: &str) -> std::fmt::Result {
+                Err(std::fmt::Error)
+            }
+        }
+
+        let result = OperationDiagnostic::default().report(
+            pip::operations::Error::OutdatedEnvironment(Box::default()),
+            FailingWriter,
+        );
+
+        assert!(result.is_err());
+    }
 
     #[test]
     fn collects_source_hints_through_pyproject_errors() {

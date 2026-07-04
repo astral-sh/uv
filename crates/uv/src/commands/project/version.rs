@@ -546,7 +546,7 @@ async fn print_frozen_version(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
@@ -695,7 +695,7 @@ async fn lock_and_sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
@@ -757,7 +757,7 @@ async fn lock_and_sync(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),

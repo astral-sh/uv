@@ -604,7 +604,7 @@ pub(crate) async fn pip_compile(
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
-            .report(err)
+            .report(err, printer.stderr_important())?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };

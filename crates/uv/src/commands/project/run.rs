@@ -265,7 +265,7 @@ pub(crate) async fn run(
                         client_builder.system_certs(),
                     )
                     .with_context("script")
-                    .report(err)
+                    .report(err, printer.stderr_important())?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -313,7 +313,7 @@ pub(crate) async fn run(
                         client_builder.system_certs(),
                     )
                     .with_context("script")
-                    .report(err)
+                    .report(err, printer.stderr_important())?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -452,7 +452,7 @@ pub(crate) async fn run(
                             client_builder.system_certs(),
                         )
                         .with_context("script")
-                        .report(err)
+                        .report(err, printer.stderr_important())?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -778,7 +778,7 @@ pub(crate) async fn run(
                         return diagnostics::OperationDiagnostic::with_system_certs(
                             client_builder.system_certs(),
                         )
-                        .report(err)
+                        .report(err, printer.stderr_important())?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -867,7 +867,7 @@ pub(crate) async fn run(
                         return diagnostics::OperationDiagnostic::with_system_certs(
                             client_builder.system_certs(),
                         )
-                        .report(err)
+                        .report(err, printer.stderr_important())?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -1022,7 +1022,7 @@ pub(crate) async fn run(
                         client_builder.system_certs(),
                     )
                     .with_context("`--with`")
-                    .report(err)
+                    .report(err, printer.stderr_important())?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
