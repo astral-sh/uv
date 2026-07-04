@@ -1015,10 +1015,6 @@ impl ManagedPythonDownloadList {
 
     /// Load available Python distributions from a provided source or the compiled-in list.
     ///
-    /// `http`/`https` URLs are fetched through the [`CachedClient`], so the response is cached and,
-    /// on subsequent calls, reused or revalidated according to the server's HTTP cache policy;
-    /// `--no-cache` bypasses the cache.
-    ///
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
