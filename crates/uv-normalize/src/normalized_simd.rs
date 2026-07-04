@@ -7,7 +7,10 @@
 
 use super::is_normalized_scalar;
 
+#[cfg(target_arch = "aarch64")]
 pub(crate) const MIN_LEN: usize = 8;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub(crate) const MIN_LEN: usize = 4;
 
 pub(crate) fn is_normalized(name: &[u8]) -> Result<bool, ()> {
     debug_assert!(name.len() >= MIN_LEN);
