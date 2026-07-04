@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
@@ -19,7 +20,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
 };
 use uv_fs::Simplified;
@@ -308,8 +309,19 @@ pub(crate) async fn pip_install(
         interpreter,
     )?;
 
+    // A direct reinstall cannot reuse installed packages during resolution. Delay the environment
+    // scan until after resolution, when we can restrict it to the packages that will be reinstalled.
+    let direct_reinstall = matches!(&dependency_mode, DependencyMode::Direct)
+        && matches!(&reinstall, Reinstall::All)
+        && matches!(modifications, Modifications::Sufficient)
+        && pylock.is_none();
+
     // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    let site_packages = if direct_reinstall {
+        SitePackages::empty(interpreter)
+    } else {
+        SitePackages::from_environment(&environment)?
+    };
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -595,6 +607,17 @@ pub(crate) async fn pip_install(
 
     // If necessary, convert editable distributions to non-editable.
     let resolution = apply_editable_mode(resolution, editable);
+
+    // For direct reinstalls, only the resolved packages can be removed from the environment.
+    let site_packages = if direct_reinstall {
+        let package_names = resolution
+            .distributions()
+            .map(|distribution| distribution.name().clone())
+            .collect::<FxHashSet<_>>();
+        SitePackages::from_environment_for_packages(&environment, &package_names)?
+    } else {
+        site_packages
+    };
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;

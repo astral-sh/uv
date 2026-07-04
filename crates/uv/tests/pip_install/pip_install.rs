@@ -4917,6 +4917,7 @@ fn reinstall_duplicate() -> Result<()> {
     // Run `pip install`.
     uv_snapshot!(context1.pip_install()
         .arg("pip")
+        .arg("--no-deps")
         .arg("--reinstall"),
         @"
     success: true
@@ -5594,6 +5595,24 @@ fn path_name_version_change() {
 
     ----- stderr -----
     Checked 1 package in [TIME]
+    "
+    );
+
+    // Reinstalling a direct wheel without dependencies should reinstall the requested package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl"))
+        .arg("--no-deps")
+        .arg("--reinstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
     "
     );
 
