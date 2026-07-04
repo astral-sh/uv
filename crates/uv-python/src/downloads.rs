@@ -1099,24 +1099,25 @@ fn parse_downloads_json(
     buf: &[u8],
     source: String,
 ) -> Result<HashMap<String, JsonPythonDownload>, Error> {
-    serde_json::from_slice(buf).map_err(
-        // As an explicit compatibility mechanism, if there's a top-level "version" key, it
-        // means it's a newer format than we know how to deal with.  Before reporting a
-        // parse error about the format of JsonPythonDownload, check for that key. We can do
-        // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
-        // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
-        // have the same parsing effect.)
-        #[expect(clippy::zero_sized_map_values)]
-        |e| {
+    match serde_json::from_slice(buf) {
+        Ok(data) => Ok(data),
+        Err(e) => {
+            // As an explicit compatibility mechanism, if there's a top-level "version" key, it
+            // means it's a newer format than we know how to deal with. Before reporting a
+            // parse error about the format of JsonPythonDownload, check for that key. We can do
+            // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
+            // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
+            // have the same parsing effect.)
+            #[expect(clippy::zero_sized_map_values)]
             if let Ok(keys) = serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(buf)
                 && keys.contains_key("version")
             {
-                Error::UnsupportedPythonDownloadsJSON(source)
+                Err(Error::UnsupportedPythonDownloadsJSON(source))
             } else {
-                Error::InvalidPythonDownloadsJSON(source, e)
+                Err(Error::InvalidPythonDownloadsJSON(source, e))
             }
-        },
-    )
+        }
+    }
 }
 
 async fn fetch_downloads_from_url(
