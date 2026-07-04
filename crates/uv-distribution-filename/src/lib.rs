@@ -21,6 +21,17 @@ mod splitter;
 mod wheel;
 mod wheel_tag;
 
+pub(crate) fn normalized_package_name_matches(actual: &str, expected: &PackageName) -> bool {
+    actual
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' => byte.to_ascii_lowercase(),
+            b'_' | b'.' => b'-',
+            _ => byte,
+        })
+        .eq(expected.as_ref().bytes())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DistFilename {
     SourceDistFilename(SourceDistFilename),
@@ -44,10 +55,12 @@ impl DistFilename {
         package_name: &PackageName,
     ) -> Result<Self, DistFilenameError> {
         match DistExtension::from_path(filename) {
-            Ok(DistExtension::Wheel) => match WheelFilename::from_str(filename) {
-                Ok(filename) => Ok(Self::WheelFilename(filename)),
-                Err(err) => Err(DistFilenameError::InvalidWheel(err)),
-            },
+            Ok(DistExtension::Wheel) => {
+                match WheelFilename::from_str_with_expected_package_name(filename, package_name) {
+                    Ok(filename) => Ok(Self::WheelFilename(filename)),
+                    Err(err) => Err(DistFilenameError::InvalidWheel(err)),
+                }
+            }
             Ok(DistExtension::Source(extension)) => {
                 match SourceDistFilename::parse(filename, extension, package_name) {
                     Ok(filename) => Ok(Self::SourceDistFilename(filename)),
