@@ -144,7 +144,7 @@ pub(crate) async fn run(
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
         // Exit as Clap would after displaying help
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::ERROR);
     };
 
     let (target, args) = command.split();
@@ -282,7 +282,7 @@ pub(crate) async fn run(
                 ))
                 .with_context("tool")
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
 
             let diagnostic =
@@ -300,14 +300,14 @@ pub(crate) async fn run(
             };
             return diagnostic
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
 
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
                 .context("Failed to resolve `--with` requirement");
             eprint!("{err:?}");
-            return Ok(ExitStatus::Failure);
+            return Ok(ExitStatus::FAILURE);
         }
         Err(err) => return Err(err.into()),
     };
@@ -334,7 +334,7 @@ pub(crate) async fn run(
                 // If the user didn't use `--from` and the command isn't in the environment, we're now
                 // just invoking an arbitrary executable on the `PATH` and should exit instead.
                 writeln!(printer.stderr(), "{provider_hints}")?;
-                return Ok(ExitStatus::Failure);
+                return Ok(ExitStatus::FAILURE);
             }
             // In the case where `--from` is used, we'll warn on failure if the command is not found
             // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
@@ -387,7 +387,7 @@ pub(crate) async fn run(
                     // could have come from the `PATH`. Display a more helpful message instead of the
                     // OS error.
                     writeln!(printer.stderr(), "{provider_hints}")?;
-                    return Ok(ExitStatus::Failure);
+                    return Ok(ExitStatus::FAILURE);
                 }
             }
             Err(err)

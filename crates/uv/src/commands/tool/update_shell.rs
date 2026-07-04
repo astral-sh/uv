@@ -39,7 +39,7 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
             )?;
         }
 
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     if Shell::contains_path(&executable_directory) {
@@ -48,7 +48,7 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
             "Executable directory {} is already in PATH",
             executable_directory.simplified_display().cyan()
         )?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // Determine the current shell.
@@ -143,7 +143,7 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
 
     if updated {
         writeln!(printer.stderr(), "Restart your shell to apply changes")?;
-        Ok(ExitStatus::Success)
+        Ok(ExitStatus::SUCCESS)
     } else {
         Err(anyhow::anyhow!(
             "The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date",

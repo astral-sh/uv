@@ -175,8 +175,8 @@ pub(crate) async fn build_frontend(
     .await?;
 
     match build_result {
-        BuildResult::Failure => Ok(ExitStatus::Error),
-        BuildResult::Success => Ok(ExitStatus::Success),
+        BuildResult::Failure => Ok(ExitStatus::ERROR),
+        BuildResult::Success => Ok(ExitStatus::SUCCESS),
     }
 }
 

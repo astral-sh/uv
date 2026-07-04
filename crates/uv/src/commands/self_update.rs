@@ -77,7 +77,7 @@ pub(crate) async fn self_update(
                 ":".bold()
             )
         )?;
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     let mut updater = AxoUpdater::new_for("uv");
@@ -108,7 +108,7 @@ pub(crate) async fn self_update(
                 ":".bold()
             )
         )?;
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::ERROR);
     };
 
     // If we know what our version is, ignore whatever the receipt thinks it is!
@@ -142,7 +142,7 @@ pub(crate) async fn self_update(
                 receipt_prefix.simplified_display().bold().cyan()
             )
         )?;
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::ERROR);
     }
 
     writeln!(
@@ -195,7 +195,7 @@ pub(crate) async fn self_update(
                     }
                 )
             )?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
 
         if dry_run {
@@ -205,7 +205,7 @@ pub(crate) async fn self_update(
                 format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
                 format!("v{}", resolved.version).bold().white(),
             )?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
 
         return run_official_updater(
@@ -257,7 +257,7 @@ pub(crate) async fn self_update(
                 )
             )?;
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     run_custom_updater(updater, printer, token.is_some()).await
@@ -391,7 +391,7 @@ async fn run_official_updater(
         )
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Return the platform-specific standalone installer filename.
@@ -722,7 +722,7 @@ async fn run_custom_updater(
                             "`--token`".green().bold()
                         )
                     )?;
-                    Ok(ExitStatus::Error)
+                    Ok(ExitStatus::ERROR)
                 } else {
                     Err(err.into())
                 }
@@ -732,7 +732,7 @@ async fn run_custom_updater(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 #[derive(Debug, Deserialize)]

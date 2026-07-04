@@ -55,7 +55,7 @@ pub(crate) async fn uninstall(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Perform the uninstallation of managed Python installations.
@@ -118,7 +118,7 @@ async fn do_uninstall(
 
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
-                return Ok(ExitStatus::Failure);
+                return Ok(ExitStatus::FAILURE);
             }
 
             writeln!(
@@ -134,7 +134,7 @@ async fn do_uninstall(
             printer.stderr(),
             "No Python installations found matching the requests"
         )?;
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     // Remove registry entries first, so we don't have dangling entries between the file removal
@@ -331,8 +331,8 @@ async fn do_uninstall(
                 err.to_string().trim()
             )?;
         }
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

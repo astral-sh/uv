@@ -90,7 +90,7 @@ pub(crate) async fn pin(
             },
             file.path().user_display()
         )?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let Some(request) = request else {
@@ -124,7 +124,7 @@ pub(crate) async fn pin(
                     );
                 }
             }
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
         bail!("No Python version file found; specify a version to create one")
     };
@@ -251,7 +251,7 @@ pub(crate) async fn pin(
         )?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Check if pinned request is compatible with the workspace/project's `Requires-Python`.

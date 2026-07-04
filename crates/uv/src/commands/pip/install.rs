@@ -350,7 +350,7 @@ pub(crate) async fn pip_install(
                 }
                 DefaultInstallLogger.on_check(requirements.len(), start, printer, dry_run)?;
 
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
             SatisfiesResult::Unsatisfied(requirement) => {
                 debug!("At least one requirement is not satisfied: {requirement}");
@@ -586,7 +586,7 @@ pub(crate) async fn pip_install(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
         };
 
@@ -658,7 +658,7 @@ pub(crate) async fn pip_install(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
     }
 
@@ -677,5 +677,5 @@ pub(crate) async fn pip_install(
         )?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

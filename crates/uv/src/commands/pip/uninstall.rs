@@ -193,7 +193,7 @@ pub(crate) async fn pip_uninstall(
                 ":".bold(),
             )?;
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // Uninstall each package.
@@ -247,5 +247,5 @@ pub(crate) async fn pip_uninstall(
         )?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

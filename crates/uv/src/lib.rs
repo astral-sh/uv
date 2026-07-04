@@ -530,7 +530,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         ($arg:expr) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
         };
         ($arg:expr, false) => {
@@ -654,7 +654,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: AuthCommand::Dir(args),
         }) => {
             commands::auth_dir(args.service.as_ref(), printer)?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Auth(AuthNamespace {
             command: AuthCommand::Helper(args),
@@ -1429,7 +1429,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                 },
         }) => {
             commands::self_version(short, output_format, printer)?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
@@ -1440,7 +1440,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Tool(ToolNamespace {
             command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
@@ -1473,7 +1473,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
                     }
                 }
                 shell.generate(&mut uvx, &mut stdout());
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -1741,7 +1741,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             command: ToolCommand::UpdateShell,
         }) => {
             commands::tool_update_shell(printer).await?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Tool(ToolNamespace {
             command: ToolCommand::Dir(args),
@@ -1751,7 +1751,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::tool_dir(args.bin, globals.preview, printer)?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::List(args),
@@ -1936,13 +1936,13 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
             show_settings!(args);
 
             commands::python_dir(args.bin, printer)?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::UpdateShell,
         }) => {
             commands::python_update_shell(printer).await?;
-            Ok(ExitStatus::Success)
+            Ok(ExitStatus::SUCCESS)
         }
         Commands::Publish(args) => {
             show_settings!(args);
@@ -2171,7 +2171,7 @@ async fn run_project(
         ($arg:expr) => {
             if globals.show_settings {
                 writeln!(printer.stdout(), "{:#?}", $arg)?;
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
         };
     }

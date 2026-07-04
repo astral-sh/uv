@@ -14,5 +14,5 @@ pub(crate) fn cache_dir(cache: &Cache, printer: Printer) -> anyhow::Result<ExitS
         "{}",
         cache.root().simplified_display().cyan()
     )?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

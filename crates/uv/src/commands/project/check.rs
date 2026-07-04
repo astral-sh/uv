@@ -299,7 +299,7 @@ pub(crate) async fn check(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -358,7 +358,7 @@ pub(crate) async fn check(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -492,7 +492,7 @@ pub(crate) async fn check(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -566,7 +566,7 @@ pub(crate) async fn check(
                             client_builder.system_certs(),
                         )
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -610,7 +610,7 @@ pub(crate) async fn check(
                         client_builder.system_certs(),
                     )
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }

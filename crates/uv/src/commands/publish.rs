@@ -417,10 +417,10 @@ pub(crate) async fn publish(
     if error_count > 0 {
         let failed = if error_count == 1 { "file" } else { "files" };
         writeln!(printer.stderr(), "Found issues with {error_count} {failed}")?;
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Whether to allow prompting for username and password.

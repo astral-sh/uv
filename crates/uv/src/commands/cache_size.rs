@@ -29,7 +29,7 @@ pub(crate) fn cache_size(
         } else {
             writeln!(printer.stdout_important(), "0")?;
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let disk_usage = DiskUsage::new(vec![cache.root().to_path_buf()]);
@@ -43,5 +43,5 @@ pub(crate) fn cache_size(
         writeln!(printer.stdout_important(), "{total_bytes}")?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

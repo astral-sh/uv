@@ -134,5 +134,5 @@ pub(crate) fn pip_freeze(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

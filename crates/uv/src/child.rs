@@ -284,7 +284,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     if let Some(code) = status.code() {
         debug!("Command exited with code: {code}");
         if let Ok(code) = u8::try_from(code) {
-            Ok(ExitStatus::External(code))
+            Ok(ExitStatus::external(code))
         } else {
             #[expect(clippy::exit)]
             std::process::exit(code);
@@ -301,9 +301,9 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                 .and_then(|signal| u8::try_from(signal).ok())
                 .and_then(|signal| 128u8.checked_add(signal))
             {
-                return Ok(ExitStatus::External(mapped_code));
+                return Ok(ExitStatus::external(mapped_code));
             }
         }
-        Ok(ExitStatus::Failure)
+        Ok(ExitStatus::FAILURE)
     }
 }

@@ -643,7 +643,7 @@ pub(crate) async fn install(
                         requirement.cyan()
                     )?;
 
-                    return Ok(ExitStatus::Success);
+                    return Ok(ExitStatus::SUCCESS);
                 }
             }
         }
@@ -732,7 +732,7 @@ pub(crate) async fn install(
                             client_builder.system_certs(),
                         )
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -811,7 +811,7 @@ pub(crate) async fn install(
                     "`{}` is already installed",
                     requirement.cyan()
                 )?;
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
             let environment = if plan.is_empty() && !settings.compile_bytecode {
                 environment
@@ -865,7 +865,7 @@ pub(crate) async fn install(
                         client_builder.system_certs(),
                     )
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -958,7 +958,7 @@ pub(crate) async fn install(
                                 client_builder.system_certs(),
                             )
                             .report(err, printer)?
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                         };
 
                         debug!(
@@ -994,7 +994,7 @@ pub(crate) async fn install(
                                     client_builder.system_certs(),
                                 )
                                 .report(err, printer)?
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                             }
                             Err(err) => return Err(err.into()),
                         }
@@ -1058,7 +1058,7 @@ pub(crate) async fn install(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -1086,7 +1086,7 @@ pub(crate) async fn install(
         printer,
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 fn existing_environment_usable(

@@ -239,7 +239,7 @@ pub(crate) async fn export(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -476,7 +476,7 @@ pub(crate) async fn export(
 
     writer.commit().await?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Format the uv command used to generate the output file.

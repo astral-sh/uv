@@ -133,7 +133,7 @@ pub(crate) async fn find(
         writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 pub(crate) async fn find_script(
@@ -168,7 +168,7 @@ pub(crate) async fn find_script(
                 "{}",
                 ErrorWithHints::new(&error, uv_errors::Hint::hints(&error))
             )?;
-            return Ok(ExitStatus::Failure);
+            return Ok(ExitStatus::FAILURE);
         }
         Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,
         Ok(ScriptInterpreter::Environment(environment)) => environment.into_interpreter(),
@@ -185,5 +185,5 @@ pub(crate) async fn find_script(
         writeln!(printer.stdout(), "{}", path.simplified_display())?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

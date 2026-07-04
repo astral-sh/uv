@@ -410,5 +410,5 @@ pub(crate) async fn venv(
         writeln!(printer.stderr(), "Activate with: {}", act.green())?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

@@ -101,41 +101,46 @@ mod venv;
 mod workspace;
 
 #[derive(Debug)]
-pub(crate) enum ExitStatus {
-    /// The command succeeded.
-    Success,
-
-    /// The command failed due to an error in the user input.
-    Failure,
-
-    /// The command failed with an unexpected error.
-    Error,
-
-    /// The command's exit status is propagated from an external command.
-    External(u8),
-
-    /// The command failed with an error that should be rendered before exiting.
-    WithError { code: u8, error: anyhow::Error },
+pub(crate) struct ExitStatus {
+    code: u8,
+    error: Option<anyhow::Error>,
 }
 
 impl ExitStatus {
-    /// Return an expected command failure with an error to render.
-    pub(crate) fn failure(error: impl Into<anyhow::Error>) -> Self {
-        Self::WithError {
+    /// The command succeeded.
+    pub(crate) const SUCCESS: Self = Self {
+        code: 0,
+        error: None,
+    };
+
+    /// The command failed due to an error in the user input.
+    pub(crate) const FAILURE: Self = Self {
+        code: 1,
+        error: None,
+    };
+
+    /// The command failed with an unexpected error.
+    pub(crate) const ERROR: Self = Self {
+        code: 2,
+        error: None,
+    };
+
+    /// Return the exit status propagated from an external command.
+    pub(crate) const fn external(code: u8) -> Self {
+        Self { code, error: None }
+    }
+
+    /// Return an expected command failure with an error to render before exiting.
+    pub(crate) fn failure_with_error(error: impl Into<anyhow::Error>) -> Self {
+        Self {
             code: 1,
-            error: error.into(),
+            error: Some(error.into()),
         }
     }
 
     /// Separate the process exit code from the optional error to render.
     pub(crate) fn into_parts(self) -> (ExitCode, Option<anyhow::Error>) {
-        match self {
-            Self::Success => (ExitCode::from(0), None),
-            Self::Failure => (ExitCode::from(1), None),
-            Self::Error => (ExitCode::from(2), None),
-            Self::External(code) => (ExitCode::from(code), None),
-            Self::WithError { code, error } => (ExitCode::from(code), Some(error)),
-        }
+        (ExitCode::from(self.code), self.error)
     }
 }
 

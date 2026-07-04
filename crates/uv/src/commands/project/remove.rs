@@ -194,7 +194,7 @@ pub(crate) async fn remove(
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // If we're modifying a script, and lockfile doesn't exist, don't create it.
@@ -205,7 +205,7 @@ pub(crate) async fn remove(
                 "Updated `{}`",
                 script.path.user_display().cyan()
             )?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
     }
 
@@ -337,19 +337,19 @@ pub(crate) async fn remove(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     };
 
     // Identify the installation target.
@@ -397,12 +397,12 @@ pub(crate) async fn remove(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Represents the destination where dependencies are added, either to a project or a script.

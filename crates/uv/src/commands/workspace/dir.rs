@@ -41,5 +41,5 @@ pub(crate) async fn dir(
 
     writeln!(printer.stdout(), "{}", dir.simplified_display().cyan())?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

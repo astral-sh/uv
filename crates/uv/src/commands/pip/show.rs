@@ -43,7 +43,7 @@ pub(crate) fn pip_show(
                 ":".bold(),
             )?;
         }
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     // Detect the current Python interpreter.
@@ -108,7 +108,7 @@ pub(crate) fn pip_show(
 
     // Like `pip`, if no packages were found, return a failure.
     if distributions.is_empty() {
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     // Since Requires and Required-by fields need data parsed from metadata, especially the
@@ -236,5 +236,5 @@ pub(crate) fn pip_show(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

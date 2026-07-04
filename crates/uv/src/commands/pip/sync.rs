@@ -159,7 +159,7 @@ pub(crate) async fn pip_sync(
                 printer.stderr(),
                 "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)"
             )?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
     }
 
@@ -490,7 +490,7 @@ pub(crate) async fn pip_sync(
                     client_builder.system_certs(),
                 )
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
             }
         };
 
@@ -559,7 +559,7 @@ pub(crate) async fn pip_sync(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
     }
 
@@ -578,5 +578,5 @@ pub(crate) async fn pip_sync(
         )?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

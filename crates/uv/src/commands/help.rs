@@ -111,7 +111,7 @@ pub(crate) fn help(query: &[String], printer: Printer, no_pager: bool) -> Result
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Get the first non-ANSI character starting at a given byte position.

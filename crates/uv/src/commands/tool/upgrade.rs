@@ -85,7 +85,7 @@ pub(crate) async fn upgrade(
 
     if names.is_empty() {
         writeln!(printer.stderr(), "Nothing to upgrade")?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let reporter = PythonDownloadReporter::single(printer);
@@ -179,7 +179,7 @@ pub(crate) async fn upgrade(
                 ErrorOptions::default().with_stream(printer.stderr()),
             )?;
         }
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     if did_upgrade_tool.is_empty() && did_upgrade_environment.is_empty() {
@@ -210,7 +210,7 @@ pub(crate) async fn upgrade(
         constraint.print(&name, printer)?;
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

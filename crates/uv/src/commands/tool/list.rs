@@ -50,7 +50,7 @@ pub(crate) async fn list(
                 .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) =>
         {
             writeln!(printer.stderr(), "No tools installed")?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
         Err(err) => return Err(err.into()),
     };
@@ -60,7 +60,7 @@ pub(crate) async fn list(
 
     if tools.is_empty() {
         writeln!(printer.stderr(), "No tools installed")?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // Collect valid tools (skip invalid ones) before checking for outdated versions.
@@ -295,5 +295,5 @@ pub(crate) async fn list(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

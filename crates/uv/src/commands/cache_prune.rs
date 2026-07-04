@@ -23,7 +23,7 @@ pub(crate) async fn cache_prune(
             "No cache found at: {}",
             cache.root().user_display().cyan()
         )?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let cache = match cache.with_exclusive_lock_no_wait() {
@@ -90,5 +90,5 @@ pub(crate) async fn cache_prune(
 
     writeln!(printer.stderr())?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

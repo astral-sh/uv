@@ -426,7 +426,7 @@ async fn perform_install(
             }
             PythonUpgrade::Disabled => {}
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let requested_minor_versions = requests
@@ -461,7 +461,7 @@ async fn perform_install(
                     ),
                 )?;
             }
-            return Ok(ExitStatus::Failure);
+            return Ok(ExitStatus::FAILURE);
         }
     }
 
@@ -587,7 +587,7 @@ async fn perform_install(
             printer.stderr(),
             "Python downloads are not allowed (`python-downloads = \"never\"`). Change to `python-downloads = \"manual\"` to allow explicit installs.",
         )?;
-        return Ok(ExitStatus::Failure);
+        return Ok(ExitStatus::FAILURE);
     }
 
     // Find downloads for the requests
@@ -800,7 +800,7 @@ async fn perform_install(
                 writeln!(printer.stderr(), "All requested versions already installed")?;
             }
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     if !changelog.installed.is_empty() {
@@ -963,11 +963,11 @@ async fn perform_install(
         }
 
         if fatal {
-            return Ok(ExitStatus::Failure);
+            return Ok(ExitStatus::FAILURE);
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Link the binaries of a managed Python installation to the bin directory.

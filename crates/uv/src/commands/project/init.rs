@@ -194,7 +194,7 @@ pub(crate) async fn init(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 #[expect(clippy::fn_params_excessive_bools)]

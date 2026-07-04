@@ -57,7 +57,7 @@ pub(crate) async fn login(
             )?;
         }
 
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let backend = AuthBackend::from_settings(preview).await?;
@@ -174,7 +174,7 @@ pub(crate) async fn login(
         "Stored credentials for {}",
         display_url.bold().cyan()
     )?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Log in via the [`PyxTokenStore`].

@@ -266,7 +266,7 @@ pub(crate) async fn run(
                     )
                     .with_context("script")
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -314,7 +314,7 @@ pub(crate) async fn run(
                     )
                     .with_context("script")
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -453,7 +453,7 @@ pub(crate) async fn run(
                         )
                         .with_context("script")
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -779,7 +779,7 @@ pub(crate) async fn run(
                             client_builder.system_certs(),
                         )
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -868,7 +868,7 @@ pub(crate) async fn run(
                             client_builder.system_certs(),
                         )
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -1023,7 +1023,7 @@ pub(crate) async fn run(
                     )
                     .with_context("`--with`")
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -1260,7 +1260,7 @@ pub(crate) async fn run(
         }
         let help = format!("See `{}` for more information.", "uv run --help".bold());
         writeln!(printer.stdout(), "\n{help}")?;
-        return Ok(ExitStatus::Error);
+        return Ok(ExitStatus::ERROR);
     };
 
     debug!("Running `{command}`");

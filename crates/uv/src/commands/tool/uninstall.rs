@@ -26,10 +26,10 @@ pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Resul
                 for name in name {
                     writeln!(printer.stderr(), "`{name}` is not installed")?;
                 }
-                return Ok(ExitStatus::Success);
+                return Ok(ExitStatus::SUCCESS);
             }
             writeln!(printer.stderr(), "Nothing to uninstall")?;
-            return Ok(ExitStatus::Success);
+            return Ok(ExitStatus::SUCCESS);
         }
         Err(err) => return Err(err.into()),
     };
@@ -51,7 +51,7 @@ pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Resul
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 trait IoErrorExt: std::error::Error + 'static {

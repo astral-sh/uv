@@ -605,7 +605,7 @@ pub(crate) async fn pip_compile(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
     };
 
@@ -795,7 +795,7 @@ pub(crate) async fn pip_compile(
     // Notify the user of any resolution diagnostics.
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Format the uv command used to generate the output file.

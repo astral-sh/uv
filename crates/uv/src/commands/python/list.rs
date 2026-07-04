@@ -320,5 +320,5 @@ pub(crate) async fn list(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

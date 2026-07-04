@@ -14,7 +14,7 @@ pub(crate) fn build_sdist(sdist_directory: &Path) -> Result<ExitStatus> {
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// PEP 517 hook to build a wheel.
@@ -31,7 +31,7 @@ pub(crate) fn build_wheel(
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// PEP 660 hook to build a wheel.
@@ -48,7 +48,7 @@ pub(crate) fn build_editable(
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Not used from Python code, exists for symmetry with PEP 517.
@@ -70,7 +70,7 @@ pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Res
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Not used from Python code, exists for symmetry with PEP 660.
@@ -87,5 +87,5 @@ pub(crate) fn prepare_metadata_for_build_editable(metadata_directory: &Path) -> 
     )?;
     // Tell the build frontend about the name of the artifact we built
     writeln!(&mut std::io::stdout(), "{filename}").context("stdout is closed")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

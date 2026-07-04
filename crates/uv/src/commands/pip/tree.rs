@@ -190,7 +190,7 @@ pub(crate) async fn pip_tree(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 #[derive(Debug)]

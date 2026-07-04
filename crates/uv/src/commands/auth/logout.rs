@@ -89,7 +89,7 @@ pub(crate) async fn logout(
         display_url.bold().cyan()
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Log out via the [`PyxTokenStore`], invalidating the existing tokens.
@@ -108,7 +108,7 @@ async fn pyx_logout(
             "{}",
             format_args!("No credentials found for {}", store.api().bold().cyan())
         )?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     };
 
     // Add the token to the request.
@@ -149,5 +149,5 @@ async fn pyx_logout(
         format_args!("Logged out from {}", store.api().bold().cyan())
     )?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

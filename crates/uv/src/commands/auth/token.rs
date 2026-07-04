@@ -30,7 +30,7 @@ pub(crate) async fn token(
             .build()?;
 
         pyx_refresh(&pyx_store, &client, printer).await?;
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     let backend = AuthBackend::from_settings(preview).await?;
@@ -83,7 +83,7 @@ pub(crate) async fn token(
     };
 
     writeln!(printer.stdout(), "{password}")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Refresh the authentication tokens in the [`PyxTokenStore`], prompting for login if necessary.

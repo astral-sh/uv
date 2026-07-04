@@ -708,7 +708,7 @@ pub(crate) async fn add(
     // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
@@ -777,7 +777,7 @@ pub(crate) async fn add(
     ))
     .await
     {
-        Ok(()) => Ok(ExitStatus::Success),
+        Ok(()) => Ok(ExitStatus::SUCCESS),
         Err(err) => {
             if modified {
                 let _ = snapshot.revert();
@@ -796,7 +796,7 @@ pub(crate) async fn add(
                     diagnostic
                         .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
                         .report(err, printer)?
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()))
                 }
                 err => Err(err.into()),
             }

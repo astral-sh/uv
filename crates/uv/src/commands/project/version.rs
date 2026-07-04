@@ -64,7 +64,7 @@ pub(crate) fn self_version(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Read or update project version (`uv version`)
@@ -336,7 +336,7 @@ pub(crate) async fn project_version(
 
     // Update the toml and lock
     let status = if dry_run {
-        ExitStatus::Success
+        ExitStatus::SUCCESS
     } else if let Some(new_version) = &new_version {
         let project = update_project(
             project,
@@ -369,7 +369,7 @@ pub(crate) async fn project_version(
         .await?
     } else {
         debug!("No changes to version; skipping update");
-        ExitStatus::Success
+        ExitStatus::SUCCESS
     };
 
     // Report the results
@@ -547,7 +547,7 @@ async fn print_frozen_version(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -572,7 +572,7 @@ async fn print_frozen_version(
     let old_version = ProjectVersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Re-lock and re-sync the project after a series of edits.
@@ -599,7 +599,7 @@ async fn lock_and_sync(
 ) -> Result<ExitStatus> {
     // If frozen, don't touch the lock or sync at all
     if frozen.is_some() {
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     // Determine the groups and extras that should be enabled.
@@ -696,19 +696,19 @@ async fn lock_and_sync(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     };
 
     // Perform a full sync, because we don't know what exactly is affected by the version.
@@ -758,12 +758,12 @@ async fn lock_and_sync(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 fn print_version(

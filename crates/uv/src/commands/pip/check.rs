@@ -72,7 +72,7 @@ pub(crate) fn pip_check(
             "All installed packages are compatible".to_string().dimmed()
         )?;
 
-        Ok(ExitStatus::Success)
+        Ok(ExitStatus::SUCCESS)
     } else {
         let incompats = if diagnostics.len() == 1 {
             "incompatibility"
@@ -93,6 +93,6 @@ pub(crate) fn pip_check(
             writeln!(printer.stderr(), "{}", diagnostic.message().bold())?;
         }
 
-        Ok(ExitStatus::Failure)
+        Ok(ExitStatus::FAILURE)
     }
 }

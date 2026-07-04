@@ -236,11 +236,11 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::failure(err)),
+        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::failure_with_error(err)),
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err, printer)?
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()))
         }
         Err(err) => Err(err.into()),
     }
@@ -285,5 +285,5 @@ fn metadata_for_target(target: InstallTarget<'_>) -> Result<Metadata> {
 fn print_metadata(export: &Metadata, printer: Printer) -> Result<ExitStatus> {
     writeln!(printer.stdout(), "{}", export.to_json()?)?;
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

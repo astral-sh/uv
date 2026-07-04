@@ -299,7 +299,7 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return Ok(ExitStatus::Success);
+                    return Ok(ExitStatus::SUCCESS);
                 }
                 Err(ProjectError::Operation(operations::Error::OutdatedEnvironment(changelog))) => {
                     write_sync_report(
@@ -315,14 +315,14 @@ pub(crate) async fn sync(
                         client_builder.system_certs(),
                     )
                     .report(operations::Error::OutdatedEnvironment(changelog), printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     )
                     .report(err, printer)?
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -371,7 +371,7 @@ pub(crate) async fn sync(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -379,7 +379,7 @@ pub(crate) async fn sync(
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                return Ok(ExitStatus::failure(ProjectError::LockMismatch(
+                return Ok(ExitStatus::failure_with_error(ProjectError::LockMismatch(
                     prev,
                     cur,
                     lock_source,
@@ -456,14 +456,14 @@ pub(crate) async fn sync(
                 client_builder.system_certs(),
             )
             .report(operations::Error::OutdatedEnvironment(changelog), printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::with_system_certs(
                 client_builder.system_certs(),
             )
             .report(err, printer)?
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            .map_or(Ok(ExitStatus::FAILURE), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -479,8 +479,8 @@ pub(crate) async fn sync(
     )?;
 
     match outcome {
-        Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur, lock_source) => Ok(ExitStatus::failure(
+        Outcome::Success(..) => Ok(ExitStatus::SUCCESS),
+        Outcome::LockMismatch(prev, cur, lock_source) => Ok(ExitStatus::failure_with_error(
             ProjectError::LockMismatch(prev, cur, lock_source),
         )),
     }

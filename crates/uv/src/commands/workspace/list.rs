@@ -47,7 +47,7 @@ pub(crate) async fn list(
                 .context("PEP 723 script was discovered outside the workspace root")?;
             writeln!(printer.stdout(), "{}", script.simplified_display().cyan())?;
         }
-        return Ok(ExitStatus::Success);
+        return Ok(ExitStatus::SUCCESS);
     }
 
     for (name, member) in workspace.packages() {
@@ -62,7 +62,7 @@ pub(crate) async fn list(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 /// Find PEP 723 scripts under a workspace root.

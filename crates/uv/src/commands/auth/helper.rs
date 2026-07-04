@@ -144,5 +144,5 @@ pub(crate) async fn helper(
     )
     .context("Failed to serialize response as JSON")?;
     writeln!(printer.stdout_important(), "{response}")?;
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }

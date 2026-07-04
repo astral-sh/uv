@@ -308,7 +308,7 @@ pub(crate) async fn pip_list(
         }
     }
 
-    Ok(ExitStatus::Success)
+    Ok(ExitStatus::SUCCESS)
 }
 
 #[derive(Debug)]
