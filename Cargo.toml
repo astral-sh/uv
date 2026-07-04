@@ -459,5 +459,5 @@ codegen-units = 1
 inherits = "release"
 
 [patch.crates-io]
-astral-pubgrub = { path = "../pubgrub" }
-astral-version-ranges = { path = "../pubgrub/version-ranges" }
+astral-pubgrub = { git = "https://github.com/astral-sh/pubgrub", branch = "konsti/simplify-ranges" }
+astral-version-ranges = { git = "https://github.com/astral-sh/pubgrub", branch = "konsti/simplify-ranges" }
