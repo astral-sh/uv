@@ -20,8 +20,9 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-    IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel,
+    BuiltDist, File, FileLocationBuilder, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, Name,
+    RegistryBuiltWheel,
 };
 use uv_git::{GIT_LFS, GitError, GitHttpSettings, GitResolver, Reporter};
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
@@ -1472,8 +1473,7 @@ impl SimpleDetailMetadata {
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
-        // Convert to a reference-counted string.
-        let base = SmallString::from(base.as_str());
+        let mut locations = FileLocationBuilder::new(SmallString::from(base.as_str()));
 
         // Group the distributions by version and kind
         for file in files {
@@ -1488,7 +1488,7 @@ impl SimpleDetailMetadata {
                         continue;
                     }
                 };
-            let file = match File::try_from_pypi(file, &base) {
+            let file = match File::try_from_pypi(file, &mut locations) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1540,12 +1540,11 @@ impl SimpleDetailMetadata {
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
-        // Convert to a reference-counted string.
-        let base = SmallString::from(base.as_str());
+        let mut locations = FileLocationBuilder::new(SmallString::from(base.as_str()));
 
         // Group the distributions by version and kind
         for file in files {
-            let file = match File::try_from_pyx(file, &base) {
+            let file = match File::try_from_pyx(file, &mut locations) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -1736,8 +1735,8 @@ mod tests {
     };
     use uv_cache::Cache;
     use uv_distribution_types::{
-        FileLocation, Index, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadataRef,
-        IndexUrl, ToUrlError,
+        FileLocationBuilder, Index, IndexCapabilities, IndexFormat, IndexLocations,
+        IndexMetadataRef, IndexUrl, ToUrlError,
     };
     use uv_small_str::SmallString;
     use wiremock::matchers::{basic_auth, method, path_regex};
@@ -2310,12 +2309,12 @@ mod tests {
             base,
             files,
         } = SimpleDetailHTML::parse(text, &base).unwrap();
-        let base = SmallString::from(base.as_str());
+        let mut locations = FileLocationBuilder::new(SmallString::from(base.as_str()));
 
         // Test parsing of the file urls
         let urls = files
             .into_iter()
-            .map(|file| FileLocation::new(file.url, &base).to_url())
+            .map(|file| locations.parse(file.url).to_url())
             .collect::<Result<Vec<_>, _>>()?;
         let urls = urls
             .iter()

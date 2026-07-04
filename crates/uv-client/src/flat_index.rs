@@ -8,7 +8,7 @@ use url::Url;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_distribution_types::{File, FileLocation, FileLocationBuilder, IndexUrl};
 use uv_pypi_types::HashDigests;
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
@@ -222,13 +222,12 @@ impl<'a> FlatIndexClient<'a> {
                 } = SimpleDetailHTML::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
-                // Convert to a reference-counted string.
-                let base = SmallString::from(base.as_str());
+                let mut locations = FileLocationBuilder::new(SmallString::from(base.as_str()));
 
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from_pypi(file, &base) {
+                        match File::try_from_pypi(file, &mut locations) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
@@ -327,7 +326,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
+                url: FileLocation::absolute(url.as_str()),
                 yanked: None,
                 zstd: None,
             };

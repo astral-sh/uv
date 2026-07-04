@@ -3577,7 +3577,7 @@ impl Package {
                     requires_python: None,
                     size: sdist.size(),
                     upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
-                    url: FileLocation::AbsoluteUrl(file_url.clone()),
+                    url: FileLocation::absolute(file_url.as_ref()),
                     yanked: None,
                     zstd: None,
                 });
@@ -3610,7 +3610,7 @@ impl Package {
 
                 let file_url = match sdist {
                     SourceDist::Url { url: file_url, .. } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        FileLocation::absolute(file_url.as_ref())
                     }
                     SourceDist::Path {
                         path: file_path, ..
@@ -3622,7 +3622,7 @@ impl Package {
                                     path: file_path.into_boxed_path(),
                                 }
                             })?;
-                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                        FileLocation::absolute(file_url.as_str())
                     }
                     SourceDist::Metadata { .. } => {
                         return Err(LockErrorKind::MissingPath {
@@ -5470,7 +5470,7 @@ impl Wheel {
             RegistrySource::Url(url) => {
                 let file_location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        FileLocation::absolute(file_url.as_ref())
                     }
                     WheelWireSource::Path { .. } | WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingUrl {
@@ -5510,7 +5510,7 @@ impl Wheel {
             RegistrySource::Path(index_path) => {
                 let file_location = match &self.url {
                     WheelWireSource::Url { url: file_url } => {
-                        FileLocation::AbsoluteUrl(file_url.clone())
+                        FileLocation::absolute(file_url.as_ref())
                     }
                     WheelWireSource::Path { path: file_path } => {
                         let file_path = root.join(index_path).join(file_path);
@@ -5520,7 +5520,7 @@ impl Wheel {
                                     path: file_path.into_boxed_path(),
                                 }
                             })?;
-                        FileLocation::AbsoluteUrl(UrlString::from(file_url))
+                        FileLocation::absolute(file_url.as_str())
                     }
                     WheelWireSource::Filename { .. } => {
                         return Err(LockErrorKind::MissingPath {
@@ -5957,7 +5957,9 @@ impl From<Hash> for Hashes {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment().into_owned()),
+        FileLocation::AbsoluteUrl(base, path) => Ok(UrlString::from_parts(base, path)
+            .without_fragment()
+            .into_owned()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }

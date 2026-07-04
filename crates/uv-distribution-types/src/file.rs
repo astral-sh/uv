@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use jiff::Timestamp;
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
@@ -48,7 +49,7 @@ impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
     pub fn try_from_pypi(
         file: uv_pypi_types::PypiFile,
-        base: &SmallString,
+        locations: &mut FileLocationBuilder,
     ) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
@@ -63,7 +64,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: FileLocation::new(file.url, base),
+            url: locations.parse(file.url),
             yanked: file.yanked,
             zstd: None,
         })
@@ -71,7 +72,7 @@ impl File {
 
     pub fn try_from_pyx(
         file: uv_pypi_types::PyxFile,
-        base: &SmallString,
+        locations: &mut FileLocationBuilder,
     ) -> Result<Self, FileConversionError> {
         let filename = if let Some(filename) = file.filename {
             filename
@@ -109,7 +110,7 @@ impl File {
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: FileLocation::new(file.url, base),
+            url: locations.parse(file.url),
             yanked: file.yanked,
             zstd: file
                 .zstd
@@ -122,27 +123,59 @@ impl File {
     }
 }
 
+/// Constructs [`FileLocation`] values while reusing URL base allocations.
+#[derive(Debug)]
+pub struct FileLocationBuilder {
+    relative_base: SmallString,
+    absolute_bases: FxHashSet<SmallString>,
+}
+
+impl FileLocationBuilder {
+    pub fn new(relative_base: SmallString) -> Self {
+        Self {
+            relative_base,
+            absolute_bases: FxHashSet::default(),
+        }
+    }
+
+    pub fn parse(&mut self, url: SmallString) -> FileLocation {
+        let Some((base, path)) = split_absolute_url(&url) else {
+            return FileLocation::RelativeUrl(self.relative_base.clone(), url);
+        };
+
+        let base = if let Some(base) = self.absolute_bases.get(base) {
+            base.clone()
+        } else {
+            let base = SmallString::from(base);
+            self.absolute_bases.insert(base.clone());
+            base
+        };
+
+        FileLocation::AbsoluteUrl(base, SmallString::from(path))
+    }
+}
+
 /// While a registry file is generally a remote URL, it can also be a file if it comes from a directory flat indexes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL. The base URL allocation is shared by every relative file in
     /// an index response, so archive it as a shared pointer.
     RelativeUrl(#[rkyv(with = RkyvShared)] SmallString, SmallString),
-    /// Absolute URL.
-    AbsoluteUrl(UrlString),
+    /// Absolute URL, split into its scheme and authority and the remaining path, query, and
+    /// fragment. The base allocation is shared by files served from the same origin.
+    AbsoluteUrl(#[rkyv(with = RkyvShared)] SmallString, SmallString),
 }
 
 impl FileLocation {
-    /// Parse a relative or absolute URL on a page with a base URL.
-    ///
-    /// This follows the HTML semantics where a link on a page is resolved relative to the URL of
-    /// that page.
-    pub fn new(url: SmallString, base: &SmallString) -> Self {
-        match split_scheme(&url) {
-            Some(..) => Self::AbsoluteUrl(UrlString::new(url)),
-            None => Self::RelativeUrl(base.clone(), url),
-        }
+    /// Construct a location from an absolute URL.
+    pub fn absolute(url: &str) -> Self {
+        let (base, path) = if let Some(parts) = split_absolute_url(url) {
+            parts
+        } else {
+            (url, "")
+        };
+        Self::AbsoluteUrl(SmallString::from(base), SmallString::from(path))
     }
 
     /// Convert this location to a URL.
@@ -171,7 +204,23 @@ impl FileLocation {
                 })?;
                 Ok(joined)
             }
-            Self::AbsoluteUrl(absolute) => absolute.to_url(),
+            Self::AbsoluteUrl(base, path) => UrlString::from_parts(base, path).to_url(),
+        }
+    }
+}
+
+impl fmt::Debug for FileLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RelativeUrl(base, path) => f
+                .debug_tuple("RelativeUrl")
+                .field(base)
+                .field(path)
+                .finish(),
+            Self::AbsoluteUrl(base, path) => f
+                .debug_tuple("AbsoluteUrl")
+                .field(&UrlString::from_parts(base, path))
+                .finish(),
         }
     }
 }
@@ -180,9 +229,29 @@ impl Display for FileLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::RelativeUrl(_base, url) => Display::fmt(&url, f),
-            Self::AbsoluteUrl(url) => Display::fmt(&url.0, f),
+            Self::AbsoluteUrl(base, path) => write!(f, "{base}{path}"),
         }
     }
+}
+
+fn split_absolute_url(url: &str) -> Option<(&str, &str)> {
+    let (scheme, remainder) = split_scheme(url)?;
+
+    // `split_scheme` trims leading and trailing control characters and spaces. Preserve such URLs
+    // verbatim instead of reconstructing them from the trimmed slices.
+    if url.len() != scheme.len() + ":".len() + remainder.len() {
+        return Some((url, ""));
+    }
+
+    let base_len = if let Some(authority) = remainder.strip_prefix("//") {
+        authority
+            .find(['/', '?', '#'])
+            .map_or(url.len(), |index| scheme.len() + "://".len() + index)
+    } else {
+        scheme.len() + ":".len()
+    };
+
+    Some(url.split_at(base_len))
 }
 
 /// A [`Url`] represented as a `String`.
@@ -210,6 +279,14 @@ impl UrlString {
     /// Create a new [`UrlString`] from a [`String`].
     fn new(url: SmallString) -> Self {
         Self(url)
+    }
+
+    /// Construct a URL from its shared base and unique path.
+    pub fn from_parts(base: &str, path: &str) -> Self {
+        let mut url = String::with_capacity(base.len() + path.len());
+        url.push_str(base);
+        url.push_str(path);
+        Self::new(SmallString::from(url))
     }
 
     /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
