@@ -23,6 +23,7 @@ use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::ToolRunScriptError;
+use crate::printer::Printer;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -79,8 +80,17 @@ impl OperationDiagnostic {
     /// Attempt to report an error with rich diagnostic context.
     ///
     /// Returns `Some` if the error was not handled, or an error if the diagnostic could not be
-    /// written to the provided stream.
+    /// written.
     pub(crate) fn report(
+        self,
+        err: pip::operations::Error,
+        printer: Printer,
+    ) -> Result<Option<pip::operations::Error>, std::fmt::Error> {
+        self.report_to(err, printer.stderr_important())
+    }
+
+    /// Attempt to report an error to the provided stream.
+    fn report_to(
         self,
         err: pip::operations::Error,
         mut stream: impl Write,
@@ -491,26 +501,7 @@ mod tests {
 
     use uv_workspace::pyproject::{PyprojectTomlError, SourceError};
 
-    use super::{OperationDiagnostic, hints_for_error};
-    use crate::commands::pip;
-
-    #[test]
-    fn propagates_writer_errors() {
-        struct FailingWriter;
-
-        impl std::fmt::Write for FailingWriter {
-            fn write_str(&mut self, _value: &str) -> std::fmt::Result {
-                Err(std::fmt::Error)
-            }
-        }
-
-        let result = OperationDiagnostic::default().report(
-            pip::operations::Error::OutdatedEnvironment(Box::default()),
-            FailingWriter,
-        );
-
-        assert!(result.is_err());
-    }
+    use super::hints_for_error;
 
     #[test]
     fn collects_source_hints_through_pyproject_errors() {

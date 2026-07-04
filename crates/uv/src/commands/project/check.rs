@@ -298,7 +298,7 @@ pub(crate) async fn check(
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err, printer.stderr_important())?
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
@@ -357,7 +357,7 @@ pub(crate) async fn check(
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err, printer.stderr_important())?
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
@@ -491,7 +491,7 @@ pub(crate) async fn check(
                 return diagnostics::OperationDiagnostic::with_system_certs(
                     client_builder.system_certs(),
                 )
-                .report(err, printer.stderr_important())?
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
@@ -565,7 +565,7 @@ pub(crate) async fn check(
                         return diagnostics::OperationDiagnostic::with_system_certs(
                             client_builder.system_certs(),
                         )
-                        .report(err, printer.stderr_important())?
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -609,7 +609,7 @@ pub(crate) async fn check(
                     return diagnostics::OperationDiagnostic::with_system_certs(
                         client_builder.system_certs(),
                     )
-                    .report(err, printer.stderr_important())?
+                    .report(err, printer)?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),

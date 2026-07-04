@@ -281,7 +281,7 @@ pub(crate) async fn run(
                     format!("uvx {rest}").green()
                 ))
                 .with_context("tool")
-                .report(err, printer.stderr_important())?
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
@@ -299,7 +299,7 @@ pub(crate) async fn run(
                 diagnostic.with_context("tool")
             };
             return diagnostic
-                .report(err, printer.stderr_important())?
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
 
