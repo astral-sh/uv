@@ -25,8 +25,9 @@ use url::Url;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{
-    BaseClient, CacheControl, CachedClient, CachedClientError, Connectivity, RetriableError,
-    WrappedReqwestError, fetch_with_url_fallback, retryable_on_request_failure,
+    BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
+    Connectivity, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
@@ -122,6 +123,8 @@ pub enum Error {
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
     #[error(transparent)]
     RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
+    #[error(transparent)]
+    ClientBuild(Box<ClientBuildError>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -1018,7 +1021,7 @@ impl ManagedPythonDownloadList {
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
-        client: &CachedClient,
+        client_builder: &BaseClientBuilder<'_>,
         cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
@@ -1048,24 +1051,30 @@ impl ManagedPythonDownloadList {
             Source::BuiltIn
         };
 
-        let json_downloads =
-            match json_source {
-                Source::BuiltIn => parse_downloads_json(
-                    BUILTIN_PYTHON_DOWNLOADS_JSON,
-                    "EMBEDDED IN THE BINARY".to_owned(),
-                )?,
-                Source::Path(ref path) => parse_downloads_json(
-                    &fs_err::read(path.as_ref())?,
-                    path.to_string_lossy().to_string(),
-                )?,
-                Source::Http(ref url) => fetch_downloads_from_url(client, cache, url)
+        let json_downloads = match json_source {
+            Source::BuiltIn => parse_downloads_json(
+                BUILTIN_PYTHON_DOWNLOADS_JSON,
+                "EMBEDDED IN THE BINARY".to_owned(),
+            )?,
+            Source::Path(ref path) => parse_downloads_json(
+                &fs_err::read(path.as_ref())?,
+                path.to_string_lossy().to_string(),
+            )?,
+            Source::Http(ref url) => {
+                let client = CachedClient::new(
+                    client_builder
+                        .build()
+                        .map_err(|err| Error::ClientBuild(Box::new(err)))?,
+                );
+                fetch_downloads_from_url(&client, cache, url)
                     .await
                     .map_err(|e| match e {
                         e @ (Error::InvalidPythonDownloadsJSON(..)
                         | Error::UnsupportedPythonDownloadsJSON(..)) => e,
                         e => Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)),
-                    })?,
-            };
+                    })?
+            }
+        };
 
         let downloads = parse_json_downloads(json_downloads);
         Ok(Self { downloads })
@@ -2075,13 +2084,9 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("20240814".to_string());
 
-        let client = uv_client::CachedClient::new(
-            uv_client::BaseClientBuilder::default()
-                .build()
-                .expect("failed to build base client"),
-        );
+        let client_builder = uv_client::BaseClientBuilder::default();
         let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
-        let download_list = ManagedPythonDownloadList::new(&client, &cache, None)
+        let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
             .await
             .unwrap();
 
@@ -2108,13 +2113,9 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("99999999".to_string());
 
-        let client = uv_client::CachedClient::new(
-            uv_client::BaseClientBuilder::default()
-                .build()
-                .expect("failed to build base client"),
-        );
+        let client_builder = uv_client::BaseClientBuilder::default();
         let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
-        let download_list = ManagedPythonDownloadList::new(&client, &cache, None)
+        let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
             .await
             .unwrap();
 

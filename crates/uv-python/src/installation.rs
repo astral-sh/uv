@@ -12,7 +12,7 @@ use uv_warnings::warn_user;
 
 use uv_cache::Cache;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
-use uv_client::{BaseClient, BaseClientBuilder, CachedClient};
+use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
 
@@ -218,9 +218,8 @@ impl PythonInstallation {
             return Err(err);
         };
 
-        let download_list_client = CachedClient::new(client_builder.build()?);
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, cache, python_downloads_json_url)
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
                 .await?;
 
         let downloads_enabled = preference.allows_managed()
@@ -539,9 +538,8 @@ impl PythonInstallation {
             return Ok(());
         }
 
-        let download_list_client = CachedClient::new(client_builder.build()?);
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, cache, python_downloads_json_url)
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
                 .await?;
         self.warn_if_outdated_prerelease(request, &download_list);
 

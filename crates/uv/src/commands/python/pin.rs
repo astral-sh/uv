@@ -7,7 +7,7 @@ use tracing::debug;
 use uv_python::downloads::ManagedPythonDownloadList;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, CachedClient};
+use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_fs::Simplified;
 use uv_python::{
@@ -98,10 +98,9 @@ pub(crate) async fn pin(
         if let Some(file) = version_file? {
             let mut pins = file.versions().peekable();
             let download_list = if virtual_project.is_some() && pins.peek().is_some() {
-                let download_list_client = CachedClient::new(client_builder.build()?);
                 Some(
                     ManagedPythonDownloadList::new(
-                        &download_list_client,
+                        &client_builder,
                         cache,
                         install_mirrors.python_downloads_json_url.as_deref(),
                     )

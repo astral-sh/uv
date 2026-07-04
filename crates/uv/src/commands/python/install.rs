@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, CachedClient};
+use uv_client::BaseClientBuilder;
 use uv_configuration::Concurrency;
 use uv_errors::{ErrorOptions, write_error_chain_with_options};
 use uv_fs::Simplified;
@@ -339,10 +339,12 @@ async fn perform_install(
     let mut is_default_install = false;
     let mut is_unspecified_upgrade = false;
     let retry_policy = client_builder.retry_policy();
-    let cached_client = CachedClient::new(client_builder.build()?);
-    let download_list =
-        ManagedPythonDownloadList::new(&cached_client, cache, python_downloads_json_url.as_deref())
-            .await?;
+    let download_list = ManagedPythonDownloadList::new(
+        &client_builder,
+        cache,
+        python_downloads_json_url.as_deref(),
+    )
+    .await?;
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
     let client = client_builder.retries(0).build()?;
