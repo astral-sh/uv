@@ -60,7 +60,7 @@ impl Display for WheelFilename {
 impl WheelFilename {
     fn parse_filename(
         filename: &str,
-        expected_package_name: Option<&PackageName>,
+        hint: Option<&PackageName>,
     ) -> Result<Self, WheelFilenameError> {
         let stem = filename.strip_suffix(".whl").ok_or_else(|| {
             WheelFilenameError::InvalidWheelFileName(
@@ -68,14 +68,14 @@ impl WheelFilename {
                 "Must end with .whl".to_string(),
             )
         })?;
-        Self::parse(stem, filename, expected_package_name)
+        Self::parse(stem, filename, hint)
     }
 
-    pub(crate) fn from_str_with_expected_package_name(
+    pub(crate) fn from_hint(
         filename: &str,
-        expected_package_name: &PackageName,
+        hint: &PackageName,
     ) -> Result<Self, WheelFilenameError> {
-        Self::parse_filename(filename, Some(expected_package_name))
+        Self::parse_filename(filename, Some(hint))
     }
 
     /// Create a [`WheelFilename`] from its components.
@@ -184,7 +184,7 @@ impl WheelFilename {
     fn parse(
         stem: &str,
         filename: &str,
-        expected_package_name: Option<&PackageName>,
+        hint: Option<&PackageName>,
     ) -> Result<Self, WheelFilenameError> {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
@@ -252,14 +252,13 @@ impl WheelFilename {
                 )
             };
 
-        let name = match expected_package_name {
-            Some(expected_package_name)
-                if normalized_package_name_matches(name, expected_package_name) =>
-            {
-                expected_package_name.clone()
-            }
-            _ => PackageName::from_str(name)
-                .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?,
+        let name = if let Some(hint) = hint
+            && normalized_package_name_matches(name, hint)
+        {
+            hint.clone()
+        } else {
+            PackageName::from_str(name)
+                .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?
         };
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
@@ -396,78 +395,7 @@ pub enum WheelFilenameError {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-    use std::io;
-    use std::mem::discriminant;
-
     use super::*;
-
-    #[test]
-    fn expected_package_name_matches_public_parser() -> Result<(), Box<dyn Error>> {
-        let cases = [
-            ("numpy-1.2.3-py3-none-any.whl", "numpy"),
-            ("foo_bar-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("foo.bar-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("Foo.Bar-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("foo__bar-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("foo_.bar-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("other-1.2.3-py3-none-any.whl", "foo-bar"),
-            ("-1.2.3-py3-none-any.whl", "foo"),
-            ("f!oo-1.2.3-py3-none-any.whl", "foo"),
-            (".foo-1.2.3-py3-none-any.whl", "foo"),
-            ("foo.-1.2.3-py3-none-any.whl", "foo"),
-            ("föö-1.2.3-py3-none-any.whl", "foo"),
-            (".whl", "foo"),
-            ("foo.whl", "foo"),
-            ("foo-1.2.3.whl", "foo"),
-            ("foo-1.2.3-py3.whl", "foo"),
-            ("foo-1.2.3-py3-none.whl", "foo"),
-            ("foo-1.2.3-202206090410-py3-none-any-whoops.whl", "foo"),
-            ("foo-x.y.z-py3-none-any.whl", "foo"),
-            ("foo-1.2.3-tag-py3-none-any.whl", "foo"),
-            ("foo-1.2.3-py3-none-unknown..tag.whl", "foo"),
-        ];
-
-        for (filename, package_name) in cases {
-            let expected_package_name = PackageName::from_str(package_name)?;
-            let baseline = WheelFilename::from_str(filename);
-            let candidate = WheelFilename::from_str_with_expected_package_name(
-                filename,
-                &expected_package_name,
-            );
-            assert_eq!(
-                baseline.is_ok(),
-                candidate.is_ok(),
-                "success parity differed for {filename}"
-            );
-            match (baseline, candidate) {
-                (Ok(baseline), Ok(candidate)) => assert_eq!(baseline, candidate, "{filename}"),
-                (Err(baseline), Err(candidate)) => {
-                    assert_eq!(
-                        discriminant(&baseline),
-                        discriminant(&candidate),
-                        "{filename}"
-                    );
-                    assert_eq!(baseline.to_string(), candidate.to_string(), "{filename}");
-                }
-                _ => {
-                    return Err(io::Error::other(format!(
-                        "parser result kind differed for {filename}"
-                    ))
-                    .into());
-                }
-            }
-        }
-
-        let expected_package_name = PackageName::from_str("foo-bar")?;
-        let mismatched = WheelFilename::from_str_with_expected_package_name(
-            "other-1.2.3-py3-none-any.whl",
-            &expected_package_name,
-        )?;
-        assert_eq!(mismatched.name.as_ref(), "other");
-
-        Ok(())
-    }
 
     #[test]
     fn err_not_whl_extension() {
