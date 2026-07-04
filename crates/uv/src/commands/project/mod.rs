@@ -154,7 +154,7 @@ pub(crate) enum ProjectError {
     #[error(
         "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
     )]
-    LockWorkspaceMismatch(PackageName),
+    LockWorkspaceMismatch(PackageName, Option<PackageName>),
 
     #[error(
         "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
@@ -404,6 +404,11 @@ impl uv_errors::Hint for ProjectError {
         match self {
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
+            }
+            Self::LockWorkspaceMismatch(package_name, Some(renamed_from)) => {
+                uv_errors::Hints::from(format!(
+                    "If you renamed `{renamed_from}` to `{package_name}`, run `uv lock` to update the lockfile"
+                ))
             }
             Self::Lock(err) => err.hints(),
             Self::Python(err) => err.hints(),
