@@ -2035,6 +2035,15 @@ impl<'a> Parser<'a> {
     /// If the version string is not in the format of `w[.x[.y[.z]]]`, then
     /// this returns `None`.
     fn parse_fast(&self) -> Option<VersionPattern> {
+        if let [major, b'.', minor, b'.', patch] = self.v {
+            let major = major.wrapping_sub(b'0');
+            let minor = minor.wrapping_sub(b'0');
+            let patch = patch.wrapping_sub(b'0');
+            if major <= 9 && minor <= 9 && patch <= 9 {
+                return Some(Self::from_fast_release([major, minor, patch, 0], 3));
+            }
+        }
+
         let (mut prev_digit, mut cur, mut release, mut len) = (false, 0u8, [0u8; 4], 0u8);
         for &byte in self.v {
             if byte == b'.' {
@@ -2059,6 +2068,11 @@ impl<'a> Parser<'a> {
         }
         *release.get_mut(usize::from(len))? = cur;
         len += 1;
+        Some(Self::from_fast_release(release, len))
+    }
+
+    /// Builds the packed representation used by the numeric fast parser.
+    fn from_fast_release(release: [u8; 4], len: u8) -> VersionPattern {
         let small = VersionSmall {
             _force_niche: NonZero::<u8>::MIN,
             repr: (u64::from(release[0]) << 48)
@@ -2071,10 +2085,10 @@ impl<'a> Parser<'a> {
         };
         let inner = VersionInner::Small { small };
         let version = Version { inner };
-        Some(VersionPattern {
+        VersionPattern {
             version,
             wildcard: false,
-        })
+        }
     }
 
     /// Parses an optional initial epoch number and the first component of the
@@ -3580,6 +3594,40 @@ mod tests {
     //
     // They are meant to be additional (but in some cases likely redundant)
     // with some of the above tests.
+    #[test]
+    fn parse_version_single_digit_release() {
+        for major in 0u8..=9 {
+            for minor in 0u8..=9 {
+                for patch in 0u8..=9 {
+                    let input = format!("{major}.{minor}.{patch}");
+                    assert_eq!(
+                        input.parse(),
+                        Ok(Version::new([
+                            u64::from(major),
+                            u64::from(minor),
+                            u64::from(patch),
+                        ])),
+                        "{input}"
+                    );
+                }
+            }
+        }
+
+        assert!("a.1.2".parse::<Version>().is_err());
+        assert_eq!(
+            "1.a.2"
+                .parse::<Version>()
+                .map(|version| version.to_string()),
+            Ok("1a2".to_string())
+        );
+        assert_eq!(
+            "1.2.a"
+                .parse::<Version>()
+                .map(|version| version.to_string()),
+            Ok("1.2a0".to_string())
+        );
+    }
+
     #[test]
     fn parse_version_valid() {
         let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
