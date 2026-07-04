@@ -1025,10 +1025,10 @@ impl ManagedPythonDownloadList {
         cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        // Although read_url() handles file:// URLs and converts them to local file reads, here we
-        // want to also support parsing bare filenames like "/tmp/py.json", not just
-        // "file:///tmp/py.json". Note that "C:\Temp\py.json" should be considered a filename, even
-        // though Url::parse would successfully misparse it as a URL with scheme "C".
+        // file:// URLs are converted to local file reads, and we also support parsing bare
+        // filenames like "/tmp/py.json", not just "file:///tmp/py.json". Note that
+        // "C:\Temp\py.json" should be considered a filename, even though Url::parse would
+        // successfully misparse it as a URL with scheme "C".
         enum Source<'a> {
             BuiltIn,
             Path(Cow<'a, Path>),
@@ -1135,19 +1135,18 @@ async fn fetch_downloads_from_url(
         Connectivity::Offline => CacheControl::AllowStale,
     };
 
-    let start = Instant::now();
     let request = client
         .uncached()
         .for_host(url)
         .get(Url::from(url.clone()))
         .build()
-        .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))?;
+        .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
 
     let response_callback = async |response: Response| {
         let bytes = response
             .bytes()
             .await
-            .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))?;
+            .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
         parse_downloads_json(&bytes, url.to_string())
     };
 
@@ -1160,13 +1159,13 @@ async fn fetch_downloads_from_url(
                 err,
                 retries,
                 duration,
-            } => {
-                if retries > 0 {
-                    err.into_retried(retries, duration)
-                } else {
-                    err
-                }
-            }
+            } => match err {
+                // Avoid double-wrapping errors.
+                err @ (Error::InvalidPythonDownloadsJSON(..)
+                | Error::UnsupportedPythonDownloadsJSON(..)) => err,
+                err if retries > 0 => err.into_retried(retries, duration),
+                err => err,
+            },
         })
 }
 
