@@ -10,7 +10,7 @@ use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
-use uv_small_str::SmallString;
+use uv_small_str::{RkyvShared, SmallString};
 
 /// Error converting [`uv_pypi_types::PypiFile`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
@@ -126,8 +126,9 @@ impl File {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Deserialize, rkyv::Serialize)]
 #[rkyv(derive(Debug))]
 pub enum FileLocation {
-    /// URL relative to the base URL.
-    RelativeUrl(SmallString, SmallString),
+    /// URL relative to the base URL. The base URL allocation is shared by every relative file in
+    /// an index response, so archive it as a shared pointer.
+    RelativeUrl(#[rkyv(with = RkyvShared)] SmallString, SmallString),
     /// Absolute URL.
     AbsoluteUrl(UrlString),
 }

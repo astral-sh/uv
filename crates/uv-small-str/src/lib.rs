@@ -144,6 +144,49 @@ impl PartialOrd<SmallString> for rkyv::string::ArchivedString {
     }
 }
 
+/// An [`rkyv`] adapter that archives [`SmallString`] values sharing an [`arcstr::ArcStr`]
+/// allocation once.
+pub struct RkyvShared;
+
+impl rkyv::with::ArchiveWith<SmallString> for RkyvShared {
+    type Archived = rkyv::rc::ArchivedRc<str, rkyv::rc::ArcFlavor>;
+    type Resolver = rkyv::rc::RcResolver;
+
+    fn resolve_with(
+        field: &SmallString,
+        resolver: Self::Resolver,
+        out: rkyv::Place<Self::Archived>,
+    ) {
+        rkyv::rc::ArchivedRc::resolve_from_ref(field.as_ref(), resolver, out);
+    }
+}
+
+impl<S> rkyv::with::SerializeWith<SmallString, S> for RkyvShared
+where
+    S: rkyv::rancor::Fallible + rkyv::ser::Sharing + rkyv::ser::Writer + ?Sized,
+    S::Error: rkyv::rancor::Source,
+{
+    fn serialize_with(field: &SmallString, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        rkyv::rc::ArchivedRc::<str, rkyv::rc::ArcFlavor>::serialize_from_ref(
+            field.as_ref(),
+            serializer,
+        )
+    }
+}
+
+impl<D> rkyv::with::DeserializeWith<rkyv::rc::ArchivedRc<str, rkyv::rc::ArcFlavor>, SmallString, D>
+    for RkyvShared
+where
+    D: rkyv::rancor::Fallible + ?Sized,
+{
+    fn deserialize_with(
+        field: &rkyv::rc::ArchivedRc<str, rkyv::rc::ArcFlavor>,
+        _deserializer: &mut D,
+    ) -> Result<SmallString, D::Error> {
+        Ok(SmallString::from(field.get()))
+    }
+}
+
 /// An [`schemars::JsonSchema`] implementation for [`SmallString`].
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SmallString {
