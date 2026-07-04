@@ -1505,6 +1505,16 @@ impl SimpleDetailMetadata {
             }
         }
 
+        // Keep file ordering deterministic without sorting the complete Simple API response.
+        for files in version_map.values_mut() {
+            files
+                .wheels
+                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+            files
+                .source_dists
+                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+        }
+
         Self {
             versions: version_map
                 .into_iter()
@@ -1713,7 +1723,7 @@ mod tests {
     use tokio::sync::Semaphore;
     use url::Url;
     use uv_normalize::PackageName;
-    use uv_pypi_types::PypiSimpleDetail;
+    use uv_pypi_types::{Hashes, ProjectStatus, PypiFile, PypiSimpleDetail};
     use uv_redacted::DisplaySafeUrl;
     use uv_torch::{TorchBackend, TorchSource, TorchStrategy};
 
@@ -2015,6 +2025,66 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn sort_pypi_files_after_grouping() {
+        let file = |filename: &str| PypiFile {
+            core_metadata: None,
+            filename: SmallString::from(filename),
+            hashes: Hashes::default(),
+            requires_python: None,
+            size: None,
+            upload_time: None,
+            url: SmallString::from(filename),
+            yanked: None,
+        };
+        let base = DisplaySafeUrl::parse("https://example.com/simple/demo/").unwrap();
+        let simple_metadata = SimpleDetailMetadata::from_pypi_files(
+            vec![
+                file("demo-1.0.zip"),
+                file("demo-1.0-py3-none-any.whl"),
+                file("demo-1.0.tar.gz"),
+                file("demo-1.0-py2.py3-none-any.whl"),
+            ],
+            &PackageName::from_str("demo").unwrap(),
+            ProjectStatus::default(),
+            &base,
+        );
+        let files = simple_metadata
+            .iter()
+            .map(|metadatum| {
+                (
+                    metadatum
+                        .files
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.file.filename.as_ref())
+                        .collect::<Vec<_>>(),
+                    metadatum
+                        .files
+                        .source_dists
+                        .iter()
+                        .map(|source_dist| source_dist.file.filename.as_ref())
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        insta::assert_debug_snapshot!(files, @r#"
+        [
+            (
+                [
+                    "demo-1.0-py2.py3-none-any.whl",
+                    "demo-1.0-py3-none-any.whl",
+                ],
+                [
+                    "demo-1.0.tar.gz",
+                    "demo-1.0.zip",
+                ],
+            ),
+        ]
+        "#);
     }
 
     #[test]
