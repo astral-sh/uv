@@ -495,7 +495,6 @@ fn prune_stale_revision() -> Result<()> {
 /// Automatic pruning should remove dangling archives during a normal command, but only when due,
 /// and without touching referenced archives.
 #[test]
-#[cfg(unix)]
 fn autoprune() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -529,7 +528,7 @@ fn autoprune() -> Result<()> {
     dangling.assert(predicates::path::exists());
 
     // Backdate the marker to make the prune due again.
-    let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60 * 60 * 24 * 2);
+    let stale = std::time::SystemTime::now() - std::time::Duration::from_hours(48);
     filetime::set_file_mtime(marker.path(), filetime::FileTime::from_system_time(stale))?;
 
     context
@@ -574,7 +573,6 @@ fn autoprune() -> Result<()> {
 
 /// Automatic pruning should not run when disabled (the default).
 #[test]
-#[cfg(unix)]
 fn autoprune_disabled() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

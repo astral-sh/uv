@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
 use uv_cache_info::Timestamp;
@@ -42,6 +42,21 @@ const AUTOPRUNE_INTERVAL: Duration = Duration::from_hours(24);
 
 /// The name of the marker file recording the time of the last automatic cache pruning run.
 const AUTOPRUNE_MARKER: &str = ".autoprune";
+
+/// The cache bucket families (at any version) that may contain links into the archive bucket,
+/// aside from the environments bucket.
+///
+/// Includes historical bucket names (e.g., `built-wheels` and `source-dists`, former names of
+/// the source distributions bucket), since outdated buckets may be in use by other uv versions.
+/// If a new bucket family gains links into the archive bucket, it must be added here.
+const DISTRIBUTION_BUCKET_FAMILIES: &[&str] = &["built-wheels", "sdists", "source-dists", "wheels"];
+
+/// The cache bucket family (at any version) containing cached environments.
+const ENVIRONMENTS_BUCKET_FAMILY: &str = "environments";
+
+/// The maximum size of an archive link file ([`Link`]) on Windows, used to avoid reading
+/// unrelated files when searching for archive references.
+const MAX_LINK_SIZE: u64 = 1024;
 
 /// Error locking a cache entry or shard
 #[derive(Debug, thiserror::Error)]
@@ -537,9 +552,10 @@ impl Cache {
             return;
         }
 
-        // Require the exclusive lock, so that the prune cannot race another uv process. If any
-        // other process holds the lock (shared or exclusive), skip pruning entirely. The lock is
-        // held until the prune completes.
+        // Require the exclusive lock, so that the prune cannot race any other uv process that
+        // takes the cache lock (as all versions since 0.10 do). If any other process holds the
+        // lock (shared or exclusive), skip pruning entirely. The lock is held until the prune
+        // completes.
         let Some(_lock_file) = LockedFile::acquire_no_wait(
             self.root.join(".lock"),
             LockedFileMode::Exclusive,
@@ -578,26 +594,134 @@ impl Cache {
     /// Remove any archives that are no longer referenced, as in [`Cache::prune`].
     ///
     /// Unlike [`Cache::prune`], leaves cached environments (and the archives they reference)
-    /// intact, along with outdated cache buckets, which may be in use by other uv versions.
+    /// intact, along with outdated cache buckets (and the archives they reference), which may
+    /// be in use by other uv versions.
     ///
     /// The caller must hold the exclusive cache lock.
     fn prune_unreferenced_archives(&self) -> Result<Removal, io::Error> {
-        let mut summary = Removal::default();
+        let references = self.find_archive_references_for_autoprune()?;
+        self.remove_unreferenced_archives(&references)
+    }
 
-        // Unlike `Cache::prune`, cached environments are retained, so their references must be
-        // included to avoid removing the archives that back them.
-        let references = self.find_archive_references_in([
-            CacheBucket::SourceDistributions,
-            CacheBucket::Wheels,
-            CacheBucket::Environments,
-        ])?;
+    /// Find all references to entries in the archive bucket, for automatic pruning.
+    ///
+    /// Unlike [`Cache::find_archive_references`], includes references from outdated cache
+    /// buckets (which may be in use by other uv versions) and from cached environments,
+    /// including references from within the environments themselves (e.g., under
+    /// `--link-mode=symlink`, an environment's files are symlinks into wheel archives).
+    fn find_archive_references_for_autoprune(
+        &self,
+    ) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
+        // Collect references from every version of every bucket that can contain them, since
+        // outdated buckets are retained and may be in use by other uv versions.
+        let mut distribution_buckets = Vec::new();
+        let mut environment_buckets = Vec::new();
+        for entry in fs_err::read_dir(&self.root)? {
+            let entry = entry?;
+            let Some(file_name) = entry.file_name().to_str().map(ToString::to_string) else {
+                continue;
+            };
+            if DISTRIBUTION_BUCKET_FAMILIES
+                .iter()
+                .any(|family| is_bucket_version(&file_name, family))
+            {
+                distribution_buckets.push(entry.path());
+            } else if is_bucket_version(&file_name, ENVIRONMENTS_BUCKET_FAMILY) {
+                environment_buckets.push(entry.path());
+            }
+        }
+
+        let raw_references = self.find_archive_references_in(distribution_buckets)?;
+        let raw_environment_references = self.find_archive_references_in(environment_buckets)?;
+
+        // If the archive bucket doesn't exist, there's nothing to normalize (or prune).
+        let archive_root = match fs_err::canonicalize(self.bucket(CacheBucket::Archive)) {
+            Ok(archive_root) => archive_root,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                return Ok(raw_references);
+            }
+            Err(err) => return Err(err),
+        };
+
+        // References can point to paths within an archive (e.g., an in-place environment's
+        // file-level symlinks under `--link-mode=symlink`), while the removal check operates on
+        // top-level archive entries; normalize each reference to the archive it falls within.
+        let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
+        for (target, links) in raw_references {
+            let target = archive_entry(&archive_root, &target).unwrap_or(target);
+            references.entry(target).or_default().extend(links);
+        }
+
+        // An environment that lives in the archive bucket can itself reference other archives
+        // via internal symlinks (e.g., under `--link-mode=symlink`). Wheel archives contain no
+        // further archive references, so a single level of indirection suffices.
+        let mut environment_archives = FxHashSet::default();
+        for (target, links) in raw_environment_references {
+            let target = match archive_entry(&archive_root, &target) {
+                Some(entry) => {
+                    environment_archives.insert(entry.clone());
+                    entry
+                }
+                None => target,
+            };
+            references.entry(target).or_default().extend(links);
+        }
+
+        for archive in environment_archives {
+            if !archive.is_dir() {
+                continue;
+            }
+            for entry in walkdir::WalkDir::new(&archive) {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(err) => {
+                        debug!("Failed to walk cached environment: {err}");
+                        continue;
+                    }
+                };
+                if !entry.path_is_symlink() {
+                    continue;
+                }
+                let Ok(inner) = fs_err::canonicalize(entry.path()) else {
+                    continue;
+                };
+                let Some(inner) = archive_entry(&archive_root, &inner) else {
+                    continue;
+                };
+                references
+                    .entry(inner)
+                    .or_default()
+                    .push(entry.path().to_path_buf());
+            }
+        }
+
+        Ok(references)
+    }
+
+    /// Remove any entries in the archive bucket that are not present in the given references.
+    fn remove_unreferenced_archives(
+        &self,
+        references: &FxHashMap<PathBuf, Vec<PathBuf>>,
+    ) -> Result<Removal, io::Error> {
+        let mut summary = Removal::default();
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
-                    let target = fs_err::canonicalize(&path)?;
+                    // Skip entries that can't be resolved (e.g., broken symlinks), rather than
+                    // aborting the entire sweep.
+                    let target = match fs_err::canonicalize(&path) {
+                        Ok(target) => target,
+                        Err(err) => {
+                            warn!(
+                                "Failed to resolve cache archive `{}`: {err}",
+                                path.display()
+                            );
+                            continue;
+                        }
+                    };
                     if !references.contains_key(&target) {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
@@ -806,22 +930,7 @@ impl Cache {
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked).
         let references = self.find_archive_references()?;
-
-        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
-            Ok(entries) => {
-                for entry in entries {
-                    let entry = entry?;
-                    let path = entry.path();
-                    let target = fs_err::canonicalize(&path)?;
-                    if !references.contains_key(&target) {
-                        debug!("Removing dangling cache archive: {}", path.display());
-                        summary += rm_rf(path)?;
-                    }
-                }
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
-            Err(err) => return Err(err),
-        }
+        summary += self.remove_unreferenced_archives(&references)?;
 
         Ok(summary)
     }
@@ -833,17 +942,19 @@ impl Cache {
     ///
     /// Returns a map from archive path to paths that reference it.
     fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
-        self.find_archive_references_in([CacheBucket::SourceDistributions, CacheBucket::Wheels])
+        self.find_archive_references_in([
+            self.bucket(CacheBucket::SourceDistributions),
+            self.bucket(CacheBucket::Wheels),
+        ])
     }
 
-    /// Find all references to entries in the archive bucket from the given buckets.
+    /// Find all references to entries in the archive bucket from the given directories.
     fn find_archive_references_in(
         &self,
-        buckets: impl IntoIterator<Item = CacheBucket>,
+        buckets: impl IntoIterator<Item = PathBuf>,
     ) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
         let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
-        for bucket in buckets {
-            let bucket_path = self.bucket(bucket);
+        for bucket_path in buckets {
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
                 for entry in walker.filter_entry(|entry| {
@@ -875,6 +986,15 @@ impl Cache {
                     // On Windows, archive references are files containing structured data.
                     if cfg!(windows) {
                         if !entry.file_type().is_file() {
+                            continue;
+                        }
+
+                        // Avoid reading files that are too large to be links (e.g., the contents
+                        // of an environment).
+                        if entry
+                            .metadata()
+                            .is_ok_and(|metadata| metadata.len() > MAX_LINK_SIZE)
+                        {
                             continue;
                         }
                     }
@@ -1001,9 +1121,31 @@ fn autoprune_due(marker: &Path) -> bool {
     };
     match SystemTime::now().duration_since(modified) {
         Ok(elapsed) => elapsed >= AUTOPRUNE_INTERVAL,
-        // The marker is from the future (e.g., clock skew); treat the prune as not due.
-        Err(_) => false,
+        // The marker is from the future (e.g., clock skew). Tolerate skew of up to one interval,
+        // but treat anything larger as due, so that a wildly-future marker (e.g., written while
+        // the clock was fast) can't disable pruning indefinitely.
+        Err(err) => err.duration() >= AUTOPRUNE_INTERVAL,
     }
+}
+
+/// Returns `true` if `file_name` is a versioned directory of the given cache bucket family
+/// (e.g., `wheels-v6` for the `wheels` family).
+fn is_bucket_version(file_name: &str, family: &str) -> bool {
+    file_name
+        .strip_prefix(family)
+        .and_then(|suffix| suffix.strip_prefix("-v"))
+        .is_some_and(|version| !version.is_empty() && version.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Returns the top-level entry in the archive bucket that contains `target`, if any.
+///
+/// For example, given a target of `archive-v0/foo/lib/python3.12/site-packages`, returns
+/// `archive-v0/foo`. The archive root must be canonicalized; the target is assumed to be
+/// canonicalized (e.g., by [`Cache::resolve_link`]).
+fn archive_entry(archive_root: &Path, target: &Path) -> Option<PathBuf> {
+    let relative = target.strip_prefix(archive_root).ok()?;
+    let entry = relative.components().next()?;
+    Some(archive_root.join(entry))
 }
 
 /// An archive (unzipped wheel) that exists in the local cache.
@@ -1750,6 +1892,73 @@ mod tests {
         assert!(archive.join("payload.txt").is_file());
     }
 
+    /// Archives referenced only from an outdated cache bucket (e.g., `wheels-v5` when the
+    /// current bucket is `wheels-v6`) must be retained, since outdated buckets may be in use by
+    /// other uv versions.
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_retains_outdated_bucket_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let outdated_wheels = cache_root.path().join("wheels-v5");
+        let archive = archives.join("referenced");
+
+        fs_err::create_dir_all(&archive).unwrap();
+        fs_err::write(archive.join("payload.txt"), "payload").unwrap();
+        fs_err::create_dir_all(outdated_wheels.join("pypi").join("anyio")).unwrap();
+        fs_err::os::unix::fs::symlink(
+            &archive,
+            outdated_wheels.join("pypi").join("anyio").join("link"),
+        )
+        .unwrap();
+
+        let summary = Cache::from_path(cache_root.path())
+            .prune_unreferenced_archives()
+            .unwrap();
+
+        assert_eq!(summary.num_files, 0);
+        assert!(archive.join("payload.txt").is_file());
+    }
+
+    /// Archives referenced only from within a cached environment (e.g., site-packages symlinks
+    /// created under `--link-mode=symlink`) must be retained.
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_retains_environment_internal_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let environments = cache_root.path().join(CacheBucket::Environments.to_str());
+        let environment = archives.join("environment");
+        let wheel = archives.join("wheel");
+
+        // A wheel archive referenced only via a symlink within the environment archive.
+        fs_err::create_dir_all(&wheel).unwrap();
+        fs_err::write(wheel.join("payload.txt"), "payload").unwrap();
+        let site_packages = environment.join("lib").join("site-packages");
+        fs_err::create_dir_all(&site_packages).unwrap();
+        fs_err::os::unix::fs::symlink(wheel.join("payload.txt"), site_packages.join("module.py"))
+            .unwrap();
+
+        fs_err::create_dir_all(environments.join("interpreter-digest")).unwrap();
+        fs_err::os::unix::fs::symlink(
+            &environment,
+            environments.join("interpreter-digest").join("resolution"),
+        )
+        .unwrap();
+
+        let summary = Cache::from_path(cache_root.path())
+            .prune_unreferenced_archives()
+            .unwrap();
+
+        assert_eq!(summary.num_files, 0);
+        assert!(wheel.join("payload.txt").is_file());
+        assert!(environment.exists());
+    }
+
     #[test]
     fn autoprune_due_marker() {
         use std::time::{Duration, SystemTime};
@@ -1767,8 +1976,35 @@ mod tests {
         assert!(!autoprune_due(&marker));
 
         // A marker older than the interval is due.
-        let stale = SystemTime::now() - AUTOPRUNE_INTERVAL - Duration::from_secs(60);
+        let stale = SystemTime::now() - AUTOPRUNE_INTERVAL - Duration::from_mins(1);
         filetime::set_file_mtime(&marker, filetime::FileTime::from_system_time(stale)).unwrap();
         assert!(autoprune_due(&marker));
+
+        // A marker slightly in the future (e.g., clock skew) is not due.
+        let skewed = SystemTime::now() + Duration::from_mins(1);
+        filetime::set_file_mtime(&marker, filetime::FileTime::from_system_time(skewed)).unwrap();
+        assert!(!autoprune_due(&marker));
+
+        // A marker more than an interval in the future is due, so that a wildly-future marker
+        // can't disable pruning indefinitely.
+        let far_future = SystemTime::now() + AUTOPRUNE_INTERVAL + Duration::from_mins(1);
+        filetime::set_file_mtime(&marker, filetime::FileTime::from_system_time(far_future))
+            .unwrap();
+        assert!(autoprune_due(&marker));
+    }
+
+    #[test]
+    fn bucket_version_matching() {
+        use super::is_bucket_version;
+
+        assert!(is_bucket_version("wheels-v6", "wheels"));
+        assert!(is_bucket_version("wheels-v10", "wheels"));
+        assert!(is_bucket_version("built-wheels-v3", "built-wheels"));
+        assert!(!is_bucket_version("wheels-v6", "built-wheels"));
+        assert!(!is_bucket_version("built-wheels-v3", "wheels"));
+        assert!(!is_bucket_version("wheels-v", "wheels"));
+        assert!(!is_bucket_version("wheels-vX", "wheels"));
+        assert!(!is_bucket_version("wheels", "wheels"));
+        assert!(!is_bucket_version("wheels-v6-backup", "wheels"));
     }
 }

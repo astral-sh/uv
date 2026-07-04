@@ -79,7 +79,8 @@ impl EnvVars {
 
     /// If set to `1` or `true`, uv will periodically remove unreferenced archives from the
     /// cache, as in `uv cache prune`. Pruning runs at most once per day, and only when no
-    /// other uv processes are running.
+    /// other uv processes are running. While the prune runs, other uv processes will wait for
+    /// it to complete before reading from the cache.
     #[attr_added_in("next release")]
     pub const UV_CACHE_AUTOPRUNE: &'static str = "UV_CACHE_AUTOPRUNE";
 
