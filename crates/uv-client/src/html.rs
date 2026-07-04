@@ -6,13 +6,13 @@ use tl::{HTMLTag, Node, Parser};
 use tracing::{debug, instrument, warn};
 
 use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifiers;
+use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pypi_types::{BaseUrl, CoreMetadata, Hashes, ProjectStatus, PypiFile, Status, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
 use uv_small_str::SmallString;
 
-type RequiresPythonResult = Result<Arc<VersionSpecifiers>, uv_pep440::VersionSpecifiersParseError>;
+type RequiresPythonResult = Result<Arc<VersionSpecifiers>, VersionSpecifiersParseError>;
 
 #[derive(Default)]
 struct RequiresPythonInterner {

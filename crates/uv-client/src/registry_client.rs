@@ -1468,6 +1468,7 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
 
@@ -1535,6 +1536,7 @@ impl SimpleDetailMetadata {
         base: &Url,
     ) -> Self {
         let mut version_map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
+
         // Convert to a reference-counted string.
         let base = SmallString::from(base.as_str());
 
