@@ -379,7 +379,7 @@ pub(crate) async fn sync(
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                return Ok(ExitStatus::failure_with_error(ProjectError::LockMismatch(
+                return Ok(ExitStatus::error(ProjectError::LockMismatch(
                     prev,
                     cur,
                     lock_source,
@@ -480,7 +480,7 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::SUCCESS),
-        Outcome::LockMismatch(prev, cur, lock_source) => Ok(ExitStatus::failure_with_error(
+        Outcome::LockMismatch(prev, cur, lock_source) => Ok(ExitStatus::error(
             ProjectError::LockMismatch(prev, cur, lock_source),
         )),
     }

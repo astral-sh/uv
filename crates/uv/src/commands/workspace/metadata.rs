@@ -236,7 +236,7 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::failure_with_error(err)),
+        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::error(err)),
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err, printer)?

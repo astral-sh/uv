@@ -131,7 +131,7 @@ impl ExitStatus {
     }
 
     /// Return an expected command failure with an error to render before exiting.
-    pub(crate) fn failure_with_error(error: impl Into<anyhow::Error>) -> Self {
+    pub(crate) fn error(error: impl Into<anyhow::Error>) -> Self {
         Self {
             code: 1,
             error: Some(error.into()),

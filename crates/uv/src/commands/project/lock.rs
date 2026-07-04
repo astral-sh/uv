@@ -269,7 +269,7 @@ pub(crate) async fn lock(
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
         // Handle them here so we return exit code 1 instead of bubbling up as an error (exit code 2).
-        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::failure_with_error(err)),
+        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::error(err)),
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err, printer)?
