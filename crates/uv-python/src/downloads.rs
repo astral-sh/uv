@@ -14,7 +14,7 @@ use owo_colors::OwoColorize;
 use reqwest::Response;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -950,7 +950,7 @@ pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct JsonPythonDownload {
     name: String,
     arch: JsonArch,
@@ -966,7 +966,7 @@ struct JsonPythonDownload {
     build: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct JsonArch {
     family: String,
     variant: Option<String>,
@@ -1048,42 +1048,27 @@ impl ManagedPythonDownloadList {
             Source::BuiltIn
         };
 
-        let buf: Cow<'_, [u8]> = match json_source {
-            Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
-            Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => fetch_bytes_from_url(client, cache, url)
-                .await
-                .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
-                .into(),
-        };
-        let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
-            .map_err(
-                // As an explicit compatibility mechanism, if there's a top-level "version" key, it
-                // means it's a newer format than we know how to deal with.  Before reporting a
-                // parse error about the format of JsonPythonDownload, check for that key. We can do
-                // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
-                // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
-                // have the same parsing effect.)
-                #[expect(clippy::zero_sized_map_values)]
-                |e| {
-                    let source = match json_source {
-                        Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
-                        Source::Path(path) => path.to_string_lossy().to_string(),
-                        Source::Http(url) => url.to_string(),
-                    };
-                    if let Ok(keys) =
-                        serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(&buf)
-                        && keys.contains_key("version")
-                    {
-                        Error::UnsupportedPythonDownloadsJSON(source)
-                    } else {
-                        Error::InvalidPythonDownloadsJSON(source, e)
-                    }
-                },
-            )?;
+        let json_downloads =
+            match json_source {
+                Source::BuiltIn => parse_downloads_json(
+                    BUILTIN_PYTHON_DOWNLOADS_JSON,
+                    "EMBEDDED IN THE BINARY".to_owned(),
+                )?,
+                Source::Path(ref path) => parse_downloads_json(
+                    &fs_err::read(path.as_ref())?,
+                    path.to_string_lossy().to_string(),
+                )?,
+                Source::Http(ref url) => fetch_downloads_from_url(client, cache, url)
+                    .await
+                    .map_err(|e| match e {
+                        e @ (Error::InvalidPythonDownloadsJSON(..)
+                        | Error::UnsupportedPythonDownloadsJSON(..)) => e,
+                        e => Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)),
+                    })?,
+            };
 
-        let result = parse_json_downloads(json_downloads);
-        Ok(Self { downloads: result })
+        let downloads = parse_json_downloads(json_downloads);
+        Ok(Self { downloads })
     }
 
     /// Load available Python distributions from the compiled-in list only.
@@ -1098,11 +1083,38 @@ impl ManagedPythonDownloadList {
     }
 }
 
-async fn fetch_bytes_from_url(
+/// Parse the downloads JSON.
+///
+/// `source` is where the JSON came from for error reporting.
+fn parse_downloads_json(
+    buf: &[u8],
+    source: String,
+) -> Result<HashMap<String, JsonPythonDownload>, Error> {
+    serde_json::from_slice(buf).map_err(
+        // As an explicit compatibility mechanism, if there's a top-level "version" key, it
+        // means it's a newer format than we know how to deal with.  Before reporting a
+        // parse error about the format of JsonPythonDownload, check for that key. We can do
+        // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
+        // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
+        // have the same parsing effect.)
+        #[expect(clippy::zero_sized_map_values)]
+        |e| {
+            if let Ok(keys) = serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(buf)
+                && keys.contains_key("version")
+            {
+                Error::UnsupportedPythonDownloadsJSON(source)
+            } else {
+                Error::InvalidPythonDownloadsJSON(source, e)
+            }
+        },
+    )
+}
+
+async fn fetch_downloads_from_url(
     client: &CachedClient,
     cache: &Cache,
     url: &DisplaySafeUrl,
-) -> Result<Vec<u8>, Error> {
+) -> Result<HashMap<String, JsonPythonDownload>, Error> {
     let cache_entry = cache.entry(
         CacheBucket::Python,
         "downloads-json",
@@ -1122,11 +1134,11 @@ async fn fetch_bytes_from_url(
         .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))?;
 
     let response_callback = async |response: Response| {
-        response
+        let bytes = response
             .bytes()
             .await
-            .map(|bytes| bytes.to_vec())
-            .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))
+            .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))?;
+        parse_downloads_json(&bytes, url.to_string())
     };
 
     client
