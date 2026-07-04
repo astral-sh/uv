@@ -3247,14 +3247,15 @@ impl ForkState {
         // set instead of accumulating one hole per rejected version, and the incompatibilities
         // of adjacent versions merge into contiguous sets. This keeps the version sets minimal.
         let versions = Range::singleton(for_version.clone());
-        let versions = if let Some(known_versions) = ResolverState::<InstalledPackages>::known_versions(
-            index,
-            installed_packages,
-            fork_urls,
-            fork_indexes,
-            known_versions,
-            &pubgrub.package_store[*next],
-        ) {
+        let versions = if let Some(known_versions) =
+            ResolverState::<InstalledPackages>::known_versions(
+                index,
+                installed_packages,
+                fork_urls,
+                fork_indexes,
+                known_versions,
+                &pubgrub.package_store[*next],
+            ) {
             versions.widen_versions(known_versions)
         } else {
             versions

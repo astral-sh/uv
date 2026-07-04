@@ -66,7 +66,7 @@ fn backtrack_to_missing_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because c was not found in the package registry and a==1.0.0 depends on c, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because c was not found in the package registry and a<2.0.0 depends on c, we can conclude that a<2.0.0 cannot be used.
           And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -284,8 +284,8 @@ fn transitive_requires_package_does_not_exist() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because b was not found in the package registry and a==1.0.0 depends on b, we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because b was not found in the package registry and all versions of a depend on b, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -367,22 +367,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and only the following versions of a are available:
-              a==1.0.0
-              a>=2.0.0
-          we can conclude that a<2.0.0 depends on b==1.0.0.
-          And because only a<=3.0.0 is available, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
-
-          Because only the following versions of c are available:
-              c==1.0.0
-              c==2.0.0
-          and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
-          And because c==2.0.0 depends on a>=3.0.0, we can conclude that all versions of c depend on one of:
-              a<2.0.0
-              a>=3.0.0
-
-          And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
-          And because a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
+          And because c>1.0.0 depends on a>=3.0.0 and a>2.4.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
               b<=1.0.0
               b>=3.0.0
 
@@ -462,22 +448,8 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and only the following versions of a are available:
-              a==1.0.0
-              a>=2.0.0
-          we can conclude that a<2.0.0 depends on b==1.0.0.
-          And because only a<=3.0.0 is available, we can conclude that a<2.0.0 depends on b==1.0.0. (1)
-
-          Because only the following versions of c are available:
-              c==1.0.0
-              c==2.0.0
-          and c==1.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on a<2.0.0.
-          And because c==2.0.0 depends on a>=3.0.0, we can conclude that all versions of c depend on one of:
-              a<2.0.0
-              a>=3.0.0
-
-          And because we know from (1) that a<2.0.0 depends on b==1.0.0, we can conclude that a!=3.0.0, b!=1.0.0, all versions of c are incompatible.
-          And because a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
+          And because c>1.0.0 depends on a>=3.0.0 and a>2.3.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
               b<=1.0.0
               b>=3.0.0
 
@@ -532,12 +504,7 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of a are available:
-              a==1.0.0
-              a==2.0.0
-              a==3.0.0
-          and a==1.0.0 depends on b==1.0.0, we can conclude that a<2.0.0 depends on b==1.0.0.
-          And because a==3.0.0 depends on b==3.0.0, we can conclude that all of:
+      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and a>2.0.0 depends on b==3.0.0, we can conclude that all of:
               a<2.0.0
               a>2.0.0
           depend on one of:
@@ -784,8 +751,7 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a[extra-b]==1.0.0 is available and a[extra-b]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra-b] depend on b==1.0.0.
-          And because a[extra-c]==1.0.0 depends on b==2.0.0 and only a[extra-c]==1.0.0 is available, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
+      ╰─▶ Because all versions of a[extra-c] depend on b==2.0.0 and all versions of a[extra-b] depend on b==1.0.0, we can conclude that all versions of a[extra-b] and all versions of a[extra-c] are incompatible.
           And because you require a[extra-b] and a[extra-c], we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -829,8 +795,8 @@ fn extra_incompatible_with_root() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a[extra]==1.0.0 is available and a[extra]==1.0.0 depends on b==1.0.0, we can conclude that all versions of a[extra] depend on b==1.0.0.
-          And because you require a[extra] and b==2.0.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a[extra] depend on b==1.0.0 and you require a[extra], we can conclude that you require b==1.0.0.
+          And because you require b==2.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Because the user requested `b==2.0.0` but the requested extra requires `b==1.0.0`, the dependencies cannot be satisfied.
@@ -1033,7 +999,7 @@ fn transitive_incompatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on b==2.0.0 and b==1.0.0, we can conclude that a==1.0.0 cannot be used.
+      ╰─▶ Because all versions of a depend on b==2.0.0 and b==1.0.0, we can conclude that all versions of a cannot be used.
           And because you require a==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1075,8 +1041,8 @@ fn transitive_incompatible_with_root_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b==2.0.0, we can conclude that all versions of a depend on b==2.0.0.
-          And because you require a and b==1.0.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a depend on b==2.0.0 and you require a, we can conclude that you require b==2.0.0.
+          And because you require b==1.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1122,8 +1088,7 @@ fn transitive_incompatible_with_transitive() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on c==1.0.0, we can conclude that all versions of a depend on c==1.0.0.
-          And because b==1.0.0 depends on c==2.0.0 and only b==1.0.0 is available, we can conclude that all versions of a and all versions of b are incompatible.
+      ╰─▶ Because all versions of b depend on c==2.0.0 and all versions of a depend on c==1.0.0, we can conclude that all versions of a and all versions of b are incompatible.
           And because you require a and b, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -1465,8 +1430,8 @@ fn local_transitive_conflicting() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b==2.0.0+bar, we can conclude that all versions of a depend on b==2.0.0+bar.
-          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a depend on b==2.0.0+bar and you require a, we can conclude that you require b==2.0.0+bar.
+          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1598,8 +1563,8 @@ fn local_transitive_greater_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b>2.0.0, we can conclude that all versions of a depend on b>2.0.0.
-          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a depend on b>2.0.0 and you require a, we can conclude that you require b>2.0.0.
+          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -1686,8 +1651,8 @@ fn local_transitive_less_than() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on b<2.0.0, we can conclude that all versions of a depend on b<2.0.0.
-          And because you require a and b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a depend on b<2.0.0 and you require a, we can conclude that you require b<2.0.0.
+          And because you require b==2.0.0+foo, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -2760,8 +2725,8 @@ fn transitive_package_only_prereleases_in_range() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only b<=0.1 is available and a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
-          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only b<=0.1 is available and all versions of a depend on b>0.1, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: Pre-releases are available for `b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -2899,12 +2864,12 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
               c>=2.0.0a5,<=2.0.0a7
               c==2.0.0b1
               c>=2.0.0b5
-          and a==1.0.0 depends on one of:
+          and all versions of a depend on one of:
               c>1.0.0,<2.0.0a5
               c>2.0.0a7,<2.0.0b1
               c>2.0.0b1,<2.0.0b5
-          we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+          we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., all of:
         c>1.0.0,<2.0.0a5
@@ -3001,9 +2966,8 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 depends on c>=2.0.0b1, we can conclude that all versions of a depend on c>=2.0.0b1.
-          And because only c<2.0.0b1 is available, we can conclude that all versions of a depend on c>3.0.0.
-          And because b==1.0.0 depends on c and only b==1.0.0 is available, we can conclude that all versions of a and all versions of b are incompatible.
+      ╰─▶ Because all versions of b depend on c and only c<2.0.0b1 is available, we can conclude that all versions of b depend on c<2.0.0b1.
+          And because all versions of a depend on c>=2.0.0b1, we can conclude that all versions of a and all versions of b are incompatible.
           And because you require a and b, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
@@ -3110,8 +3074,8 @@ fn transitive_prerelease_and_stable_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of c==2.0.0b1 and a==1.0.0 depends on c==2.0.0b1, we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
@@ -4056,8 +4020,7 @@ fn transitive_package_only_yanked_in_range() {
               b<=0.1
               b==1.0.0
           and b==1.0.0 was yanked, we can conclude that b>0.1 cannot be used.
-          And because a==0.1.0 depends on b>0.1, we can conclude that a==0.1.0 cannot be used.
-          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+          And because all versions of a depend on b>0.1 and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only valid version in a range.
@@ -4095,8 +4058,7 @@ fn transitive_package_only_yanked() {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only b==1.0.0 is available and b==1.0.0 was yanked, we can conclude that all versions of b cannot be used.
-          And because a==0.1.0 depends on b, we can conclude that a==0.1.0 cannot be used.
-          And because only a==0.1.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+          And because all versions of a depend on b and you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Yanked versions should not be installed, even if they are the only one available.
@@ -4196,8 +4158,8 @@ fn transitive_yanked_and_unyanked_dependency() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because c==2.0.0 was yanked and a==1.0.0 depends on c==2.0.0, we can conclude that a==1.0.0 cannot be used.
-          And because only a==1.0.0 is available and you require a, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because c==2.0.0 was yanked and all versions of a depend on c==2.0.0, we can conclude that all versions of a cannot be used.
+          And because you require a, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Since the user did not explicitly select the yanked version, it cannot be used.

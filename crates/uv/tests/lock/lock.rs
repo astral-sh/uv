@@ -2185,7 +2185,7 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and your project depends on anyio==3.7.0, we can conclude that your project depends on idna==3.2.
+      ╰─▶ Because anyio>3.7.0rc1,<3.7.1 depends on idna==3.2 and your project depends on anyio==3.7.0, we can conclude that your project depends on idna==3.2.
           And because your project depends on idna==3.6, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -2260,7 +2260,7 @@ fn lock_project_with_conflicting_scoped_overrides() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and idna==3.3, we can conclude that anyio==3.7.0 cannot be used.
+      ╰─▶ Because anyio>3.7.0rc1,<3.7.1 depends on idna==3.2 and idna==3.3, we can conclude that anyio>3.7.0rc1,<3.7.1 cannot be used.
           And because your project depends on anyio==3.7.0, we can conclude that your project's requirements are unsatisfiable.
     ");
 
@@ -33751,7 +33751,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: python_full_version >= '3.11'):
-      ╰─▶ Because pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas==1.5.3 are incompatible.
+      ╰─▶ Because pandas>1.5.2,<2.0.0 depends on numpy{python_full_version >= '3.10'}>=1.21.0 and your project depends on numpy==1.20.3, we can conclude that your project and pandas>1.5.2,<2.0.0 are incompatible.
           And because your project depends on pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
 
     hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.

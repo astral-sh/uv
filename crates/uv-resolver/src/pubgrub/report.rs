@@ -663,8 +663,8 @@ impl PubGrubReportFormatter<'_> {
         match (external1, external2) {
             (
                 External::FromDependencyOf(package1, package_set1, dependency1, dependency_set1),
-                External::FromDependencyOf(package2, _, dependency2, dependency_set2),
-            ) if package1 == package2 => {
+                External::FromDependencyOf(package2, package_set2, dependency2, dependency_set2),
+            ) if package1 == package2 && package_set1 == package_set2 => {
                 let dependency1 = self.dependency_range(dependency1, dependency_set1);
                 let dependency2 = self.dependency_range(dependency2, dependency_set2);
 
