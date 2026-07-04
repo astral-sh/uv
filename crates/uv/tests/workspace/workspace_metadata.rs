@@ -128,6 +128,53 @@ fn workspace_metadata_simple() {
 }
 
 #[test]
+fn workspace_metadata_locked_quiet_modes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+    context.lock().current_dir(&project).assert().success();
+
+    project.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.2.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .workspace_metadata()
+        .current_dir(&project)
+        .arg("--locked")
+        .arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .workspace_metadata()
+        .current_dir(&project)
+        .arg("--locked")
+        .arg("--quiet")
+        .arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "test-pypi")]
 fn workspace_metadata_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");

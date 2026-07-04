@@ -16,6 +16,21 @@ pub(crate) enum Printer {
 }
 
 impl Printer {
+    /// Create a printer from the global output settings.
+    pub(crate) fn new(quiet: u8, verbose: u8, no_progress: bool) -> Self {
+        if quiet == 1 {
+            Self::Quiet
+        } else if quiet > 1 {
+            Self::Silent
+        } else if verbose > 0 {
+            Self::Verbose
+        } else if no_progress {
+            Self::NoProgress
+        } else {
+            Self::Default
+        }
+    }
+
     /// Return the [`ProgressDrawTarget`] for this printer.
     pub(crate) fn target(self) -> ProgressDrawTarget {
         match self {

@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
 
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
@@ -237,10 +236,7 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Ok(ExitStatus::failure(err)),
         Err(ProjectError::Operation(err)) => {
             diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
                 .report(err, printer)?

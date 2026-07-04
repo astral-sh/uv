@@ -100,7 +100,7 @@ mod tool;
 mod venv;
 mod workspace;
 
-#[derive(Copy, Clone)]
+#[derive(Debug)]
 pub(crate) enum ExitStatus {
     /// The command succeeded.
     Success,
@@ -113,6 +113,30 @@ pub(crate) enum ExitStatus {
 
     /// The command's exit status is propagated from an external command.
     External(u8),
+
+    /// The command failed with an error that should be rendered before exiting.
+    WithError { code: u8, error: anyhow::Error },
+}
+
+impl ExitStatus {
+    /// Return an expected command failure with an error to render.
+    pub(crate) fn failure(error: impl Into<anyhow::Error>) -> Self {
+        Self::WithError {
+            code: 1,
+            error: error.into(),
+        }
+    }
+
+    /// Separate the process exit code from the optional error to render.
+    pub(crate) fn into_parts(self) -> (ExitCode, Option<anyhow::Error>) {
+        match self {
+            Self::Success => (ExitCode::from(0), None),
+            Self::Failure => (ExitCode::from(1), None),
+            Self::Error => (ExitCode::from(2), None),
+            Self::External(code) => (ExitCode::from(code), None),
+            Self::WithError { code, error } => (ExitCode::from(code), Some(error)),
+        }
+    }
 }
 
 /// Read dotenv files into an overlay for a spawned process.
@@ -201,17 +225,6 @@ fn read_env_files<'a>(
     environment.reverse();
 
     Ok(environment)
-}
-
-impl From<ExitStatus> for ExitCode {
-    fn from(status: ExitStatus) -> Self {
-        match status {
-            ExitStatus::Success => Self::from(0),
-            ExitStatus::Failure => Self::from(1),
-            ExitStatus::Error => Self::from(2),
-            ExitStatus::External(code) => Self::from(code),
-        }
-    }
 }
 
 /// Format a duration as a human-readable string, Cargo-style.

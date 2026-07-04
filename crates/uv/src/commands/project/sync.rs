@@ -379,14 +379,11 @@ pub(crate) async fn sync(
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    ProjectError::LockMismatch(prev, cur, lock_source)
-                        .to_string()
-                        .bold()
-                )?;
-                return Ok(ExitStatus::Failure);
+                return Ok(ExitStatus::failure(ProjectError::LockMismatch(
+                    prev,
+                    cur,
+                    lock_source,
+                )));
             }
         }
         Err(err) => return Err(err.into()),
@@ -483,16 +480,9 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur, lock_source) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                ProjectError::LockMismatch(prev, cur, lock_source)
-                    .to_string()
-                    .bold()
-            )?;
-            Ok(ExitStatus::Failure)
-        }
+        Outcome::LockMismatch(prev, cur, lock_source) => Ok(ExitStatus::failure(
+            ProjectError::LockMismatch(prev, cur, lock_source),
+        )),
     }
 }
 

@@ -255,6 +255,25 @@ fn locked() -> Result<()> {
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
+    // Quiet mode suppresses the resolution summary, but preserves the final error.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Silent mode suppresses the final error too.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
     let updated = context.read("uv.lock");
 
     // And the lockfile should be unchanged.
@@ -12321,6 +12340,23 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would install 1 package
      + iniconfig==2.0.0
     The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run").arg("--quiet").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
     ");
 
     let updated = context.read("uv.lock");

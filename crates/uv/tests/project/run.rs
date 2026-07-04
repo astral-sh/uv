@@ -5281,6 +5281,23 @@ fn run_with_not_existing_env_file() -> Result<()> {
     error: No environment file found at: `.env.development`
     ");
 
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("test.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No environment file found at: `.env.development`
+    ");
+
+    uv_snapshot!(context.filters(), context.run().arg("--env-file").arg(".env.development").arg("--quiet").arg("--quiet").arg("test.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
     Ok(())
 }
 

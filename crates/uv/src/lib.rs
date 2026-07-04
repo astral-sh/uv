@@ -500,17 +500,7 @@ async fn run(cli: Cli) -> Result<ExitStatus> {
     }
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = if globals.quiet == 1 {
-        Printer::Quiet
-    } else if globals.quiet > 1 {
-        Printer::Silent
-    } else if globals.verbose > 0 {
-        Printer::Verbose
-    } else if globals.no_progress {
-        Printer::NoProgress
-    } else {
-        Printer::Default
-    };
+    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if globals.quiet > 0 {
@@ -2989,6 +2979,14 @@ where
         }
     };
 
+    // Configure a printer for errors that escape command execution. The resolved `no_progress`
+    // setting can differ due to environment variables, but it does not affect important stderr.
+    let printer = Printer::new(
+        cli.top_level.global_args.quiet,
+        cli.top_level.global_args.verbose,
+        cli.top_level.global_args.no_progress,
+    );
+
     // See `min_stack_size` doc comment about `main2`
     let min_stack_size = min_stack_size();
     let main2 = move || {
@@ -3016,18 +3014,28 @@ where
         .expect("Tokio executor failed, was there a panic?");
 
     match result {
-        Ok(code) => code.into(),
+        Ok(status) => {
+            let (code, error) = status.into_parts();
+            if let Some(error) = error {
+                trace!("Error trace: {error:?}");
+                writeln!(printer.stderr_important(), "{}", error.to_string().bold())
+                    .expect("writing to stderr should not fail");
+            }
+            code
+        }
         Err(err) => {
             trace!("Error trace: {err:?}");
 
             let hints = commands::diagnostics::hints_for_error(&err);
             uv_errors::write_error_chain_with_options(
                 err.as_ref(),
-                uv_errors::ErrorOptions::default().with_hints(hints),
+                uv_errors::ErrorOptions::default()
+                    .with_hints(hints)
+                    .with_stream(printer.stderr_important()),
             )
             .expect("writing to stderr should not fail");
 
-            ExitStatus::Error.into()
+            ExitCode::from(2)
         }
     }
 }
