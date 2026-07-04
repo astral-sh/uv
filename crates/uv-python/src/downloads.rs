@@ -11,18 +11,22 @@ use std::{env, io};
 use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use reqwest::Response;
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufWriter, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_cache::{Cache, CacheBucket};
+use uv_cache_key::cache_digest;
 use uv_client::{
-    BaseClient, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
+    BaseClient, BaseClientBuilder, CacheControl, CachedClient, CachedClientError, ClientBuildError,
+    Connectivity, RetriableError, WrappedReqwestError, fetch_with_url_fallback,
     retryable_on_request_failure,
 };
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
@@ -117,6 +121,10 @@ pub enum Error {
     UnsupportedPythonDownloadsJSON(String),
     #[error("Error while fetching remote python downloads json from '{0}'")]
     FetchingPythonDownloadsJSONError(String, #[source] Box<Self>),
+    #[error(transparent)]
+    RemotePythonDownloadsJSONClient(Box<uv_client::Error>),
+    #[error(transparent)]
+    ClientBuild(Box<ClientBuildError>),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -945,7 +953,7 @@ pub struct ManagedPythonDownloadList {
     downloads: Vec<ManagedPythonDownload>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct JsonPythonDownload {
     name: String,
     arch: JsonArch,
@@ -961,7 +969,7 @@ struct JsonPythonDownload {
     build: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct JsonArch {
     family: String,
     variant: Option<String>,
@@ -1010,20 +1018,17 @@ impl ManagedPythonDownloadList {
 
     /// Load available Python distributions from a provided source or the compiled-in list.
     ///
-    /// `python_downloads_json_url` can be either `None`, to use the default list (taken from
-    /// `crates/uv-python/download-metadata.json`), or `Some` local path
-    /// or file://, http://, or https:// URL.
-    ///
     /// Returns an error if the provided list could not be opened, if the JSON is invalid, or if it
     /// does not parse into the expected data structure.
     pub async fn new(
-        client: &BaseClient,
+        client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
-        // Although read_url() handles file:// URLs and converts them to local file reads, here we
-        // want to also support parsing bare filenames like "/tmp/py.json", not just
-        // "file:///tmp/py.json". Note that "C:\Temp\py.json" should be considered a filename, even
-        // though Url::parse would successfully misparse it as a URL with scheme "C".
+        // file:// URLs are converted to local file reads, and we also support parsing bare
+        // filenames like "/tmp/py.json", not just "file:///tmp/py.json". Note that
+        // "C:\Temp\py.json" should be considered a filename, even though Url::parse would
+        // successfully misparse it as a URL with scheme "C".
         enum Source<'a> {
             BuiltIn,
             Path(Cow<'a, Path>),
@@ -1046,42 +1051,33 @@ impl ManagedPythonDownloadList {
             Source::BuiltIn
         };
 
-        let buf: Cow<'_, [u8]> = match json_source {
-            Source::BuiltIn => BUILTIN_PYTHON_DOWNLOADS_JSON.into(),
-            Source::Path(ref path) => fs_err::read(path.as_ref())?.into(),
-            Source::Http(ref url) => fetch_bytes_from_url(client, url)
-                .await
-                .map_err(|e| Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)))?
-                .into(),
+        let json_downloads = match json_source {
+            Source::BuiltIn => parse_downloads_json(
+                BUILTIN_PYTHON_DOWNLOADS_JSON,
+                "EMBEDDED IN THE BINARY".to_owned(),
+            )?,
+            Source::Path(ref path) => parse_downloads_json(
+                &fs_err::read(path.as_ref())?,
+                path.to_string_lossy().to_string(),
+            )?,
+            Source::Http(ref url) => {
+                let client = CachedClient::new(
+                    client_builder
+                        .build()
+                        .map_err(|err| Error::ClientBuild(Box::new(err)))?,
+                );
+                fetch_downloads_from_url(&client, cache, url)
+                    .await
+                    .map_err(|e| match e {
+                        e @ (Error::InvalidPythonDownloadsJSON(..)
+                        | Error::UnsupportedPythonDownloadsJSON(..)) => e,
+                        e => Error::FetchingPythonDownloadsJSONError(url.to_string(), Box::new(e)),
+                    })?
+            }
         };
-        let json_downloads: HashMap<String, JsonPythonDownload> = serde_json::from_slice(&buf)
-            .map_err(
-                // As an explicit compatibility mechanism, if there's a top-level "version" key, it
-                // means it's a newer format than we know how to deal with.  Before reporting a
-                // parse error about the format of JsonPythonDownload, check for that key. We can do
-                // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
-                // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
-                // have the same parsing effect.)
-                #[expect(clippy::zero_sized_map_values)]
-                |e| {
-                    let source = match json_source {
-                        Source::BuiltIn => "EMBEDDED IN THE BINARY".to_owned(),
-                        Source::Path(path) => path.to_string_lossy().to_string(),
-                        Source::Http(url) => url.to_string(),
-                    };
-                    if let Ok(keys) =
-                        serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(&buf)
-                        && keys.contains_key("version")
-                    {
-                        Error::UnsupportedPythonDownloadsJSON(source)
-                    } else {
-                        Error::InvalidPythonDownloadsJSON(source, e)
-                    }
-                },
-            )?;
 
-        let result = parse_json_downloads(json_downloads);
-        Ok(Self { downloads: result })
+        let downloads = parse_json_downloads(json_downloads);
+        Ok(Self { downloads })
     }
 
     /// Load available Python distributions from the compiled-in list only.
@@ -1096,12 +1092,81 @@ impl ManagedPythonDownloadList {
     }
 }
 
-async fn fetch_bytes_from_url(client: &BaseClient, url: &DisplaySafeUrl) -> Result<Vec<u8>, Error> {
-    let (mut reader, size) = read_url(url, client).await?;
-    let capacity = size.and_then(|s| s.try_into().ok()).unwrap_or(1_048_576);
-    let mut buf = Vec::with_capacity(capacity);
-    reader.read_to_end(&mut buf).await?;
-    Ok(buf)
+/// Parse the downloads JSON.
+///
+/// `source` is where the JSON came from for error reporting.
+fn parse_downloads_json(
+    buf: &[u8],
+    source: String,
+) -> Result<HashMap<String, JsonPythonDownload>, Error> {
+    match serde_json::from_slice(buf) {
+        Ok(data) => Ok(data),
+        Err(e) => {
+            // As an explicit compatibility mechanism, if there's a top-level "version" key, it
+            // means it's a newer format than we know how to deal with. Before reporting a
+            // parse error about the format of JsonPythonDownload, check for that key. We can do
+            // this by parsing into a Map<String, IgnoredAny> which allows any valid JSON on the
+            // value side. (Because it's zero-sized, Clippy suggests Set<String>, but that won't
+            // have the same parsing effect.)
+            #[expect(clippy::zero_sized_map_values)]
+            if let Ok(keys) = serde_json::from_slice::<HashMap<String, serde::de::IgnoredAny>>(buf)
+                && keys.contains_key("version")
+            {
+                Err(Error::UnsupportedPythonDownloadsJSON(source))
+            } else {
+                Err(Error::InvalidPythonDownloadsJSON(source, e))
+            }
+        }
+    }
+}
+
+async fn fetch_downloads_from_url(
+    client: &CachedClient,
+    cache: &Cache,
+    url: &DisplaySafeUrl,
+) -> Result<HashMap<String, JsonPythonDownload>, Error> {
+    let cache_entry = cache.entry(
+        CacheBucket::Python,
+        "downloads-json",
+        format!("{}.msgpack", cache_digest(&url.as_str())),
+    );
+    let cache_control = match client.uncached().connectivity() {
+        Connectivity::Online => CacheControl::from(cache.freshness(&cache_entry, None, None)?),
+        Connectivity::Offline => CacheControl::AllowStale,
+    };
+
+    let request = client
+        .uncached()
+        .for_host(url)
+        .get(Url::from(url.clone()))
+        .build()
+        .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
+
+    let response_callback = async |response: Response| {
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|err| Error::NetworkError(url.clone(), WrappedReqwestError::from(err)))?;
+        parse_downloads_json(&bytes, url.to_string())
+    };
+
+    client
+        .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
+        .await
+        .map_err(|err| match err {
+            CachedClientError::Client(err) => Error::RemotePythonDownloadsJSONClient(Box::new(err)),
+            CachedClientError::Callback {
+                err,
+                retries,
+                duration,
+            } => match err {
+                // Avoid double-wrapping errors.
+                err @ (Error::InvalidPythonDownloadsJSON(..)
+                | Error::UnsupportedPythonDownloadsJSON(..)) => err,
+                err if retries > 0 => err.into_retried(retries, duration),
+                err => err,
+            },
+        })
 }
 
 impl ManagedPythonDownload {
@@ -2019,10 +2084,11 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("20240814".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client_builder = uv_client::BaseClientBuilder::default();
+        let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
+        let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
+            .await
+            .unwrap();
 
         let downloads: Vec<_> = download_list
             .iter_all()
@@ -2047,10 +2113,11 @@ mod tests {
             .with_implementation(ImplementationName::CPython);
         request.build = Some("99999999".to_string());
 
-        let client = uv_client::BaseClientBuilder::default()
-            .build()
-            .expect("failed to build base client");
-        let download_list = ManagedPythonDownloadList::new(&client, None).await.unwrap();
+        let client_builder = uv_client::BaseClientBuilder::default();
+        let cache = uv_cache::Cache::temp().expect("failed to create temp cache");
+        let download_list = ManagedPythonDownloadList::new(&client_builder, &cache, None)
+            .await
+            .unwrap();
 
         // Should find no matching downloads
         let downloads: Vec<_> = download_list

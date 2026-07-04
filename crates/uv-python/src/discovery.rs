@@ -1496,9 +1496,9 @@ pub(crate) async fn find_best_python_installation(
                 if let Some(download_state) = &mut download_state {
                     download_state
                 } else {
-                    let download_list_client = client_builder.build()?;
                     let download_list = ManagedPythonDownloadList::new(
-                        &download_list_client,
+                        client_builder,
+                        cache,
                         python_downloads_json_url,
                     )
                     .await?;

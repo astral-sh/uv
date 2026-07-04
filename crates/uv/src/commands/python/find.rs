@@ -97,6 +97,7 @@ pub(crate) async fn find(
         .download_and_warn_if_outdated_prerelease(
             &python_request,
             client_builder,
+            cache,
             python_downloads_json_url,
         )
         .await?;
