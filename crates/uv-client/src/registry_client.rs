@@ -1505,6 +1505,16 @@ impl SimpleDetailMetadata {
             }
         }
 
+        // Keep file ordering deterministic without sorting the complete Simple API response.
+        for files in version_map.values_mut() {
+            files
+                .wheels
+                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+            files
+                .source_dists
+                .sort_unstable_by(|left, right| left.file.filename.cmp(&right.file.filename));
+        }
+
         Self {
             versions: version_map
                 .into_iter()
