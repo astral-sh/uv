@@ -1113,19 +1113,20 @@ async fn fetch_bytes_from_url(
         Connectivity::Offline => CacheControl::AllowStale,
     };
 
+    let start = Instant::now();
     let request = client
         .uncached()
         .for_host(url)
         .get(Url::from(url.clone()))
         .build()
-        .map_err(|err| Error::from_reqwest(url.clone(), err, None, Instant::now()))?;
+        .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))?;
 
     let response_callback = async |response: Response| {
         response
             .bytes()
             .await
             .map(|bytes| bytes.to_vec())
-            .map_err(|err| Error::from_reqwest(url.clone(), err, None, Instant::now()))
+            .map_err(|err| Error::from_reqwest(url.clone(), err, None, start))
     };
 
     client
@@ -1133,7 +1134,17 @@ async fn fetch_bytes_from_url(
         .await
         .map_err(|err| match err {
             CachedClientError::Client(err) => Error::RemotePythonDownloadsJSONClient(Box::new(err)),
-            CachedClientError::Callback { err, .. } => err,
+            CachedClientError::Callback {
+                err,
+                retries,
+                duration,
+            } => {
+                if retries > 0 {
+                    err.into_retried(retries, duration)
+                } else {
+                    err
+                }
+            }
         })
 }
 
