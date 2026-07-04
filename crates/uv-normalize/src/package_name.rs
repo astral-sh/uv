@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{InvalidNameError, validate_and_normalize_ref};
+use crate::{InvalidNameError, validate_and_normalize_owned, validate_and_normalize_ref};
 
 /// The normalized name of a package.
 ///
@@ -33,11 +33,8 @@ pub struct PackageName(SmallString);
 
 impl PackageName {
     /// Create a validated, normalized package name.
-    ///
-    /// At present, this is no more efficient than calling [`PackageName::from_str`].
-    #[expect(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_ref(&name).map(Self)
+        validate_and_normalize_owned(name).map(Self)
     }
 
     /// Escape this name with underscores (`_`) instead of dashes (`-`)

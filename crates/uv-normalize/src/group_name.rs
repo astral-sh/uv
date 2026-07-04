@@ -10,7 +10,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uv_small_str::SmallString;
 
 use crate::{
-    InvalidNameError, InvalidPipGroupError, InvalidPipGroupPathError, validate_and_normalize_ref,
+    InvalidNameError, InvalidPipGroupError, InvalidPipGroupPathError, validate_and_normalize_owned,
+    validate_and_normalize_ref,
 };
 
 /// The normalized name of a dependency group.
@@ -36,11 +37,8 @@ pub struct GroupName(SmallString);
 
 impl GroupName {
     /// Create a validated, normalized group name.
-    ///
-    /// At present, this is no more efficient than calling [`GroupName::from_str`].
-    #[expect(clippy::needless_pass_by_value)]
     fn from_owned(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_ref(&name).map(Self)
+        validate_and_normalize_owned(name).map(Self)
     }
 
     /// Return the underlying group name as a string.

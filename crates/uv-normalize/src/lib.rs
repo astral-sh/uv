@@ -25,6 +25,15 @@ pub(crate) fn validate_and_normalize_ref(
     }
 }
 
+/// Validate and normalize an owned package or extra name.
+pub(crate) fn validate_and_normalize_owned(name: String) -> Result<SmallString, InvalidNameError> {
+    if is_normalized(&name)? {
+        Ok(SmallString::from(name))
+    } else {
+        Ok(SmallString::from(normalize(&name)?))
+    }
+}
+
 /// Normalize an unowned package or extra name.
 fn normalize(name: &str) -> Result<String, InvalidNameError> {
     // An empty string is not a valid package, extra, or group name.
@@ -221,6 +230,27 @@ mod tests {
     }
 
     #[test]
+    fn owned() {
+        let inputs = [
+            "friendly-bard",
+            "friendly.bard",
+            "friendly.BARD",
+            "friendly_bard",
+            "friendly--bard",
+            "friendly-.bard",
+            "FrIeNdLy-._.-bArD",
+        ];
+        for input in inputs {
+            assert_eq!(
+                validate_and_normalize_owned(input.to_string())
+                    .unwrap()
+                    .as_ref(),
+                "friendly-bard"
+            );
+        }
+    }
+
+    #[test]
     fn failures() {
         let failures = [
             "",
@@ -235,6 +265,7 @@ mod tests {
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
             assert!(is_normalized(input).is_err());
+            assert!(validate_and_normalize_owned(input.to_string()).is_err());
         }
     }
 }

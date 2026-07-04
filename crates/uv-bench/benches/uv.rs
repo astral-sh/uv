@@ -20,6 +20,7 @@ use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
+use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
@@ -31,6 +32,31 @@ const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_FILENAME: &str = "manyfiles-0.0.0.tar.gz";
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
+const PACKAGE_NAMES: &[&str] = &[
+    "anyio",
+    "aiohttp",
+    "apache-airflow",
+    "Babel",
+    "black",
+    "click",
+    "cryptography",
+    "Flask-Login",
+    "google.auth",
+    "grpcio-status",
+    "importlib_metadata",
+    "Jinja2",
+    "jsonschema-specifications",
+    "opentelemetry.api",
+    "protobuf",
+    "pydantic_core",
+    "python-dateutil",
+    "requests",
+    "setuptools-scm",
+    "SQLAlchemy",
+    "typing_extensions",
+    "werkzeug",
+    "zope.interface",
+];
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
     let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
@@ -282,6 +308,38 @@ fn layout(root: &Path) -> Layout {
     }
 }
 
+fn normalize_package_names(c: &mut Criterion<WallTime>) {
+    c.bench_function("normalize_package_names_ref", |b| {
+        b.iter(|| {
+            for name in PACKAGE_NAMES {
+                black_box(
+                    PackageName::from_str(black_box(name)).expect("package name should be valid"),
+                );
+            }
+        });
+    });
+
+    c.bench_function("normalize_package_names_owned", |b| {
+        b.iter_batched(
+            || {
+                PACKAGE_NAMES
+                    .iter()
+                    .map(|name| (*name).to_string())
+                    .collect::<Vec<_>>()
+            },
+            |names| {
+                for name in names {
+                    black_box(
+                        PackageName::from_owned(black_box(name))
+                            .expect("package name should be valid"),
+                    );
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
@@ -340,6 +398,7 @@ criterion_group!(
     unzip_wheel_many_files,
     prepare_wheel_many_files,
     install_wheel_many_files,
+    normalize_package_names,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
     resolve_warm_airflow,
