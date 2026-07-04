@@ -491,3 +491,104 @@ fn prune_stale_revision() -> Result<()> {
 
     Ok(())
 }
+
+/// Automatic pruning should remove dangling archives during a normal command, but only when due,
+/// and without touching referenced archives.
+#[test]
+#[cfg(unix)]
+fn autoprune() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.3.0")?;
+
+    // Install a requirement, to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .assert()
+        .success();
+
+    // The run above should have recorded an autoprune run.
+    let marker = context.cache_dir.child(".autoprune");
+    marker.assert(predicates::path::exists());
+
+    // Add a dangling archive to the cache.
+    let dangling = context.cache_dir.child("archive-v0").child("dangling");
+    dangling.create_dir_all()?;
+    dangling.child("payload.txt").write_str("payload")?;
+
+    // The prune should not re-run within the interval.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .assert()
+        .success();
+    dangling.assert(predicates::path::exists());
+
+    // Backdate the marker to make the prune due again.
+    let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(60 * 60 * 24 * 2);
+    filetime::set_file_mtime(marker.path(), filetime::FileTime::from_system_time(stale))?;
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .assert()
+        .success();
+
+    // The dangling archive should be removed; the installed package should be unaffected.
+    dangling.assert(predicates::path::missing());
+    uv_snapshot!(context.filters(), context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   4.3.0
+
+    ----- stderr -----
+    ");
+
+    // A reinstall from the cache should still succeed.
+    uv_snapshot!(context.filters(), context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--reinstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==4.3.0
+    ");
+
+    Ok(())
+}
+
+/// Automatic pruning should not run when disabled (the default).
+#[test]
+#[cfg(unix)]
+fn autoprune_disabled() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio")?;
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    let marker = context.cache_dir.child(".autoprune");
+    marker.assert(predicates::path::missing());
+
+    Ok(())
+}

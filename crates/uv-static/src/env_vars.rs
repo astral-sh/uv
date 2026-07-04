@@ -77,6 +77,12 @@ impl EnvVars {
     #[attr_added_in("0.1.2")]
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
 
+    /// If set to `1` or `true`, uv will periodically remove unreferenced archives from the
+    /// cache, as in `uv cache prune`. Pruning runs at most once per day, and only when no
+    /// other uv processes are running.
+    #[attr_added_in("next release")]
+    pub const UV_CACHE_AUTOPRUNE: &'static str = "UV_CACHE_AUTOPRUNE";
+
     /// Equivalent to the `--resolution` command-line argument. For example, if set to
     /// `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
     #[attr_added_in("0.1.27")]

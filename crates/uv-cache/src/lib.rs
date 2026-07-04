@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use rustc_hash::FxHashMap;
 use tracing::{debug, trace, warn};
@@ -13,6 +14,7 @@ use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
+use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -34,6 +36,12 @@ mod wheel;
 ///
 /// Must be kept in-sync with the version in [`CacheBucket::to_str`].
 pub const ARCHIVE_VERSION: u8 = 0;
+
+/// The minimum interval between automatic cache pruning runs.
+const AUTOPRUNE_INTERVAL: Duration = Duration::from_hours(24);
+
+/// The name of the marker file recording the time of the last automatic cache pruning run.
+const AUTOPRUNE_MARKER: &str = ".autoprune";
 
 /// Error locking a cache entry or shard
 #[derive(Debug, thiserror::Error)]
@@ -467,6 +475,10 @@ impl Cache {
 
         Self::create_base_files(root).map_err(|err| Error::Init(root.clone(), err))?;
 
+        // Opportunistically prune unreferenced archives, if enabled. This must happen before
+        // acquiring the shared lock below, since the prune requires the exclusive lock.
+        self.autoprune();
+
         // Block cache removal operations from interfering.
         let lock_file = match LockedFile::acquire(
             root.join(".lock"),
@@ -495,6 +507,108 @@ impl Cache {
             lock_file,
             ..self
         })
+    }
+
+    /// Opportunistically prune unreferenced archives from the cache.
+    ///
+    /// Pruning is enabled by setting [`EnvVars::UV_CACHE_AUTOPRUNE`], and runs at most once per
+    /// [`AUTOPRUNE_INTERVAL`]. To guarantee that no other uv process is reading from the cache,
+    /// pruning requires the exclusive lock; if the lock is unavailable, or if the caller already
+    /// holds a lock, the prune is skipped and retried on a subsequent invocation.
+    ///
+    /// Failures are logged and ignored, since pruning is best-effort.
+    fn autoprune(&self) {
+        if self.lock_file.is_some() || self.is_temporary() {
+            return;
+        }
+
+        match parse_boolish_environment_variable(EnvVars::UV_CACHE_AUTOPRUNE) {
+            Ok(Some(true)) => {}
+            Ok(_) => return,
+            Err(err) => {
+                warn!("{err}");
+                return;
+            }
+        }
+
+        // Consult the marker file before taking the lock, to keep the common case cheap.
+        let marker = self.root.join(AUTOPRUNE_MARKER);
+        if !autoprune_due(&marker) {
+            return;
+        }
+
+        // Require the exclusive lock, so that the prune cannot race another uv process. If any
+        // other process holds the lock (shared or exclusive), skip pruning entirely. The lock is
+        // held until the prune completes.
+        let Some(_lock_file) = LockedFile::acquire_no_wait(
+            self.root.join(".lock"),
+            LockedFileMode::Exclusive,
+            self.root.simplified_display(),
+        ) else {
+            debug!("Skipping automatic cache pruning: the cache is in use");
+            return;
+        };
+
+        // Re-check the marker while holding the lock, in case another process pruned in between.
+        if !autoprune_due(&marker) {
+            return;
+        }
+
+        // Record the attempt before pruning, so that a failing prune isn't retried on every
+        // invocation.
+        if let Err(err) = fs_err::write(&marker, []) {
+            debug!("Failed to update autoprune marker: {err}");
+            return;
+        }
+
+        debug!("Automatically pruning unreferenced cache archives");
+        match self.prune_unreferenced_archives() {
+            Ok(removal) => {
+                debug!(
+                    "Removed {} unreferenced archive files ({} bytes)",
+                    removal.num_files, removal.total_bytes
+                );
+            }
+            Err(err) => {
+                debug!("Failed to prune cache archives: {err}");
+            }
+        }
+    }
+
+    /// Remove any archives that are no longer referenced, as in [`Cache::prune`].
+    ///
+    /// Unlike [`Cache::prune`], leaves cached environments (and the archives they reference)
+    /// intact, along with outdated cache buckets, which may be in use by other uv versions.
+    ///
+    /// The caller must hold the exclusive cache lock.
+    fn prune_unreferenced_archives(&self) -> Result<Removal, io::Error> {
+        let mut summary = Removal::default();
+
+        // Unlike `Cache::prune`, cached environments are retained, so their references must be
+        // included to avoid removing the archives that back them.
+        let references = self.find_archive_references_in([
+            CacheBucket::SourceDistributions,
+            CacheBucket::Wheels,
+            CacheBucket::Environments,
+        ])?;
+
+        match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
+            Ok(entries) => {
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+                    let target = fs_err::canonicalize(&path)?;
+                    if !references.contains_key(&target) {
+                        debug!("Removing dangling cache archive: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+            Err(err) => return Err(err),
+        }
+
+        Ok(summary)
     }
 
     /// Initialize the [`Cache`], assuming that there are no other uv processes running.
@@ -595,6 +709,7 @@ impl Cache {
                 || entry.file_name() == ".gitignore"
                 || entry.file_name() == ".git"
                 || entry.file_name() == ".lock"
+                || entry.file_name() == AUTOPRUNE_MARKER
             {
                 continue;
             }
@@ -718,8 +833,16 @@ impl Cache {
     ///
     /// Returns a map from archive path to paths that reference it.
     fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
+        self.find_archive_references_in([CacheBucket::SourceDistributions, CacheBucket::Wheels])
+    }
+
+    /// Find all references to entries in the archive bucket from the given buckets.
+    fn find_archive_references_in(
+        &self,
+        buckets: impl IntoIterator<Item = CacheBucket>,
+    ) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
         let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
-        for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
+        for bucket in buckets {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
                 let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
@@ -862,6 +985,24 @@ impl Cache {
     #[cfg(unix)]
     pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
         path.as_ref().canonicalize()
+    }
+}
+
+/// Returns `true` if the automatic prune interval has elapsed since the last run.
+///
+/// The marker file's modification time records the last run. A missing marker (e.g., a fresh
+/// cache, or one predating this feature) is treated as due.
+fn autoprune_due(marker: &Path) -> bool {
+    let Ok(metadata) = fs_err::metadata(marker) else {
+        return true;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return true;
+    };
+    match SystemTime::now().duration_since(modified) {
+        Ok(elapsed) => elapsed >= AUTOPRUNE_INTERVAL,
+        // The marker is from the future (e.g., clock skew); treat the prune as not due.
+        Err(_) => false,
     }
 }
 
@@ -1536,5 +1677,98 @@ mod tests {
         assert!(victim_dir.is_dir());
         assert!(victim_dir.join("payload.txt").is_file());
         assert!(fs_err::symlink_metadata(symlink).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_removes_dangling_archives() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let dangling = archives.join("dangling");
+
+        fs_err::create_dir_all(&dangling).unwrap();
+        fs_err::write(dangling.join("payload.txt"), "payload").unwrap();
+
+        let summary = Cache::from_path(cache_root.path())
+            .prune_unreferenced_archives()
+            .unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert!(!dangling.exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_retains_wheel_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let wheels = cache_root.path().join(CacheBucket::Wheels.to_str());
+        let archive = archives.join("referenced");
+
+        fs_err::create_dir_all(&archive).unwrap();
+        fs_err::write(archive.join("payload.txt"), "payload").unwrap();
+        fs_err::create_dir_all(wheels.join("pypi").join("anyio")).unwrap();
+        fs_err::os::unix::fs::symlink(&archive, wheels.join("pypi").join("anyio").join("link"))
+            .unwrap();
+
+        let summary = Cache::from_path(cache_root.path())
+            .prune_unreferenced_archives()
+            .unwrap();
+
+        assert_eq!(summary.num_files, 0);
+        assert!(archive.join("payload.txt").is_file());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unreferenced_archives_retains_environment_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let environments = cache_root.path().join(CacheBucket::Environments.to_str());
+        let archive = archives.join("environment");
+
+        fs_err::create_dir_all(&archive).unwrap();
+        fs_err::write(archive.join("payload.txt"), "payload").unwrap();
+        fs_err::create_dir_all(environments.join("interpreter-digest")).unwrap();
+        fs_err::os::unix::fs::symlink(
+            &archive,
+            environments.join("interpreter-digest").join("resolution"),
+        )
+        .unwrap();
+
+        let summary = Cache::from_path(cache_root.path())
+            .prune_unreferenced_archives()
+            .unwrap();
+
+        assert_eq!(summary.num_files, 0);
+        assert!(archive.join("payload.txt").is_file());
+    }
+
+    #[test]
+    fn autoprune_due_marker() {
+        use std::time::{Duration, SystemTime};
+
+        use super::{AUTOPRUNE_INTERVAL, autoprune_due};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let marker = cache_root.path().join(".autoprune");
+
+        // A missing marker is due.
+        assert!(autoprune_due(&marker));
+
+        // A fresh marker is not due.
+        fs_err::write(&marker, []).unwrap();
+        assert!(!autoprune_due(&marker));
+
+        // A marker older than the interval is due.
+        let stale = SystemTime::now() - AUTOPRUNE_INTERVAL - Duration::from_secs(60);
+        filetime::set_file_mtime(&marker, filetime::FileTime::from_system_time(stale)).unwrap();
+        assert!(autoprune_due(&marker));
     }
 }

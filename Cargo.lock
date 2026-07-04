@@ -6120,6 +6120,7 @@ name = "uv-cache"
 version = "0.0.59"
 dependencies = [
  "clap",
+ "filetime",
  "fs-err",
  "rmp-serde",
  "rustc-hash",
