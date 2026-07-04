@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use rustc_hash::FxHashSet;
 use thiserror::Error;
 use tracing::{Level, debug, enabled, warn};
 
@@ -610,11 +609,10 @@ pub(crate) async fn pip_install(
 
     // For direct reinstalls, only the resolved packages can be removed from the environment.
     let site_packages = if direct_reinstall {
-        let package_names = resolution
-            .distributions()
-            .map(|distribution| distribution.name().clone())
-            .collect::<FxHashSet<_>>();
-        SitePackages::from_environment_for_packages(&environment, &package_names)?
+        SitePackages::from_environment_for_packages(
+            &environment,
+            resolution.distributions().map(Name::name),
+        )?
     } else {
         site_packages
     };

@@ -62,11 +62,12 @@ impl SitePackages {
     }
 
     /// Build an index of the requested installed packages from the given Python environment.
-    pub fn from_environment_for_packages(
+    pub fn from_environment_for_packages<'a>(
         environment: &PythonEnvironment,
-        package_names: &FxHashSet<PackageName>,
+        package_names: impl IntoIterator<Item = &'a PackageName>,
     ) -> Result<Self> {
-        Self::from_interpreter_with_filter(environment.interpreter(), Some(package_names))
+        let package_names = package_names.into_iter().collect::<FxHashSet<_>>();
+        Self::from_interpreter_with_filter(environment.interpreter(), Some(&package_names))
     }
 
     /// Build an index of installed packages from the given Python executable.
@@ -77,7 +78,7 @@ impl SitePackages {
     /// Build an index of installed packages from the given Python executable.
     fn from_interpreter_with_filter(
         interpreter: &Interpreter,
-        package_names: Option<&FxHashSet<PackageName>>,
+        package_names: Option<&FxHashSet<&PackageName>>,
     ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
@@ -106,7 +107,8 @@ impl SitePackages {
             // Index all installed packages by name.
             for path in site_packages {
                 if let Some(package_names) = package_names
-                    && !path_matches_package_names(&path, package_names)
+                    && let Some(package_name) = installed_dist_name(&path)
+                    && !package_names.contains(&package_name)
                 {
                     continue;
                 }
@@ -636,46 +638,27 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
-/// Returns true if a distribution-like path could belong to one of the requested packages.
+/// Infer the package name from an installed distribution path without reading its metadata.
 ///
-/// Returns true for paths that cannot be identified from their filename alone, so they retain
-/// the existing parsing and error behavior.
-fn path_matches_package_names(path: &Path, package_names: &FxHashSet<PackageName>) -> bool {
-    let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
-        return true;
-    };
-    let Some(file_stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) else {
-        return true;
-    };
+/// Returns `None` when the name cannot safely be derived from the filename alone.
+fn installed_dist_name(path: &Path) -> Option<PackageName> {
+    let extension = path.extension()?.to_str()?;
+    let file_stem = path.file_stem()?.to_str()?;
 
-    let package_name = match extension {
+    match extension {
         "dist-info" => {
-            let Some((name, version)) = file_stem.split_once('-') else {
-                return true;
-            };
-            if Version::from_str(version).is_err() {
-                return true;
-            }
-            let Ok(package_name) = PackageName::from_str(name) else {
-                return true;
-            };
-            package_name
+            let (name, version) = file_stem.split_once('-')?;
+            Version::from_str(version).ok()?;
+            PackageName::from_str(name).ok()
         }
         "egg-info" => {
-            let Ok(filename) = EggInfoFilename::parse(file_stem) else {
-                return true;
-            };
-            if filename.version.is_none() {
-                return true;
-            }
-            filename.name
+            let filename = EggInfoFilename::parse(file_stem).ok()?;
+            filename.version?;
+            Some(filename.name)
         }
         // Legacy editables require reading metadata to determine their package name.
-        "egg-link" => return true,
-        _ => return true,
-    };
-
-    package_names.contains(&package_name)
+        _ => None,
+    }
 }
 
 impl IntoIterator for SitePackages {
