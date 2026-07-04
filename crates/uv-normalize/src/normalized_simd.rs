@@ -110,16 +110,14 @@ mod architecture {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod architecture {
+    use arch::{
+        __m128i, _mm_and_si128, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_cvtsi32_si128, _mm_loadl_epi64,
+        _mm_loadu_si128, _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8,
+    };
     #[cfg(target_arch = "x86")]
-    use std::arch::x86::{
-        __m128i, _mm_and_si128, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_cvtsi32_si128, _mm_loadl_epi64,
-        _mm_loadu_si128, _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8,
-    };
+    use std::arch::x86 as arch;
     #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::{
-        __m128i, _mm_and_si128, _mm_cmpeq_epi8, _mm_cmpgt_epi8, _mm_cvtsi32_si128, _mm_loadl_epi64,
-        _mm_loadu_si128, _mm_movemask_epi8, _mm_or_si128, _mm_set1_epi8,
-    };
+    use std::arch::x86_64 as arch;
 
     use super::is_normalized_scalar;
 

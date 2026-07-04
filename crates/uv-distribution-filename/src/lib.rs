@@ -52,17 +52,14 @@ fn normalized_package_name_matches(actual: &str, expected: &PackageName) -> bool
 }
 
 fn normalized_package_name_matches_scalar(actual: &str, expected: &str) -> bool {
-    for (actual, expected) in actual.bytes().zip(expected.bytes()) {
-        let actual = match actual {
-            b'A'..=b'Z' => actual.to_ascii_lowercase(),
+    actual
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' => byte.to_ascii_lowercase(),
             b'_' | b'.' => b'-',
-            _ => actual,
-        };
-        if actual != expected {
-            return false;
-        }
-    }
-    true
+            _ => byte,
+        })
+        .eq(expected.bytes())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
