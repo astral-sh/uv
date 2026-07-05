@@ -4044,6 +4044,12 @@ fn install_no_downgrade() -> Result<()> {
     "
     );
 
+    // An unrelated distribution should not be inspected when all resolved packages will be
+    // reinstalled.
+    let unrelated = context.site_packages().join("unrelated-1.0.0.dist-info");
+    fs::create_dir_all(&unrelated)?;
+    fs::write(unrelated.join("direct_url.json"), "invalid")?;
+
     // Install `anyio` with `--reinstall`, which should downgrade `idna`.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--reinstall")
@@ -12643,6 +12649,11 @@ fn pep_751_install_registry_wheel() -> Result<()> {
      + iniconfig==2.0.0
     "
     );
+
+    // An unrelated distribution should not be inspected when installing from a `pylock.toml`.
+    let unrelated = context.site_packages().join("unrelated-1.0.0.dist-info");
+    fs::create_dir_all(&unrelated)?;
+    fs::write(unrelated.join("direct_url.json"), "invalid")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")

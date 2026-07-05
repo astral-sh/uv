@@ -308,14 +308,15 @@ pub(crate) async fn pip_install(
         interpreter,
     )?;
 
-    // A direct reinstall cannot reuse installed packages during resolution. Delay the environment
-    // scan until after resolution, when we can restrict it to the packages that will be reinstalled.
-    let direct_reinstall = matches!(&dependency_mode, DependencyMode::Direct)
-        && matches!(&reinstall, Reinstall::All)
-        && matches!(modifications, Modifications::Sufficient)
-        && pylock.is_none();
+    // With sufficient modifications, installation only needs installed distributions selected by
+    // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling
+    // every package excludes all installed distributions from candidate selection, including for
+    // transitive dependencies. Delay the environment scan in either case, then restrict it to the
+    // resolved package names.
+    let defer_site_packages = matches!(modifications, Modifications::Sufficient)
+        && (pylock.is_some() || matches!(&reinstall, Reinstall::All));
 
-    let site_packages = if direct_reinstall {
+    let site_packages = if defer_site_packages {
         None
     } else {
         Some(SitePackages::from_environment(&environment)?)
@@ -608,7 +609,7 @@ pub(crate) async fn pip_install(
     let resolution = apply_editable_mode(resolution, editable);
 
     let site_packages = match site_packages {
-        // For direct reinstalls, only the resolved packages can be removed from the environment.
+        // Only resolved packages can be modified when using sufficient installation semantics.
         None => SitePackages::from_environment_for_packages(
             &environment,
             resolution.distributions().map(Name::name),
