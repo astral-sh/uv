@@ -1,7 +1,10 @@
+#[cfg(any(test, debug_assertions))]
 use rustc_hash::FxHashMap;
 
 use super::block_graph::BlockGraph;
-use super::{AssembledCode, Assembler, AssemblerStage, Item, Label, Operand, extended_arg_count};
+use super::{AssembledCode, Assembler, Item, Operand, extended_arg_count};
+#[cfg(any(test, debug_assertions))]
+use super::{AssemblerStage, Label};
 use crate::CompileError;
 
 mod blocks;

@@ -25,8 +25,10 @@ use crate::target::{
     num_popped as opcode_num_popped, num_pushed as opcode_num_pushed,
 };
 
+#[cfg(any(test, debug_assertions))]
+use ir::AssemblerStage;
 pub(crate) use ir::{AssembledCode, Assembler, InstructionId, Label, SourceLocation};
-use ir::{AssemblerStage, ExceptionRegion, Instruction, InstructionFlags, Item, Operand};
+use ir::{ExceptionRegion, Instruction, InstructionFlags, Item, Operand};
 
 impl Assembler {
     pub(crate) fn disable_load_fast_borrowing(&mut self) {
