@@ -2942,10 +2942,21 @@ impl TryFrom<LockWire> for Lock {
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
         );
+        // Most dependency entries omit their marker, so reuse the result of intersecting the
+        // default marker with the lock's environment.
+        let default =
+            UniversalMarker::from_combined(environment.into_marker(&wire.requires_python));
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| dist.unwire(&wire.requires_python, environment, &unambiguous_package_ids))
+            .map(|dist| {
+                dist.unwire(
+                    &wire.requires_python,
+                    environment,
+                    default,
+                    &unambiguous_package_ids,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -4035,6 +4046,7 @@ impl PackageWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
@@ -4067,7 +4079,14 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, environment, unambiguous_package_ids))
+                .map(|dep| {
+                    dep.unwire(
+                        requires_python,
+                        environment,
+                        default,
+                        unambiguous_package_ids,
+                    )
+                })
                 .collect()
         };
 
@@ -5839,16 +5858,24 @@ impl DependencyWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let mut simplified_marker = self.marker;
-        simplified_marker.and(environment);
-        let complexified_marker = simplified_marker.into_marker(requires_python);
+        let (simplified_marker, complexified_marker) =
+            if self.marker.as_simplified_marker_tree().is_true() {
+                (environment, default)
+            } else {
+                let mut simplified_marker = self.marker;
+                simplified_marker.and(environment);
+                let complexified_marker =
+                    UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
+                (simplified_marker, complexified_marker)
+            };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker,
-            complexified_marker: UniversalMarker::from_combined(complexified_marker),
+            complexified_marker,
         })
     }
 }
@@ -7376,6 +7403,38 @@ mod tests {
             marker.combined().try_to_string().as_deref(),
             Some("python_full_version >= '3.12' and extra != 'extra-1-x-foo'")
         );
+    }
+
+    #[test]
+    fn dependency_marker_defaults_to_environment() {
+        let requires_python = RequiresPython::from_specifiers(
+            &VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
+        );
+        let environment = SimplifiedMarkerTree::new(
+            &requires_python,
+            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker"),
+        );
+        let default = UniversalMarker::from_combined(environment.into_marker(&requires_python));
+        let dependency: DependencyWire = toml::from_str(
+            r#"
+name = "dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+"#,
+        )
+        .expect("valid dependency");
+
+        let dependency = dependency
+            .unwire(
+                &requires_python,
+                environment,
+                default,
+                &FxHashMap::default(),
+            )
+            .expect("valid dependency");
+
+        assert_eq!(dependency.simplified_marker, environment);
+        assert_eq!(dependency.complexified_marker, default);
     }
 
     #[test]
