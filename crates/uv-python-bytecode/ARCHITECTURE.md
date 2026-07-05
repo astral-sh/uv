@@ -50,7 +50,7 @@ Each stage has one primary owner:
 | Concern                                                                      | Owner              |
 | ---------------------------------------------------------------------------- | ------------------ |
 | Public API, input normalization, parser setup, `.pyc` header                 | `src/lib.rs`       |
-| Scope analysis, AST lowering, constants/names/locals, stack-depth accounting | `src/compiler.rs`  |
+| Scope analysis, AST lowering, constants/names/locals, stack-depth accounting | `src/compiler.rs`, `src/compiler/` |
 | Labels, control-flow rewrites, instruction layout, line and exception tables | `src/assembler/`   |
 | CPython IDs, widths, flags, stack metadata, version and provenance           | `src/target/`      |
 | Marshal equality/identity keys, reference graph, binary encoding             | `src/marshal/`     |
@@ -67,7 +67,18 @@ provide CPython's symbol table, compiler, runtime, or marshal implementation.
 
 ### Scope planning and lowering
 
-`src/compiler.rs` performs the CPython-specific analysis that lowering needs:
+`src/compiler.rs` owns the shared compiler state and code-object data model. The behavioral
+implementation is split into real Rust submodules under `src/compiler/`:
+
+- `scope.rs` owns scope plans, name interning, and the binding/reference collectors.
+- `orchestration.rs` owns compiler construction, nested compilation, and code-object finishing.
+- `statement.rs`, `definition.rs`, and `expression.rs` own their corresponding AST lowering,
+    including control flow, annotations, comprehensions, and patterns.
+- `symbol.rs`, `constant.rs`, and `source.rs` own name/output emission, constant folding, and
+    source-range or annotation reconstruction respectively.
+- `tests.rs` contains the compiler unit tests.
+
+In particular, `src/compiler/scope.rs` performs the CPython-specific analysis that lowering needs:
 
 - `LocalCollector` and `ReferenceCollector` collect bindings, explicit globals/nonlocals, and
     references.
