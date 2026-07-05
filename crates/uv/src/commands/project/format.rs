@@ -199,6 +199,11 @@ pub(crate) async fn format(
     // Add any additional arguments passed after `--`
     command.args(extra_args.iter());
 
+    // Mark the ruff binary's cache entry as in use, then release the main cache lock so that
+    // cache maintenance can proceed while ruff runs.
+    let _claims = cache.claim_in_use(std::iter::once(ruff_path.as_path()));
+    cache.release_lock();
+
     let handle = command.spawn().context("Failed to spawn `ruff format`")?;
     run_to_completion(handle).await
 }

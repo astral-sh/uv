@@ -1304,6 +1304,20 @@ pub(crate) async fn run(
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
     }
 
+    // Mark the cache entries the child process runs from as in use, then release the main
+    // cache lock so that cache maintenance (e.g., `uv cache prune`, automatic pruning) can
+    // proceed while the child runs. The in-use claims must be taken before releasing the lock.
+    let _claims = cache.claim_in_use(
+        ephemeral_env
+            .as_ref()
+            .map(PythonEnvironment::root)
+            .into_iter()
+            .chain(requirements_env.as_ref().map(PythonEnvironment::root))
+            .chain(std::iter::once(interpreter.sys_prefix()))
+            .chain(std::iter::once(base_interpreter.sys_prefix())),
+    );
+    cache.release_lock();
+
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found

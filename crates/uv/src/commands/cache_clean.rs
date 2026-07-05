@@ -43,6 +43,13 @@ pub(crate) async fn cache_clean(
         }
     };
 
+    // Long-lived commands (e.g., servers started with `uv run`) release the main cache lock
+    // while running, and instead hold in-use locks on the cache entries they run from. Since
+    // cleaning removes the entire cache, wait for those entries to be released as well.
+    if !force {
+        cache.wait_for_in_use().await?;
+    }
+
     let summary = if packages.is_empty() {
         writeln!(
             printer.stderr(),
