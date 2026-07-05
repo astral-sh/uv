@@ -255,9 +255,10 @@ impl Upgrade {
     /// Combine a set of [`Upgrade`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        // For `strategy`: `other` takes precedence for an explicit `All` or `None`; otherwise,
-        // merge.
+        // For `strategy`: `self` (CLI) takes precedence over `other` (config) for `All`;
+        // `other` takes precedence for `None`; otherwise merge.
         let strategy = match (self.strategy, other.strategy) {
+            (UpgradeStrategy::All, _) => UpgradeStrategy::All,
             (_, UpgradeStrategy::All) => UpgradeStrategy::All,
             (_, UpgradeStrategy::None) => UpgradeStrategy::None,
             (
