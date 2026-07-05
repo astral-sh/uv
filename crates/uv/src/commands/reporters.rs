@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 
@@ -156,6 +156,10 @@ impl ProgressReporter {
         }
     }
 
+    fn should_print_fallback(multi_progress: &MultiProgress, state: &BarState) -> bool {
+        state.active_checkouts == 0 && multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS
+    }
+
     fn on_build_start(&self, source: &BuildableSource) -> usize {
         let ProgressMode::Multi {
             multi_progress,
@@ -179,7 +183,7 @@ impl ProgressReporter {
             "Building".bold().cyan(),
             source.to_color_string()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if Self::should_print_fallback(multi_progress, &state) {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -198,10 +202,13 @@ impl ProgressReporter {
             return;
         };
 
-        let progress = {
+        let (progress, should_print_fallback) = {
             let mut state = state.lock().unwrap();
             state.headers -= 1;
-            state.bars.remove(&id).unwrap()
+            (
+                state.bars.remove(&id).unwrap(),
+                Self::should_print_fallback(multi_progress, &state),
+            )
         };
 
         let message = format!(
@@ -209,7 +216,7 @@ impl ProgressReporter {
             "Built".bold().green(),
             source.to_color_string()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if should_print_fallback {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
@@ -266,7 +273,7 @@ impl ProgressReporter {
             );
             // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
+            if Self::should_print_fallback(multi_progress, &state) && size > 1024 * 1024 {
                 let (bytes, unit) = human_readable_bytes(size);
                 let _ = writeln!(
                     self.printer.stderr(),
@@ -279,7 +286,7 @@ impl ProgressReporter {
             progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
-            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            if Self::should_print_fallback(multi_progress, &state) {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {}",
@@ -323,8 +330,7 @@ impl ProgressReporter {
 
         let mut state = state.lock().unwrap();
         if let ProgressBarKind::Numeric { progress, size } = state.bars.remove(&id).unwrap() {
-            if multi_progress.is_hidden()
-                && !*HAS_UV_TEST_NO_CLI_PROGRESS
+            if Self::should_print_fallback(multi_progress, &state)
                 && size.is_none_or(|size| size > 1024 * 1024)
             {
                 let _ = writeln!(
@@ -395,12 +401,6 @@ impl ProgressReporter {
         let mut state = state.lock().unwrap();
         let id = state.id();
 
-        // Stop redrawing the root spinner while a checkout is in progress.
-        state.active_checkouts += 1;
-        if state.active_checkouts == 1 {
-            self.root.disable_steady_tick();
-        }
-
         let progress = multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -408,7 +408,7 @@ impl ProgressReporter {
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
         let message = format!("   {} {} ({})", "Updating".bold().cyan(), url, rev.dimmed());
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if Self::should_print_fallback(multi_progress, &state) {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.set_message(message);
@@ -416,6 +416,12 @@ impl ProgressReporter {
 
         state.headers += 1;
         state.bars.insert(id, ProgressBarKind::Spinner { progress });
+        state.active_checkouts += 1;
+        if state.active_checkouts == 1 {
+            // Git can prompt on the terminal, so prevent every bar in the shared progress
+            // display from redrawing until all checkouts have finished.
+            multi_progress.set_draw_target(ProgressDrawTarget::hidden());
+        }
         id
     }
 
@@ -428,14 +434,17 @@ impl ProgressReporter {
             return;
         };
 
-        let progress = {
+        let (progress, should_print_fallback) = {
             let mut state = state.lock().unwrap();
             state.headers -= 1;
             state.active_checkouts -= 1;
             if state.active_checkouts == 0 {
-                self.root.enable_steady_tick(Duration::from_millis(200));
+                multi_progress.set_draw_target(self.printer.target());
             }
-            state.bars.remove(&id).unwrap()
+            (
+                state.bars.remove(&id).unwrap(),
+                Self::should_print_fallback(multi_progress, &state),
+            )
         };
 
         let message = format!(
@@ -444,7 +453,7 @@ impl ProgressReporter {
             url,
             rev.dimmed()
         );
-        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+        if should_print_fallback {
             let _ = writeln!(self.printer.stderr(), "{message}");
         }
         progress.finish_with_message(message);
@@ -926,5 +935,107 @@ impl uv_bin_install::Reporter for BinaryDownloadReporter {
 
     fn on_download_complete(&self, id: usize) {
         self.reporter.on_request_complete(Direction::Download, id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use indicatif::TermLike;
+
+    use super::*;
+
+    #[derive(Clone, Debug, Default)]
+    struct RecordingTerm {
+        writes: Arc<AtomicUsize>,
+    }
+
+    impl RecordingTerm {
+        fn record_write(&self) {
+            self.writes.fetch_add(1, Ordering::Relaxed);
+        }
+
+        fn writes(&self) -> usize {
+            self.writes.load(Ordering::Relaxed)
+        }
+    }
+
+    impl TermLike for RecordingTerm {
+        fn width(&self) -> u16 {
+            80
+        }
+
+        fn move_cursor_up(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn move_cursor_down(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn move_cursor_right(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn move_cursor_left(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn write_line(&self, _s: &str) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn write_str(&self, _s: &str) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn clear_line(&self) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+
+        fn flush(&self) -> io::Result<()> {
+            self.record_write();
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn checkout_suspends_all_progress_draws() {
+        let terminal = RecordingTerm::default();
+        let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::term_like(
+            Box::new(terminal.clone()),
+        ));
+        let root = multi_progress.add(ProgressBar::new_spinner());
+        let reporter = ProgressReporter::new(root, multi_progress.clone(), Printer::Default);
+        let url = DisplaySafeUrl::parse("ssh://git@example.com/project.git")
+            .expect("test URL should be valid");
+
+        let first_checkout = reporter.on_checkout_start(&url, "main");
+        assert!(multi_progress.is_hidden());
+        let writes_before_updates = terminal.writes();
+
+        reporter.root.set_message("Resolving dependencies...");
+        reporter.root.tick();
+        let download = reporter.on_download_start("example".to_string(), None);
+        reporter.on_download_progress(download, 1);
+        reporter.on_download_complete(download);
+
+        let second_checkout = reporter.on_checkout_start(&url, "other");
+        reporter.on_checkout_complete(&url, "main", first_checkout);
+
+        assert!(multi_progress.is_hidden());
+        assert_eq!(terminal.writes(), writes_before_updates);
+
+        reporter.on_checkout_complete(&url, "other", second_checkout);
     }
 }
