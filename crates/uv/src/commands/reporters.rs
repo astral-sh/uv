@@ -80,6 +80,8 @@ struct BarState {
     id: usize,
     /// The maximum length of all bar names encountered.
     max_len: usize,
+    /// The number of Git checkouts currently in progress.
+    active_checkouts: usize,
 }
 
 impl Default for BarState {
@@ -92,6 +94,7 @@ impl Default for BarState {
             // Avoid resizing the progress bar templates too often by starting with a padding
             // that's wider than most package names.
             max_len: 20,
+            active_checkouts: 0,
         }
     }
 }
@@ -392,6 +395,12 @@ impl ProgressReporter {
         let mut state = state.lock().unwrap();
         let id = state.id();
 
+        // Stop redrawing the root spinner while a checkout is in progress.
+        state.active_checkouts += 1;
+        if state.active_checkouts == 1 {
+            self.root.disable_steady_tick();
+        }
+
         let progress = multi_progress.insert_before(
             &self.root,
             ProgressBar::with_draw_target(None, self.printer.target()),
@@ -422,6 +431,10 @@ impl ProgressReporter {
         let progress = {
             let mut state = state.lock().unwrap();
             state.headers -= 1;
+            state.active_checkouts -= 1;
+            if state.active_checkouts == 0 {
+                self.root.enable_steady_tick(Duration::from_millis(200));
+            }
             state.bars.remove(&id).unwrap()
         };
 
