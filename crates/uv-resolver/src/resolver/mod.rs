@@ -370,7 +370,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     err,
                                     state.fork_urls,
                                     state.fork_indexes,
-                                    state.known_versions,
+                                    &state.known_versions,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -2809,7 +2809,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
-        known_versions: FxHashMap<PackageName, Arc<[Version]>>,
+        known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
@@ -2817,7 +2817,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
             err,
         ));
-        err = NoSolutionError::narrow_widened_sets(err, &known_versions);
+        err = NoSolutionError::narrow_widened_sets(err, known_versions);
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
