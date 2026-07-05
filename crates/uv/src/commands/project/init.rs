@@ -1268,9 +1268,22 @@ fn generate_package_scripts(
     is_lib: bool,
 ) -> Result<()> {
     let module_name = package.as_dist_info_name();
-
     let src_dir = path.join("src");
-    let pkg_dir = src_dir.join(&*module_name);
+
+    // Determine if this is a stubs-only package (name ends with `-stubs`).
+    let is_stubs = package.as_str().ends_with("-stubs");
+    let pkg_dir = if is_stubs {
+        // For stubs packages, the module directory must preserve the `-stubs` suffix
+        // so that `uv_build` can find it, e.g., `foo-stubs` not `foo_stubs`.
+        // See: `uv_build::find_module_path_from_package_name`
+        let stem = &package.as_str()[..package.as_str().len() - "-stubs".len()];
+        let normalized_stem = PackageName::from_str(stem)
+            .map(|name| name.as_dist_info_name().to_string())
+            .unwrap_or_else(|_| stem.to_string());
+        src_dir.join(format!("{normalized_stem}-stubs"))
+    } else {
+        src_dir.join(&*module_name)
+    };
     fs_err::create_dir_all(&pkg_dir)?;
 
     let pure_python_script = if is_lib {
@@ -1376,14 +1389,21 @@ fn generate_package_scripts(
         _ => pure_python_script,
     };
 
-    // Create `src/{name}/__init__.py`, if it doesn't exist already.
-    let init_py = pkg_dir.join("__init__.py");
-    if !init_py.try_exists()? {
-        fs_err::write(init_py, package_script)?;
+    // Create `src/{name}/__init__.py` (or `__init__.pyi` for stubs packages), if it doesn't exist already.
+    if is_stubs {
+        let init_pyi = pkg_dir.join("__init__.pyi");
+        if !init_pyi.try_exists()? {
+            fs_err::write(init_pyi, package_script)?;
+        }
+    } else {
+        let init_py = pkg_dir.join("__init__.py");
+        if !init_py.try_exists()? {
+            fs_err::write(init_py, package_script)?;
+        }
     }
 
     // Create `src/{name}/py.typed`, if it doesn't exist already.
-    if is_lib {
+    if is_lib && !is_stubs {
         let py_typed = pkg_dir.join("py.typed");
         if !py_typed.try_exists()? {
             fs_err::write(py_typed, "")?;
