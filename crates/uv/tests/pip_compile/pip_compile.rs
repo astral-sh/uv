@@ -2930,7 +2930,7 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only werkzeug<3.0.0 is available and flask>2.3.3,<3.0.1 depends on werkzeug>=3.0.0, we can conclude that flask>2.3.3,<3.0.1 cannot be used.
+      ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
           And because you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
@@ -18541,7 +18541,7 @@ fn incompatible_cuda() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision>0.17.1+cpu,<0.17.1+cu121 depends on system:cuda==11.8 and torch>2.2.1+cu118,<2.2.2 depends on system:cuda==12.1, we can conclude that torch>2.2.1+cu118,<2.2.2 and torchvision>0.17.1+cpu,<0.17.1+cu121 are incompatible.
+      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
           And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 

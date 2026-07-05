@@ -770,8 +770,8 @@ fn conflict_in_fork() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
       ╰─▶ Because all versions of c depend on d==2 and all versions of b depend on d==1, we can conclude that all versions of b and all versions of c are incompatible.
-          And because a<2.0.0 depends on b, we can conclude that a<2.0.0 and all versions of c are incompatible.
-          And because a<2.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+          And because a==1.0.0 depends on b, we can conclude that a==1.0.0 and all versions of c are incompatible.
+          And because a==1.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "

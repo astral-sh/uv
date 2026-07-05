@@ -66,7 +66,7 @@ fn backtrack_to_missing_package() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because c was not found in the package registry and a<2.0.0 depends on c, we can conclude that a<2.0.0 cannot be used.
+      ╰─▶ Because c was not found in the package registry and a==1.0.0 depends on c, we can conclude that a==1.0.0 cannot be used.
           And because all versions of b depend on a==1.0.0 and you require b, we can conclude that your requirements are unsatisfiable.
     ");
 
@@ -367,8 +367,8 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
-          And because c>1.0.0 depends on a>=3.0.0 and a>2.4.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and c==1.0.0 depends on a<2.0.0, we can conclude that c==1.0.0 depends on b==1.0.0.
+          And because c==2.0.0 depends on a>=3.0.0 and a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
               b<=1.0.0
               b>=3.0.0
 
@@ -448,8 +448,8 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and c<2.0.0 depends on a<2.0.0, we can conclude that c<2.0.0 depends on b==1.0.0.
-          And because c>1.0.0 depends on a>=3.0.0 and a>2.3.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
+      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and c==1.0.0 depends on a<2.0.0, we can conclude that c==1.0.0 depends on b==1.0.0.
+          And because c==2.0.0 depends on a>=3.0.0 and a==3.0.0 depends on b==3.0.0, we can conclude that all versions of c depend on one of:
               b<=1.0.0
               b>=3.0.0
 
@@ -504,9 +504,9 @@ fn excluded_only_compatible_version() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a<2.0.0 depends on b==1.0.0 and a>2.0.0 depends on b==3.0.0, we can conclude that all of:
-              a<2.0.0
-              a>2.0.0
+      ╰─▶ Because a==1.0.0 depends on b==1.0.0 and a==3.0.0 depends on b==3.0.0, we can conclude that all of:
+              a<=1.0.0
+              a>=3.0.0
           depend on one of:
               b==1.0.0
               b==3.0.0
