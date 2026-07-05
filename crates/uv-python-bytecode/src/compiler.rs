@@ -1173,18 +1173,18 @@ impl Compiler {
         context: ExceptionHandlerContext,
         compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
     ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
-        self.control
-            .active_exception_region_exclusions
-            .push(Vec::new());
-        self.control.active_exception_handlers.push(context);
-        let result = compile(self);
-        self.control.active_exception_handlers.pop();
-        let exclusions = self
-            .control
-            .active_exception_region_exclusions
-            .pop()
-            .expect("exception handler has an exclusion collector");
-        result.map(|value| (value, exclusions))
+        let ((value, _context), exclusions) = self.with_control_stack(
+            |control| &mut control.active_exception_region_exclusions,
+            Vec::new(),
+            |compiler| {
+                compiler.with_control_stack(
+                    |control| &mut control.active_exception_handlers,
+                    context,
+                    compile,
+                )
+            },
+        )?;
+        Ok((value, exclusions))
     }
 
     fn with_comprehension_context<T>(
@@ -1192,18 +1192,150 @@ impl Compiler {
         cleanup: (Label, u32),
         compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
     ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
-        self.control.active_comprehension_cleanups.push(cleanup);
-        self.control
-            .active_comprehension_region_exclusions
-            .push(Vec::new());
+        let ((value, exclusions), _cleanup) = self.with_control_stack(
+            |control| &mut control.active_comprehension_cleanups,
+            cleanup,
+            |compiler| {
+                compiler.with_control_stack(
+                    |control| &mut control.active_comprehension_region_exclusions,
+                    Vec::new(),
+                    compile,
+                )
+            },
+        )?;
+        Ok((value, exclusions))
+    }
+
+    fn with_control_stack<T, R>(
+        &mut self,
+        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut Vec<T>,
+        value: T,
+        compile: impl FnOnce(&mut Self) -> Result<R, CompileError>,
+    ) -> Result<(R, T), CompileError> {
+        let previous_depth = select(&mut self.control).len();
+        select(&mut self.control).push(value);
         let result = compile(self);
+        let entries = select(&mut self.control);
+        debug_assert!(
+            result.is_err() || entries.len() == previous_depth + 1,
+            "scoped control-flow stacks should be balanced"
+        );
+        entries.truncate(previous_depth + 1);
+        let value = entries
+            .pop()
+            .expect("scoped control-flow stack retains its entry");
+        result.map(|result| (result, value))
+    }
+
+    fn with_control_counter<R>(
+        &mut self,
+        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut usize,
+        compile: impl FnOnce(&mut Self) -> Result<R, CompileError>,
+    ) -> Result<R, CompileError> {
+        let previous = *select(&mut self.control);
+        *select(&mut self.control) = previous + 1;
+        let result = compile(self);
+        *select(&mut self.control) = previous;
+        result
+    }
+
+    fn with_finally_protected_context<T>(
+        &mut self,
+        pass_location: Option<SourceLocation>,
+        overriding_return: bool,
+        preserve_break_exit_loop_range: Option<ruff_text_size::TextRange>,
+        return_context: Option<ReturnFinallyContext>,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
+        let exclusion_depth = self.control.active_exception_region_exclusions.len();
+        let pass_depth = self.control.active_pass_finally_locations.len();
+        let return_depth = self.control.active_return_finally_contexts.len();
+        let has_pass_location = pass_location.is_some();
+        let has_return_context = return_context.is_some();
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
+        if let Some(location) = pass_location {
+            self.control.active_pass_finally_locations.push(location);
+        }
+        if let Some(context) = return_context {
+            self.control.active_return_finally_contexts.push(context);
+        }
+        let previous_overriding_returns = self.control.active_overriding_finally_returns;
+        self.control.active_overriding_finally_returns += usize::from(overriding_return);
+        let previous_break_exit_loop_range = std::mem::replace(
+            &mut self.control.preserve_finally_break_exit_loop_range,
+            preserve_break_exit_loop_range,
+        );
+        let previous_try_bodies = self.control.active_finally_try_bodies;
+        self.control.active_finally_try_bodies = previous_try_bodies + 1;
+
+        let result = compile(self);
+
+        self.control.active_finally_try_bodies = previous_try_bodies;
+        self.control.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
+        self.control.active_overriding_finally_returns = previous_overriding_returns;
+        debug_assert!(
+            result.is_err()
+                || self.control.active_return_finally_contexts.len()
+                    == return_depth + usize::from(has_return_context),
+            "return-finally contexts should be balanced"
+        );
+        self.control
+            .active_return_finally_contexts
+            .truncate(return_depth);
+        debug_assert!(
+            result.is_err()
+                || self.control.active_pass_finally_locations.len()
+                    == pass_depth + usize::from(has_pass_location),
+            "pass-finally locations should be balanced"
+        );
+        self.control
+            .active_pass_finally_locations
+            .truncate(pass_depth);
+        debug_assert!(
+            result.is_err()
+                || self.control.active_exception_region_exclusions.len() == exclusion_depth + 1,
+            "finally exception exclusions should be balanced"
+        );
+        self.control
+            .active_exception_region_exclusions
+            .truncate(exclusion_depth + 1);
         let exclusions = self
             .control
-            .active_comprehension_region_exclusions
+            .active_exception_region_exclusions
             .pop()
-            .expect("active comprehension has region exclusions");
-        self.control.active_comprehension_cleanups.pop();
+            .expect("finally protected region retains its exclusion collector");
         result.map(|value| (value, exclusions))
+    }
+
+    fn with_region_exclusion_collector<T>(
+        &mut self,
+        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut Vec<Vec<(Label, Label)>>,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
+        let (value, exclusions) = self.with_control_stack(select, Vec::new(), compile)?;
+        Ok((value, exclusions))
+    }
+
+    fn with_with_context<T>(
+        &mut self,
+        context: WithExitContext,
+        terminal: bool,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<T, CompileError> {
+        let previous_depth = self.control.active_with_exits.len();
+        let previous_terminal_withs = self.control.active_terminal_withs;
+        self.control.active_with_exits.push(context);
+        self.control.active_terminal_withs += usize::from(terminal);
+        let result = compile(self);
+        self.control.active_terminal_withs = previous_terminal_withs;
+        debug_assert!(
+            result.is_err() || self.control.active_with_exits.len() == previous_depth + 1,
+            "with contexts should be balanced"
+        );
+        self.control.active_with_exits.truncate(previous_depth);
+        result
     }
 
     fn with_control_override<T, R>(
@@ -6183,16 +6315,17 @@ impl Compiler {
                 last_test = test;
                 let next = self.assembler.label();
                 if branch_index > 0 && branch_index + 1 == branch_count && !has_else {
-                    self.control.active_with_region_exclusions.push(Vec::new());
-                    self.control.exclude_terminal_if_not_taken = true;
-                    self.compile_jump_if(test, false, next)?;
-                    self.control.exclude_terminal_if_not_taken = false;
-                    exclusions.extend(
-                        self.control
-                            .active_with_region_exclusions
-                            .pop()
-                            .expect("terminal handler has exclusion collector"),
-                    );
+                    let ((), branch_exclusions) = self.with_region_exclusion_collector(
+                        |control| &mut control.active_with_region_exclusions,
+                        |compiler| {
+                            compiler.with_control_override(
+                                |control| &mut control.exclude_terminal_if_not_taken,
+                                true,
+                                |compiler| compiler.compile_jump_if(test, false, next),
+                            )
+                        },
+                    )?;
+                    exclusions.extend(branch_exclusions);
                 } else {
                     self.compile_jump_if(test, false, next)?;
                 }
@@ -6330,104 +6463,83 @@ impl Compiler {
                 .push((statement_nop_start, statement_nop_end));
         }
         self.assembler.mark(protected_start);
-        self.control
-            .active_exception_region_exclusions
-            .push(Vec::new());
         let pass_finally_location = match statement.finalbody.as_slice() {
             [Stmt::Pass(statement)] => Some(self.source_location(statement.range)),
             _ => None,
         };
-        if let Some(location) = pass_finally_location {
-            self.control.active_pass_finally_locations.push(location);
-        }
-        let previous_overriding_finally_returns = self.control.active_overriding_finally_returns;
-        if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
-            self.control.active_overriding_finally_returns += 1;
-        }
-        let previous_break_exit_loop_range = self.control.preserve_finally_break_exit_loop_range;
-        self.control.preserve_finally_break_exit_loop_range =
-            if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
-                match statement.body.last() {
-                    Some(Stmt::While(loop_statement))
-                        if loop_statement.orelse.is_empty()
-                            && suite_contains_loop_break(&loop_statement.body) =>
-                    {
-                        Some(loop_statement.range)
-                    }
-                    Some(Stmt::For(loop_statement))
-                        if loop_statement.orelse.is_empty()
-                            && suite_contains_loop_break(&loop_statement.body) =>
-                    {
-                        Some(loop_statement.range)
-                    }
-                    _ => previous_break_exit_loop_range,
+        let overriding_return = matches!(statement.finalbody.last(), Some(Stmt::Return(_)));
+        let preserve_break_exit_loop_range = if overriding_return {
+            match statement.body.last() {
+                Some(Stmt::While(loop_statement))
+                    if loop_statement.orelse.is_empty()
+                        && suite_contains_loop_break(&loop_statement.body) =>
+                {
+                    Some(loop_statement.range)
                 }
-            } else {
-                previous_break_exit_loop_range
-            };
+                Some(Stmt::For(loop_statement))
+                    if loop_statement.orelse.is_empty()
+                        && suite_contains_loop_break(&loop_statement.body) =>
+                {
+                    Some(loop_statement.range)
+                }
+                _ => self.control.preserve_finally_break_exit_loop_range,
+            }
+        } else {
+            self.control.preserve_finally_break_exit_loop_range
+        };
         let copy_finally_on_return = pass_finally_location.is_none()
             && !suite_terminates(&statement.finalbody)
             && self.control.active_exception_handlers.is_empty()
             && self.control.active_return_finally_contexts.is_empty();
-        if copy_finally_on_return {
-            self.control
-                .active_return_finally_contexts
-                .push(ReturnFinallyContext {
-                    body: statement.finalbody.to_vec(),
-                    loop_depth: self.control.loops.len(),
-                    handler: finally_handler,
-                    depth: base_depth.cast_unsigned(),
-                });
-        }
-        self.control.active_finally_try_bodies += 1;
-        let protected_result = (|| -> Result<bool, CompileError> {
-            if statement.handlers.is_empty() {
-                let instruction_count = self.assembler.instruction_count();
-                if statement.body.len() > 1
-                    && let Some(Stmt::Pass(pass)) = statement.body.first()
-                {
-                    self.assembler
-                        .set_location(self.source_location(pass.range));
-                    self.emit(NOP, 0, 0)?;
-                }
-                self.compile_suite(&statement.body)?;
-                let has_instructions = self.assembler.instruction_count() > instruction_count;
-                if !has_instructions {
-                    if let Some(last) = statement.body.last() {
-                        self.assembler
-                            .set_location(self.source_location(last.range()));
+        let return_context = copy_finally_on_return.then(|| ReturnFinallyContext {
+            body: statement.finalbody.to_vec(),
+            loop_depth: self.control.loops.len(),
+            handler: finally_handler,
+            depth: base_depth.cast_unsigned(),
+        });
+        let (protected_has_instructions, protected_exclusions) = self
+            .with_finally_protected_context(
+                pass_finally_location,
+                overriding_return,
+                preserve_break_exit_loop_range,
+                return_context,
+                |compiler| {
+                    if statement.handlers.is_empty() {
+                        let instruction_count = compiler.assembler.instruction_count();
+                        if statement.body.len() > 1
+                            && let Some(Stmt::Pass(pass)) = statement.body.first()
+                        {
+                            compiler
+                                .assembler
+                                .set_location(compiler.source_location(pass.range));
+                            compiler.emit(NOP, 0, 0)?;
+                        }
+                        compiler.compile_suite(&statement.body)?;
+                        let has_instructions =
+                            compiler.assembler.instruction_count() > instruction_count;
+                        if !has_instructions {
+                            if let Some(last) = statement.body.last() {
+                                compiler
+                                    .assembler
+                                    .set_location(compiler.source_location(last.range()));
+                            }
+                            compiler.emit(NOP, 0, 0)?;
+                            // A no-op protected body does not acquire an enclosing try's handler.
+                            if compiler.control.active_exception_region_exclusions.len() > 1 {
+                                compiler.assembler.exclude_last_instruction_from_exception();
+                            }
+                        }
+                        Ok(has_instructions)
+                    } else {
+                        compiler.with_control_override(
+                            |control| &mut control.prevent_try_exit_inlining,
+                            true,
+                            |compiler| compiler.compile_try_except(statement, false, false, false),
+                        )?;
+                        Ok(true)
                     }
-                    self.emit(NOP, 0, 0)?;
-                    // A no-op protected body does not acquire an enclosing try's handler.
-                    if self.control.active_exception_region_exclusions.len() > 1 {
-                        self.assembler.exclude_last_instruction_from_exception();
-                    }
-                }
-                Ok(has_instructions)
-            } else {
-                self.with_control_override(
-                    |control| &mut control.prevent_try_exit_inlining,
-                    true,
-                    |compiler| compiler.compile_try_except(statement, false, false, false),
-                )?;
-                Ok(true)
-            }
-        })();
-        self.control.active_finally_try_bodies -= 1;
-        if copy_finally_on_return {
-            self.control.active_return_finally_contexts.pop();
-        }
-        self.control.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
-        self.control.active_overriding_finally_returns = previous_overriding_finally_returns;
-        let protected_has_instructions = protected_result?;
-        if pass_finally_location.is_some() {
-            self.control.active_pass_finally_locations.pop();
-        }
-        let protected_exclusions = self
-            .control
-            .active_exception_region_exclusions
-            .pop()
-            .expect("active protected region has exclusion collector");
+                },
+            )?;
         self.assembler.mark(protected_end);
         if terminal
             && pass_finally_location.is_some()
@@ -6496,10 +6608,10 @@ impl Compiler {
                     }
                 }
             } else {
-                compiler.control.active_normal_finally_bodies += 1;
-                let result = compiler.compile_suite_inner(&statement.finalbody, terminal);
-                compiler.control.active_normal_finally_bodies -= 1;
-                result?;
+                compiler.with_control_counter(
+                    |control| &mut control.active_normal_finally_bodies,
+                    |compiler| compiler.compile_suite_inner(&statement.finalbody, terminal),
+                )?;
             }
             Ok(())
         })?;
@@ -6563,10 +6675,10 @@ impl Compiler {
         {
             let condition_false = self.assembler.label();
             self.compile_jump_if(&final_if.test, false, condition_false)?;
-            self.control.active_finally_end_blocks += 1;
-            let body_result = self.compile_suite(&final_if.body);
-            self.control.active_finally_end_blocks -= 1;
-            body_result?;
+            self.with_control_counter(
+                |control| &mut control.active_finally_end_blocks,
+                |compiler| compiler.compile_suite(&final_if.body),
+            )?;
             if !suite_terminates(&final_if.body) {
                 if let Some(location) = self.assembler.last_instruction_location() {
                     self.assembler.set_location(location);
@@ -6583,10 +6695,10 @@ impl Compiler {
                 self.assembler.set_location(location);
                 self.emit(NOP, 0, 0)?;
             } else {
-                self.control.active_finally_end_blocks += 1;
-                let finalbody_result = self.compile_suite(&statement.finalbody);
-                self.control.active_finally_end_blocks -= 1;
-                finalbody_result?;
+                self.with_control_counter(
+                    |control| &mut control.active_finally_end_blocks,
+                    |compiler| compiler.compile_suite(&statement.finalbody),
+                )?;
             }
             if !suite_terminates(&statement.finalbody) {
                 if let Some(statement) = statement
@@ -6788,55 +6900,11 @@ impl Compiler {
         self.compile_with_items(&statement.items, &statement.body, false)
     }
 
-    fn compile_with_items(
+    fn compile_with_body(
         &mut self,
-        items: &[ruff_python_ast::WithItem],
+        remaining: &[ruff_python_ast::WithItem],
         body: &[Stmt],
-        terminal: bool,
-    ) -> Result<(), CompileError> {
-        let Some((item, remaining)) = items.split_first() else {
-            return self.compile_suite(body);
-        };
-        let base_depth = self.control.depth;
-        let protected_start = self.assembler.label();
-        let protected_end = self.assembler.label();
-        let handler = self.assembler.label();
-        let suppress = self.assembler.label();
-        let handler_end = self.assembler.label();
-        let cleanup = self.assembler.label();
-        let end = self.assembler.label();
-        self.control.max_depth = self.control.max_depth.max((base_depth + 7).cast_unsigned());
-        let newly_initialized_targets =
-            item.optional_vars
-                .as_deref()
-                .map_or_else(Vec::new, |target| {
-                    let mut names = Vec::new();
-                    collect_target_names(target, &mut names);
-                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
-                    names
-                });
-
-        self.compile_expression(&item.context_expr)?;
-        self.assembler
-            .set_location(self.source_location(item.context_expr.range()));
-        self.emit(COPY, 1, 1)?;
-        self.emit(LOAD_SPECIAL, 1, 1)?;
-        self.emit(SWAP, 2, 0)?;
-        self.emit(SWAP, 3, 0)?;
-        self.emit(LOAD_SPECIAL, 0, 1)?;
-        self.emit(CALL, 0, -1)?;
-        self.assembler.mark(protected_start);
-        if let Some(target) = &item.optional_vars {
-            self.compile_store_target(target)?;
-        } else {
-            self.emit(POP_TOP, 0, -1)?;
-        }
-        self.control.active_with_exits.push(WithExitContext {
-            location: self.source_location(item.context_expr.range()),
-            is_async: false,
-        });
-        self.control.active_with_region_exclusions.push(Vec::new());
-        self.control.active_terminal_withs += usize::from(terminal);
+    ) -> Result<Option<ruff_text_size::TextRange>, CompileError> {
         let mut body_noop = None;
         if remaining.is_empty() {
             let body_start = self.assembler.instruction_count();
@@ -6891,13 +6959,64 @@ impl Compiler {
         } else {
             self.compile_with_items(remaining, body, false)?;
         }
-        self.control.active_terminal_withs -= usize::from(terminal);
-        let region_exclusions = self
-            .control
-            .active_with_region_exclusions
-            .pop()
-            .expect("active with statement has region exclusions");
-        self.control.active_with_exits.pop();
+        Ok(body_noop)
+    }
+
+    fn compile_with_items(
+        &mut self,
+        items: &[ruff_python_ast::WithItem],
+        body: &[Stmt],
+        terminal: bool,
+    ) -> Result<(), CompileError> {
+        let Some((item, remaining)) = items.split_first() else {
+            return self.compile_suite(body);
+        };
+        let base_depth = self.control.depth;
+        let protected_start = self.assembler.label();
+        let protected_end = self.assembler.label();
+        let handler = self.assembler.label();
+        let suppress = self.assembler.label();
+        let handler_end = self.assembler.label();
+        let cleanup = self.assembler.label();
+        let end = self.assembler.label();
+        self.control.max_depth = self.control.max_depth.max((base_depth + 7).cast_unsigned());
+        let newly_initialized_targets =
+            item.optional_vars
+                .as_deref()
+                .map_or_else(Vec::new, |target| {
+                    let mut names = Vec::new();
+                    collect_target_names(target, &mut names);
+                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
+                    names
+                });
+
+        self.compile_expression(&item.context_expr)?;
+        self.assembler
+            .set_location(self.source_location(item.context_expr.range()));
+        self.emit(COPY, 1, 1)?;
+        self.emit(LOAD_SPECIAL, 1, 1)?;
+        self.emit(SWAP, 2, 0)?;
+        self.emit(SWAP, 3, 0)?;
+        self.emit(LOAD_SPECIAL, 0, 1)?;
+        self.emit(CALL, 0, -1)?;
+        self.assembler.mark(protected_start);
+        if let Some(target) = &item.optional_vars {
+            self.compile_store_target(target)?;
+        } else {
+            self.emit(POP_TOP, 0, -1)?;
+        }
+        let context = WithExitContext {
+            location: self.source_location(item.context_expr.range()),
+            is_async: false,
+        };
+        let (body_noop, region_exclusions) = self.with_region_exclusion_collector(
+            |control| &mut control.active_with_region_exclusions,
+            |compiler| {
+                compiler.with_with_context(context, terminal, |compiler| {
+                    compiler.compile_with_body(remaining, body)
+                })
+            },
+        )?;
         self.assembler.mark(protected_end);
         if !remaining.is_empty() && suite_terminates(body) {
             // A nested manager can suppress the terminal body's exception. CPython keeps the
@@ -7057,38 +7176,40 @@ impl Compiler {
         self.emit(CALL, 0, -1)?;
         self.compile_awaitable_on_stack(1)?;
         self.assembler.mark(protected_start);
-        self.control.active_with_region_exclusions.push(Vec::new());
-        if let Some(target) = &item.optional_vars {
-            self.compile_store_target(target)?;
-        } else {
-            self.emit(POP_TOP, 0, -1)?;
-        }
-        self.control.active_with_exits.push(WithExitContext {
+        let context = WithExitContext {
             location: self.source_location(item.context_expr.range()),
             is_async: true,
-        });
-        let body_start = self.assembler.instruction_count();
-        if remaining.is_empty() {
-            if !matches!(body, [Stmt::Pass(_)]) {
-                self.compile_suite(body)?;
-            }
-        } else {
-            self.compile_async_with_items(remaining, body, false)?;
-        }
-        if remaining.is_empty()
-            && self.assembler.instruction_count() == body_start
-            && let Some(statement) = body.last()
-        {
-            self.assembler
-                .set_location(self.source_location(statement.range()));
-            self.emit(NOP, 0, 0)?;
-        }
-        let mut region_exclusions = self
-            .control
-            .active_with_region_exclusions
-            .pop()
-            .expect("active async with statement has region exclusions");
-        self.control.active_with_exits.pop();
+        };
+        let ((), mut region_exclusions) = self.with_region_exclusion_collector(
+            |control| &mut control.active_with_region_exclusions,
+            |compiler| {
+                if let Some(target) = &item.optional_vars {
+                    compiler.compile_store_target(target)?;
+                } else {
+                    compiler.emit(POP_TOP, 0, -1)?;
+                }
+                compiler.with_with_context(context, false, |compiler| {
+                    let body_start = compiler.assembler.instruction_count();
+                    if remaining.is_empty() {
+                        if !matches!(body, [Stmt::Pass(_)]) {
+                            compiler.compile_suite(body)?;
+                        }
+                    } else {
+                        compiler.compile_async_with_items(remaining, body, false)?;
+                    }
+                    if remaining.is_empty()
+                        && compiler.assembler.instruction_count() == body_start
+                        && let Some(statement) = body.last()
+                    {
+                        compiler
+                            .assembler
+                            .set_location(compiler.source_location(statement.range()));
+                        compiler.emit(NOP, 0, 0)?;
+                    }
+                    Ok(())
+                })
+            },
+        )?;
         if remaining.is_empty()
             && matches!(body, [Stmt::Expr(expression)] if fold_constant(&expression.value).is_some())
         {
