@@ -1,5 +1,9 @@
+#[cfg(not(unix))]
+use std::io::Read;
+#[cfg(unix)]
+use std::mem::MaybeUninit;
 use std::time::{Duration, Instant};
-use std::{borrow::Cow, io::Read, path::Path};
+use std::{borrow::Cow, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
@@ -800,6 +804,45 @@ pub struct DataWithCachePolicy {
     cache_policy: OwnedArchive<CachePolicy>,
 }
 
+#[cfg(unix)]
+#[expect(unsafe_code, reason = "read file contents without zero-filling")]
+fn read_exact_uninit(file: &mut fs_err::File, file_size: usize) -> std::io::Result<AlignedVec> {
+    let mut aligned_bytes = AlignedVec::with_capacity(file_size);
+    let mut initialized_len = 0;
+    while initialized_len < file_size {
+        // SAFETY: The pointer covers the uninitialized portion of the
+        // allocation, which has `file_size - initialized_len` bytes remaining.
+        let uninitialized = unsafe {
+            std::slice::from_raw_parts_mut(
+                aligned_bytes
+                    .as_mut_ptr()
+                    .add(initialized_len)
+                    .cast::<MaybeUninit<u8>>(),
+                file_size - initialized_len,
+            )
+        };
+        match rustix::io::read(&*file, uninitialized) {
+            Ok(([], _)) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+            Ok((initialized, _)) => initialized_len += initialized.len(),
+            Err(rustix::io::Errno::INTR) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    // SAFETY: `rustix::io::read` initialized the entire allocation.
+    unsafe {
+        aligned_bytes.set_len(file_size);
+    }
+    Ok(aligned_bytes)
+}
+
+#[cfg(not(unix))]
+fn read_exact_uninit(file: &mut fs_err::File, file_size: usize) -> std::io::Result<AlignedVec> {
+    let mut aligned_bytes = AlignedVec::with_capacity(file_size);
+    aligned_bytes.resize(file_size, 0);
+    file.read_exact(&mut aligned_bytes)?;
+    Ok(aligned_bytes)
+}
+
 impl DataWithCachePolicy {
     /// Loads cached data and its associated HTTP cache policy from the given
     /// file path in an asynchronous fashion (via `spawn_blocking`).
@@ -841,9 +884,7 @@ impl DataWithCachePolicy {
                 ))
             })?;
 
-        let mut aligned_bytes = AlignedVec::with_capacity(file_size);
-        aligned_bytes.resize(file_size, 0);
-        file.read_exact(&mut aligned_bytes).map_err(ErrorKind::Io)?;
+        let aligned_bytes = read_exact_uninit(&mut file, file_size).map_err(ErrorKind::Io)?;
         Self::from_aligned_bytes(aligned_bytes)
     }
 

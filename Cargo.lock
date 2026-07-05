@@ -6233,6 +6233,7 @@ dependencies = [
  "rkyv",
  "rmp-serde",
  "rustc-hash",
+ "rustix 1.1.4",
  "rustls",
  "rustls-native-certs",
  "rustls-pki-types",

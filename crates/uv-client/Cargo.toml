@@ -75,6 +75,9 @@ tracing = { workspace = true }
 url = { workspace = true }
 webpki-root-certs = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true }
+
 [dev-dependencies]
 anyhow = { workspace = true }
 http-body-util = { workspace = true }
