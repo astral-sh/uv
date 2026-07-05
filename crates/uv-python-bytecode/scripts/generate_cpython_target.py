@@ -268,8 +268,11 @@ def render(sources: dict[str, str]) -> str:
 
 
 def check_numeric_authority() -> None:
-    for relative in ("src/compiler.rs", "src/assembler.rs"):
-        source = (CRATE_ROOT / relative).read_text()
+    paths = [CRATE_ROOT / "src" / "compiler.rs"]
+    paths.extend(sorted((CRATE_ROOT / "src" / "assembler").rglob("*.rs")))
+    for path in paths:
+        relative = path.relative_to(CRATE_ROOT)
+        source = path.read_text()
         if re.search(r"Opcode::new\s*\(", source):
             raise ValueError(f"{relative} constructs Opcode outside the target module")
         for name in parse_opcodes_from_generated_names():
