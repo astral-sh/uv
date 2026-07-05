@@ -654,12 +654,16 @@ impl Cache {
 
         // An environment that lives in the archive bucket can itself reference other archives
         // via internal symlinks (e.g., under `--link-mode=symlink`). Wheel archives contain no
-        // further archive references, so a single level of indirection suffices.
+        // further archive references, so a single level of indirection suffices. Links to an
+        // environment archive point at the archive root, while an environment's internal
+        // symlinks resolve to paths within other archives; only the former need to be walked.
         let mut environment_archives = FxHashSet::default();
         for (target, links) in raw_environment_references {
             let target = match archive_entry(&archive_root, &target) {
                 Some(entry) => {
-                    environment_archives.insert(entry.clone());
+                    if entry == target {
+                        environment_archives.insert(entry.clone());
+                    }
                     entry
                 }
                 None => target,
@@ -976,27 +980,32 @@ impl Cache {
                 }) {
                     let entry = entry?;
 
-                    // On Unix, archive references use symlinks.
-                    if cfg!(unix) {
-                        if !entry.file_type().is_symlink() {
-                            continue;
+                    // On Unix, archive references are symlinks. On Windows, archive references
+                    // are files containing structured data ([`Link`]), though environments may
+                    // also contain real symlinks (e.g., under `--link-mode=symlink`).
+                    if entry.path_is_symlink() {
+                        if let Ok(target) = fs_err::canonicalize(entry.path()) {
+                            references
+                                .entry(target)
+                                .or_default()
+                                .push(entry.path().to_path_buf());
                         }
+                        continue;
                     }
 
-                    // On Windows, archive references are files containing structured data.
-                    if cfg!(windows) {
-                        if !entry.file_type().is_file() {
-                            continue;
-                        }
+                    if cfg!(unix) {
+                        continue;
+                    }
 
-                        // Avoid reading files that are too large to be links (e.g., the contents
-                        // of an environment).
-                        if entry
-                            .metadata()
-                            .is_ok_and(|metadata| metadata.len() > MAX_LINK_SIZE)
-                        {
-                            continue;
-                        }
+                    if !entry.file_type().is_file() {
+                        continue;
+                    }
+
+                    // Avoid reading files that are too large to be links (e.g., the contents of
+                    // an environment). Skip files whose size can't be determined.
+                    match entry.metadata() {
+                        Ok(metadata) if metadata.len() <= MAX_LINK_SIZE => {}
+                        _ => continue,
                     }
 
                     if let Ok(target) = self.resolve_link(entry.path()) {
