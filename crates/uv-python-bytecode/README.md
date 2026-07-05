@@ -63,8 +63,9 @@ the authoritative compatibility gate.
 
 ## Updating the CPython target
 
-Opcode IDs, inline-cache widths, stack metadata, code flags, local-kind bits, magic number, and
-target provenance are generated from CPython tag `v3.14.5` at commit
+Opcode IDs, inline-cache widths, opcode flags and predicates, operand values, stack metadata, code
+flags, local-kind bits, magic number, marshal format tags, and target provenance are generated from
+CPython tag `v3.14.5` at commit
 `5607950ef232dad16d75c0cf53101d9649d89115`. Regenerate the checked-in module from a checkout at
 that exact commit, then verify that it is current:
 
@@ -73,8 +74,10 @@ python3 scripts/generate_cpython_target.py --cpython /path/to/cpython
 python3 scripts/generate_cpython_target.py --cpython /path/to/cpython --check
 ```
 
-The generator rejects a checkout at any other commit and records hashes for every CPython header
-that contributes target metadata.
+The generator rejects a checkout at any other commit and records hashes for every CPython source
+file that contributes target or marshal-format metadata. Instruction metadata is emitted under
+`src/target`; the independently versioned marshal protocol constants are emitted under
+`src/marshal`.
 
 The Ruff dependencies are pinned to a specific Git revision because Ruff's parser crates are not
 published independently.

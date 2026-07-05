@@ -1,9 +1,9 @@
 use crate::compiler::{CodeObject, Constant};
 
-use super::{
-    FLAG_REF, TYPE_ASCII, TYPE_ASCII_INTERNED, TYPE_BINARY_COMPLEX, TYPE_BINARY_FLOAT, TYPE_BYTES,
-    TYPE_CODE, TYPE_ELLIPSIS, TYPE_FALSE, TYPE_FROZENSET, TYPE_INT, TYPE_INTERNED, TYPE_LONG,
-    TYPE_NONE, TYPE_SHORT_ASCII, TYPE_SHORT_ASCII_INTERNED, TYPE_SLICE, TYPE_SMALL_TUPLE,
+use super::v5::{
+    FLAG_REF, TYPE_ASCII, TYPE_ASCII_INTERNED, TYPE_BINARY_COMPLEX, TYPE_BINARY_FLOAT, TYPE_CODE,
+    TYPE_ELLIPSIS, TYPE_FALSE, TYPE_FROZENSET, TYPE_INT, TYPE_INTERNED, TYPE_LONG, TYPE_NONE,
+    TYPE_SHORT_ASCII, TYPE_SHORT_ASCII_INTERNED, TYPE_SLICE, TYPE_SMALL_TUPLE, TYPE_STRING,
     TYPE_TRUE, TYPE_TUPLE, TYPE_UNICODE,
 };
 
@@ -211,7 +211,7 @@ pub(super) fn constant_sort_key(value: &Constant) -> Vec<u8> {
                 output.extend_from_slice(value);
             }
             Constant::Bytes(value) => {
-                output.push(TYPE_BYTES | flag);
+                output.push(TYPE_STRING | flag);
                 output.extend_from_slice(
                     &u32::try_from(value.len())
                         .expect("sort-key bytes length fits in u32")

@@ -7,11 +7,11 @@ use super::key::{
     ObjectKey, code_bytes_key, code_key, constant_key, constant_sort_key, constants_tuple_key,
     local_kinds_key, locals_tuple_key, slice_member_uses_identity, strings_tuple_key,
 };
-use super::{
-    FLAG_REF, TYPE_ASCII, TYPE_ASCII_INTERNED, TYPE_BINARY_COMPLEX, TYPE_BINARY_FLOAT, TYPE_BYTES,
-    TYPE_CODE, TYPE_ELLIPSIS, TYPE_FALSE, TYPE_FROZENSET, TYPE_INT, TYPE_INTERNED, TYPE_LONG,
-    TYPE_NONE, TYPE_REF, TYPE_SHORT_ASCII, TYPE_SHORT_ASCII_INTERNED, TYPE_SLICE, TYPE_SMALL_TUPLE,
-    TYPE_TRUE, TYPE_TUPLE, TYPE_UNICODE,
+use super::v5::{
+    FLAG_REF, TYPE_ASCII, TYPE_ASCII_INTERNED, TYPE_BINARY_COMPLEX, TYPE_BINARY_FLOAT, TYPE_CODE,
+    TYPE_ELLIPSIS, TYPE_FALSE, TYPE_FROZENSET, TYPE_INT, TYPE_INTERNED, TYPE_LONG, TYPE_NONE,
+    TYPE_REF, TYPE_SHORT_ASCII, TYPE_SHORT_ASCII_INTERNED, TYPE_SLICE, TYPE_SMALL_TUPLE,
+    TYPE_STRING, TYPE_TRUE, TYPE_TUPLE, TYPE_UNICODE,
 };
 
 pub(crate) fn encode_code(code: &CodeObject) -> Vec<u8> {
@@ -63,7 +63,7 @@ impl Writer<'_> {
         let Some(flag) = self.begin_object(key, force_reference) else {
             return;
         };
-        self.byte(TYPE_BYTES | flag);
+        self.byte(TYPE_STRING | flag);
         self.long(value.len().try_into().expect("marshal value exceeds 4 GiB"));
         self.output.extend_from_slice(value);
     }
@@ -338,7 +338,7 @@ impl Writer<'_> {
                 self.output.extend_from_slice(value);
             }
             Constant::Bytes(value) => {
-                self.byte(TYPE_BYTES | flag);
+                self.byte(TYPE_STRING | flag);
                 self.long(value.len().try_into().expect("marshal value exceeds 4 GiB"));
                 self.output.extend_from_slice(value);
             }

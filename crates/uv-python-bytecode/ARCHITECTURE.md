@@ -179,17 +179,34 @@ cache width.
 
 - target tag, commit, version, implementation, and magic number;
 - physical compiled-code opcodes and inline-cache widths;
+- opcode metadata flags and control-flow predicates;
+- typed operand values for intrinsics, function attributes, common constants, resume points,
+  binary and comparison operations, conversions, and special-method loads;
 - code flags and local-kind bits; and
 - separate dynamic pop and push counts used by assembler dataflow.
+
+`src/marshal/v5.rs` is generated separately from CPython's marshal sources. It contains only the
+version and wire tags for marshal format 5; the generic graph, reference, ordering, and encoding
+logic remains handwritten in `src/marshal`.
 
 The generator reads these CPython files:
 
 - `Include/opcode_ids.h`;
+- `Include/opcode.h`;
+- `Include/object.h`;
+- `Include/ceval.h`;
 - `Include/internal/pycore_opcode_metadata.h`;
+- `Include/internal/pycore_opcode_utils.h`;
+- `Include/internal/pycore_intrinsics.h`;
+- `Include/internal/pycore_ceval.h`;
 - `Include/cpython/code.h`;
 - `Include/internal/pycore_code.h`;
-- `Include/internal/pycore_magic_number.h`; and
-- `Include/patchlevel.h`.
+- `Include/internal/pycore_magic_number.h`;
+- `Include/patchlevel.h`;
+- `Python/codegen.c`;
+- `Python/flowgraph.c`;
+- `Include/marshal.h`; and
+- `Python/marshal.c`.
 
 Run it from the repository root:
 
@@ -202,12 +219,12 @@ python3 crates/uv-python-bytecode/scripts/generate_cpython_target.py \
 ```
 
 The checkout must be at the exact pinned commit. Generation verifies the commit, the release tag
-when available, the expected version, opcode and stack-metadata completeness, and cache references.
-The output records a SHA-256 digest for every input header and is formatted before comparison.
-`--check` also rejects direct `Opcode::new` calls and duplicated numeric opcode constants in the
-compiler and assembler.
+when available, the expected version, opcode, operand, predicate, stack, and marshal-metadata
+completeness, and cache references. Each output records a SHA-256 digest for its input sources and
+is formatted before comparison. `--check` also rejects direct `Opcode::new` calls and duplicated
+numeric opcode constants in the compiler and assembler.
 
-Do not hand-edit the generated file. Internal compiler state that cannot appear in output should
+Do not hand-edit the generated files. Internal compiler state that cannot appear in output should
 be represented by typed Rust state or instruction flags, not by inventing a private bytecode
 opcode.
 
