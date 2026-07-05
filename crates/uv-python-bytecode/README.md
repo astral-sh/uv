@@ -4,6 +4,9 @@
 bytecode. It uses Ruff's parser and does not embed or link a Python runtime. CPython 3.14.5 is only
 needed to execute generated `.pyc` files and to serve as the compatibility oracle in tests.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the pipeline, ownership boundaries, assembler contracts,
+generated-target workflow, and required correctness gate.
+
 The backend currently implements:
 
 - CPython 3.14.5 code objects, inline caches, extended arguments, jumps, source-location tables,
