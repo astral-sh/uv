@@ -48,9 +48,6 @@ const STORE_SLICE: Opcode = Opcode::new(37, 0);
 // shape. The assembler mirrors that dataflow pass.
 const LOAD_FAST: Opcode = Opcode::new(84, 0);
 const LOAD_FAST_CHECK: Opcode = Opcode::new(88, 0);
-// Internal marker: the assembler lowers this to `LOAD_FAST`, while retaining
-// the code generator's conservative ownership hint for the final CFG pass.
-const LOAD_FAST_OWNED: Opcode = Opcode::new(121, 0);
 const LOAD_FAST_AND_CLEAR: Opcode = Opcode::new(85, 0);
 const LOAD_FROM_DICT_OR_DEREF: Opcode = Opcode::new(90, 0);
 const LOAD_FROM_DICT_OR_GLOBALS: Opcode = Opcode::new(91, 0);
@@ -10250,7 +10247,7 @@ impl Compiler {
         child.emit_function_prologue()?;
         let generator_location = child.source_location(generator_range);
         child.assembler.set_location(generator_location);
-        child.emit(LOAD_FAST_OWNED, 0, 1)?;
+        child.emit_owned_fast(0, 1)?;
         child.compile_generator_expression_loop(
             &generator.generators,
             0,
@@ -12000,15 +11997,11 @@ impl Compiler {
                             self.emit(LOAD_DEREF, index, 1)
                         }
                     } else if self.initialized_locals.contains(name) {
-                        self.emit(
-                            if self.owned_load_locals.contains(name) {
-                                LOAD_FAST_OWNED
-                            } else {
-                                LOAD_FAST
-                            },
-                            index,
-                            1,
-                        )
+                        if self.owned_load_locals.contains(name) {
+                            self.emit_owned_fast(index, 1)
+                        } else {
+                            self.emit(LOAD_FAST, index, 1)
+                        }
                     } else {
                         self.emit(LOAD_FAST_CHECK, index, 1)
                     }
@@ -12956,6 +12949,13 @@ impl Compiler {
         self.apply_stack_effect(effect)?;
         self.assembler
             .emit_with_depth(opcode, argument, self.depth.cast_unsigned());
+        Ok(())
+    }
+
+    fn emit_owned_fast(&mut self, argument: u32, effect: i32) -> Result<(), CompileError> {
+        self.apply_stack_effect(effect)?;
+        self.assembler
+            .emit_owned_fast_with_depth(argument, self.depth.cast_unsigned());
         Ok(())
     }
 

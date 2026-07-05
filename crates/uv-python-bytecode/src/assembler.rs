@@ -12,6 +12,70 @@ pub(crate) struct AssembledCode {
     pub(crate) removed_max_depth: Option<u32>,
 }
 
+#[cfg(any(test, debug_assertions))]
+#[derive(Clone, Copy, Debug)]
+enum AssemblerStage {
+    RemoveUnreachableInitial,
+    OptimizeBooleanConversions,
+    ThreadForwardJumps,
+    RemoveUnreachableAfterThreading,
+    RemoveRedundantForwardJumpsEarly,
+    OptimizeRedundantStoreFast,
+    OptimizeSwapRuns,
+    ApplyStaticSwaps,
+    DuplicateExitBlocks,
+    AddChecksForUninitializedLoads,
+    FuseSuperinstructions,
+    PushColdBlocksToEnd,
+    RemoveRedundantCheckedLoads,
+    PropagateLocationsWithinBlocks,
+    RemoveRedundantSwapsBeforePops,
+    RemoveRedundantNops,
+    RemoveRedundantForwardJumpsLate,
+    OptimizeLoadFast,
+    FinalLayout,
+}
+
+#[cfg(any(test, debug_assertions))]
+impl AssemblerStage {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::RemoveUnreachableInitial => "remove_unreachable_instructions (initial)",
+            Self::OptimizeBooleanConversions => "optimize_boolean_conversions",
+            Self::ThreadForwardJumps => "thread_forward_jumps",
+            Self::RemoveUnreachableAfterThreading => {
+                "remove_unreachable_instructions (after threading)"
+            }
+            Self::RemoveRedundantForwardJumpsEarly => "remove_redundant_forward_jumps (early)",
+            Self::OptimizeRedundantStoreFast => "optimize_redundant_store_fast",
+            Self::OptimizeSwapRuns => "optimize_swap_runs",
+            Self::ApplyStaticSwaps => "apply_static_swaps",
+            Self::DuplicateExitBlocks => "duplicate_exit_blocks",
+            Self::AddChecksForUninitializedLoads => "add_checks_for_uninitialized_loads",
+            Self::FuseSuperinstructions => "fuse_superinstructions",
+            Self::PushColdBlocksToEnd => "push_cold_blocks_to_end",
+            Self::RemoveRedundantCheckedLoads => "remove_redundant_checked_loads",
+            Self::PropagateLocationsWithinBlocks => "propagate_locations_within_blocks",
+            Self::RemoveRedundantSwapsBeforePops => "remove_redundant_swaps_before_pops",
+            Self::RemoveRedundantNops => "remove_redundant_nops",
+            Self::RemoveRedundantForwardJumpsLate => "remove_redundant_forward_jumps (late)",
+            Self::OptimizeLoadFast => "optimize_load_fast",
+            Self::FinalLayout => "final jump layout",
+        }
+    }
+
+    const fn requires_full_reachability(self) -> bool {
+        matches!(
+            self,
+            Self::RemoveUnreachableInitial | Self::RemoveUnreachableAfterThreading
+        )
+    }
+
+    const fn requires_ordered_exception_regions(self) -> bool {
+        matches!(self, Self::FinalLayout)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct Label(u32);
 
@@ -41,40 +105,180 @@ pub(crate) enum Operand {
     Backward(Label),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct InstructionFlags(u16);
+
+impl InstructionFlags {
+    const FORCE_OWNED_LOAD: Self = Self(1 << 0);
+    const STRICT_OWNED_LOAD: Self = Self(1 << 1);
+    const INLINE_SMALL_EXIT: Self = Self(1 << 2);
+    const PRESERVE_INLINED_JUMP_NOP: Self = Self(1 << 3);
+    // Whether an incoming jump may be threaded through this instruction.
+    const ALLOW_JUMP_THREADING_TARGET: Self = Self(1 << 4);
+    // Whether an unlocated block ending here may be inlined into predecessors.
+    const ALLOW_NO_LOCATION_BLOCK_INLINING: Self = Self(1 << 5);
+    const PRESERVE_NO_LOCATION: Self = Self(1 << 6);
+    const PREVENT_FUSION_WITH_NEXT: Self = Self(1 << 7);
+    const PREVENT_FUSION_WITH_PREVIOUS: Self = Self(1 << 8);
+    const DEFER_REDUNDANT_JUMP_REMOVAL: Self = Self(1 << 9);
+    const PRESERVE_NOP_AFTER_JUMP_THREADING: Self = Self(1 << 10);
+    const CONVERTED_POP_BLOCK: Self = Self(1 << 11);
+    // Exclude this instruction from every exception region after CFG normalization.
+    const EXCLUDE_EXCEPTION: Self = Self(1 << 12);
+    // CPython retains stale exception ownership for the short form of some synthetic handler-exit
+    // jumps, but not once the jump needs an `EXTENDED_ARG`.
+    const EXCLUDE_EXCEPTION_IF_EXTENDED: Self = Self(1 << 13);
+    // Stop borrowed-load traversal at an optimized-away empty CFG block without exposing a label
+    // to the other assembler passes.
+    const BORROW_UNREACHABLE_ENTRY: Self = Self(1 << 14);
+
+    const DEFAULT: Self = Self(Self::INLINE_SMALL_EXIT.0 | Self::ALLOW_JUMP_THREADING_TARGET.0);
+
+    const fn contains(self, flag: Self) -> bool {
+        self.0 & flag.0 != 0
+    }
+
+    fn insert(&mut self, flag: Self) {
+        self.0 |= flag.0;
+    }
+
+    fn remove(&mut self, flag: Self) {
+        self.0 &= !flag.0;
+    }
+
+    fn set(&mut self, flag: Self, enabled: bool) {
+        if enabled {
+            self.insert(flag);
+        } else {
+            self.remove(flag);
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Instruction {
     opcode: Opcode,
     operand: Operand,
     location: SourceLocation,
     depth_after: Option<u32>,
-    force_owned_load: bool,
-    strict_owned_load: bool,
-    inline_small_exit: bool,
-    preserve_inlined_jump_nop: bool,
+    flags: InstructionFlags,
     // Retain the jump's line event only if its original target is copied directly.
     preserve_direct_inlined_jump_nop: Option<Label>,
-    // Whether an incoming jump may be threaded through this instruction.
-    allow_jump_threading_target: bool,
-    // Whether an unlocated block ending in this instruction may be inlined into predecessors.
-    allow_no_location_block_inlining: bool,
-    preserve_no_location: bool,
-    prevent_fusion_with_next: bool,
-    prevent_fusion_with_previous: bool,
-    defer_redundant_jump_removal: bool,
-    preserve_nop_after_jump_threading: bool,
-    converted_pop_block: bool,
     // `NOT_TAKEN` is added after CPython labels exception handlers. The new instruction keeps
     // whatever exception target remains in its reused CFG slot, if there is one.
     normalized_exception_owner: Option<bool>,
-    // Exclude this instruction from all exception regions after CFG normalization.
-    exclude_exception: bool,
-    // CPython's cold-block optimizer retains stale exception ownership for the short form of
-    // certain synthetic handler-exit jumps, but not when the jump needs an `EXTENDED_ARG`.
-    exclude_exception_if_extended: bool,
-    // CPython's borrowed-load traversal stops at some optimized-away empty CFG blocks. This
-    // marks the first instruction after such a block without exposing a synthetic label to the
-    // other assembler passes.
-    borrow_unreachable_entry: bool,
+}
+
+impl Instruction {
+    fn new(
+        opcode: Opcode,
+        operand: Operand,
+        location: SourceLocation,
+        depth_after: Option<u32>,
+    ) -> Self {
+        Self {
+            opcode,
+            operand,
+            location,
+            depth_after,
+            flags: InstructionFlags::DEFAULT,
+            preserve_direct_inlined_jump_nop: None,
+            normalized_exception_owner: None,
+        }
+    }
+
+    /// Creates an instruction introduced by an assembler pass rather than the compiler.
+    fn synthetic(
+        opcode: Opcode,
+        operand: Operand,
+        location: SourceLocation,
+        depth_after: Option<u32>,
+    ) -> Self {
+        let mut instruction = Self::new(opcode, operand, location, depth_after);
+        instruction.remove_flag(InstructionFlags::INLINE_SMALL_EXIT);
+        instruction
+    }
+
+    const fn has_flag(&self, flag: InstructionFlags) -> bool {
+        self.flags.contains(flag)
+    }
+
+    fn insert_flag(&mut self, flag: InstructionFlags) {
+        self.flags.insert(flag);
+    }
+
+    fn remove_flag(&mut self, flag: InstructionFlags) {
+        self.flags.remove(flag);
+    }
+
+    fn set_flag(&mut self, flag: InstructionFlags, enabled: bool) {
+        self.flags.set(flag, enabled);
+    }
+
+    fn with_flag(mut self, flag: InstructionFlags, enabled: bool) -> Self {
+        self.set_flag(flag, enabled);
+        self
+    }
+
+    /// Combines the provenance of two instructions replaced by one superinstruction.
+    fn fused(opcode: Opcode, operand: Operand, first: Self, second: Self) -> Self {
+        let mut flags = InstructionFlags(0);
+        flags.set(
+            InstructionFlags::FORCE_OWNED_LOAD,
+            first.has_flag(InstructionFlags::FORCE_OWNED_LOAD)
+                || second.has_flag(InstructionFlags::FORCE_OWNED_LOAD),
+        );
+        flags.set(
+            InstructionFlags::STRICT_OWNED_LOAD,
+            first.has_flag(InstructionFlags::STRICT_OWNED_LOAD)
+                || second.has_flag(InstructionFlags::STRICT_OWNED_LOAD),
+        );
+        flags.set(
+            InstructionFlags::INLINE_SMALL_EXIT,
+            first.has_flag(InstructionFlags::INLINE_SMALL_EXIT)
+                && second.has_flag(InstructionFlags::INLINE_SMALL_EXIT),
+        );
+        flags.set(
+            InstructionFlags::ALLOW_JUMP_THREADING_TARGET,
+            first.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET)
+                && second.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET),
+        );
+        for flag in [
+            InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING,
+            InstructionFlags::PRESERVE_NO_LOCATION,
+            InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL,
+            InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING,
+            InstructionFlags::CONVERTED_POP_BLOCK,
+            InstructionFlags::EXCLUDE_EXCEPTION,
+            InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED,
+        ] {
+            flags.set(flag, first.has_flag(flag) || second.has_flag(flag));
+        }
+        flags.set(
+            InstructionFlags::PREVENT_FUSION_WITH_NEXT,
+            second.has_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT),
+        );
+        flags.set(
+            InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS,
+            first.has_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS),
+        );
+        flags.set(
+            InstructionFlags::BORROW_UNREACHABLE_ENTRY,
+            first.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY),
+        );
+
+        Self {
+            opcode,
+            operand,
+            location: first.location,
+            depth_after: second.depth_after,
+            flags,
+            preserve_direct_inlined_jump_nop: None,
+            normalized_exception_owner: first
+                .normalized_exception_owner
+                .or(second.normalized_exception_owner),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -246,7 +450,7 @@ impl Assembler {
         let Some((mut index, instruction)) = instructions.next() else {
             return false;
         };
-        if !instruction.converted_pop_block {
+        if !instruction.has_flag(InstructionFlags::CONVERTED_POP_BLOCK) {
             return false;
         }
         if let Some((previous_index, previous)) = instructions.next()
@@ -266,41 +470,41 @@ impl Assembler {
     /// Prevents fusion with the next instruction without introducing a CFG boundary.
     pub(crate) fn prevent_last_instruction_fusion(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.prevent_fusion_with_next = true;
+            instruction.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT);
         }
     }
 
     /// Prevents fusion with the previous instruction without introducing a CFG boundary.
     pub(crate) fn prevent_last_instruction_fusion_with_previous(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.prevent_fusion_with_previous = true;
+            instruction.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS);
         }
     }
 
     /// Defers a redundant jump until the pass after exit-block duplication.
     pub(crate) fn defer_last_jump_removal(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.defer_redundant_jump_removal = true;
+            instruction.insert_flag(InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL);
         }
     }
 
     /// Allows incoming jumps to thread through the last jump before retaining it as a NOP.
     pub(crate) fn preserve_last_redundant_jump_nop_after_threading(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.defer_redundant_jump_removal = true;
-            instruction.preserve_nop_after_jump_threading = true;
+            instruction.insert_flag(InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL);
+            instruction.insert_flag(InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING);
         }
     }
 
     pub(crate) fn prevent_last_jump_inlining(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.inline_small_exit = false;
+            instruction.remove_flag(InstructionFlags::INLINE_SMALL_EXIT);
         }
     }
 
     pub(crate) fn preserve_last_inlined_jump_nop(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.preserve_inlined_jump_nop = true;
+            instruction.insert_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
         }
     }
 
@@ -314,27 +518,27 @@ impl Assembler {
 
     pub(crate) fn prevent_last_jump_threading_target(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.allow_jump_threading_target = false;
+            instruction.remove_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET);
         }
     }
 
     pub(crate) fn prepare_last_no_location_block_for_inlining(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
             instruction.location = SourceLocation::NONE;
-            instruction.allow_jump_threading_target = false;
-            instruction.allow_no_location_block_inlining = true;
+            instruction.remove_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET);
+            instruction.insert_flag(InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING);
         }
     }
 
     pub(crate) fn preserve_last_no_location(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.preserve_no_location = true;
+            instruction.insert_flag(InstructionFlags::PRESERVE_NO_LOCATION);
         }
     }
 
     pub(crate) fn mark_last_as_converted_pop_block(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.converted_pop_block = true;
+            instruction.insert_flag(InstructionFlags::CONVERTED_POP_BLOCK);
         }
     }
 
@@ -389,13 +593,13 @@ impl Assembler {
 
     pub(crate) fn exclude_last_instruction_from_exception_if_extended(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.exclude_exception_if_extended = true;
+            instruction.insert_flag(InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED);
         }
     }
 
     pub(crate) fn exclude_last_instruction_from_exception(&mut self) {
         if let Some(instruction) = self.last_instruction_mut() {
-            instruction.exclude_exception = true;
+            instruction.insert_flag(InstructionFlags::EXCLUDE_EXCEPTION);
         }
     }
 
@@ -411,6 +615,15 @@ impl Assembler {
 
     pub(crate) fn emit_with_depth(&mut self, opcode: Opcode, argument: u32, depth_after: u32) {
         self.emit_operand_with_depth(opcode, Operand::Value(argument), Some(depth_after));
+    }
+
+    pub(crate) fn emit_owned_fast_with_depth(&mut self, argument: u32, depth_after: u32) {
+        self.emit_operand_with_depth_and_ownership(
+            Opcode::new(84, 0),
+            Operand::Value(argument),
+            Some(depth_after),
+            true,
+        );
     }
 
     pub(crate) fn emit_placeholder_with_depth(
@@ -568,42 +781,120 @@ impl Assembler {
 
     fn emit_operand_with_depth(
         &mut self,
-        mut opcode: Opcode,
+        opcode: Opcode,
         operand: Operand,
         depth_after: Option<u32>,
     ) {
-        let strict_owned_load = self.strict_owned_loads && matches!(opcode.code, 84 | 121);
-        let force_owned_load = strict_owned_load
-            || opcode.code == 121
+        self.emit_operand_with_depth_and_ownership(opcode, operand, depth_after, false);
+    }
+
+    fn emit_operand_with_depth_and_ownership(
+        &mut self,
+        opcode: Opcode,
+        operand: Operand,
+        depth_after: Option<u32>,
+        explicitly_owned: bool,
+    ) {
+        let strict_owned_load = self.strict_owned_loads && opcode.code == 84;
+        let force_owned_load = explicitly_owned
+            || strict_owned_load
             || (opcode.code == 84 && !self.load_fast_borrowing_enabled);
-        if force_owned_load {
-            opcode = Opcode::new(84, 0);
-        }
         let borrow_unreachable_entry =
             std::mem::take(&mut self.next_instruction_borrow_unreachable);
-        self.items.push(Item::Instruction(Instruction {
-            opcode,
-            operand,
-            location: self.location,
-            depth_after,
-            force_owned_load,
-            strict_owned_load,
-            inline_small_exit: true,
-            preserve_inlined_jump_nop: false,
-            preserve_direct_inlined_jump_nop: None,
-            allow_jump_threading_target: true,
-            allow_no_location_block_inlining: false,
-            preserve_no_location: false,
-            prevent_fusion_with_next: false,
-            prevent_fusion_with_previous: false,
-            defer_redundant_jump_removal: false,
-            preserve_nop_after_jump_threading: false,
-            converted_pop_block: false,
-            normalized_exception_owner: None,
-            exclude_exception: false,
-            exclude_exception_if_extended: false,
+        let mut instruction = Instruction::new(opcode, operand, self.location, depth_after);
+        instruction.set_flag(InstructionFlags::FORCE_OWNED_LOAD, force_owned_load);
+        instruction.set_flag(InstructionFlags::STRICT_OWNED_LOAD, strict_owned_load);
+        instruction.set_flag(
+            InstructionFlags::BORROW_UNREACHABLE_ENTRY,
             borrow_unreachable_entry,
-        }));
+        );
+        self.items.push(Item::Instruction(instruction));
+    }
+
+    #[cfg(any(test, debug_assertions))]
+    fn validate_structure(&self, stage: AssemblerStage) -> Result<(), CompileError> {
+        let invariant_error = |message: String| {
+            CompileError::Internal(format!(
+                "assembler invariant failed after {}: {message}",
+                stage.name()
+            ))
+        };
+
+        let mut label_positions = FxHashMap::default();
+        for (index, item) in self.items.iter().enumerate() {
+            let Item::Label(label) = item else {
+                continue;
+            };
+            if label_positions.insert(*label, index).is_some() {
+                return Err(invariant_error(format!(
+                    "label {} is bound more than once",
+                    label.0
+                )));
+            }
+        }
+
+        for (index, item) in self.items.iter().enumerate() {
+            let Item::Instruction(instruction) = item else {
+                continue;
+            };
+            let (target, is_forward) = match instruction.operand {
+                Operand::Value(_) => continue,
+                Operand::Forward(target) => (target, true),
+                Operand::Backward(target) => (target, false),
+            };
+            let Some(target_index) = label_positions.get(&target).copied() else {
+                return Err(invariant_error(format!(
+                    "instruction {index} targets unbound label {}",
+                    target.0
+                )));
+            };
+            if is_forward && target_index <= index {
+                return Err(invariant_error(format!(
+                    "instruction {index} has a forward operand to label {} at {target_index}",
+                    target.0
+                )));
+            }
+            if !is_forward && target_index >= index {
+                return Err(invariant_error(format!(
+                    "instruction {index} has a backward operand to label {} at {target_index}",
+                    target.0
+                )));
+            }
+        }
+
+        for (index, region) in self.exception_regions.iter().enumerate() {
+            let position = |label: Label, role: &str| {
+                label_positions.get(&label).copied().ok_or_else(|| {
+                    invariant_error(format!(
+                        "exception region {index} has an unbound {role} label {}",
+                        label.0
+                    ))
+                })
+            };
+            let start = position(region.start, "start")?;
+            let end = position(region.end, "end")?;
+            position(region.target, "target")?;
+            if stage.requires_ordered_exception_regions() && start > end {
+                return Err(invariant_error(format!(
+                    "exception region {index} starts at {start} after it ends at {end}"
+                )));
+            }
+        }
+
+        if stage.requires_full_reachability() {
+            let reachable = self.reachable_items();
+            if let Some(index) = self.items.iter().enumerate().find_map(|(index, item)| {
+                matches!(item, Item::Instruction(_))
+                    .then_some(index)
+                    .filter(|index| !reachable[*index])
+            }) {
+                return Err(invariant_error(format!(
+                    "instruction {index} remains unreachable"
+                )));
+            }
+        }
+
+        Ok(())
     }
 
     #[cfg(test)]
@@ -619,25 +910,61 @@ impl Assembler {
         parameter_count: usize,
     ) -> Result<AssembledCode, CompileError> {
         let mut removed_max_depth = self.remove_unreachable_instructions();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveUnreachableInitial)?;
         self.optimize_boolean_conversions();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::OptimizeBooleanConversions)?;
         self.thread_forward_jumps();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::ThreadForwardJumps)?;
         if let Some(depth) = self.remove_unreachable_instructions() {
             removed_max_depth = Some(removed_max_depth.map_or(depth, |current| current.max(depth)));
         }
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveUnreachableAfterThreading)?;
         self.remove_redundant_forward_jumps();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveRedundantForwardJumpsEarly)?;
         self.optimize_redundant_store_fast();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::OptimizeRedundantStoreFast)?;
         self.optimize_swap_runs();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::OptimizeSwapRuns)?;
         self.apply_static_swaps();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::ApplyStaticSwaps)?;
         self.duplicate_exit_blocks();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::DuplicateExitBlocks)?;
         self.add_checks_for_uninitialized_loads(local_count, parameter_count);
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::AddChecksForUninitializedLoads)?;
         self.fuse_superinstructions();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::FuseSuperinstructions)?;
         self.push_cold_blocks_to_end();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::PushColdBlocksToEnd)?;
         self.remove_redundant_checked_loads();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveRedundantCheckedLoads)?;
         self.propagate_locations_within_blocks();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::PropagateLocationsWithinBlocks)?;
         self.remove_redundant_swaps_before_pops();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveRedundantSwapsBeforePops)?;
         self.remove_redundant_nops();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveRedundantNops)?;
         self.remove_redundant_forward_jumps();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::RemoveRedundantForwardJumpsLate)?;
         self.optimize_load_fast();
+        #[cfg(any(test, debug_assertions))]
+        self.validate_structure(AssemblerStage::OptimizeLoadFast)?;
         let instruction_count = self.instruction_count();
         let mut extended_args = vec![0_u8; instruction_count];
         let mut resolved_arguments = vec![0_u32; instruction_count];
@@ -684,6 +1011,8 @@ impl Assembler {
             }
 
             if !changed {
+                #[cfg(any(test, debug_assertions))]
+                self.validate_structure(AssemblerStage::FinalLayout)?;
                 let line_table = self.line_table(&extended_args, first_line_number);
                 let exception_table = self.exception_table(&extended_args)?;
                 let max_depth = self
@@ -1111,8 +1440,8 @@ impl Assembler {
                 continue;
             };
             // A jump retained as a source-position NOP remains a CFG boundary.
-            if instruction.allow_jump_threading_target
-                && !instruction.preserve_inlined_jump_nop
+            if instruction.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET)
+                && !instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
                 && matches!(instruction.opcode.code, 75..=77)
                 && let operand @ (Operand::Forward(_) | Operand::Backward(_)) = instruction.operand
             {
@@ -1124,7 +1453,9 @@ impl Assembler {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
-            if instruction.opcode.code != JUMP_FORWARD || instruction.preserve_inlined_jump_nop {
+            if instruction.opcode.code != JUMP_FORWARD
+                || instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
+            {
                 continue;
             }
             let Operand::Forward(mut target) = instruction.operand else {
@@ -1171,14 +1502,14 @@ impl Assembler {
                 index += 1;
                 continue;
             }
-            if instruction.defer_redundant_jump_removal {
+            if instruction.has_flag(InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL) {
                 let Item::Instruction(instruction) = &mut self.items[index] else {
                     unreachable!();
                 };
-                instruction.defer_redundant_jump_removal = false;
-                if instruction.preserve_nop_after_jump_threading {
-                    instruction.preserve_nop_after_jump_threading = false;
-                    instruction.preserve_inlined_jump_nop = true;
+                instruction.remove_flag(InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL);
+                if instruction.has_flag(InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING) {
+                    instruction.remove_flag(InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING);
+                    instruction.insert_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
                 }
                 index += 1;
                 continue;
@@ -1205,27 +1536,27 @@ impl Assembler {
                     None
                 }
             });
-            if !instruction.preserve_inlined_jump_nop
+            if !instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
                 && (instruction.location.line < 0
                     || previous_line == Some(instruction.location.line)
                     || next_line == Some(instruction.location.line))
             {
                 self.items.remove(index);
-                if instruction.exclude_exception_if_extended
+                if instruction.has_flag(InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED)
                     && let Some(Item::Instruction(previous)) = self.items[..index]
                         .iter_mut()
                         .rev()
                         .find(|item| matches!(item, Item::Instruction(_)))
                 {
-                    previous.exclude_exception_if_extended = true;
+                    previous.insert_flag(InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED);
                 }
                 if instruction.location.line >= 0
                     && let Some(Item::Instruction(next)) = self.items[index..]
                         .iter_mut()
                         .find(|item| matches!(item, Item::Instruction(_)))
                     && next.location.line < 0
-                    && !next.preserve_no_location
-                    && !next.allow_no_location_block_inlining
+                    && !next.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
+                    && !next.has_flag(InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING)
                 {
                     next.location = instruction.location;
                 }
@@ -1377,7 +1708,7 @@ impl Assembler {
                     if let Item::Instruction(instruction) = item {
                         Some((
                             instruction.location,
-                            instruction.exclude_exception_if_extended,
+                            instruction.has_flag(InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED),
                         ))
                     } else {
                         None
@@ -1389,29 +1720,18 @@ impl Assembler {
                 index + 1,
                 vec![
                     Item::Label(label),
-                    Item::Instruction(Instruction {
-                        opcode: Opcode::new(76, 0),
-                        operand: Operand::Backward(target),
-                        location,
-                        depth_after: None,
-                        force_owned_load: false,
-                        strict_owned_load: false,
-                        inline_small_exit: false,
-                        preserve_inlined_jump_nop: false,
-                        preserve_direct_inlined_jump_nop: None,
-                        allow_jump_threading_target: true,
-                        allow_no_location_block_inlining: false,
-                        preserve_no_location: false,
-                        prevent_fusion_with_next: false,
-                        prevent_fusion_with_previous: false,
-                        defer_redundant_jump_removal: false,
-                        preserve_nop_after_jump_threading: false,
-                        converted_pop_block: false,
-                        normalized_exception_owner: None,
-                        exclude_exception: false,
-                        exclude_exception_if_extended,
-                        borrow_unreachable_entry: false,
-                    }),
+                    Item::Instruction(
+                        Instruction::synthetic(
+                            Opcode::new(76, 0),
+                            Operand::Backward(target),
+                            location,
+                            None,
+                        )
+                        .with_flag(
+                            InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED,
+                            exclude_exception_if_extended,
+                        ),
+                    ),
                 ],
             );
             block_labels.insert(index + 1, label);
@@ -1794,7 +2114,7 @@ impl Assembler {
                 .rev()
                 .find_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(instruction.inline_small_exit)
+                        Some(instruction.has_flag(InstructionFlags::INLINE_SMALL_EXIT))
                     } else {
                         None
                     }
@@ -1810,9 +2130,9 @@ impl Assembler {
                 .iter()
                 .rev()
                 .find_map(|item| match item {
-                    Item::Instruction(instruction) => {
-                        Some(instruction.allow_no_location_block_inlining)
-                    }
+                    Item::Instruction(instruction) => Some(
+                        instruction.has_flag(InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING),
+                    ),
                     Item::Label(_) => None,
                 })
                 .unwrap_or(false);
@@ -1871,7 +2191,7 @@ impl Assembler {
                     .find_map(|item| {
                         if let Item::Instruction(instruction) = item {
                             Some(
-                                instruction.preserve_inlined_jump_nop
+                                instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
                                     || matches!(
                                         (
                                             instruction.preserve_direct_inlined_jump_nop,
@@ -1939,36 +2259,19 @@ impl Assembler {
                     .unwrap_or(copied.len());
                 copied.insert(
                     position,
-                    Item::Instruction(Instruction {
-                        opcode: Opcode::new(27, 0),
-                        operand: Operand::Value(0),
-                        location: source_location,
-                        depth_after: None,
-                        force_owned_load: false,
-                        strict_owned_load: false,
-                        inline_small_exit: false,
-                        preserve_inlined_jump_nop: false,
-                        preserve_direct_inlined_jump_nop: None,
-                        allow_jump_threading_target: true,
-                        allow_no_location_block_inlining: false,
-                        preserve_no_location: false,
-                        prevent_fusion_with_next: false,
-                        prevent_fusion_with_previous: false,
-                        defer_redundant_jump_removal: false,
-                        preserve_nop_after_jump_threading: false,
-                        converted_pop_block: false,
-                        normalized_exception_owner: None,
-                        exclude_exception: false,
-                        exclude_exception_if_extended: false,
-                        borrow_unreachable_entry: false,
-                    }),
+                    Item::Instruction(Instruction::synthetic(
+                        Opcode::new(27, 0),
+                        Operand::Value(0),
+                        source_location,
+                        None,
+                    )),
                 );
             }
             if target_has_no_location && !(inline_no_location_block && predecessors[source] > 1) {
                 if let Some(Item::Instruction(instruction)) = copied
                     .iter_mut()
                     .find(|item| matches!(item, Item::Instruction(_)))
-                    && !instruction.preserve_no_location
+                    && !instruction.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
                 {
                     instruction.location = source_location;
                 }
@@ -2083,9 +2386,9 @@ impl Assembler {
                     .iter()
                     .find(|item| matches!(item, Item::Instruction(_)))
                 && first.opcode.code == 27
-                && first.converted_pop_block
+                && first.has_flag(InstructionFlags::CONVERTED_POP_BLOCK)
                 && first.location.line < 0
-                && !first.preserve_no_location
+                && !first.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
                 && let Some(location) = blocks.iter().enumerate().find_map(|(_, block)| {
                     block_jump_target(block)
                         .and_then(|label| label_blocks.get(&label).copied())
@@ -2138,7 +2441,7 @@ impl Assembler {
             if let Some(Item::Instruction(instruction)) = blocks[target]
                 .iter_mut()
                 .find(|item| matches!(item, Item::Instruction(_)))
-                && !instruction.preserve_no_location
+                && !instruction.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
             {
                 instruction.location = location;
             }
@@ -2177,7 +2480,9 @@ impl Assembler {
                 Item::Label(_) => {}
                 Item::Instruction(instruction) => {
                     block_has_instruction = true;
-                    if instruction.location.line < 0 && !instruction.preserve_no_location {
+                    if instruction.location.line < 0
+                        && !instruction.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
+                    {
                         if let Some(location) = previous {
                             instruction.location = location;
                         }
@@ -2210,7 +2515,7 @@ impl Assembler {
                 self.items.remove(index);
                 continue;
             }
-            if instruction.converted_pop_block
+            if instruction.has_flag(InstructionFlags::CONVERTED_POP_BLOCK)
                 && let Some(previous) = self.items[..index].iter().rev().find_map(|item| {
                     if let Item::Instruction(instruction) = item {
                         Some(instruction)
@@ -2930,7 +3235,7 @@ impl Assembler {
         let mut block = Vec::new();
         for (index, item) in self.items.iter().enumerate() {
             if (matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
-                || matches!(item, Item::Instruction(instruction) if instruction.borrow_unreachable_entry))
+                || matches!(item, Item::Instruction(instruction) if instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY)))
                 && !block.is_empty()
             {
                 blocks.push(std::mem::take(&mut block));
@@ -2941,7 +3246,8 @@ impl Assembler {
             block.push(index);
             if !matches!(instruction.operand, Operand::Value(_))
                 || matches!(instruction.opcode.code, 35 | 104 | 105)
-                || (instruction.opcode.code == 27 && instruction.preserve_inlined_jump_nop)
+                || (instruction.opcode.code == 27
+                    && instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP))
             {
                 blocks.push(std::mem::take(&mut block));
             }
@@ -2976,7 +3282,9 @@ impl Assembler {
             .collect::<FxHashSet<_>>();
         borrow_unreachable_blocks.extend(self.items.iter().enumerate().filter_map(
             |(index, item)| match item {
-                Item::Instruction(instruction) if instruction.borrow_unreachable_entry => {
+                Item::Instruction(instruction)
+                    if instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY) =>
+                {
                     item_blocks[index]
                 }
                 Item::Instruction(_) | Item::Label(_) => None,
@@ -3001,8 +3309,8 @@ impl Assembler {
             let Item::Instruction(last) = self.items[last_index] else {
                 unreachable!();
             };
-            let folded_jump_has_no_fallthrough =
-                last.opcode.code == 27 && last.preserve_inlined_jump_nop;
+            let folded_jump_has_no_fallthrough = last.opcode.code == 27
+                && last.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
             if !folded_jump_has_no_fallthrough
                 && block_has_fallthrough(&[Item::Instruction(last)])
                 && block_index + 1 < blocks.len()
@@ -3212,9 +3520,10 @@ impl Assembler {
                     continue;
                 }
                 let (force_owned_load, strict_owned_load) = match self.items[index] {
-                    Item::Instruction(instruction) => {
-                        (instruction.force_owned_load, instruction.strict_owned_load)
-                    }
+                    Item::Instruction(instruction) => (
+                        instruction.has_flag(InstructionFlags::FORCE_OWNED_LOAD),
+                        instruction.has_flag(InstructionFlags::STRICT_OWNED_LOAD),
+                    ),
                     Item::Label(_) => unreachable!(),
                 };
                 if strict_owned_load {
@@ -3278,9 +3587,9 @@ impl Assembler {
                 index += 1;
                 continue;
             };
-            if first.prevent_fusion_with_next
-                || second.prevent_fusion_with_previous
-                || second.borrow_unreachable_entry
+            if first.has_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT)
+                || second.has_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS)
+                || second.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY)
             {
                 fused.push(self.items[index]);
                 index += 1;
@@ -3314,36 +3623,12 @@ impl Assembler {
                     continue;
                 }
             };
-            fused.push(Item::Instruction(Instruction {
-                opcode: Opcode::new(opcode, 0),
-                operand: Operand::Value((first_argument << 4) | second_argument),
-                location: first.location,
-                depth_after: second.depth_after,
-                force_owned_load: first.force_owned_load || second.force_owned_load,
-                strict_owned_load: first.strict_owned_load || second.strict_owned_load,
-                inline_small_exit: first.inline_small_exit && second.inline_small_exit,
-                preserve_inlined_jump_nop: false,
-                preserve_direct_inlined_jump_nop: None,
-                allow_jump_threading_target: first.allow_jump_threading_target
-                    && second.allow_jump_threading_target,
-                allow_no_location_block_inlining: first.allow_no_location_block_inlining
-                    || second.allow_no_location_block_inlining,
-                preserve_no_location: first.preserve_no_location || second.preserve_no_location,
-                prevent_fusion_with_next: second.prevent_fusion_with_next,
-                prevent_fusion_with_previous: first.prevent_fusion_with_previous,
-                defer_redundant_jump_removal: first.defer_redundant_jump_removal
-                    || second.defer_redundant_jump_removal,
-                preserve_nop_after_jump_threading: first.preserve_nop_after_jump_threading
-                    || second.preserve_nop_after_jump_threading,
-                converted_pop_block: first.converted_pop_block || second.converted_pop_block,
-                normalized_exception_owner: first
-                    .normalized_exception_owner
-                    .or(second.normalized_exception_owner),
-                exclude_exception: first.exclude_exception || second.exclude_exception,
-                exclude_exception_if_extended: first.exclude_exception_if_extended
-                    || second.exclude_exception_if_extended,
-                borrow_unreachable_entry: first.borrow_unreachable_entry,
-            }));
+            fused.push(Item::Instruction(Instruction::fused(
+                Opcode::new(opcode, 0),
+                Operand::Value((first_argument << 4) | second_argument),
+                first,
+                second,
+            )));
             index += 2;
         }
         self.items = fused;
@@ -3387,8 +3672,9 @@ impl Assembler {
             .zip(&positions)
             .zip(extended_args)
             .filter_map(|((instruction, position), extended)| {
-                (instruction.exclude_exception
-                    || (instruction.exclude_exception_if_extended && *extended > 0))
+                (instruction.has_flag(InstructionFlags::EXCLUDE_EXCEPTION)
+                    || (instruction.has_flag(InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED)
+                        && *extended > 0))
                     .then_some((
                         *position,
                         *position + u32::from(*extended) + 1 + u32::from(instruction.opcode.caches),
@@ -3886,7 +4172,218 @@ fn extended_arg_count(argument: u32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Assembler, Opcode, Operand};
+    use super::{
+        Assembler, AssemblerStage, Instruction, InstructionFlags, Item, Opcode, Operand,
+        SourceLocation,
+    };
+
+    #[test]
+    fn instruction_constructors_set_audited_defaults() {
+        let regular = Instruction::new(
+            Opcode::new(82, 0),
+            Operand::Value(0),
+            SourceLocation::NONE,
+            None,
+        );
+        assert_eq!(regular.flags, InstructionFlags::DEFAULT);
+        assert!(regular.has_flag(InstructionFlags::INLINE_SMALL_EXIT));
+        assert!(regular.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET));
+
+        let synthetic = Instruction::synthetic(
+            Opcode::new(27, 0),
+            Operand::Value(0),
+            SourceLocation::NONE,
+            None,
+        );
+        assert!(!synthetic.has_flag(InstructionFlags::INLINE_SMALL_EXIT));
+        assert!(synthetic.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET));
+        assert_eq!(
+            synthetic.preserve_direct_inlined_jump_nop, None,
+            "synthetic instructions do not inherit jump provenance"
+        );
+        assert_eq!(synthetic.normalized_exception_owner, None);
+    }
+
+    #[test]
+    fn fusion_uses_each_flags_propagation_policy() {
+        let mut first = Instruction::new(
+            Opcode::new(84, 0),
+            Operand::Value(1),
+            SourceLocation::new(2, 2, 0, 1),
+            Some(1),
+        );
+        for flag in [
+            InstructionFlags::FORCE_OWNED_LOAD,
+            InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING,
+            InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL,
+            InstructionFlags::CONVERTED_POP_BLOCK,
+            InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED,
+            InstructionFlags::PREVENT_FUSION_WITH_NEXT,
+            InstructionFlags::PRESERVE_INLINED_JUMP_NOP,
+        ] {
+            first.insert_flag(flag);
+        }
+        first.remove_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET);
+        first.preserve_direct_inlined_jump_nop = Some(super::Label(1));
+        first.normalized_exception_owner = Some(false);
+
+        let mut second = Instruction::new(
+            Opcode::new(84, 0),
+            Operand::Value(2),
+            SourceLocation::new(2, 2, 2, 3),
+            Some(2),
+        );
+        for flag in [
+            InstructionFlags::STRICT_OWNED_LOAD,
+            InstructionFlags::PRESERVE_NO_LOCATION,
+            InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING,
+            InstructionFlags::EXCLUDE_EXCEPTION,
+            InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS,
+            InstructionFlags::BORROW_UNREACHABLE_ENTRY,
+            InstructionFlags::PRESERVE_INLINED_JUMP_NOP,
+        ] {
+            second.insert_flag(flag);
+        }
+        second.remove_flag(InstructionFlags::INLINE_SMALL_EXIT);
+        second.preserve_direct_inlined_jump_nop = Some(super::Label(2));
+        second.normalized_exception_owner = Some(true);
+
+        let fused = Instruction::fused(Opcode::new(89, 0), Operand::Value(0x12), first, second);
+
+        for flag in [
+            InstructionFlags::FORCE_OWNED_LOAD,
+            InstructionFlags::STRICT_OWNED_LOAD,
+            InstructionFlags::ALLOW_NO_LOCATION_BLOCK_INLINING,
+            InstructionFlags::PRESERVE_NO_LOCATION,
+            InstructionFlags::DEFER_REDUNDANT_JUMP_REMOVAL,
+            InstructionFlags::PRESERVE_NOP_AFTER_JUMP_THREADING,
+            InstructionFlags::CONVERTED_POP_BLOCK,
+            InstructionFlags::EXCLUDE_EXCEPTION,
+            InstructionFlags::EXCLUDE_EXCEPTION_IF_EXTENDED,
+        ] {
+            assert!(fused.has_flag(flag), "missing merged flag {flag:?}");
+        }
+        for flag in [
+            InstructionFlags::INLINE_SMALL_EXIT,
+            InstructionFlags::PRESERVE_INLINED_JUMP_NOP,
+            InstructionFlags::ALLOW_JUMP_THREADING_TARGET,
+            InstructionFlags::PREVENT_FUSION_WITH_NEXT,
+            InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS,
+            InstructionFlags::BORROW_UNREACHABLE_ENTRY,
+        ] {
+            assert!(!fused.has_flag(flag), "unexpected merged flag {flag:?}");
+        }
+        assert_eq!(fused.location, first.location);
+        assert_eq!(fused.depth_after, second.depth_after);
+        assert_eq!(fused.preserve_direct_inlined_jump_nop, None);
+        assert_eq!(fused.normalized_exception_owner, Some(false));
+
+        let mut first_edge = Instruction::new(
+            Opcode::new(84, 0),
+            Operand::Value(1),
+            SourceLocation::NONE,
+            None,
+        );
+        first_edge.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS);
+        first_edge.insert_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY);
+        let mut second_edge = Instruction::new(
+            Opcode::new(84, 0),
+            Operand::Value(2),
+            SourceLocation::NONE,
+            None,
+        );
+        second_edge.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT);
+        let fused_edges = Instruction::fused(
+            Opcode::new(89, 0),
+            Operand::Value(0x12),
+            first_edge,
+            second_edge,
+        );
+        for flag in [
+            InstructionFlags::INLINE_SMALL_EXIT,
+            InstructionFlags::ALLOW_JUMP_THREADING_TARGET,
+            InstructionFlags::PREVENT_FUSION_WITH_NEXT,
+            InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS,
+            InstructionFlags::BORROW_UNREACHABLE_ENTRY,
+        ] {
+            assert!(
+                fused_edges.has_flag(flag),
+                "missing edge-selected flag {flag:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn owned_fast_loads_use_real_opcodes_with_provenance() {
+        let mut assembler = Assembler::default();
+        assembler.emit_owned_fast_with_depth(3, 1);
+        let Some(Item::Instruction(instruction)) = assembler.items.last() else {
+            panic!("owned load was not emitted");
+        };
+        assert_eq!(instruction.opcode.code, 84);
+        assert!(instruction.has_flag(InstructionFlags::FORCE_OWNED_LOAD));
+        assert!(!instruction.has_flag(InstructionFlags::STRICT_OWNED_LOAD));
+    }
+
+    #[test]
+    fn structural_validation_reports_the_pass_and_broken_label() {
+        let mut assembler = Assembler::default();
+        let target = assembler.label();
+        assembler.emit_operand(Opcode::new(77, 0), Operand::Forward(target));
+
+        let error = assembler
+            .validate_structure(AssemblerStage::ThreadForwardJumps)
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("thread_forward_jumps"));
+        assert!(message.contains("unbound label"));
+    }
+
+    #[test]
+    fn structural_validation_rejects_duplicate_labels() {
+        let mut assembler = Assembler::default();
+        let label = assembler.label();
+        assembler.mark(label);
+        assembler.mark(label);
+
+        let error = assembler
+            .validate_structure(AssemblerStage::FinalLayout)
+            .unwrap_err();
+        assert!(error.to_string().contains("bound more than once"));
+    }
+
+    #[test]
+    fn structural_validation_rejects_a_misdirected_operand() {
+        let mut assembler = Assembler::default();
+        let target = assembler.label();
+        assembler.mark(target);
+        assembler.emit_operand(Opcode::new(77, 0), Operand::Forward(target));
+
+        let error = assembler
+            .validate_structure(AssemblerStage::OptimizeBooleanConversions)
+            .unwrap_err();
+        assert!(error.to_string().contains("forward operand"));
+    }
+
+    #[test]
+    fn exception_regions_only_require_final_order_after_cfg_passes() {
+        let mut assembler = Assembler::default();
+        let end = assembler.label();
+        let start = assembler.label();
+        let target = assembler.label();
+        assembler.mark(end);
+        assembler.mark(start);
+        assembler.mark(target);
+        assembler.add_exception_region(start, end, target, 0, false);
+
+        assembler
+            .validate_structure(AssemblerStage::RemoveUnreachableInitial)
+            .unwrap();
+        let error = assembler
+            .validate_structure(AssemblerStage::FinalLayout)
+            .unwrap_err();
+        assert!(error.to_string().contains("starts at"));
+    }
 
     #[test]
     fn removes_unreachable_jumps() {
