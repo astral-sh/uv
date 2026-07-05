@@ -763,6 +763,102 @@ impl Compiler {
         Self::new(context, unit, symbols)
     }
 
+    fn loop_context(
+        &self,
+        continue_label: Label,
+        break_label: Label,
+        iterator_cleanup: IteratorCleanup,
+        break_returns: bool,
+        preserve_break_exit: bool,
+    ) -> LoopContext {
+        LoopContext {
+            continue_label,
+            break_label,
+            iterator_cleanup,
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
+            break_returns,
+            preserve_break_exit,
+        }
+    }
+
+    fn with_loop_context<T>(
+        &mut self,
+        context: LoopContext,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<T, CompileError> {
+        let previous_depth = self.control.loops.len();
+        self.control.loops.push(context);
+        let result = compile(self);
+        debug_assert!(
+            result.is_err() || self.control.loops.len() == previous_depth + 1,
+            "loop contexts should be balanced"
+        );
+        self.control.loops.truncate(previous_depth);
+        result
+    }
+
+    fn with_exception_handler<T>(
+        &mut self,
+        context: ExceptionHandlerContext,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
+        self.control.active_exception_handlers.push(context);
+        let result = compile(self);
+        self.control.active_exception_handlers.pop();
+        let exclusions = self
+            .control
+            .active_exception_region_exclusions
+            .pop()
+            .expect("exception handler has an exclusion collector");
+        result.map(|value| (value, exclusions))
+    }
+
+    fn with_comprehension_context<T>(
+        &mut self,
+        cleanup: (Label, u32),
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
+        self.control.active_comprehension_cleanups.push(cleanup);
+        self.control
+            .active_comprehension_region_exclusions
+            .push(Vec::new());
+        let result = compile(self);
+        let exclusions = self
+            .control
+            .active_comprehension_region_exclusions
+            .pop()
+            .expect("active comprehension has region exclusions");
+        self.control.active_comprehension_cleanups.pop();
+        result.map(|value| (value, exclusions))
+    }
+
+    fn with_control_override<T, R>(
+        &mut self,
+        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut T,
+        value: T,
+        compile: impl FnOnce(&mut Self) -> Result<R, CompileError>,
+    ) -> Result<R, CompileError> {
+        let previous = std::mem::replace(select(&mut self.control), value);
+        let result = compile(self);
+        *select(&mut self.control) = previous;
+        result
+    }
+
+    fn with_fallthrough_tracking<T>(
+        &mut self,
+        compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
+    ) -> Result<(T, bool), CompileError> {
+        let previous = std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
+        let result = compile(self);
+        let emitted = std::mem::replace(&mut self.control.emitted_fallthrough_return, previous);
+        result.map(|value| (value, emitted))
+    }
+
     pub(crate) fn compile_module(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
         self.symbols.module_globals = module_global_names(body);
         self.symbols.imported_scope_names = module_imported_names(body);
@@ -1469,13 +1565,11 @@ impl Compiler {
                     && matches!(statement, Stmt::For(statement) if statement.is_async)
                     && (!self.control.active_with_region_exclusions.is_empty()
                         || !self.control.active_exception_region_exclusions.is_empty());
-                let previous = std::mem::replace(
-                    &mut self.control.emit_protected_async_for_end_nop,
+                self.with_control_override(
+                    |control| &mut control.emit_protected_async_for_end_nop,
                     emit_protected_async_for_end_nop,
-                );
-                let result = self.compile_statement(statement);
-                self.control.emit_protected_async_for_end_nop = previous;
-                result?;
+                    |compiler| compiler.compile_statement(statement),
+                )?;
             }
             if statement_terminates(statement) {
                 let unreachable = &body[index + 1..];
@@ -1565,18 +1659,8 @@ impl Compiler {
         {
             self.add_constant(constant)?;
         }
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: condition_false,
-            iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: true,
-            preserve_break_exit: false,
-        });
-        self.compile_suite(&statement.body)?;
-        self.control.loops.pop();
+        let context = self.loop_context(start, condition_false, IteratorCleanup::None, true, false);
+        self.with_loop_context(context, |compiler| compiler.compile_suite(&statement.body))?;
         if !suite_terminates(&statement.body) {
             if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
@@ -1613,19 +1697,9 @@ impl Compiler {
             })
             .collect::<Result<Vec<_>, CompileError>>()?;
 
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: exits[0].1,
-            iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: true,
-            preserve_break_exit: false,
-        });
+        let context = self.loop_context(start, exits[0].1, IteratorCleanup::None, true, false);
         let body_start = self.assembler.instruction_count();
-        self.compile_suite(&statement.body)?;
-        self.control.loops.pop();
+        self.with_loop_context(context, |compiler| compiler.compile_suite(&statement.body))?;
         if !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
@@ -1715,13 +1789,10 @@ impl Compiler {
                 return Ok(());
             };
             let emitted_fallthrough = if matches!(body.last(), Some(Stmt::If(_))) {
-                let previous_fallthrough =
-                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-                self.compile_suite_inner(body, true)?;
-                std::mem::replace(
-                    &mut self.control.emitted_fallthrough_return,
-                    previous_fallthrough,
-                )
+                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                    compiler.compile_suite_inner(body, true)
+                })?;
+                emitted_fallthrough
             } else {
                 self.compile_suite(body)?;
                 false
@@ -1758,34 +1829,28 @@ impl Compiler {
                     || (!self.control.active_with_region_exclusions.is_empty()
                         && branch_index > 0
                         && suite_terminates(body));
-                let previous_exclusion = std::mem::replace(
-                    &mut self.control.exclude_terminal_if_not_taken,
-                    exclude_not_taken,
-                );
                 let exclude_from_generator = self.unit.flags & CO_COROUTINE != 0
                     && self.control.generator_region_start.is_some()
                     && self.assembler.contains_opcode(YIELD_VALUE)
                     && self.control.active_with_region_exclusions.is_empty()
                     && self.control.active_exception_region_exclusions.is_empty()
                     && self.control.active_normal_finally_bodies == 0;
-                let previous_exception_exclusion = std::mem::replace(
-                    &mut self.control.exclude_condition_not_taken_from_exception,
-                    exclude_from_generator,
-                );
-                let condition_result = self.compile_jump_if(test, false, next);
-                self.control.exclude_terminal_if_not_taken = previous_exclusion;
-                self.control.exclude_condition_not_taken_from_exception =
-                    previous_exception_exclusion;
-                condition_result?;
+                self.with_control_override(
+                    |control| &mut control.exclude_terminal_if_not_taken,
+                    exclude_not_taken,
+                    |compiler| {
+                        compiler.with_control_override(
+                            |control| &mut control.exclude_condition_not_taken_from_exception,
+                            exclude_from_generator,
+                            |compiler| compiler.compile_jump_if(test, false, next),
+                        )
+                    },
+                )?;
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
-                let previous_fallthrough =
-                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-                self.compile_suite_inner(body, true)?;
-                let emitted_fallthrough = std::mem::replace(
-                    &mut self.control.emitted_fallthrough_return,
-                    previous_fallthrough,
-                );
+                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                    compiler.compile_suite_inner(body, true)
+                })?;
                 if !suite_terminates(body) && !emitted_fallthrough {
                     if let Some(statement) = body
                         .last()
@@ -1813,13 +1878,9 @@ impl Compiler {
                     .set_location(self.source_location(test.range()));
             } else {
                 let body_start = self.assembler.instruction_count();
-                let previous_fallthrough =
-                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-                self.compile_suite_inner(body, true)?;
-                let emitted_fallthrough = std::mem::replace(
-                    &mut self.control.emitted_fallthrough_return,
-                    previous_fallthrough,
-                );
+                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                    compiler.compile_suite_inner(body, true)
+                })?;
                 if !suite_terminates(body) && !emitted_fallthrough {
                     if let Some(statement) = body
                         .last()
@@ -2221,25 +2282,30 @@ impl Compiler {
                 } else {
                     let defer_restore =
                         expression_defers_async_comprehension_restore(&assignment.value);
-                    let previous_defer = std::mem::replace(
-                        &mut self.control.defer_async_comprehension_restore,
+                    self.with_control_override(
+                        |control| &mut control.defer_async_comprehension_restore,
                         defer_restore,
-                    );
-                    let newly_owned = if assignment
-                        .targets
-                        .iter()
-                        .any(|target| matches!(target, Expr::Name(_)))
-                        && let Expr::Name(name) = assignment.value.as_ref()
-                    {
-                        self.symbols.owned_load_locals.insert(name.id.to_string())
-                    } else {
-                        false
-                    };
-                    self.compile_expression(&assignment.value)?;
-                    if newly_owned && let Expr::Name(name) = assignment.value.as_ref() {
-                        self.symbols.owned_load_locals.remove(name.id.as_str());
-                    }
-                    self.control.defer_async_comprehension_restore = previous_defer;
+                        |compiler| {
+                            let newly_owned = if assignment
+                                .targets
+                                .iter()
+                                .any(|target| matches!(target, Expr::Name(_)))
+                                && let Expr::Name(name) = assignment.value.as_ref()
+                            {
+                                compiler
+                                    .symbols
+                                    .owned_load_locals
+                                    .insert(name.id.to_string())
+                            } else {
+                                false
+                            };
+                            compiler.compile_expression(&assignment.value)?;
+                            if newly_owned && let Expr::Name(name) = assignment.value.as_ref() {
+                                compiler.symbols.owned_load_locals.remove(name.id.as_str());
+                            }
+                            Ok(())
+                        },
+                    )?;
                     for (index, target) in assignment.targets.iter().enumerate() {
                         if index + 1 < assignment.targets.len() {
                             self.emit(COPY, 1, 1)?;
@@ -2812,18 +2878,16 @@ impl Compiler {
                     || (!self.control.active_with_region_exclusions.is_empty()
                         && branch_index > 0
                         && suite_terminates(body));
-                let previous_exclusion = std::mem::replace(
-                    &mut self.control.exclude_terminal_if_not_taken,
-                    exclude_not_taken,
-                );
                 let retain_folded_test_in_protected_region = branch_index == 0
                     && early_condition_truthiness(test) == Some(true)
                     && (!self.control.active_with_region_exclusions.is_empty()
                         || !self.control.active_exception_region_exclusions.is_empty()
                         || self.control.generator_region_start.is_some());
-                let condition_result = self.compile_jump_if(test, false, next);
-                self.control.exclude_terminal_if_not_taken = previous_exclusion;
-                condition_result?;
+                self.with_control_override(
+                    |control| &mut control.exclude_terminal_if_not_taken,
+                    exclude_not_taken,
+                    |compiler| compiler.compile_jump_if(test, false, next),
+                )?;
                 if retain_folded_test_in_protected_region {
                     // CPython keeps the first folded branch marker inside the surrounding
                     // protected region instead of treating it as an artificial condition NOP.
@@ -3133,28 +3197,15 @@ impl Compiler {
 
         self.assembler.mark(body_label);
         self.set_depth(base_depth);
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: restart,
-            iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: false,
-            preserve_break_exit: false,
-        });
+        let context = self.loop_context(start, restart, IteratorCleanup::None, false, false);
         let body_start = self.assembler.instruction_count();
-        let previous_loop_tail_exclusion = std::mem::replace(
-            &mut self
-                .control
-                .exclude_loop_tail_not_taken_from_control_flow_regions,
-            control_region.is_some(),
-        );
-        let tail_result = self.compile_while_tail_suite(&statement.body, start);
-        self.control
-            .exclude_loop_tail_not_taken_from_control_flow_regions = previous_loop_tail_exclusion;
-        let tail_jumps = tail_result?;
-        self.control.loops.pop();
+        let tail_jumps = self.with_loop_context(context, |compiler| {
+            compiler.with_control_override(
+                |control| &mut control.exclude_loop_tail_not_taken_from_control_flow_regions,
+                control_region.is_some(),
+                |compiler| compiler.compile_while_tail_suite(&statement.body, start),
+            )
+        })?;
         if !tail_jumps && !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
@@ -3204,31 +3255,37 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let base_depth = self.control.depth;
         let failure = self.assembler.label();
-        let previous_exclusion = std::mem::replace(
-            &mut self.control.exclude_terminal_if_not_taken,
-            !self.control.active_with_region_exclusions.is_empty(),
-        );
-        if let Expr::BoolOp(boolean) = statement.test.as_ref()
-            && boolean.op == BoolOp::Or
-            && let Some((last, leading)) = boolean.values.split_last()
-        {
-            for value in leading {
-                let next = self.assembler.label();
-                self.compile_jump_if(value, false, next)?;
-                self.assembler
-                    .set_location(self.source_location(value.range()));
-                self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
-                self.assembler.mark(next);
-            }
-            self.compile_jump_if(last, false, failure)?;
-            self.assembler
-                .set_location(self.source_location(last.range()));
-        } else {
-            self.compile_jump_if(&statement.test, false, failure)?;
-            self.assembler
-                .set_location(self.source_location(statement.test.range()));
-        }
-        self.control.exclude_terminal_if_not_taken = previous_exclusion;
+        let exclude_not_taken = !self.control.active_with_region_exclusions.is_empty();
+        self.with_control_override(
+            |control| &mut control.exclude_terminal_if_not_taken,
+            exclude_not_taken,
+            |compiler| {
+                if let Expr::BoolOp(boolean) = statement.test.as_ref()
+                    && boolean.op == BoolOp::Or
+                    && let Some((last, leading)) = boolean.values.split_last()
+                {
+                    for value in leading {
+                        let next = compiler.assembler.label();
+                        compiler.compile_jump_if(value, false, next)?;
+                        compiler
+                            .assembler
+                            .set_location(compiler.source_location(value.range()));
+                        compiler.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
+                        compiler.assembler.mark(next);
+                    }
+                    compiler.compile_jump_if(last, false, failure)?;
+                    compiler
+                        .assembler
+                        .set_location(compiler.source_location(last.range()));
+                } else {
+                    compiler.compile_jump_if(&statement.test, false, failure)?;
+                    compiler
+                        .assembler
+                        .set_location(compiler.source_location(statement.test.range()));
+                }
+                Ok(())
+            },
+        )?;
         self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
 
         self.assembler.mark(failure);
@@ -3337,23 +3394,21 @@ impl Compiler {
                         || self
                             .control
                             .exclude_loop_tail_not_taken_from_control_flow_regions;
-                let previous_exception_exclusion = std::mem::replace(
-                    &mut self.control.exclude_condition_not_taken_from_exception,
+                let exclude_from_all_exception_regions =
+                    !self.control.active_exception_region_exclusions.is_empty();
+                self.with_control_override(
+                    |control| &mut control.exclude_condition_not_taken_from_exception,
                     exclude_from_control_flow_regions,
-                );
-                let previous_all_exception_exclusions = std::mem::replace(
-                    &mut self
-                        .control
-                        .exclude_condition_not_taken_from_all_exception_regions,
-                    !self.control.active_exception_region_exclusions.is_empty(),
-                );
-                let condition_result = self.compile_jump_if(test, false, next);
-                self.control.exclude_condition_not_taken_from_exception =
-                    previous_exception_exclusion;
-                self.control
-                    .exclude_condition_not_taken_from_all_exception_regions =
-                    previous_all_exception_exclusions;
-                condition_result?;
+                    |compiler| {
+                        compiler.with_control_override(
+                            |control| {
+                                &mut control.exclude_condition_not_taken_from_all_exception_regions
+                            },
+                            exclude_from_all_exception_regions,
+                            |compiler| compiler.compile_jump_if(test, false, next),
+                        )
+                    },
+                )?;
             }
             let nested_tail = self.compile_with_strict_owned_loads(
                 test.is_some_and(|test| matches!(test, Expr::If(_))),
@@ -3625,13 +3680,10 @@ impl Compiler {
                 let emitted_fallthrough = if emitted_case_exit {
                     false
                 } else if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
-                    let previous_fallthrough =
-                        std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-                    self.compile_suite_inner(&case.body, true)?;
-                    std::mem::replace(
-                        &mut self.control.emitted_fallthrough_return,
-                        previous_fallthrough,
-                    )
+                    let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                        compiler.compile_suite_inner(&case.body, true)
+                    })?;
+                    emitted_fallthrough
                 } else {
                     self.compile_suite(&case.body)?;
                     false
@@ -3705,13 +3757,10 @@ impl Compiler {
             }
             let body_start = self.assembler.instruction_count();
             let emitted_fallthrough = if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
-                let previous_fallthrough =
-                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-                self.compile_suite_inner(&case.body, true)?;
-                std::mem::replace(
-                    &mut self.control.emitted_fallthrough_return,
-                    previous_fallthrough,
-                )
+                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                    compiler.compile_suite_inner(&case.body, true)
+                })?;
+                emitted_fallthrough
             } else {
                 self.compile_suite(&case.body)?;
                 false
@@ -4226,20 +4275,17 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
             self.emit(NOP, 0, 0)?;
-            self.control.loops.push(LoopContext {
-                continue_label: start,
-                break_label: end,
-                iterator_cleanup: IteratorCleanup::None,
-                with_depth: self.control.active_with_exits.len(),
-                finally_end_depth: self.control.active_finally_end_blocks,
-                exception_region_depth: self.control.active_exception_region_exclusions.len(),
-                break_returns: false,
-                preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
-                    == Some(statement.range),
-            });
+            let context = self.loop_context(
+                start,
+                end,
+                IteratorCleanup::None,
+                false,
+                self.control.preserve_finally_break_exit_loop_range == Some(statement.range),
+            );
             let body_start = self.assembler.instruction_count();
-            let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
-            self.control.loops.pop();
+            let tail_jumps = self.with_loop_context(context, |compiler| {
+                compiler.compile_while_tail_suite(&statement.body, start)
+            })?;
             if !tail_jumps && !suite_terminates(&statement.body) {
                 self.emit_while_backedge(&statement.body, body_start, start)?;
             }
@@ -4263,29 +4309,25 @@ impl Compiler {
         let end = self.assembler.label();
 
         self.assembler.mark(start);
-        let previous_exception_exclusion = std::mem::replace(
-            &mut self.control.exclude_condition_not_taken_from_exception,
-            !self.control.active_exception_region_exclusions.is_empty()
-                || self.control.active_terminal_withs > 0
-                || self.control.generator_region_start.is_some(),
+        let exclude_not_taken = !self.control.active_exception_region_exclusions.is_empty()
+            || self.control.active_terminal_withs > 0
+            || self.control.generator_region_start.is_some();
+        self.with_control_override(
+            |control| &mut control.exclude_condition_not_taken_from_exception,
+            exclude_not_taken,
+            |compiler| compiler.compile_jump_if(&statement.test, false, else_label),
+        )?;
+        let context = self.loop_context(
+            start,
+            end,
+            IteratorCleanup::None,
+            false,
+            self.control.preserve_finally_break_exit_loop_range == Some(statement.range),
         );
-        let condition_result = self.compile_jump_if(&statement.test, false, else_label);
-        self.control.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
-        condition_result?;
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: end,
-            iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: false,
-            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
-                == Some(statement.range),
-        });
         let body_start = self.assembler.instruction_count();
-        let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
-        self.control.loops.pop();
+        let tail_jumps = self.with_loop_context(context, |compiler| {
+            compiler.compile_while_tail_suite(&statement.body, start)
+        })?;
         if !tail_jumps && !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
@@ -4340,20 +4382,17 @@ impl Compiler {
         self.emit_jump_forward(FOR_ITER, cleanup, 1)?;
         self.compile_store_target(&statement.target)?;
 
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: end,
-            iterator_cleanup: IteratorCleanup::Sync,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: false,
-            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
-                == Some(statement.range),
-        });
+        let context = self.loop_context(
+            start,
+            end,
+            IteratorCleanup::Sync,
+            false,
+            self.control.preserve_finally_break_exit_loop_range == Some(statement.range),
+        );
         let body_start = self.assembler.instruction_count();
-        let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
-        self.control.loops.pop();
+        let tail_jumps = self.with_loop_context(context, |compiler| {
+            compiler.compile_loop_tail_suite(&statement.body, start)
+        })?;
         if !tail_jumps && !suite_terminates(&statement.body) {
             if self.assembler.instruction_count() > body_start
                 && let Some(location) = self.assembler.last_instruction_location()
@@ -4449,20 +4488,17 @@ impl Compiler {
         self.emit(NOT_TAKEN, 0, 0)?;
         self.compile_store_target(&statement.target)?;
 
-        self.control.loops.push(LoopContext {
-            continue_label: start,
-            break_label: end,
-            iterator_cleanup: IteratorCleanup::Async,
-            with_depth: self.control.active_with_exits.len(),
-            finally_end_depth: self.control.active_finally_end_blocks,
-            exception_region_depth: self.control.active_exception_region_exclusions.len(),
-            break_returns: false,
-            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
-                == Some(statement.range),
-        });
+        let context = self.loop_context(
+            start,
+            end,
+            IteratorCleanup::Async,
+            false,
+            self.control.preserve_finally_break_exit_loop_range == Some(statement.range),
+        );
         let body_start = self.assembler.instruction_count();
-        let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
-        self.control.loops.pop();
+        let tail_jumps = self.with_loop_context(context, |compiler| {
+            compiler.compile_loop_tail_suite(&statement.body, start)
+        })?;
         if !tail_jumps && !suite_terminates(&statement.body) {
             if self.assembler.instruction_count() > body_start
                 && let Some(location) = self.assembler.last_instruction_location()
@@ -4753,12 +4789,12 @@ impl Compiler {
         }
         let base_depth = self.control.depth;
         let end = self.assembler.label();
-        let previous_exclusion = std::mem::replace(
-            &mut self.control.exclude_terminal_if_not_taken,
-            !self.control.active_with_region_exclusions.is_empty(),
-        );
-        self.compile_jump_if(&statement.test, true, end)?;
-        self.control.exclude_terminal_if_not_taken = previous_exclusion;
+        let exclude_not_taken = !self.control.active_with_region_exclusions.is_empty();
+        self.with_control_override(
+            |control| &mut control.exclude_terminal_if_not_taken,
+            exclude_not_taken,
+            |compiler| compiler.compile_jump_if(&statement.test, true, end),
+        )?;
         self.assembler
             .set_location(self.source_location(statement.range));
         self.emit(LOAD_COMMON_CONSTANT, 0, 1)?;
@@ -4885,16 +4921,17 @@ impl Compiler {
                 && let Some((last @ Stmt::If(_), leading)) = statement.body.split_last()
             {
                 self.compile_suite(leading)?;
-                let previous =
-                    std::mem::replace(&mut self.control.exclude_terminal_if_not_taken, true);
-                let previous_exception = std::mem::replace(
-                    &mut self.control.exclude_condition_not_taken_from_exception,
+                self.with_control_override(
+                    |control| &mut control.exclude_terminal_if_not_taken,
                     true,
-                );
-                let result = self.compile_statement(last);
-                self.control.exclude_terminal_if_not_taken = previous;
-                self.control.exclude_condition_not_taken_from_exception = previous_exception;
-                result?;
+                    |compiler| {
+                        compiler.with_control_override(
+                            |control| &mut control.exclude_condition_not_taken_from_exception,
+                            true,
+                            |compiler| compiler.compile_statement(last),
+                        )
+                    },
+                )?;
             } else {
                 self.compile_suite(&statement.body)?;
             }
@@ -5261,50 +5298,42 @@ impl Compiler {
                         Vec::new(),
                     )
                 } else {
-                    self.control
-                        .active_exception_region_exclusions
-                        .push(Vec::new());
-                    self.control
-                        .active_exception_handlers
-                        .push(ExceptionHandlerContext {
-                            name: handler.name.as_ref().map(ToString::to_string),
-                            loop_depth: self.control.loops.len(),
-                        });
-                    let previous_unwind = std::mem::replace(
-                        &mut self.control.unwind_exception_handlers_for_implicit_return,
-                        terminal_handler_try,
-                    );
-                    let previous_fallthrough = terminal_handler_try.then(|| {
-                        std::mem::replace(&mut self.control.emitted_fallthrough_return, false)
-                    });
                     let strict_owned_loads = matches!(
                         handler.body.last(),
                         Some(Stmt::Break(_) | Stmt::Continue(_))
                     );
-                    let result =
-                        self.compile_with_strict_owned_loads(strict_owned_loads, |compiler| {
-                            if terminal_handler_try {
-                                compiler.compile_suite_inner(&handler.body, true)
-                            } else {
-                                compiler.compile_suite(&handler.body)
-                            }
-                        });
-                    self.control.unwind_exception_handlers_for_implicit_return = previous_unwind;
-                    if let Some(previous_fallthrough) = previous_fallthrough {
-                        terminal_handler_try_return = std::mem::replace(
-                            &mut self.control.emitted_fallthrough_return,
-                            previous_fallthrough,
-                        );
-                    }
-                    self.control.active_exception_handlers.pop();
-                    result?;
-                    (
-                        None,
-                        self.control
-                            .active_exception_region_exclusions
-                            .pop()
-                            .expect("exception handler has an exclusion collector"),
-                    )
+                    let context = ExceptionHandlerContext {
+                        name: handler.name.as_ref().map(ToString::to_string),
+                        loop_depth: self.control.loops.len(),
+                    };
+                    let (_, exclusions) = self.with_exception_handler(context, |compiler| {
+                        compiler.with_control_override(
+                            |control| &mut control.unwind_exception_handlers_for_implicit_return,
+                            terminal_handler_try,
+                            |compiler| {
+                                if terminal_handler_try {
+                                    let (_, emitted_fallthrough) = compiler
+                                        .with_fallthrough_tracking(|compiler| {
+                                            compiler.compile_with_strict_owned_loads(
+                                                strict_owned_loads,
+                                                |compiler| {
+                                                    compiler
+                                                        .compile_suite_inner(&handler.body, true)
+                                                },
+                                            )
+                                        })?;
+                                    terminal_handler_try_return = emitted_fallthrough;
+                                    Ok(())
+                                } else {
+                                    compiler.compile_with_strict_owned_loads(
+                                        strict_owned_loads,
+                                        |compiler| compiler.compile_suite(&handler.body),
+                                    )
+                                }
+                            },
+                        )
+                    })?;
+                    (None, exclusions)
                 };
             if let Some(exclusions) = &terminal_handler_exclusions {
                 handler_region_exclusions.extend_from_slice(exclusions);
@@ -5993,10 +6022,11 @@ impl Compiler {
                 }
                 Ok(has_instructions)
             } else {
-                let previous = std::mem::replace(&mut self.control.prevent_try_exit_inlining, true);
-                let result = self.compile_try_except(statement, false, false, false);
-                self.control.prevent_try_exit_inlining = previous;
-                result?;
+                self.with_control_override(
+                    |control| &mut control.prevent_try_exit_inlining,
+                    true,
+                    |compiler| compiler.compile_try_except(statement, false, false, false),
+                )?;
                 Ok(true)
             }
         })();
@@ -6060,35 +6090,36 @@ impl Compiler {
         } else {
             self.assembler.preserve_last_no_location();
         }
-        let previous_fallthrough =
-            std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
-        if let Some(location) = pass_finally_location {
-            self.assembler.set_location(location);
-            if self.control.active_exception_region_exclusions.is_empty() {
-                self.emit(NOP, 0, 0)?;
-            } else {
-                // The normal finally copy is outside an enclosing try's exception ownership.
-                // Mark both the pass and its exit because CFG optimization can keep either NOP.
-                let pass_start = self.assembler.label();
-                self.assembler.mark(pass_start);
-                self.emit(NOP, 0, 0)?;
-                self.assembler.exclude_last_instruction_from_exception();
-                let pass_end = self.assembler.label();
-                self.assembler.mark(pass_end);
-                for exclusions in &mut self.control.active_exception_region_exclusions {
-                    exclusions.push((pass_start, pass_end));
+        let (_, finalbody_emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+            if let Some(location) = pass_finally_location {
+                compiler.assembler.set_location(location);
+                if compiler
+                    .control
+                    .active_exception_region_exclusions
+                    .is_empty()
+                {
+                    compiler.emit(NOP, 0, 0)?;
+                } else {
+                    // The normal finally copy is outside an enclosing try's exception ownership.
+                    // Mark both the pass and its exit because CFG optimization can keep either NOP.
+                    let pass_start = compiler.assembler.label();
+                    compiler.assembler.mark(pass_start);
+                    compiler.emit(NOP, 0, 0)?;
+                    compiler.assembler.exclude_last_instruction_from_exception();
+                    let pass_end = compiler.assembler.label();
+                    compiler.assembler.mark(pass_end);
+                    for exclusions in &mut compiler.control.active_exception_region_exclusions {
+                        exclusions.push((pass_start, pass_end));
+                    }
                 }
+            } else {
+                compiler.control.active_normal_finally_bodies += 1;
+                let result = compiler.compile_suite_inner(&statement.finalbody, terminal);
+                compiler.control.active_normal_finally_bodies -= 1;
+                result?;
             }
-        } else {
-            self.control.active_normal_finally_bodies += 1;
-            let result = self.compile_suite_inner(&statement.finalbody, terminal);
-            self.control.active_normal_finally_bodies -= 1;
-            result?;
-        }
-        let finalbody_emitted_fallthrough = std::mem::replace(
-            &mut self.control.emitted_fallthrough_return,
-            previous_fallthrough,
-        );
+            Ok(())
+        })?;
         if terminal && !finalbody_emitted_fallthrough && !suite_terminates(&statement.finalbody) {
             if let Some(statement) = statement
                 .finalbody
@@ -6444,9 +6475,11 @@ impl Compiler {
             if terminal_if || terminal_branching {
                 let (last, leading) = body.split_last().expect("with body has a final if");
                 self.compile_suite(leading)?;
-                self.control.exclude_terminal_if_not_taken = true;
-                self.compile_statement(last)?;
-                self.control.exclude_terminal_if_not_taken = false;
+                self.with_control_override(
+                    |control| &mut control.exclude_terminal_if_not_taken,
+                    true,
+                    |compiler| compiler.compile_statement(last),
+                )?;
             } else if !matches!(body, [Stmt::Pass(_)]) {
                 // Keep direct pass-only bodies on the with compiler's fallback path. CPython
                 // retains that NOP inside the protected range, unlike a terminal pass in a
@@ -7975,8 +8008,7 @@ impl Compiler {
             1,
             1,
             0,
-            (if nested { CO_NESTED } else { 0 })
-                | (self.unit.flags & SUPPORTED_FUTURE_FLAGS),
+            (if nested { CO_NESTED } else { 0 }) | (self.unit.flags & SUPPORTED_FUTURE_FLAGS),
         )?;
         child.unit.private_name.clone_from(&self.unit.private_name);
         child
@@ -9991,28 +10023,21 @@ impl Compiler {
         self.assembler.mark(protected_start);
         self.emit(build_opcode, 0, 1)?;
         self.emit(SWAP, 2, 0)?;
-        self.control.active_comprehension_cleanups.push((
-            cleanup,
-            (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned(),
-        ));
-        self.control
-            .active_comprehension_region_exclusions
-            .push(Vec::new());
-        let previous_reorder_cleanup = std::mem::replace(
-            &mut self.control.reorder_async_comprehension_cleanup_throw,
-            // CPython 3.14.5's flow graph leaves the throw cleanup immediately before
-            // `END_SEND` for a discarded async comprehension whose target is captured.
-            discard_result && !comprehension_cell_names.is_empty(),
-        );
-        let result = self.compile_comprehension_generator(generators, 0, key, value, add_opcode);
-        self.control.reorder_async_comprehension_cleanup_throw = previous_reorder_cleanup;
-        result?;
-        let region_exclusions = self
-            .control
-            .active_comprehension_region_exclusions
-            .pop()
-            .expect("active comprehension has region exclusions");
-        self.control.active_comprehension_cleanups.pop();
+        let cleanup_depth =
+            (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned();
+        let (_, region_exclusions) =
+            self.with_comprehension_context((cleanup, cleanup_depth), |compiler| {
+                compiler.with_control_override(
+                    |control| &mut control.reorder_async_comprehension_cleanup_throw,
+                    // CPython 3.14.5's flow graph leaves the throw cleanup immediately before
+                    // `END_SEND` for a discarded async comprehension whose target is captured.
+                    discard_result && !comprehension_cell_names.is_empty(),
+                    |compiler| {
+                        compiler
+                            .compile_comprehension_generator(generators, 0, key, value, add_opcode)
+                    },
+                )
+            })?;
         self.assembler.mark(protected_end);
 
         if temporary_names.is_empty() {
@@ -10105,8 +10130,6 @@ impl Compiler {
             self.symbols.active_temporaries.remove(name);
         }
 
-        let cleanup_depth =
-            (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned();
         let mut region_start = protected_start;
         for (exclusion_start, exclusion_end) in region_exclusions {
             self.assembler.add_exception_region(
