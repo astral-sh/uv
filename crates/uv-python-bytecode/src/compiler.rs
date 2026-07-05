@@ -232,13 +232,13 @@ struct LoopContext {
     preserve_break_exit: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ExceptionHandlerContext {
     name: Option<String>,
     loop_depth: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ReturnFinallyContext {
     body: Vec<Stmt>,
     loop_depth: usize,
@@ -271,6 +271,12 @@ enum CollectionKind {
     List,
     Tuple,
     Set,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DefinitionDecorators {
+    Compile,
+    AlreadyCompiled,
 }
 
 impl CollectionKind {
@@ -1685,9 +1691,10 @@ impl Compiler {
             start
         });
         if self.unwind_exception_handlers_for_implicit_return {
-            for handler in self.active_exception_handlers.clone().iter().rev() {
+            for index in (0..self.active_exception_handlers.len()).rev() {
+                let name = self.active_exception_handlers[index].name.clone();
                 self.emit(POP_EXCEPT, 0, -1)?;
-                if let Some(name) = &handler.name {
+                if let Some(name) = &name {
                     self.emit_deferred_constant_before_return(Constant::None)?;
                     self.store_name(name)?;
                     self.delete_name(name)?;
@@ -2692,28 +2699,21 @@ impl Compiler {
                 } else {
                     None
                 };
-                let loops = self.loops.clone();
-                let handlers = if !return_is_overridden
+                let handler_count = if !return_is_overridden
                     && self.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                 {
-                    self.active_exception_handlers.clone()
+                    self.active_exception_handlers.len()
                 } else {
-                    Vec::new()
+                    0
                 };
-                let mut next_loop = loops.len();
-                for handler in handlers.iter().rev() {
-                    for context in loops[handler.loop_depth..next_loop].iter().rev() {
-                        match context.iterator_cleanup {
-                            IteratorCleanup::None => {}
-                            IteratorCleanup::Sync | IteratorCleanup::Async => {
-                                if preserve_tos {
-                                    self.emit(SWAP, 2, 0)?;
-                                }
-                                self.emit(POP_TOP, 0, -1)?;
-                            }
-                        }
-                    }
+                let mut next_loop = self.loops.len();
+                for handler_index in (0..handler_count).rev() {
+                    let (loop_depth, name) = {
+                        let handler = &self.active_exception_handlers[handler_index];
+                        (handler.loop_depth, handler.name.clone())
+                    };
+                    self.emit_loop_iterator_cleanup(loop_depth, next_loop, preserve_tos)?;
                     if preserve_tos {
                         self.emit(SWAP, 2, 0)?;
                     }
@@ -2743,13 +2743,13 @@ impl Compiler {
                             );
                         }
                     }
-                    if let Some(name) = &handler.name {
+                    if let Some(name) = &name {
                         let none = self.add_constant(Constant::None)?;
                         self.emit(LOAD_CONST, none, 1)?;
                         self.store_name(name)?;
                         self.delete_name(name)?;
                     }
-                    next_loop = handler.loop_depth;
+                    next_loop = loop_depth;
                 }
                 let return_finally_contexts = if !return_is_overridden {
                     std::mem::take(&mut self.active_return_finally_contexts)
@@ -2757,17 +2757,11 @@ impl Compiler {
                     Vec::new()
                 };
                 for finally_context in return_finally_contexts.iter().rev() {
-                    for context in loops[finally_context.loop_depth..next_loop].iter().rev() {
-                        match context.iterator_cleanup {
-                            IteratorCleanup::None => {}
-                            IteratorCleanup::Sync | IteratorCleanup::Async => {
-                                if preserve_tos {
-                                    self.emit(SWAP, 2, 0)?;
-                                }
-                                self.emit(POP_TOP, 0, -1)?;
-                            }
-                        }
-                    }
+                    self.emit_loop_iterator_cleanup(
+                        finally_context.loop_depth,
+                        next_loop,
+                        preserve_tos,
+                    )?;
                     let initialized_locals = self.initialized_locals.clone();
                     let result = self.compile_suite(&finally_context.body);
                     self.initialized_locals = initialized_locals;
@@ -2780,17 +2774,7 @@ impl Compiler {
                 if !return_finally_contexts.is_empty() {
                     self.active_return_finally_contexts = return_finally_contexts;
                 }
-                for context in loops[..next_loop].iter().rev() {
-                    match context.iterator_cleanup {
-                        IteratorCleanup::None => {}
-                        IteratorCleanup::Sync | IteratorCleanup::Async => {
-                            if preserve_tos {
-                                self.emit(SWAP, 2, 0)?;
-                            }
-                            self.emit(POP_TOP, 0, -1)?;
-                        }
-                    }
-                }
+                self.emit_loop_iterator_cleanup(0, next_loop, preserve_tos)?;
                 let with_unwind_starts = self.emit_active_with_unwind(0, preserve_tos)?;
                 let finally_unwind_start = if unwinds_pass_finally {
                     let start = if let Some(start) = pass_finally_edge_start {
@@ -2800,10 +2784,7 @@ impl Compiler {
                         self.assembler.mark(start);
                         start
                     };
-                    for location in self.active_pass_finally_locations.clone().into_iter().rev() {
-                        self.assembler.set_location(location);
-                        self.emit(NOP, 0, 0)?;
-                    }
+                    self.emit_pass_finally_nops()?;
                     self.assembler.set_location(SourceLocation::NONE);
                     Some(start)
                 } else {
@@ -3182,10 +3163,10 @@ impl Compiler {
         from_depth: usize,
         preserve_tos: bool,
     ) -> Result<Vec<(usize, Label)>, CompileError> {
-        let contexts = self.active_with_exits[from_depth..].to_vec();
-        let mut unwind_starts = Vec::with_capacity(contexts.len());
-        for (offset, context) in contexts.into_iter().enumerate().rev() {
-            let index = from_depth + offset;
+        let context_count = self.active_with_exits.len();
+        let mut unwind_starts = Vec::with_capacity(context_count - from_depth);
+        for index in (from_depth..context_count).rev() {
+            let context = self.active_with_exits[index];
             let start = self.assembler.label();
             self.assembler.mark(start);
             unwind_starts.push((index, start));
@@ -3207,20 +3188,49 @@ impl Compiler {
         Ok(unwind_starts)
     }
 
+    fn emit_loop_iterator_cleanup(
+        &mut self,
+        from_depth: usize,
+        to_depth: usize,
+        preserve_tos: bool,
+    ) -> Result<(), CompileError> {
+        for index in (from_depth..to_depth).rev() {
+            match self.loops[index].iterator_cleanup {
+                IteratorCleanup::None => {}
+                IteratorCleanup::Sync | IteratorCleanup::Async => {
+                    if preserve_tos {
+                        self.emit(SWAP, 2, 0)?;
+                    }
+                    self.emit(POP_TOP, 0, -1)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_pass_finally_nops(&mut self) -> Result<(), CompileError> {
+        for index in (0..self.active_pass_finally_locations.len()).rev() {
+            let location = self.active_pass_finally_locations[index];
+            self.assembler.set_location(location);
+            self.emit(NOP, 0, 0)?;
+        }
+        Ok(())
+    }
+
     fn emit_loop_control_exception_unwind(
         &mut self,
         loop_depth: usize,
     ) -> Result<(), CompileError> {
-        let handlers = self
-            .active_exception_handlers
-            .iter()
-            .rev()
-            .take_while(|handler| handler.loop_depth >= loop_depth)
-            .cloned()
-            .collect::<Vec<_>>();
-        for handler in handlers {
+        for index in (0..self.active_exception_handlers.len()).rev() {
+            let (handler_loop_depth, name) = {
+                let handler = &self.active_exception_handlers[index];
+                (handler.loop_depth, handler.name.clone())
+            };
+            if handler_loop_depth < loop_depth {
+                break;
+            }
             self.emit(POP_EXCEPT, 0, -1)?;
-            if let Some(name) = &handler.name {
+            if let Some(name) = &name {
                 let none = self.add_constant(Constant::None)?;
                 self.emit(LOAD_CONST, none, 1)?;
                 self.store_name(name)?;
@@ -4028,9 +4038,7 @@ impl Compiler {
             };
             self.compile_stack_pattern(alternative, &mut alternative_context)?;
 
-            if index == 0 {
-                control = Some(alternative_context.stores.clone());
-            } else {
+            if index != 0 {
                 let control = control.as_ref().unwrap();
                 if alternative_context.stores.len() != control.len() {
                     return Err(CompileError::Parse(
@@ -4074,6 +4082,9 @@ impl Compiler {
                     self.source_location(alternative.range()),
                     entry_depth,
                 )?;
+            }
+            if index == 0 {
+                control = Some(alternative_context.stores);
             }
         }
         self.assembler
@@ -4928,6 +4939,21 @@ impl Compiler {
         if !statement.finalbody.is_empty() {
             return self.compile_try_finally(statement, terminal);
         }
+        self.compile_try_except(
+            statement,
+            terminal,
+            emit_statement_nop,
+            exclude_terminal_body_not_taken,
+        )
+    }
+
+    fn compile_try_except(
+        &mut self,
+        statement: &ruff_python_ast::StmtTry,
+        terminal: bool,
+        emit_statement_nop: bool,
+        exclude_terminal_body_not_taken: bool,
+    ) -> Result<(), CompileError> {
         if statement.is_star {
             return self.compile_try_star_except(statement, terminal, emit_statement_nop);
         }
@@ -5302,10 +5328,7 @@ impl Compiler {
                 self.emit(POP_EXCEPT, 0, -1)?;
                 let unwind_start = self.assembler.label();
                 self.assembler.mark(unwind_start);
-                for location in self.active_pass_finally_locations.clone().into_iter().rev() {
-                    self.assembler.set_location(location);
-                    self.emit(NOP, 0, 0)?;
-                }
+                self.emit_pass_finally_nops()?;
                 self.assembler.set_location(SourceLocation::NONE);
                 let none = self.add_constant(Constant::None)?;
                 self.emit(LOAD_CONST, none, 1)?;
@@ -5320,12 +5343,15 @@ impl Compiler {
                 continue;
             }
             let handler_body_start = self.assembler.instruction_count();
-            let newly_owned_handler_locals = self
-                .initialized_locals
-                .clone()
-                .into_iter()
-                .filter(|name| self.owned_load_locals.insert(name.clone()))
-                .collect::<Vec<_>>();
+            let newly_owned_handler_locals = {
+                let initialized_locals = &self.initialized_locals;
+                let owned_load_locals = &mut self.owned_load_locals;
+                initialized_locals
+                    .iter()
+                    .filter(|name| owned_load_locals.insert((*name).clone()))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
             let previously_owned = handler
                 .name
                 .as_ref()
@@ -6075,10 +6101,8 @@ impl Compiler {
                 }
                 Ok(has_instructions)
             } else {
-                let mut inner = statement.clone();
-                inner.finalbody.clear();
                 let previous = std::mem::replace(&mut self.prevent_try_exit_inlining, true);
-                let result = self.compile_try_inner(&inner, false, false, false);
+                let result = self.compile_try_except(statement, false, false, false);
                 self.prevent_try_exit_inlining = previous;
                 result?;
                 Ok(true)
@@ -6406,17 +6430,7 @@ impl Compiler {
         let handler_end = self.assembler.label();
         self.assembler.mark(handler_end);
         self.emit(POP_EXCEPT, 0, -1)?;
-        for context in self.loops.clone().iter().rev() {
-            match context.iterator_cleanup {
-                IteratorCleanup::None => {}
-                IteratorCleanup::Sync | IteratorCleanup::Async => {
-                    if preserve_value {
-                        self.emit(SWAP, 2, 0)?;
-                    }
-                    self.emit(POP_TOP, 0, -1)?;
-                }
-            }
-        }
+        self.emit_loop_iterator_cleanup(0, self.loops.len(), preserve_value)?;
 
         let pass_finally_unwind_start =
             (!self.active_pass_finally_locations.is_empty()).then(|| {
@@ -6424,10 +6438,7 @@ impl Compiler {
                 self.assembler.mark(start);
                 start
             });
-        for location in self.active_pass_finally_locations.clone().into_iter().rev() {
-            self.assembler.set_location(location);
-            self.emit(NOP, 0, 0)?;
-        }
+        self.emit_pass_finally_nops()?;
 
         if !preserve_value {
             if let Some(value) = &statement.value {
@@ -7082,7 +7093,7 @@ impl Compiler {
         if let Some(type_params) = definition.type_params.as_deref() {
             return self.compile_generic_function_definition(definition, type_params);
         }
-        self.compile_plain_function_definition(definition, None)
+        self.compile_plain_function_definition(definition, None, DefinitionDecorators::Compile)
     }
 
     fn compile_generic_function_definition(
@@ -7105,8 +7116,6 @@ impl Compiler {
             self.assembler.set_location(definition_location);
             self.emit(SWAP, 2, 0)?;
         }
-        let mut inner_definition = definition.clone();
-        inner_definition.decorator_list.clear();
         let type_names: BTreeSet<_> = type_params
             .iter()
             .map(|parameter| parameter.name().as_str().to_string())
@@ -7211,7 +7220,11 @@ impl Compiler {
             // argument loads, so the last default does not fuse with a cell.
             wrapper.assembler.prevent_last_instruction_fusion();
         }
-        wrapper.compile_plain_function_definition(&inner_definition, Some(defaults))?;
+        wrapper.compile_plain_function_definition(
+            definition,
+            Some(defaults),
+            DefinitionDecorators::AlreadyCompiled,
+        )?;
         wrapper.emit(SWAP, 2, 0)?;
         wrapper.emit(CALL_INTRINSIC_2, 4, -1)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
@@ -7268,10 +7281,13 @@ impl Compiler {
         &mut self,
         definition: &StmtFunctionDef,
         preloaded_defaults: Option<(bool, bool)>,
+        decorators: DefinitionDecorators,
     ) -> Result<(), CompileError> {
         let parameters = &definition.parameters;
-        for decorator in &definition.decorator_list {
-            self.compile_expression(&decorator.expression)?;
+        if decorators == DefinitionDecorators::Compile {
+            for decorator in &definition.decorator_list {
+                self.compile_expression(&decorator.expression)?;
+            }
         }
         let definition_location = self.definition_location(
             definition.range,
@@ -7348,14 +7364,17 @@ impl Compiler {
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
-        let first_line_number = self.line_number(u32::from(
-            definition
-                .decorator_list
-                .first()
-                .map_or(definition.range.start(), |decorator| {
-                    decorator.expression.range().start()
-                }),
-        ));
+        let first_line_number =
+            self.line_number(u32::from(if decorators == DefinitionDecorators::Compile {
+                definition
+                    .decorator_list
+                    .first()
+                    .map_or(definition.range.start(), |decorator| {
+                        decorator.expression.range().start()
+                    })
+            } else {
+                definition.range.start()
+            }));
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -7412,10 +7431,12 @@ impl Compiler {
         if has_positional_defaults {
             self.emit(SET_FUNCTION_ATTRIBUTE, 1, -1)?;
         }
-        for decorator in definition.decorator_list.iter().rev() {
-            self.assembler
-                .set_location(self.source_location(decorator.expression.range()));
-            self.emit(CALL, 0, -1)?;
+        if decorators == DefinitionDecorators::Compile {
+            for decorator in definition.decorator_list.iter().rev() {
+                self.assembler
+                    .set_location(self.source_location(decorator.expression.range()));
+                self.emit(CALL, 0, -1)?;
+            }
         }
         self.assembler.set_location(definition_location);
         if self.generic_target_qualified_name.is_some() {
@@ -7489,7 +7510,7 @@ impl Compiler {
         if let Some(type_params) = definition.type_params.as_deref() {
             return self.compile_generic_class_definition(definition, type_params);
         }
-        self.compile_plain_class_definition(definition)
+        self.compile_plain_class_definition(definition, DefinitionDecorators::Compile)
     }
 
     fn compile_generic_class_definition(
@@ -7500,8 +7521,6 @@ impl Compiler {
         for decorator in &definition.decorator_list {
             self.compile_expression(&decorator.expression)?;
         }
-        let mut inner_definition = definition.clone();
-        inner_definition.decorator_list.clear();
         let type_names: BTreeSet<_> = type_params
             .iter()
             .map(|parameter| parameter.name().as_str().to_string())
@@ -7610,7 +7629,8 @@ impl Compiler {
             false,
         ));
         wrapper.store_name(".type_params")?;
-        wrapper.compile_plain_class_definition(&inner_definition)?;
+        wrapper
+            .compile_plain_class_definition(definition, DefinitionDecorators::AlreadyCompiled)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
         let wrapper_closure_names: Vec<_> = wrapper
@@ -7647,9 +7667,12 @@ impl Compiler {
     fn compile_plain_class_definition(
         &mut self,
         definition: &StmtClassDef,
+        decorators: DefinitionDecorators,
     ) -> Result<(), CompileError> {
-        for decorator in &definition.decorator_list {
-            self.compile_expression(&decorator.expression)?;
+        if decorators == DefinitionDecorators::Compile {
+            for decorator in &definition.decorator_list {
+                self.compile_expression(&decorator.expression)?;
+            }
         }
         let is_generic = self.generic_target_qualified_name.is_some();
 
@@ -7683,14 +7706,17 @@ impl Compiler {
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
-        let first_line_number = self.line_number(u32::from(
-            definition
-                .decorator_list
-                .first()
-                .map_or(definition.range.start(), |decorator| {
-                    decorator.expression.range().start()
-                }),
-        ));
+        let first_line_number =
+            self.line_number(u32::from(if decorators == DefinitionDecorators::Compile {
+                definition
+                    .decorator_list
+                    .first()
+                    .map_or(definition.range.start(), |decorator| {
+                        decorator.expression.range().start()
+                    })
+            } else {
+                definition.range.start()
+            }));
         let needs_class_closure =
             class_needs_class_closure(&definition.body, self.flags & CO_FUTURE_ANNOTATIONS != 0);
         let needs_classdict = contains_type_alias(&definition.body)
@@ -7878,10 +7904,12 @@ impl Compiler {
                 self.emit(CALL, count, -i32::try_from(argument_count).unwrap() - 3)?;
             }
         }
-        for decorator in definition.decorator_list.iter().rev() {
-            self.assembler
-                .set_location(self.source_location(decorator.expression.range()));
-            self.emit(CALL, 0, -1)?;
+        if decorators == DefinitionDecorators::Compile {
+            for decorator in definition.decorator_list.iter().rev() {
+                self.assembler
+                    .set_location(self.source_location(decorator.expression.range()));
+                self.emit(CALL, 0, -1)?;
+            }
         }
         self.assembler.set_location(definition_location);
         if self.generic_target_qualified_name.is_some() {
