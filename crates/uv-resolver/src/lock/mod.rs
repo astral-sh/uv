@@ -2942,10 +2942,21 @@ impl TryFrom<LockWire> for Lock {
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
         );
+        // Most dependency entries omit their marker, so reuse the result of intersecting the
+        // default marker with the lock's environment.
+        let default =
+            UniversalMarker::from_combined(environment.into_marker(&wire.requires_python));
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| dist.unwire(&wire.requires_python, environment, &unambiguous_package_ids))
+            .map(|dist| {
+                dist.unwire(
+                    &wire.requires_python,
+                    environment,
+                    default,
+                    &unambiguous_package_ids,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -4035,6 +4046,7 @@ impl PackageWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
         // Consistency check
@@ -4067,7 +4079,14 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, environment, unambiguous_package_ids))
+                .map(|dep| {
+                    dep.unwire(
+                        requires_python,
+                        environment,
+                        default,
+                        unambiguous_package_ids,
+                    )
+                })
                 .collect()
         };
 
@@ -5839,16 +5858,24 @@ impl DependencyWire {
         self,
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
+        default: UniversalMarker,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Dependency, LockError> {
-        let mut simplified_marker = self.marker;
-        simplified_marker.and(environment);
-        let complexified_marker = simplified_marker.into_marker(requires_python);
+        let (simplified_marker, complexified_marker) =
+            if self.marker.as_simplified_marker_tree().is_true() {
+                (environment, default)
+            } else {
+                let mut simplified_marker = self.marker;
+                simplified_marker.and(environment);
+                let complexified_marker =
+                    UniversalMarker::from_combined(simplified_marker.into_marker(requires_python));
+                (simplified_marker, complexified_marker)
+            };
         Ok(Dependency {
             package_id: self.package_id.unwire(unambiguous_package_ids)?,
             extra: self.extra,
             simplified_marker,
-            complexified_marker: UniversalMarker::from_combined(complexified_marker),
+            complexified_marker,
         })
     }
 }
