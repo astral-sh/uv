@@ -5031,11 +5031,54 @@ pub struct ExportArgs {
     #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
-    /// Write an additional `--only-group` requirements export to the given file.
-    ///
-    /// May be provided multiple times as `GROUP=PATH`.
-    #[arg(long, value_name = "GROUP=PATH", hide = true)]
-    pub only_group_output_file: Vec<String>,
+    /// Read multiple export projections from a TOML plan file.
+    #[arg(
+        long,
+        value_name = "PATH",
+        value_hint = ValueHint::FilePath,
+        hide = true,
+        conflicts_with_all = [
+            "format",
+            "all_packages",
+            "package",
+            "prune",
+            "extra",
+            "all_extras",
+            "no_extra",
+            "no_all_extras",
+            "dev",
+            "no_dev",
+            "only_dev",
+            "group",
+            "no_group",
+            "no_default_groups",
+            "only_group",
+            "all_groups",
+            "no_annotate",
+            "annotate",
+            "no_header",
+            "header",
+            "emit_index_url",
+            "no_emit_index_url",
+            "emit_find_links",
+            "no_emit_find_links",
+            "editable",
+            "no_editable",
+            "no_editable_package",
+            "hashes",
+            "no_hashes",
+            "output_file",
+            "no_emit_project",
+            "only_emit_project",
+            "no_emit_workspace",
+            "only_emit_workspace",
+            "no_emit_local",
+            "only_emit_local",
+            "no_emit_package",
+            "only_emit_package",
+        ]
+    )]
+    pub plan: Option<PathBuf>,
 
     /// Do not emit the current project.
     ///

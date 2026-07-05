@@ -3,11 +3,12 @@ use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use clap::ValueEnum;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
+use serde::Deserialize;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -16,11 +17,11 @@ use uv_configuration::{
     ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_normalize::{DefaultExtras, DefaultGroups, GroupName, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
-use uv_resolver::{PylockToml, RequirementsTxtExport, cyclonedx_json};
+use uv_resolver::{Lock, PylockToml, RequirementsTxtExport, cyclonedx_json};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
@@ -48,12 +49,283 @@ enum ExportTarget {
     Project(VirtualProject),
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExportPlan {
+    projection: Vec<ExportProjectionWire>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
+struct ExportProjectionWire {
+    format: Option<ExportFormat>,
+    all_packages: bool,
+    package: Vec<PackageName>,
+    prune: Vec<PackageName>,
+    extra: Vec<ExtraName>,
+    all_extras: bool,
+    no_extra: Vec<ExtraName>,
+    dev: Option<bool>,
+    only_dev: bool,
+    group: Vec<GroupName>,
+    no_group: Vec<GroupName>,
+    no_default_groups: bool,
+    only_group: Vec<GroupName>,
+    all_groups: bool,
+    annotate: Option<bool>,
+    header: Option<bool>,
+    emit_index_url: Option<bool>,
+    emit_find_links: Option<bool>,
+    editable: Option<bool>,
+    no_editable_package: Vec<PackageName>,
+    hashes: Option<bool>,
+    output_file: Option<PathBuf>,
+    no_emit_project: bool,
+    only_emit_project: bool,
+    no_emit_workspace: bool,
+    only_emit_workspace: bool,
+    no_emit_local: bool,
+    only_emit_local: bool,
+    no_emit_package: Vec<PackageName>,
+    only_emit_package: Vec<PackageName>,
+}
+
+#[derive(Debug)]
+struct ExportProjection {
+    format: Option<ExportFormat>,
+    all_packages: bool,
+    package: Vec<PackageName>,
+    prune: Vec<PackageName>,
+    hashes: bool,
+    install_options: InstallOptions,
+    output_file: Option<PathBuf>,
+    extras: ExtrasSpecification,
+    groups: DependencyGroups,
+    editable: Option<EditableMode>,
+    include_annotations: bool,
+    include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
+}
+
+struct PreparedExport<'a> {
+    projection: &'a ExportProjection,
+    target: InstallTarget<'a>,
+    format: ExportFormat,
+    extras: ExtrasSpecificationWithDefaults,
+    groups: DependencyGroupsWithDefaults,
+}
+
+impl ExportProjectionWire {
+    fn resolve(self) -> Result<ExportProjection> {
+        let Self {
+            format,
+            all_packages,
+            package,
+            prune,
+            extra,
+            all_extras,
+            no_extra,
+            dev,
+            only_dev,
+            group,
+            no_group,
+            no_default_groups,
+            only_group,
+            all_groups,
+            annotate,
+            header,
+            emit_index_url,
+            emit_find_links,
+            editable,
+            no_editable_package,
+            hashes,
+            output_file,
+            no_emit_project,
+            only_emit_project,
+            no_emit_workspace,
+            only_emit_workspace,
+            no_emit_local,
+            only_emit_local,
+            no_emit_package,
+            only_emit_package,
+        } = self;
+
+        if all_packages && (!package.is_empty() || !prune.is_empty()) {
+            return Err(anyhow!(
+                "`all-packages` cannot be combined with `package` or `prune`"
+            ));
+        }
+        if all_extras && !extra.is_empty() {
+            return Err(anyhow!("`all-extras` cannot be combined with `extra`"));
+        }
+        if !only_group.is_empty() && (!extra.is_empty() || all_extras) {
+            return Err(anyhow!(
+                "`only-group` cannot be combined with `extra` or `all-extras`"
+            ));
+        }
+        if only_dev && (!group.is_empty() || all_groups || dev == Some(false)) {
+            return Err(anyhow!(
+                "`only-dev` cannot be combined with `group`, `all-groups`, or `dev = false`"
+            ));
+        }
+        if !only_group.is_empty()
+            && (!group.is_empty() || all_groups || dev == Some(true) || only_dev)
+        {
+            return Err(anyhow!(
+                "`only-group` cannot be combined with `group`, `all-groups`, `dev = true`, or `only-dev`"
+            ));
+        }
+        if no_emit_project && only_emit_project {
+            return Err(anyhow!(
+                "`no-emit-project` cannot be combined with `only-emit-project`"
+            ));
+        }
+        if no_emit_workspace && only_emit_workspace {
+            return Err(anyhow!(
+                "`no-emit-workspace` cannot be combined with `only-emit-workspace`"
+            ));
+        }
+        if no_emit_local && only_emit_local {
+            return Err(anyhow!(
+                "`no-emit-local` cannot be combined with `only-emit-local`"
+            ));
+        }
+        if !no_emit_package.is_empty() && !only_emit_package.is_empty() {
+            return Err(anyhow!(
+                "`no-emit-package` cannot be combined with `only-emit-package`"
+            ));
+        }
+
+        let output_file = output_file
+            .ok_or_else(|| anyhow!("Every export projection must define `output-file`"))?;
+        let (dev, no_dev) = match dev {
+            Some(true) => (true, false),
+            Some(false) => (false, true),
+            None => (false, false),
+        };
+
+        Ok(ExportProjection {
+            format,
+            all_packages,
+            package,
+            prune,
+            hashes: hashes.unwrap_or(true),
+            install_options: InstallOptions::new(
+                no_emit_project,
+                only_emit_project,
+                no_emit_workspace,
+                only_emit_workspace,
+                no_emit_local,
+                only_emit_local,
+                no_emit_package,
+                only_emit_package,
+            ),
+            output_file: Some(output_file),
+            extras: ExtrasSpecification::from_args(extra, no_extra, false, vec![], all_extras),
+            groups: DependencyGroups::from_args(
+                dev,
+                no_dev,
+                only_dev,
+                group,
+                no_group,
+                no_default_groups,
+                only_group,
+                all_groups,
+            ),
+            editable: EditableMode::from_args(editable, no_editable_package),
+            include_annotations: annotate.unwrap_or(true),
+            include_header: header.unwrap_or(true),
+            include_index_url: emit_index_url.unwrap_or(false),
+            include_find_links: emit_find_links.unwrap_or(false),
+        })
+    }
+}
+
+fn read_export_plan(path: &Path) -> Result<Vec<ExportProjection>> {
+    let contents = fs_err::read_to_string(path)
+        .with_context(|| format!("Failed to read export plan at `{}`", path.display()))?;
+    let plan = toml::from_str::<ExportPlan>(&contents)
+        .with_context(|| format!("Failed to parse export plan at `{}`", path.display()))?;
+
+    if plan.projection.is_empty() {
+        return Err(anyhow!(
+            "Export plan must contain at least one `[[projection]]`"
+        ));
+    }
+
+    plan.projection
+        .into_iter()
+        .enumerate()
+        .map(|(index, projection)| {
+            projection
+                .resolve()
+                .with_context(|| format!("Invalid export projection {}", index + 1))
+        })
+        .collect()
+}
+
 impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
     fn from(value: &'lock ExportTarget) -> Self {
         match value {
             ExportTarget::Script(script) => Self::Script(script),
             ExportTarget::Project(project) => Self::Workspace(project.workspace()),
         }
+    }
+}
+
+fn installation_target<'a>(
+    target: &'a ExportTarget,
+    lock: &'a Lock,
+    projection: &'a ExportProjection,
+) -> InstallTarget<'a> {
+    match target {
+        ExportTarget::Project(VirtualProject::Project(project)) => {
+            if projection.all_packages {
+                InstallTarget::Workspace {
+                    workspace: project.workspace(),
+                    lock,
+                }
+            } else {
+                match projection.package.as_slice() {
+                    [] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name: project.project_name(),
+                        lock,
+                    },
+                    [name] => InstallTarget::Project {
+                        workspace: project.workspace(),
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace: project.workspace(),
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
+        ExportTarget::Project(VirtualProject::NonProject(workspace)) => {
+            if projection.all_packages {
+                InstallTarget::NonProjectWorkspace { workspace, lock }
+            } else {
+                match projection.package.as_slice() {
+                    [] => InstallTarget::NonProjectWorkspace { workspace, lock },
+                    [name] => InstallTarget::Project {
+                        workspace,
+                        name,
+                        lock,
+                    },
+                    names => InstallTarget::Projects {
+                        workspace,
+                        names,
+                        lock,
+                    },
+                }
+            }
+        }
+        ExportTarget::Script(script) => InstallTarget::Script { script, lock },
     }
 }
 
@@ -68,7 +340,7 @@ pub(crate) async fn export(
     hashes: bool,
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
-    only_group_output_file: Vec<String>,
+    plan: Option<PathBuf>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -92,10 +364,27 @@ pub(crate) async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    let only_group_output_file = only_group_output_file
-        .iter()
-        .map(|value| parse_only_group_output_file(value))
-        .collect::<Result<Vec<_>>>()?;
+    let using_plan = plan.is_some();
+    let projections = if let Some(plan) = plan {
+        read_export_plan(&plan)?
+    } else {
+        vec![ExportProjection {
+            format,
+            all_packages,
+            package,
+            prune,
+            hashes,
+            install_options,
+            output_file,
+            extras,
+            groups,
+            editable,
+            include_annotations,
+            include_header,
+            include_index_url,
+            include_find_links,
+        }]
+    };
 
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -113,7 +402,9 @@ pub(crate) async fn export(
                 &workspace_cache,
             )
             .await?
-        } else if let [name] = package.as_slice() {
+        } else if let [projection] = projections.as_slice()
+            && let [name] = projection.package.as_slice()
+        {
             VirtualProject::discover_with_package(
                 project_dir,
                 &DiscoveryOptions::default(),
@@ -131,9 +422,11 @@ pub(crate) async fn export(
             )
             .await?;
 
-            for name in &package {
-                if !project.workspace().packages().contains_key(name) {
-                    return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+            for projection in &projections {
+                for name in &projection.package {
+                    if !project.workspace().packages().contains_key(name) {
+                        return Err(anyhow::anyhow!("Package `{name}` not found in workspace"));
+                    }
                 }
             }
 
@@ -153,10 +446,6 @@ pub(crate) async fn export(
         ExportTarget::Project(_project) => DefaultExtras::default(),
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
-
-    let groups = groups.with_defaults(default_groups.clone());
-    let extras = extras.with_defaults(default_extras.clone());
-    let only_group_extras = ExtrasSpecification::default().with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen.is_some() {
@@ -179,6 +468,11 @@ pub(crate) async fn export(
             .await?
             .into_interpreter(),
             ExportTarget::Project(project) => {
+                let groups = if using_plan {
+                    DependencyGroupsWithDefaults::none()
+                } else {
+                    projections[0].groups.with_defaults(default_groups.clone())
+                };
                 let workspace_python = WorkspacePython::from_request(
                     python.as_deref().map(PythonRequest::parse),
                     Some(project.workspace()),
@@ -252,122 +546,154 @@ pub(crate) async fn export(
         Err(err) => return Err(err.into()),
     };
 
-    // Identify the installation target.
-    let target = match &target {
-        ExportTarget::Project(VirtualProject::Project(project)) => {
-            if all_packages {
-                InstallTarget::Workspace {
-                    workspace: project.workspace(),
-                    lock: &lock,
-                }
-            } else {
-                match package.as_slice() {
-                    // By default, install the root project.
-                    [] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name: project.project_name(),
-                        lock: &lock,
-                    },
-                    [name] => InstallTarget::Project {
-                        workspace: project.workspace(),
-                        name,
-                        lock: &lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace: project.workspace(),
-                        names,
-                        lock: &lock,
-                    },
-                }
-            }
-        }
-        ExportTarget::Project(VirtualProject::NonProject(workspace)) => {
-            if all_packages {
-                InstallTarget::NonProjectWorkspace {
-                    workspace,
-                    lock: &lock,
-                }
-            } else {
-                match package.as_slice() {
-                    // By default, install the entire workspace.
-                    [] => InstallTarget::NonProjectWorkspace {
-                        workspace,
-                        lock: &lock,
-                    },
-                    [name] => InstallTarget::Project {
-                        workspace,
-                        name,
-                        lock: &lock,
-                    },
-                    names => InstallTarget::Projects {
-                        workspace,
-                        names,
-                        lock: &lock,
-                    },
-                }
-            }
-        }
-        ExportTarget::Script(script) => InstallTarget::Script {
-            script,
-            lock: &lock,
-        },
-    };
-
-    // Validate that the set of requested extras and development groups are defined in the lockfile.
-    target.validate_extras(&extras)?;
-    target.validate_groups(&groups)?;
-    target.validate_extras(&only_group_extras)?;
-
-    let only_group_output_file = only_group_output_file
-        .into_iter()
-        .map(|(group, output_file)| {
-            let groups = DependencyGroups::from_args(
-                false,
-                false,
-                false,
-                vec![],
-                vec![],
-                false,
-                vec![group],
-                false,
-            )
-            .with_defaults(default_groups.clone());
-            target.validate_groups(&groups)?;
-            Ok((output_file, groups))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
     let mut output_files = FxHashSet::default();
-    if let Some(output_file) = &output_file {
-        output_files.insert(output_file.clone());
-    }
-    for (additional_output_file, _) in &only_group_output_file {
-        if !output_files.insert(additional_output_file.clone()) {
+    let mut prepared = Vec::with_capacity(projections.len());
+    for (index, projection) in projections.iter().enumerate() {
+        if let Some(output_file) = &projection.output_file
+            && !output_files.insert(output_file)
+        {
             return Err(anyhow!(
                 "Cannot write multiple exports to the same output file: `{}`",
-                additional_output_file.display()
+                output_file.display()
             ));
         }
+
+        validate_output_file(projection.output_file.as_deref())?;
+
+        let target = installation_target(&target, &lock, projection);
+        let extras = projection.extras.with_defaults(default_extras.clone());
+        let groups = projection.groups.with_defaults(default_groups.clone());
+
+        // Validate that the set of requested extras and development groups are defined in the lockfile.
+        if using_plan {
+            target
+                .validate_extras(&extras)
+                .with_context(|| format!("Invalid export projection {}", index + 1))?;
+            target
+                .validate_groups(&groups)
+                .with_context(|| format!("Invalid export projection {}", index + 1))?;
+        } else {
+            target.validate_extras(&extras)?;
+            target.validate_groups(&groups)?;
+        }
+
+        let format = export_format(projection.format, projection.output_file.as_deref());
+
+        // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
+        if !matches!(format, ExportFormat::CycloneDX1_5) {
+            if using_plan {
+                detect_conflicts(&target, &extras, &groups)
+                    .with_context(|| format!("Invalid export projection {}", index + 1))?;
+            } else {
+                detect_conflicts(&target, &extras, &groups)?;
+            }
+        }
+
+        // If the user is exporting to PEP 751, ensure the filename matches the specification.
+        if matches!(format, ExportFormat::PylockToml)
+            && let Some(file_name) = projection
+                .output_file
+                .as_deref()
+                .and_then(Path::file_name)
+                .and_then(OsStr::to_str)
+            && !is_pylock_toml(file_name)
+        {
+            return Err(anyhow!(
+                "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+            ));
+        }
+
+        prepared.push(PreparedExport {
+            projection,
+            target,
+            format,
+            extras,
+            groups,
+        });
     }
 
-    validate_output_file(output_file.as_deref())?;
-    for (additional_output_file, _) in &only_group_output_file {
-        validate_output_file(Some(additional_output_file))?;
+    // Render every projection before committing any output file.
+    let mut writers = Vec::with_capacity(prepared.len());
+    for export in &prepared {
+        let projection = export.projection;
+        let mut writer = OutputWriter::new(
+            !using_plan && (!quiet || projection.output_file.is_none()),
+            projection.output_file.as_deref(),
+        );
+
+        match export.format {
+            ExportFormat::RequirementsTxt => {
+                write_requirements_txt_export(
+                    &mut writer,
+                    &export.target,
+                    &projection.prune,
+                    projection.hashes,
+                    &projection.install_options,
+                    &export.extras,
+                    &export.groups,
+                    projection.editable.as_ref(),
+                    projection.include_annotations,
+                    projection.include_header,
+                    projection.include_index_url,
+                    projection.include_find_links,
+                    &settings,
+                )?;
+            }
+            ExportFormat::PylockToml => {
+                let export = PylockToml::from_lock(
+                    &export.target,
+                    &projection.prune,
+                    &export.extras,
+                    &export.groups,
+                    projection.include_annotations,
+                    projection.editable.as_ref(),
+                    &projection.install_options,
+                )?;
+
+                if projection.include_header {
+                    writeln!(
+                        writer,
+                        "{}",
+                        "# This file was autogenerated by uv via the following command:".green()
+                    )?;
+                    writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+                }
+                write!(writer, "{}", export.to_toml()?)?;
+            }
+            ExportFormat::CycloneDX1_5 => {
+                let export = cyclonedx_json::from_lock(
+                    &export.target,
+                    &projection.prune,
+                    &export.extras,
+                    &export.groups,
+                    projection.include_annotations,
+                    &projection.install_options,
+                    preview,
+                    projection.all_packages,
+                )?;
+
+                export.output_as_json_v1_5(&mut writer)?;
+            }
+        }
+
+        writers.push(writer);
     }
 
-    // Write the resolved dependencies to the output channel.
-    let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
+    for writer in writers {
+        writer.commit().await?;
+    }
 
-    // Determine the output format.
-    let format = format.unwrap_or_else(|| {
+    Ok(ExitStatus::Success)
+}
+
+fn export_format(format: Option<ExportFormat>, output_file: Option<&Path>) -> ExportFormat {
+    format.unwrap_or_else(|| {
         if output_file
-            .as_deref()
             .and_then(Path::extension)
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
         {
             ExportFormat::RequirementsTxt
         } else if output_file
-            .as_deref()
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
             .is_some_and(is_pylock_toml)
@@ -376,116 +702,7 @@ pub(crate) async fn export(
         } else {
             ExportFormat::RequirementsTxt
         }
-    });
-
-    if !only_group_output_file.is_empty() && !matches!(format, ExportFormat::RequirementsTxt) {
-        return Err(anyhow!(
-            "`--only-group-output-file` is only supported with `requirements.txt` exports"
-        ));
-    }
-
-    // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
-    if !matches!(format, ExportFormat::CycloneDX1_5) {
-        detect_conflicts(&target, &extras, &groups)?;
-        for (_, groups) in &only_group_output_file {
-            detect_conflicts(&target, &only_group_extras, groups)?;
-        }
-    }
-
-    // If the user is exporting to PEP 751, ensure the filename matches the specification.
-    if matches!(format, ExportFormat::PylockToml) {
-        if let Some(file_name) = output_file
-            .as_deref()
-            .and_then(Path::file_name)
-            .and_then(OsStr::to_str)
-        {
-            if !is_pylock_toml(file_name) {
-                return Err(anyhow!(
-                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
-                ));
-            }
-        }
-    }
-
-    // Generate the export.
-    match format {
-        ExportFormat::RequirementsTxt => {
-            write_requirements_txt_export(
-                &mut writer,
-                &target,
-                &prune,
-                hashes,
-                &install_options,
-                &extras,
-                &groups,
-                editable.as_ref(),
-                include_annotations,
-                include_header,
-                include_index_url,
-                include_find_links,
-                &settings,
-            )?;
-        }
-        ExportFormat::PylockToml => {
-            let export = PylockToml::from_lock(
-                &target,
-                &prune,
-                &extras,
-                &groups,
-                include_annotations,
-                editable.as_ref(),
-                &install_options,
-            )?;
-
-            if include_header {
-                writeln!(
-                    writer,
-                    "{}",
-                    "# This file was autogenerated by uv via the following command:".green()
-                )?;
-                writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
-            }
-            write!(writer, "{}", export.to_toml()?)?;
-        }
-        ExportFormat::CycloneDX1_5 => {
-            let export = cyclonedx_json::from_lock(
-                &target,
-                &prune,
-                &extras,
-                &groups,
-                include_annotations,
-                &install_options,
-                preview,
-                all_packages,
-            )?;
-
-            export.output_as_json_v1_5(&mut writer)?;
-        }
-    }
-
-    writer.commit().await?;
-
-    for (output_file, groups) in only_group_output_file {
-        let mut writer = OutputWriter::new(false, Some(&output_file));
-        write_requirements_txt_export(
-            &mut writer,
-            &target,
-            &prune,
-            hashes,
-            &install_options,
-            &only_group_extras,
-            &groups,
-            editable.as_ref(),
-            include_annotations,
-            include_header,
-            include_index_url,
-            include_find_links,
-            &settings,
-        )?;
-        writer.commit().await?;
-    }
-
-    Ok(ExitStatus::Success)
+    })
 }
 
 fn validate_output_file(output_file: Option<&Path>) -> Result<()> {
@@ -505,26 +722,6 @@ fn validate_output_file(output_file: Option<&Path>) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn parse_only_group_output_file(value: &str) -> Result<(GroupName, PathBuf)> {
-    let Some((group, output_file)) = value.split_once('=') else {
-        return Err(anyhow!(
-            "Expected `--only-group-output-file` to use `GROUP=PATH`, got `{value}`"
-        ));
-    };
-
-    if group.is_empty() || output_file.is_empty() {
-        return Err(anyhow!(
-            "Expected `--only-group-output-file` to use `GROUP=PATH`, got `{value}`"
-        ));
-    }
-
-    let group = group
-        .parse::<GroupName>()
-        .map_err(|err| anyhow!("Invalid group in `--only-group-output-file`: {err}"))?;
-
-    Ok((group, PathBuf::from(output_file)))
 }
 
 #[expect(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]

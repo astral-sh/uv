@@ -5,6 +5,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use predicates::prelude::predicate;
 #[cfg(feature = "test-git")]
 use std::path::Path;
 use std::process::Stdio;
@@ -2794,7 +2795,7 @@ fn requirements_txt_export_group() -> Result<()> {
 }
 
 #[test]
-fn requirements_txt_multi_export_group() -> Result<()> {
+fn export_plan() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -2815,21 +2816,38 @@ fn requirements_txt_multi_export_group() -> Result<()> {
 
     context.lock().assert().success();
 
-    context
-        .export()
+    let plan = context.temp_dir.child("exports.toml");
+    plan.write_str(
+        r#"
+        [[projection]]
+        output-file = "multi-main.txt"
+        no-group = ["dev"]
+        header = false
+
+        [[projection]]
+        output-file = "multi-foo.txt"
+        only-group = ["foo"]
+        header = false
+
+        [[projection]]
+        output-file = "pylock.multi-bar.toml"
+        format = "pylock.toml"
+        only-group = ["bar"]
+        header = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
         .arg("--frozen")
         .arg("--quiet")
-        .arg("--no-header")
-        .arg("--no-group")
-        .arg("dev")
-        .arg("--output-file")
-        .arg("multi-main.txt")
-        .arg("--only-group-output-file")
-        .arg("foo=multi-foo.txt")
-        .arg("--only-group-output-file")
-        .arg("bar=multi-bar.txt")
-        .assert()
-        .success();
+        .arg("--plan")
+        .arg(plan.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
 
     context
         .export()
@@ -2860,8 +2878,10 @@ fn requirements_txt_multi_export_group() -> Result<()> {
         .arg("--no-header")
         .arg("--only-group")
         .arg("bar")
+        .arg("--format")
+        .arg("pylock.toml")
         .arg("--output-file")
-        .arg("single-bar.txt")
+        .arg("pylock.single-bar.toml")
         .assert()
         .success();
 
@@ -2874,9 +2894,40 @@ fn requirements_txt_multi_export_group() -> Result<()> {
         context.read("single-foo.txt")
     );
     assert_eq!(
-        context.read("multi-bar.txt"),
-        context.read("single-bar.txt")
+        context.read("pylock.multi-bar.toml"),
+        context.read("pylock.single-bar.toml")
     );
+
+    plan.write_str(
+        r#"
+        [[projection]]
+        output-file = "unwritten.txt"
+        header = false
+
+        [[projection]]
+        output-file = "missing-group.txt"
+        only-group = ["missing"]
+        header = false
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.export()
+        .arg("--frozen")
+        .arg("--quiet")
+        .arg("--plan")
+        .arg(plan.path()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid export projection 2
+      Caused by: Group `missing` is not defined in the project's `dependency-groups` table
+    ");
+    context
+        .temp_dir
+        .child("unwritten.txt")
+        .assert(predicate::path::missing());
 
     Ok(())
 }
