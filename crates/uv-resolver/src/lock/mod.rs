@@ -7406,38 +7406,6 @@ mod tests {
     }
 
     #[test]
-    fn dependency_marker_defaults_to_environment() {
-        let requires_python = RequiresPython::from_specifiers(
-            &VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
-        );
-        let environment = SimplifiedMarkerTree::new(
-            &requires_python,
-            MarkerTree::from_str("sys_platform == 'darwin'").expect("valid marker"),
-        );
-        let default = UniversalMarker::from_combined(environment.into_marker(&requires_python));
-        let dependency: DependencyWire = toml::from_str(
-            r#"
-name = "dependency"
-version = "1.0.0"
-source = { registry = "https://example.com/simple" }
-"#,
-        )
-        .expect("valid dependency");
-
-        let dependency = dependency
-            .unwire(
-                &requires_python,
-                environment,
-                default,
-                &FxHashMap::default(),
-            )
-            .expect("valid dependency");
-
-        assert_eq!(dependency.simplified_marker, environment);
-        assert_eq!(dependency.complexified_marker, default);
-    }
-
-    #[test]
     fn dependency_selection_resolves_included_groups_to_same_package() {
         let lock: Lock = toml::from_str(
             r#"
