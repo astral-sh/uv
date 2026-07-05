@@ -91,8 +91,8 @@ struct BarState {
     id: usize,
     /// The maximum length of all bar names encountered.
     max_len: usize,
-    /// The number of Git checkouts currently in progress.
-    active_checkouts: usize,
+    /// The number of active requests to suspend progress rendering.
+    suspensions: usize,
 }
 
 impl Default for BarState {
@@ -105,7 +105,7 @@ impl Default for BarState {
             // Avoid resizing the progress bar templates too often by starting with a padding
             // that's wider than most package names.
             max_len: 20,
-            active_checkouts: 0,
+            suspensions: 0,
         }
     }
 }
@@ -169,7 +169,7 @@ impl ProgressReporter {
 
     /// Determines how progress updates should be presented.
     fn progress_output_mode(multi_progress: &MultiProgress, state: &BarState) -> ProgressOutput {
-        if state.active_checkouts > 0 {
+        if state.suspensions > 0 {
             ProgressOutput::Suppressed
         } else if !multi_progress.is_hidden() {
             ProgressOutput::Rendered
@@ -438,11 +438,10 @@ impl ProgressReporter {
 
         state.headers += 1;
         state.bars.insert(id, ProgressBarKind::Spinner { progress });
-        state.active_checkouts += 1;
-        if state.active_checkouts == 1 {
+        state.suspensions += 1;
+        if state.suspensions == 1 {
             // Git can prompt on the terminal, so prevent every bar in the shared progress
             // display from redrawing until all checkouts have finished.
-            let _ = multi_progress.clear();
             multi_progress.set_draw_target(ProgressDrawTarget::hidden());
         }
         id
@@ -460,8 +459,8 @@ impl ProgressReporter {
         let (progress, progress_output) = {
             let mut state = state.lock().unwrap();
             state.headers -= 1;
-            state.active_checkouts -= 1;
-            if state.active_checkouts == 0 {
+            state.suspensions -= 1;
+            if state.suspensions == 0 {
                 multi_progress.set_draw_target(self.printer.target());
             }
             (
@@ -965,67 +964,76 @@ impl uv_bin_install::Reporter for BinaryDownloadReporter {
 mod tests {
     use std::io;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use indicatif::TermLike;
 
     use super::*;
 
     #[derive(Clone, Debug, Default)]
-    struct TrackingTerm {
-        has_output: Arc<AtomicBool>,
+    struct RecordingTerm {
+        writes: Arc<AtomicUsize>,
     }
 
-    impl TrackingTerm {
-        fn has_output(&self) -> bool {
-            self.has_output.load(Ordering::Relaxed)
+    impl RecordingTerm {
+        fn record_write(&self) {
+            self.writes.fetch_add(1, Ordering::Relaxed);
+        }
+
+        fn writes(&self) -> usize {
+            self.writes.load(Ordering::Relaxed)
         }
     }
 
-    impl TermLike for TrackingTerm {
+    impl TermLike for RecordingTerm {
         fn width(&self) -> u16 {
             80
         }
 
         fn move_cursor_up(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
             Ok(())
         }
 
         fn move_cursor_down(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
             Ok(())
         }
 
         fn move_cursor_right(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
             Ok(())
         }
 
         fn move_cursor_left(&self, _n: usize) -> io::Result<()> {
+            self.record_write();
             Ok(())
         }
 
         fn write_line(&self, _s: &str) -> io::Result<()> {
-            self.has_output.store(true, Ordering::Relaxed);
+            self.record_write();
             Ok(())
         }
 
         fn write_str(&self, _s: &str) -> io::Result<()> {
-            self.has_output.store(true, Ordering::Relaxed);
+            self.record_write();
             Ok(())
         }
 
         fn clear_line(&self) -> io::Result<()> {
-            self.has_output.store(false, Ordering::Relaxed);
+            self.record_write();
             Ok(())
         }
 
         fn flush(&self) -> io::Result<()> {
+            self.record_write();
             Ok(())
         }
     }
 
     #[test]
-    fn checkout_clears_and_hides_progress_until_all_checkouts_complete() {
-        let terminal = TrackingTerm::default();
+    fn checkout_suspends_all_progress_draws() {
+        let terminal = RecordingTerm::default();
         let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::term_like(
             Box::new(terminal.clone()),
         ));
@@ -1034,13 +1042,9 @@ mod tests {
         let url = DisplaySafeUrl::parse("ssh://git@example.com/project.git")
             .expect("test URL should be valid");
 
-        reporter.root.set_message("Resolving dependencies...");
-        reporter.root.tick();
-        assert!(terminal.has_output());
-
         let first_checkout = reporter.on_checkout_start(&url, "main");
         assert!(multi_progress.is_hidden());
-        assert!(!terminal.has_output());
+        let writes_before_updates = terminal.writes();
 
         reporter.root.set_message("Resolving dependencies...");
         reporter.root.tick();
@@ -1052,7 +1056,7 @@ mod tests {
         reporter.on_checkout_complete(&url, "main", first_checkout);
 
         assert!(multi_progress.is_hidden());
-        assert!(!terminal.has_output());
+        assert_eq!(terminal.writes(), writes_before_updates);
 
         reporter.on_checkout_complete(&url, "other", second_checkout);
     }
