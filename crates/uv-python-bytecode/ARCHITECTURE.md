@@ -51,7 +51,7 @@ Each stage has one primary owner:
 | ---------------------------------------------------------------------------- | ------------------ |
 | Public API, input normalization, parser setup, `.pyc` header                 | `src/lib.rs`       |
 | Scope analysis, AST lowering, constants/names/locals, stack-depth accounting | `src/compiler.rs`  |
-| Labels, control-flow rewrites, instruction layout, line and exception tables | `src/assembler.rs` |
+| Labels, control-flow rewrites, instruction layout, line and exception tables | `src/assembler/`   |
 | CPython IDs, widths, flags, stack metadata, version and provenance           | `src/target/`      |
 | Marshal equality/identity keys, reference graph, binary encoding             | `src/marshal/`     |
 
