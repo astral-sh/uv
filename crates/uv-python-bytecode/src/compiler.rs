@@ -22,6 +22,9 @@ use crate::target::local_kinds::{
     CO_FAST_ARG_KW, CO_FAST_ARG_POS, CO_FAST_ARG_VAR, CO_FAST_CELL, CO_FAST_FREE, CO_FAST_HIDDEN,
     CO_FAST_LOCAL,
 };
+// The generated opcode module is the compiler lowering vocabulary; spelling out this nearly
+// complete import would obscure which imports carry higher-level meaning.
+#[allow(clippy::wildcard_imports)]
 use crate::target::opcodes::*;
 use crate::target::operands::{
     BinaryIntrinsic, BinaryOperation, CommonConstant, ComparisonOperation, Conversion,
@@ -141,6 +144,9 @@ struct MatchContext {
     fail_pop: Vec<Label>,
     on_top: usize,
 }
+
+type RegionExclusions = Vec<(Label, Label)>;
+type RegionExclusionStack = Vec<RegionExclusions>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IteratorCleanup {
@@ -1801,9 +1807,9 @@ impl Compiler {
 
     fn with_region_exclusion_collector<T>(
         &mut self,
-        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut Vec<Vec<(Label, Label)>>,
+        select: for<'a> fn(&'a mut ControlFlowState) -> &'a mut RegionExclusionStack,
         compile: impl FnOnce(&mut Self) -> Result<T, CompileError>,
-    ) -> Result<(T, Vec<(Label, Label)>), CompileError> {
+    ) -> Result<(T, RegionExclusions), CompileError> {
         let (value, exclusions) = self.with_control_stack(select, Vec::new(), compile)?;
         Ok((value, exclusions))
     }
@@ -2052,7 +2058,7 @@ impl Compiler {
             self.add_constant(Constant::String(self.unit.qualified_name.clone()))?;
         self.emit(LOAD_CONST, qualified_name, 1)?;
         self.store_name("__qualname__")?;
-        if self.unit.first_line_number <= u32::from(u8::MAX) {
+        if u8::try_from(self.unit.first_line_number).is_ok() {
             self.emit(LOAD_SMALL_INT, self.unit.first_line_number, 1)?;
         } else {
             let first_line_number =
@@ -2794,7 +2800,7 @@ impl Compiler {
                 return Ok(());
             };
             let emitted_fallthrough = if matches!(body.last(), Some(Stmt::If(_))) {
-                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                let ((), emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
                     compiler.compile_suite_inner(body, true)
                 })?;
                 emitted_fallthrough
@@ -2853,7 +2859,7 @@ impl Compiler {
                 )?;
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
-                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                let ((), emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
                     compiler.compile_suite_inner(body, true)
                 })?;
                 if !suite_terminates(body) && !emitted_fallthrough {
@@ -2883,7 +2889,7 @@ impl Compiler {
                     .set_location(self.source_location(test.range()));
             } else {
                 let body_start = self.assembler.instruction_count();
-                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                let ((), emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
                     compiler.compile_suite_inner(body, true)
                 })?;
                 if !suite_terminates(body) && !emitted_fallthrough {
@@ -3703,6 +3709,10 @@ impl Compiler {
                 };
                 if !preserve_tos && !return_is_overridden {
                     if let Some(value) = &statement.value {
+                        let return_spans_lines = {
+                            let location = self.source_location(statement.range);
+                            location.line != location.end_line
+                        };
                         if !with_unwind_starts.is_empty() || finally_unwind_start.is_some() {
                             let constant = fold_constant(value).ok_or_else(|| {
                                 CompileError::Internal(
@@ -3710,10 +3720,7 @@ impl Compiler {
                                 )
                             })?;
                             self.emit_preprocessed_constant(value, constant)?;
-                        } else if {
-                            let location = self.source_location(statement.range);
-                            location.line != location.end_line
-                        } {
+                        } else if return_spans_lines {
                             self.assembler
                                 .set_location(self.source_location(statement.range));
                             let constant = fold_constant(value).ok_or_else(|| {
@@ -4688,7 +4695,7 @@ impl Compiler {
                 let emitted_fallthrough = if emitted_case_exit {
                     false
                 } else if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
-                    let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                    let ((), emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
                         compiler.compile_suite_inner(&case.body, true)
                     })?;
                     emitted_fallthrough
@@ -4765,7 +4772,7 @@ impl Compiler {
             }
             let body_start = self.assembler.instruction_count();
             let emitted_fallthrough = if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
-                let (_, emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+                let ((), emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
                     compiler.compile_suite_inner(&case.body, true)
                 })?;
                 emitted_fallthrough
@@ -6328,13 +6335,13 @@ impl Compiler {
                         name: handler.name.as_ref().map(ToString::to_string),
                         loop_depth: self.control.loops.len(),
                     };
-                    let (_, exclusions) = self.with_exception_handler(context, |compiler| {
+                    let ((), exclusions) = self.with_exception_handler(context, |compiler| {
                         compiler.with_control_override(
                             |control| &mut control.unwind_exception_handlers_for_implicit_return,
                             terminal_handler_try,
                             |compiler| {
                                 if terminal_handler_try {
-                                    let (_, emitted_fallthrough) = compiler
+                                    let ((), emitted_fallthrough) = compiler
                                         .with_fallthrough_tracking(|compiler| {
                                             compiler.compile_with_strict_owned_loads(
                                                 strict_owned_loads,
@@ -7092,7 +7099,7 @@ impl Compiler {
         } else {
             self.assembler.preserve_last_no_location();
         }
-        let (_, finalbody_emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
+        let ((), finalbody_emitted_fallthrough) = self.with_fallthrough_tracking(|compiler| {
             if let Some(location) = pass_finally_location {
                 compiler.assembler.set_location(location);
                 if compiler
@@ -10982,7 +10989,7 @@ impl Compiler {
         self.emit(SWAP, 2, 0)?;
         let cleanup_depth =
             (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned();
-        let (_, region_exclusions) =
+        let ((), region_exclusions) =
             self.with_comprehension_context((cleanup, cleanup_depth), |compiler| {
                 compiler.with_control_override(
                     |control| &mut control.reorder_async_comprehension_cleanup_throw,
@@ -15330,7 +15337,9 @@ fn explicit_surrogate_string(value: &str, source: &str) -> Option<Vec<u8>> {
             continue;
         };
         if (0xd800..=0xdfff).contains(&codepoint) {
-            replacements.push(Some(codepoint as u16));
+            replacements.push(Some(
+                u16::try_from(codepoint).expect("surrogate code point fits in u16"),
+            ));
         } else if codepoint == 0xfffd {
             replacements.push(None);
         }
@@ -15443,6 +15452,10 @@ enum NumericReal {
     Float(f64),
 }
 
+#[expect(
+    clippy::float_cmp,
+    reason = "CPython constant deduplication uses exact numeric equality"
+)]
 fn python_constants_equal(left: &Constant, right: &Constant) -> bool {
     if let (Some((left_real, left_imag)), Some((right_real, right_imag))) =
         (numeric_parts(left), numeric_parts(right))
@@ -15509,6 +15522,10 @@ fn normalized_digits(mut digits: Vec<u16>) -> Vec<u16> {
     digits
 }
 
+#[expect(
+    clippy::float_cmp,
+    reason = "CPython constant deduplication uses exact numeric equality"
+)]
 fn numeric_reals_equal(left: &NumericReal, right: &NumericReal) -> bool {
     match (left, right) {
         (NumericReal::Float(left), NumericReal::Float(right)) => left == right,
@@ -15575,7 +15592,7 @@ fn float_integer_numeric_real(value: f64) -> Option<NumericReal> {
             carry = shifted >> 15;
         }
         if carry != 0 {
-            digits.push(carry as u16);
+            digits.push(u16::try_from(carry).expect("base-2^15 carry fits in u16"));
         }
     }
     Some(NumericReal::Integer { negative, digits })
@@ -16312,6 +16329,10 @@ fn parse_percent_format(
     Some((conversion, (!format_spec.is_empty()).then_some(format_spec)))
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "CPython constant folding intentionally rounds integer operands to binary64"
+)]
 fn fold_constant(expression: &Expr) -> Option<Constant> {
     if let Some(constant) = literal_constant(expression) {
         return Some(constant);
@@ -16369,15 +16390,15 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
             UnaryOp::Invert => match fold_constant(&unary.operand)? {
                 Constant::Int(value) => {
                     let magnitude = u128::from(value) + 1;
-                    if magnitude < i64::MIN.unsigned_abs().into() {
-                        Some(Constant::SignedInt(-(magnitude as i64)))
-                    } else if magnitude == i64::MIN.unsigned_abs().into() {
-                        Some(Constant::SignedInt(i64::MIN))
-                    } else {
-                        Some(Constant::BigInt {
+                    match magnitude.cmp(&u128::from(i64::MIN.unsigned_abs())) {
+                        std::cmp::Ordering::Less => Some(Constant::SignedInt(
+                            -i64::try_from(magnitude).expect("magnitude below 2^63 fits in i64"),
+                        )),
+                        std::cmp::Ordering::Equal => Some(Constant::SignedInt(i64::MIN)),
+                        std::cmp::Ordering::Greater => Some(Constant::BigInt {
                             negative: true,
                             digits: big_integer_digits(&magnitude.to_string()),
-                        })
+                        }),
                     }
                 }
                 Constant::SignedInt(value) => Some(Constant::SignedInt(!value)),
@@ -16556,34 +16577,29 @@ fn fold_constant(expression: &Expr) -> Option<Constant> {
                 (Constant::String(value), Operator::Mult, Constant::Int(times))
                 | (Constant::Int(times), Operator::Mult, Constant::String(value)) => {
                     let length = value.chars().count();
-                    if length == 0 {
-                        Some(Constant::String(String::new()))
-                    } else {
-                        let times = usize::try_from(times).ok()?;
-                        (times <= 4096 / length).then(|| Constant::String(value.repeat(times)))
-                    }
+                    let Some(max_times) = 4096_usize.checked_div(length) else {
+                        return Some(Constant::String(String::new()));
+                    };
+                    let times = usize::try_from(times).ok()?;
+                    (times <= max_times).then(|| Constant::String(value.repeat(times)))
                 }
                 (Constant::Bytes(value), Operator::Mult, Constant::Int(times))
                 | (Constant::Int(times), Operator::Mult, Constant::Bytes(value)) => {
-                    if value.is_empty() {
-                        Some(Constant::Bytes(Vec::new()))
-                    } else {
-                        let times = usize::try_from(times).ok()?;
-                        (times <= 4096 / value.len()).then(|| Constant::Bytes(value.repeat(times)))
-                    }
+                    let Some(max_times) = 4096_usize.checked_div(value.len()) else {
+                        return Some(Constant::Bytes(Vec::new()));
+                    };
+                    let times = usize::try_from(times).ok()?;
+                    (times <= max_times).then(|| Constant::Bytes(value.repeat(times)))
                 }
                 (Constant::Tuple(value), Operator::Mult, Constant::Int(times))
                 | (Constant::Int(times), Operator::Mult, Constant::Tuple(value)) => {
-                    if value.is_empty() {
-                        Some(Constant::Tuple(Vec::new()))
-                    } else {
-                        let times = usize::try_from(times).ok()?;
-                        (times <= 256 / value.len()).then(|| {
-                            Constant::Tuple(
-                                (0..times).flat_map(|_| value.iter().cloned()).collect(),
-                            )
-                        })
-                    }
+                    let Some(max_times) = 256_usize.checked_div(value.len()) else {
+                        return Some(Constant::Tuple(Vec::new()));
+                    };
+                    let times = usize::try_from(times).ok()?;
+                    (times <= max_times).then(|| {
+                        Constant::Tuple((0..times).flat_map(|_| value.iter().cloned()).collect())
+                    })
                 }
                 _ => None,
             }
@@ -16631,7 +16647,7 @@ fn fold_positive_integer_add(left: &Constant, right: &Constant) -> Option<Consta
         carry = value >> 15;
     }
     if carry != 0 {
-        digits.push(carry as u16);
+        digits.push(u16::try_from(carry).expect("base-2^15 carry fits in u16"));
     }
     Some(positive_integer_constant(digits))
 }
@@ -16675,11 +16691,42 @@ fn positive_integer_constant(digits: Vec<u16>) -> Constant {
 }
 
 fn fold_literal_subscript(value: &Expr, index: &Expr) -> Option<Constant> {
+    fn integer(expression: &Expr) -> Option<usize> {
+        match fold_constant(expression)? {
+            Constant::Bool(value) => Some(usize::from(value)),
+            Constant::Int(value) => usize::try_from(value).ok(),
+            Constant::SignedInt(value) if value >= 0 => usize::try_from(value).ok(),
+            Constant::SignedInt(_) => None,
+            Constant::BigInt {
+                negative: false, ..
+            } => Some(usize::MAX),
+            Constant::BigInt { negative: true, .. } => None,
+            _ => None,
+        }
+    }
+
+    fn bound(expression: Option<&Expr>, length: usize, default: usize) -> Option<usize> {
+        let Some(expression) = expression else {
+            return Some(default);
+        };
+        integer(expression).map(|value| value.min(length))
+    }
+
+    fn indices(slice: &ruff_python_ast::ExprSlice, length: usize) -> Option<Vec<usize>> {
+        let lower = bound(slice.lower.as_deref(), length, 0)?;
+        let upper = bound(slice.upper.as_deref(), length, length)?;
+        let step = slice.step.as_deref().map_or(Some(1), integer)?;
+        if step == 0 {
+            return None;
+        }
+        Some((lower.min(upper)..upper).step_by(step).collect())
+    }
+
     let value = fold_constant(value)?;
     if !matches!(index, Expr::Slice(_)) {
         let index = match fold_constant(index)? {
             Constant::Bool(value) => i128::from(u8::from(value)),
-            Constant::Int(value) => i128::try_from(value).ok()?,
+            Constant::Int(value) => i128::from(value),
             Constant::SignedInt(value) => i128::from(value),
             _ => return None,
         };
@@ -16713,37 +16760,6 @@ fn fold_literal_subscript(value: &Expr, index: &Expr) -> Option<Constant> {
     };
     if slice.step.is_some() && constant_slice(slice).is_none() {
         return None;
-    }
-
-    fn integer(expression: &Expr) -> Option<usize> {
-        match fold_constant(expression)? {
-            Constant::Bool(value) => Some(usize::from(value)),
-            Constant::Int(value) => usize::try_from(value).ok(),
-            Constant::SignedInt(value) if value >= 0 => usize::try_from(value).ok(),
-            Constant::SignedInt(_) => None,
-            Constant::BigInt {
-                negative: false, ..
-            } => Some(usize::MAX),
-            Constant::BigInt { negative: true, .. } => None,
-            _ => None,
-        }
-    }
-
-    fn bound(expression: Option<&Expr>, length: usize, default: usize) -> Option<usize> {
-        let Some(expression) = expression else {
-            return Some(default);
-        };
-        integer(expression).map(|value| value.min(length))
-    }
-
-    fn indices(slice: &ruff_python_ast::ExprSlice, length: usize) -> Option<Vec<usize>> {
-        let lower = bound(slice.lower.as_deref(), length, 0)?;
-        let upper = bound(slice.upper.as_deref(), length, length)?;
-        let step = slice.step.as_deref().map_or(Some(1), integer)?;
-        if step == 0 {
-            return None;
-        }
-        Some((lower.min(upper)..upper).step_by(step).collect())
     }
 
     match value {
@@ -16782,7 +16798,7 @@ fn folded_bool_operand(expression: &Expr) -> Option<(&Expr, Constant)> {
             return None;
         }
         let constant = fold_constant(value)?;
-        let truthiness = constant_truthiness(&constant)?;
+        let truthiness = constant_truthiness(&constant);
         if matches!(boolean.op, BoolOp::And) && !truthiness
             || matches!(boolean.op, BoolOp::Or) && truthiness
         {
@@ -16796,6 +16812,10 @@ fn folded_bool_operand(expression: &Expr) -> Option<(&Expr, Constant)> {
     }
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "CPython complex folding intentionally rounds integer operands to binary64"
+)]
 fn constant_complex_parts(constant: &Constant) -> Option<(f64, f64)> {
     match constant {
         Constant::Int(value) => Some((*value as f64, 0.0)),
@@ -16806,20 +16826,20 @@ fn constant_complex_parts(constant: &Constant) -> Option<(f64, f64)> {
     }
 }
 
-fn constant_truthiness(constant: &Constant) -> Option<bool> {
+fn constant_truthiness(constant: &Constant) -> bool {
     match constant {
-        Constant::None => Some(false),
-        Constant::Bool(value) => Some(*value),
-        Constant::Ellipsis | Constant::Slice { .. } | Constant::Code(_) => Some(true),
-        Constant::Int(value) => Some(*value != 0),
-        Constant::SignedInt(value) => Some(*value != 0),
-        Constant::BigInt { digits, .. } => Some(!digits.is_empty()),
-        Constant::Float(value) => Some(*value != 0.0),
-        Constant::Complex { real, imag } => Some(*real != 0.0 || *imag != 0.0),
-        Constant::String(value) => Some(!value.is_empty()),
-        Constant::SurrogateString(value) => Some(!value.is_empty()),
-        Constant::Bytes(value) => Some(!value.is_empty()),
-        Constant::Tuple(value) | Constant::FrozenSet(value) => Some(!value.is_empty()),
+        Constant::None => false,
+        Constant::Bool(value) => *value,
+        Constant::Ellipsis | Constant::Slice { .. } | Constant::Code(_) => true,
+        Constant::Int(value) => *value != 0,
+        Constant::SignedInt(value) => *value != 0,
+        Constant::BigInt { digits, .. } => !digits.is_empty(),
+        Constant::Float(value) => *value != 0.0,
+        Constant::Complex { real, imag } => *real != 0.0 || *imag != 0.0,
+        Constant::String(value) => !value.is_empty(),
+        Constant::SurrogateString(value) => !value.is_empty(),
+        Constant::Bytes(value) => !value.is_empty(),
+        Constant::Tuple(value) | Constant::FrozenSet(value) => !value.is_empty(),
     }
 }
 

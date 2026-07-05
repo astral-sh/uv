@@ -1101,6 +1101,10 @@ fn print_summaries(rows: &[RawRow], phase: Phase) -> Result<(), String> {
     Ok(())
 }
 
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "benchmark nanosecond samples are intentionally converted to floating-point means"
+)]
 fn block_samples(rows: &[RawRow], phase: &str, metric: Metric) -> Result<Vec<BlockSample>, String> {
     let mut grouped = BTreeMap::<usize, Vec<&RawRow>>::new();
     for row in rows.iter().filter(|row| row.included && row.phase == phase) {
@@ -1282,7 +1286,9 @@ fn bootstrap_median_ci(
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            sample.push(ratios[state as usize % ratios.len()]);
+            let length = u64::try_from(ratios.len()).expect("sample length fits in u64");
+            let index = usize::try_from(state % length).expect("index is below sample length");
+            sample.push(ratios[index]);
         }
         medians.push(median_f64(&sample)?);
     }

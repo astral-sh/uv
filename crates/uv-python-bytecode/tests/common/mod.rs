@@ -24,14 +24,13 @@ fn python_3145() -> Option<String> {
     if output.status.success() {
         return Some(executable.to_string());
     }
-    if configured.is_some() {
-        panic!(
-            "UV_PYTHON_BYTECODE_TEST_PYTHON must name CPython {} with magic {}: {}",
-            version,
-            magic,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
+    assert!(
+        configured.is_none(),
+        "UV_PYTHON_BYTECODE_TEST_PYTHON must name CPython {} with magic {}: {}",
+        version,
+        magic,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
     None
 }
 

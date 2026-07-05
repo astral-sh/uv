@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn matches_cpython_marshal_for_generic_wrapper_closures() {
-        let source = r#"def outer():
+        let source = r"def outer():
     value = int
 
     class Nested[T]:
@@ -111,13 +111,13 @@ mod tests {
 class Generic[T]:
     def method[U](self):
         return T, U
-"#;
+";
         assert_matches_cpython_marshal(source, "generic_closures.py");
     }
 
     #[test]
     fn matches_cpython_marshal_for_annotation_scope_closures() {
-        let source = r#"from __future__ import annotations
+        let source = r"from __future__ import annotations
 
 def outer():
     from . import dependency
@@ -141,7 +141,7 @@ class Container:
 
 class CapturesBase[T](factory(lambda: T), metaclass=factory(lambda: T)):
     pass
-"#;
+";
         assert_matches_cpython_marshal(source, "annotation_scopes.py");
     }
 
@@ -165,7 +165,7 @@ class CapturesBase[T](factory(lambda: T), metaclass=factory(lambda: T)):
 
     #[test]
     fn matches_cpython_marshal_for_try_exits_across_exception_boundaries() {
-        let source = r#"try:
+        let source = r"try:
     1 / 0
 except ZeroDivisionError:
     pass
@@ -200,7 +200,7 @@ try:
         raise error
 except Exception:
     pass
-"#;
+";
         assert_matches_cpython_marshal(source, "try_exit.py");
     }
 
@@ -249,7 +249,7 @@ except Exception:
 
     #[test]
     fn matches_cpython_marshal_for_noop_finally_bodies() {
-        let source = r#"try:
+        let source = r"try:
     body()
 except Error:
     recover()
@@ -271,7 +271,7 @@ try:
         pass
 except Error:
     recover()
-"#;
+";
         assert_matches_cpython_marshal(source, "try_finally_noops.py");
     }
 
@@ -349,7 +349,7 @@ except Error:
 
     #[test]
     fn matches_cpython_marshal_for_inlined_comprehension_cells() {
-        let source = r#"module_result = [lambda: x for x in range(2)]
+        let source = r"module_result = [lambda: x for x in range(2)]
 
 def captured_targets():
     lists = [lambda: x for x in range(2)]
@@ -363,13 +363,13 @@ def unreachable_target():
 
 def nested_targets(xs, ys):
     return [[lambda: x for x in ys] for x in xs]
-"#;
+";
         assert_matches_cpython_marshal(source, "comprehension_cells.py");
     }
 
     #[test]
     fn matches_cpython_marshal_for_class_scope_super_resolution() {
-        let source = r#"class Outer:
+        let source = r"class Outer:
     def method(self):
         class Inner:
             super(Outer, self).method()
@@ -387,7 +387,7 @@ class Annotated:
 class Shadowed:
     super = factory
     value = super(Shadowed, instance).method()
-"#;
+";
         assert_matches_cpython_marshal(source, "class_super.py");
     }
 
@@ -531,7 +531,7 @@ class Shadowed:
 
     #[test]
     fn matches_cpython_marshal_for_annotations_in_compound_suites() {
-        let source = r#"with manager:
+        let source = r"with manager:
     in_with: WithAnnotation = 1
 
 try:
@@ -546,7 +546,7 @@ finally:
 match subject:
     case 1:
         in_match: MatchAnnotation = 6
-"#;
+";
         assert_matches_cpython_marshal(source, "compound_annotations.py");
     }
 
