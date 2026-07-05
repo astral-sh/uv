@@ -440,14 +440,82 @@ impl FunctionPlan {
 }
 
 #[derive(Debug)]
-pub(crate) struct Compiler {
-    assembler: Assembler,
+struct CompilationContext {
+    filename: String,
+    source: Arc<str>,
+    line_index: LineIndex,
+}
+
+#[derive(Debug)]
+struct CodeUnit {
+    scope: Scope,
+    function_plan: Option<FunctionPlan>,
+    generic_target_qualified_name: Option<String>,
+    child_qualified_name_parent: Option<String>,
+    class_scope_is_nested: bool,
+    module_annotation_index: u32,
+    annotation_classdict_index: Option<u32>,
+    name: String,
+    qualified_name: String,
+    private_name: Option<String>,
+    arg_count: u32,
+    positional_only_arg_count: u32,
+    keyword_only_arg_count: u32,
+    flags: u32,
+    first_line_number: u32,
+    annotation_thunk: bool,
+}
+
+#[derive(Debug)]
+struct CodeUnitSpec {
+    scope: Scope,
+    function_plan: Option<FunctionPlan>,
+    name: String,
+    qualified_name: String,
+    private_name: Option<String>,
+    arg_count: u32,
+    positional_only_arg_count: u32,
+    keyword_only_arg_count: u32,
+    flags: u32,
+    first_line_number: u32,
+}
+
+impl CodeUnit {
+    fn from_spec(spec: CodeUnitSpec) -> Self {
+        Self {
+            scope: spec.scope,
+            function_plan: spec.function_plan,
+            generic_target_qualified_name: None,
+            child_qualified_name_parent: None,
+            class_scope_is_nested: false,
+            module_annotation_index: 0,
+            annotation_classdict_index: None,
+            name: spec.name,
+            qualified_name: spec.qualified_name,
+            private_name: spec.private_name,
+            arg_count: spec.arg_count,
+            positional_only_arg_count: spec.positional_only_arg_count,
+            keyword_only_arg_count: spec.keyword_only_arg_count,
+            flags: spec.flags,
+            first_line_number: spec.first_line_number,
+            annotation_thunk: false,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct OutputState {
     constants: Vec<Constant>,
     deferred_constants_before_return: Vec<(InstructionId, Constant)>,
     deferred_constants: Vec<(Option<InstructionId>, Constant)>,
     deferred_names: Vec<(InstructionId, String)>,
     names: Vec<String>,
     name_indices: FxHashMap<String, u32>,
+    interned_constant_strings: FxHashSet<String>,
+}
+
+#[derive(Debug, Default)]
+struct SymbolState {
     locals: Vec<String>,
     fast_local_count: usize,
     cell_names: FxHashSet<String>,
@@ -458,11 +526,12 @@ pub(crate) struct Compiler {
     initialized_locals: FxHashSet<String>,
     owned_load_locals: FxHashSet<String>,
     imported_scope_names: FxHashSet<String>,
-    interned_constant_strings: FxHashSet<String>,
     type_parameter_names: BTreeSet<String>,
-    generic_target_qualified_name: Option<String>,
-    child_qualified_name_parent: Option<String>,
-    class_scope_is_nested: bool,
+    module_globals: FxHashSet<String>,
+}
+
+#[derive(Debug, Default)]
+struct ControlFlowState {
     defer_async_comprehension_restore: bool,
     reorder_async_comprehension_cleanup_throw: bool,
     pending_comprehension_restores: Vec<(Vec<u32>, SourceLocation)>,
@@ -490,95 +559,45 @@ pub(crate) struct Compiler {
     exclude_loop_tail_not_taken_from_control_flow_regions: bool,
     unwind_exception_handlers_for_implicit_return: bool,
     prevent_try_exit_inlining: bool,
-    scope: Scope,
-    function_plan: Option<FunctionPlan>,
-    module_globals: FxHashSet<String>,
-    module_annotation_index: u32,
-    annotation_classdict_index: Option<u32>,
     generator_region_start: Option<Label>,
     generator_region_exclusions: Vec<(Label, Label)>,
     emitted_fallthrough_return: bool,
     loops: Vec<LoopContext>,
     depth: i32,
     max_depth: u32,
-    filename: String,
-    source: Arc<str>,
-    line_index: LineIndex,
-    name: String,
-    qualified_name: String,
-    private_name: Option<String>,
-    arg_count: u32,
-    positional_only_arg_count: u32,
-    keyword_only_arg_count: u32,
-    flags: u32,
-    first_line_number: u32,
-    annotation_thunk: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct Compiler {
+    context: Arc<CompilationContext>,
+    unit: CodeUnit,
+    output: OutputState,
+    symbols: SymbolState,
+    control: ControlFlowState,
+    assembler: Assembler,
 }
 
 impl Compiler {
-    pub(crate) fn module(filename: &str, source: &str) -> Self {
-        let line_index = LineIndex::from_source_text(source);
+    fn new(context: Arc<CompilationContext>, unit: CodeUnit, symbols: SymbolState) -> Self {
         Self {
+            context,
+            unit,
+            output: OutputState::default(),
+            symbols,
+            control: ControlFlowState::default(),
             assembler: Assembler::default(),
-            constants: Vec::new(),
-            deferred_constants_before_return: Vec::new(),
-            deferred_constants: Vec::new(),
-            deferred_names: Vec::new(),
-            names: Vec::new(),
-            name_indices: FxHashMap::default(),
-            locals: Vec::new(),
-            fast_local_count: 0,
-            cell_names: FxHashSet::default(),
-            free_names: Vec::new(),
-            temporary_indices: FxHashMap::default(),
-            hidden_names: FxHashSet::default(),
-            active_temporaries: FxHashSet::default(),
-            initialized_locals: FxHashSet::default(),
-            owned_load_locals: FxHashSet::default(),
-            imported_scope_names: FxHashSet::default(),
-            interned_constant_strings: FxHashSet::default(),
-            type_parameter_names: BTreeSet::new(),
-            generic_target_qualified_name: None,
-            child_qualified_name_parent: None,
-            class_scope_is_nested: false,
-            defer_async_comprehension_restore: false,
-            reorder_async_comprehension_cleanup_throw: false,
-            pending_comprehension_restores: Vec::new(),
-            active_comprehension_cleanups: Vec::new(),
-            active_comprehension_region_exclusions: Vec::new(),
-            active_with_exits: Vec::new(),
-            active_with_region_exclusions: Vec::new(),
-            active_terminal_withs: 0,
-            emit_protected_async_for_end_nop: false,
-            active_exception_region_exclusions: Vec::new(),
-            active_exception_handlers: Vec::new(),
-            active_return_finally_contexts: Vec::new(),
-            active_normal_finally_bodies: 0,
-            active_finally_end_blocks: 0,
-            active_finally_try_bodies: 0,
-            active_pass_finally_locations: Vec::new(),
-            active_overriding_finally_returns: 0,
-            preserve_finally_break_exit_loop_range: None,
-            exclude_terminal_if_not_taken: false,
-            exclude_condition_not_taken_from_exception: false,
-            exclude_condition_not_taken_from_all_exception_regions: false,
-            exclude_loop_tail_not_taken_from_control_flow_regions: false,
-            unwind_exception_handlers_for_implicit_return: false,
-            prevent_try_exit_inlining: false,
-            scope: Scope::Module,
-            function_plan: None,
-            module_globals: FxHashSet::default(),
-            module_annotation_index: 0,
-            annotation_classdict_index: None,
-            generator_region_start: None,
-            generator_region_exclusions: Vec::new(),
-            emitted_fallthrough_return: false,
-            loops: Vec::new(),
-            depth: 0,
-            max_depth: 0,
+        }
+    }
+
+    pub(crate) fn module(filename: &str, source: &str) -> Self {
+        let context = Arc::new(CompilationContext {
             filename: filename.to_string(),
             source: Arc::from(source),
-            line_index,
+            line_index: LineIndex::from_source_text(source),
+        });
+        let unit = CodeUnit::from_spec(CodeUnitSpec {
+            scope: Scope::Module,
+            function_plan: None,
             name: "<module>".to_string(),
             qualified_name: "<module>".to_string(),
             private_name: None,
@@ -587,14 +606,12 @@ impl Compiler {
             keyword_only_arg_count: 0,
             flags: 0,
             first_line_number: 1,
-            annotation_thunk: false,
-        }
+        });
+        Self::new(context, unit, SymbolState::default())
     }
 
     fn function(
-        filename: &str,
-        source: Arc<str>,
-        line_index: LineIndex,
+        context: Arc<CompilationContext>,
         name: &str,
         qualified_name: String,
         first_line_number: u32,
@@ -656,53 +673,15 @@ impl Compiler {
         let initialized_locals = locals.iter().take(parameter_count).cloned().collect();
         locals.extend(plan.freevars.iter().cloned());
 
-        Ok(Self {
-            assembler: Assembler::default(),
-            constants: Vec::new(),
-            deferred_constants_before_return: Vec::new(),
-            deferred_constants: Vec::new(),
-            deferred_names: Vec::new(),
-            names: Vec::new(),
-            name_indices: FxHashMap::default(),
+        let symbols = SymbolState {
             locals,
             fast_local_count,
             cell_names: plan.cellvars.clone(),
             free_names: plan.freevars.iter().cloned().collect(),
-            temporary_indices: FxHashMap::default(),
-            hidden_names: FxHashSet::default(),
-            active_temporaries: FxHashSet::default(),
             initialized_locals,
-            owned_load_locals: FxHashSet::default(),
-            imported_scope_names: FxHashSet::default(),
-            interned_constant_strings: FxHashSet::default(),
-            type_parameter_names: BTreeSet::new(),
-            generic_target_qualified_name: None,
-            child_qualified_name_parent: None,
-            class_scope_is_nested: false,
-            defer_async_comprehension_restore: false,
-            reorder_async_comprehension_cleanup_throw: false,
-            pending_comprehension_restores: Vec::new(),
-            active_comprehension_cleanups: Vec::new(),
-            active_comprehension_region_exclusions: Vec::new(),
-            active_with_exits: Vec::new(),
-            active_with_region_exclusions: Vec::new(),
-            active_terminal_withs: 0,
-            emit_protected_async_for_end_nop: false,
-            active_exception_region_exclusions: Vec::new(),
-            active_exception_handlers: Vec::new(),
-            active_return_finally_contexts: Vec::new(),
-            active_normal_finally_bodies: 0,
-            active_finally_end_blocks: 0,
-            active_finally_try_bodies: 0,
-            active_pass_finally_locations: Vec::new(),
-            active_overriding_finally_returns: 0,
-            preserve_finally_break_exit_loop_range: None,
-            exclude_terminal_if_not_taken: false,
-            exclude_condition_not_taken_from_exception: false,
-            exclude_condition_not_taken_from_all_exception_regions: false,
-            exclude_loop_tail_not_taken_from_control_flow_regions: false,
-            unwind_exception_handlers_for_implicit_return: false,
-            prevent_try_exit_inlining: false,
+            ..SymbolState::default()
+        };
+        let unit = CodeUnit::from_spec(CodeUnitSpec {
             scope: Scope::Function {
                 indices,
                 free_indices,
@@ -710,18 +689,6 @@ impl Compiler {
                 globals: plan.globals.clone(),
             },
             function_plan: Some(plan),
-            module_globals: FxHashSet::default(),
-            module_annotation_index: 0,
-            annotation_classdict_index: None,
-            generator_region_start: None,
-            generator_region_exclusions: Vec::new(),
-            emitted_fallthrough_return: false,
-            loops: Vec::new(),
-            depth: 0,
-            max_depth: 0,
-            filename: filename.to_string(),
-            source,
-            line_index,
             name: name.to_string(),
             qualified_name,
             private_name: None,
@@ -730,14 +697,12 @@ impl Compiler {
             keyword_only_arg_count,
             flags: CO_OPTIMIZED | CO_NEWLOCALS | parameter_flags,
             first_line_number,
-            annotation_thunk: false,
-        })
+        });
+        Ok(Self::new(context, unit, symbols))
     }
 
     fn class(
-        filename: &str,
-        source: Arc<str>,
-        line_index: LineIndex,
+        context: Arc<CompilationContext>,
         name: &str,
         qualified_name: String,
         first_line_number: u32,
@@ -772,53 +737,13 @@ impl Compiler {
             .collect();
         let free_names: Vec<_> = freevars.into_iter().collect();
         locals.extend(free_names.iter().cloned());
-        Self {
-            assembler: Assembler::default(),
-            constants: Vec::new(),
-            deferred_constants_before_return: Vec::new(),
-            deferred_constants: Vec::new(),
-            deferred_names: Vec::new(),
-            names: Vec::new(),
-            name_indices: FxHashMap::default(),
+        let symbols = SymbolState {
             locals,
-            fast_local_count: 0,
             cell_names,
             free_names,
-            temporary_indices: FxHashMap::default(),
-            hidden_names: FxHashSet::default(),
-            active_temporaries: FxHashSet::default(),
-            initialized_locals: FxHashSet::default(),
-            owned_load_locals: FxHashSet::default(),
-            imported_scope_names: FxHashSet::default(),
-            interned_constant_strings: FxHashSet::default(),
-            type_parameter_names: BTreeSet::new(),
-            generic_target_qualified_name: None,
-            child_qualified_name_parent: None,
-            class_scope_is_nested: false,
-            defer_async_comprehension_restore: false,
-            reorder_async_comprehension_cleanup_throw: false,
-            pending_comprehension_restores: Vec::new(),
-            active_comprehension_cleanups: Vec::new(),
-            active_comprehension_region_exclusions: Vec::new(),
-            active_with_exits: Vec::new(),
-            active_with_region_exclusions: Vec::new(),
-            active_terminal_withs: 0,
-            emit_protected_async_for_end_nop: false,
-            active_exception_region_exclusions: Vec::new(),
-            active_exception_handlers: Vec::new(),
-            active_return_finally_contexts: Vec::new(),
-            active_normal_finally_bodies: 0,
-            active_finally_end_blocks: 0,
-            active_finally_try_bodies: 0,
-            active_pass_finally_locations: Vec::new(),
-            active_overriding_finally_returns: 0,
-            preserve_finally_break_exit_loop_range: None,
-            exclude_terminal_if_not_taken: false,
-            exclude_condition_not_taken_from_exception: false,
-            exclude_condition_not_taken_from_all_exception_regions: false,
-            exclude_loop_tail_not_taken_from_control_flow_regions: false,
-            unwind_exception_handlers_for_implicit_return: false,
-            prevent_try_exit_inlining: false,
+            ..SymbolState::default()
+        };
+        let unit = CodeUnit::from_spec(CodeUnitSpec {
             scope: Scope::Class {
                 globals,
                 nonlocals,
@@ -826,18 +751,6 @@ impl Compiler {
                 bound_names,
             },
             function_plan: None,
-            module_globals: FxHashSet::default(),
-            module_annotation_index: 0,
-            annotation_classdict_index: None,
-            generator_region_start: None,
-            generator_region_exclusions: Vec::new(),
-            emitted_fallthrough_return: false,
-            loops: Vec::new(),
-            depth: 0,
-            max_depth: 0,
-            filename: filename.to_string(),
-            source,
-            line_index,
             name: name.to_string(),
             qualified_name,
             private_name: Some(name.to_string()),
@@ -846,30 +759,32 @@ impl Compiler {
             keyword_only_arg_count: 0,
             flags: future_flags,
             first_line_number,
-            annotation_thunk: false,
-        }
+        });
+        Self::new(context, unit, symbols)
     }
 
     pub(crate) fn compile_module(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
-        self.module_globals = module_global_names(body);
-        self.imported_scope_names = module_imported_names(body);
+        self.symbols.module_globals = module_global_names(body);
+        self.symbols.imported_scope_names = module_imported_names(body);
         let mut module_bindings = LocalCollector::default();
         module_bindings.collect_suite(body);
         for name in &module_bindings.comprehension_targets {
-            let index = to_u32(self.locals.len(), "module local count")?;
-            self.locals.push(name.clone());
-            self.temporary_indices.insert(name.clone(), index);
-            self.hidden_names.insert(name.clone());
+            let index = to_u32(self.symbols.locals.len(), "module local count")?;
+            self.symbols.locals.push(name.clone());
+            self.symbols.temporary_indices.insert(name.clone(), index);
+            self.symbols.hidden_names.insert(name.clone());
         }
-        self.cell_names
+        self.symbols
+            .cell_names
             .extend(inlined_comprehension_cell_names_in_suite(body));
-        self.fast_local_count = self.locals.len();
+        self.symbols.fast_local_count = self.symbols.locals.len();
         self.assembler.set_location(SourceLocation::NONE);
         let comprehension_cells = self
+            .symbols
             .locals
             .iter()
             .enumerate()
-            .filter(|(_, name)| self.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         for index in comprehension_cells {
@@ -879,18 +794,23 @@ impl Compiler {
             // This set is propagated to every child compiler. An impossible
             // Python identifier keeps the module-shadowing fact alongside the
             // imported-name facts used by the same optimization checks.
-            self.imported_scope_names
+            self.symbols
+                .imported_scope_names
                 .insert(SHADOWED_SUPER_SENTINEL.to_string());
         }
-        self.flags |= future_feature_flags(body);
+        self.unit.flags |= future_feature_flags(body);
         let simple_module_annotations = has_simple_annotations(body);
         let module_annotations = has_annotations(body);
         let future_module_annotations =
-            self.flags & CO_FUTURE_ANNOTATIONS != 0 && module_annotations;
+            self.unit.flags & CO_FUTURE_ANNOTATIONS != 0 && module_annotations;
         if module_annotations {
-            let annotation_cell = to_u32(self.locals.len(), "module annotation cell index")?;
-            self.locals.push("__conditional_annotations__".to_string());
-            self.cell_names
+            let annotation_cell =
+                to_u32(self.symbols.locals.len(), "module annotation cell index")?;
+            self.symbols
+                .locals
+                .push("__conditional_annotations__".to_string());
+            self.symbols
+                .cell_names
                 .insert("__conditional_annotations__".to_string());
             self.assembler.set_location(SourceLocation::NONE);
             self.emit(MAKE_CELL, annotation_cell, 0)?;
@@ -941,7 +861,7 @@ impl Compiler {
         let body_start = self.assembler.instruction_count();
         let add_implicit_return = !suite_terminates(body);
         self.compile_suite_inner(body, add_implicit_return)?;
-        let add_implicit_return = add_implicit_return && !self.emitted_fallthrough_return;
+        let add_implicit_return = add_implicit_return && !self.control.emitted_fallthrough_return;
         if add_implicit_return
             && body
                 .last()
@@ -968,7 +888,7 @@ impl Compiler {
         let body = if let Some(Stmt::Expr(expression)) = body.first() {
             if let Expr::StringLiteral(string) = expression.value.as_ref() {
                 self.add_constant(Constant::String(clean_doc(string.value.to_str())))?;
-                self.flags |= CO_HAS_DOCSTRING;
+                self.unit.flags |= CO_HAS_DOCSTRING;
                 &body[1..]
             } else {
                 body.as_slice()
@@ -980,7 +900,7 @@ impl Compiler {
         let body_start = self.assembler.instruction_count();
         let add_implicit_return = !suite_terminates(body);
         self.compile_suite_inner(body, add_implicit_return)?;
-        let add_implicit_return = add_implicit_return && !self.emitted_fallthrough_return;
+        let add_implicit_return = add_implicit_return && !self.control.emitted_fallthrough_return;
         if add_implicit_return
             && body
                 .last()
@@ -999,58 +919,66 @@ impl Compiler {
     }
 
     fn compile_class_body(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
-        let has_classdict_cell = self.cell_names.contains("__classdict__");
-        let has_class_cell = self.cell_names.contains("__class__");
+        let has_classdict_cell = self.symbols.cell_names.contains("__classdict__");
+        let has_class_cell = self.symbols.cell_names.contains("__class__");
         self.assembler.set_location(SourceLocation::NONE);
-        if !self.free_names.is_empty() {
+        if !self.symbols.free_names.is_empty() {
             self.emit(
                 COPY_FREE_VARS,
-                to_u32(self.free_names.len(), "class free variable count")?,
+                to_u32(self.symbols.free_names.len(), "class free variable count")?,
                 0,
             )?;
         }
         let cell_indices = self
+            .symbols
             .locals
             .iter()
-            .take(self.locals.len() - self.free_names.len())
+            .take(self.symbols.locals.len() - self.symbols.free_names.len())
             .enumerate()
-            .filter(|(_, name)| self.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         for index in cell_indices {
             self.emit(MAKE_CELL, to_u32(index, "class cell index")?, 0)?;
         }
-        let line = i32::try_from(self.first_line_number).unwrap_or(i32::MAX);
+        let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
         self.assembler
             .set_location(SourceLocation::new(line, line, 0, 0));
         self.emit(RESUME, 0, 0)?;
         self.load_name("__name__")?;
         self.store_name("__module__")?;
-        let qualified_name = self.add_constant(Constant::String(self.qualified_name.clone()))?;
+        let qualified_name =
+            self.add_constant(Constant::String(self.unit.qualified_name.clone()))?;
         self.emit(LOAD_CONST, qualified_name, 1)?;
         self.store_name("__qualname__")?;
-        if self.first_line_number <= u32::from(u8::MAX) {
-            self.emit(LOAD_SMALL_INT, self.first_line_number, 1)?;
+        if self.unit.first_line_number <= u32::from(u8::MAX) {
+            self.emit(LOAD_SMALL_INT, self.unit.first_line_number, 1)?;
         } else {
             let first_line_number =
-                self.add_constant(Constant::Int(u64::from(self.first_line_number)))?;
+                self.add_constant(Constant::Int(u64::from(self.unit.first_line_number)))?;
             self.emit(LOAD_CONST, first_line_number, 1)?;
         }
         self.store_name("__firstlineno__")?;
-        if self.free_names.iter().any(|name| name == ".type_params") {
+        if self
+            .symbols
+            .free_names
+            .iter()
+            .any(|name| name == ".type_params")
+        {
             self.load_name(".type_params")?;
             self.store_name("__type_params__")?;
         }
         if has_classdict_cell {
             self.emit(LOAD_LOCALS, 0, 1)?;
             let index = self
+                .symbols
                 .locals
                 .iter()
                 .position(|name| name == "__classdict__")
                 .expect("classdict cell is present");
             self.emit(STORE_DEREF, to_u32(index, "classdict cell index")?, -1)?;
         }
-        if self.flags & CO_FUTURE_ANNOTATIONS != 0 && has_simple_annotations(body) {
+        if self.unit.flags & CO_FUTURE_ANNOTATIONS != 0 && has_simple_annotations(body) {
             self.emit(SETUP_ANNOTATIONS, 0, 0)?;
         }
 
@@ -1104,10 +1032,10 @@ impl Compiler {
             }
         }
 
-        if self.flags & CO_FUTURE_ANNOTATIONS == 0
+        if self.unit.flags & CO_FUTURE_ANNOTATIONS == 0
             && let Some((annotation_child, closure_names)) = self.compile_class_annotations(body)?
         {
-            let line = i32::try_from(self.first_line_number).unwrap_or(i32::MAX);
+            let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
             self.assembler
                 .set_location(SourceLocation::new(line, line, 0, 0));
             self.emit_closure_tuple(&closure_names)?;
@@ -1129,6 +1057,7 @@ impl Compiler {
         self.store_name("__static_attributes__")?;
         if has_classdict_cell {
             let index = self
+                .symbols
                 .locals
                 .iter()
                 .position(|name| name == "__classdict__")
@@ -1138,6 +1067,7 @@ impl Compiler {
         }
         if has_class_cell {
             let index = self
+                .symbols
                 .locals
                 .iter()
                 .position(|name| name == "__class__")
@@ -1157,7 +1087,9 @@ impl Compiler {
     }
 
     fn finish_inner(mut self, add_implicit_return: bool) -> Result<CodeObject, CompileError> {
-        for (instruction, constant) in std::mem::take(&mut self.deferred_constants_before_return) {
+        for (instruction, constant) in
+            std::mem::take(&mut self.output.deferred_constants_before_return)
+        {
             let index = self.add_constant(constant)?;
             self.assembler.patch_argument(instruction, index);
         }
@@ -1166,15 +1098,16 @@ impl Compiler {
             self.emit(LOAD_CONST, none, 1)?;
             self.emit(RETURN_VALUE, 0, -1)?;
         }
-        if self.constants.is_empty() && !(self.name == "<lambda>" && self.flags & CO_GENERATOR != 0)
+        if self.output.constants.is_empty()
+            && !(self.unit.name == "<lambda>" && self.unit.flags & CO_GENERATOR != 0)
         {
             self.add_constant(Constant::None)?;
         }
-        if let Some(start) = self.generator_region_start {
+        if let Some(start) = self.control.generator_region_start {
             let handler = self.assembler.label();
             self.assembler.mark(handler);
             let mut region_start = start;
-            for (exclusion_start, exclusion_end) in &self.generator_region_exclusions {
+            for (exclusion_start, exclusion_end) in &self.control.generator_region_exclusions {
                 self.assembler.add_exception_region(
                     region_start,
                     *exclusion_start,
@@ -1192,20 +1125,20 @@ impl Compiler {
             self.emit(RERAISE, 1, -1)?;
         }
 
-        if self.depth != 0 {
+        if self.control.depth != 0 {
             return Err(CompileError::Internal(format!(
                 "compiler finished with stack depth {}",
-                self.depth
+                self.control.depth
             )));
         }
 
-        for (instruction, constant) in std::mem::take(&mut self.deferred_constants) {
+        for (instruction, constant) in std::mem::take(&mut self.output.deferred_constants) {
             let index = self.add_constant(constant)?;
             if let Some(instruction) = instruction {
                 self.assembler.patch_argument(instruction, index);
             }
         }
-        for (instruction, name) in std::mem::take(&mut self.deferred_names) {
+        for (instruction, name) in std::mem::take(&mut self.output.deferred_names) {
             let index = self.name_index(&name)?;
             self.assembler.patch_argument(instruction, index);
         }
@@ -1213,43 +1146,47 @@ impl Compiler {
         self.remove_unused_constants()?;
 
         let local_kinds = self
+            .symbols
             .locals
             .iter()
             .enumerate()
             .map(|(index, name)| {
-                let positional_only = usize::try_from(self.positional_only_arg_count).unwrap();
-                let positional = usize::try_from(self.arg_count).unwrap();
-                let keyword_only = usize::try_from(self.keyword_only_arg_count).unwrap();
+                let positional_only = usize::try_from(self.unit.positional_only_arg_count).unwrap();
+                let positional = usize::try_from(self.unit.arg_count).unwrap();
+                let keyword_only = usize::try_from(self.unit.keyword_only_arg_count).unwrap();
                 let argument_kind = if index < positional_only {
                     CO_FAST_ARG_POS
                 } else if index < positional {
                     CO_FAST_ARG_POS | CO_FAST_ARG_KW
                 } else if index < positional + keyword_only {
                     CO_FAST_ARG_KW
-                } else if self.flags & CO_VARARGS != 0 && index == positional + keyword_only {
+                } else if self.unit.flags & CO_VARARGS != 0 && index == positional + keyword_only {
                     CO_FAST_ARG_POS | CO_FAST_ARG_VAR
-                } else if self.flags & CO_VARKEYWORDS != 0
+                } else if self.unit.flags & CO_VARKEYWORDS != 0
                     && index
-                        == positional + keyword_only + usize::from(self.flags & CO_VARARGS != 0)
+                        == positional
+                            + keyword_only
+                            + usize::from(self.unit.flags & CO_VARARGS != 0)
                 {
                     CO_FAST_ARG_KW | CO_FAST_ARG_VAR
                 } else {
                     0
                 };
-                let storage_kind = if index >= self.locals.len() - self.free_names.len() {
-                    CO_FAST_FREE
-                } else if self.cell_names.contains(name) {
-                    if index < self.fast_local_count {
-                        CO_FAST_LOCAL | CO_FAST_CELL
+                let storage_kind =
+                    if index >= self.symbols.locals.len() - self.symbols.free_names.len() {
+                        CO_FAST_FREE
+                    } else if self.symbols.cell_names.contains(name) {
+                        if index < self.symbols.fast_local_count {
+                            CO_FAST_LOCAL | CO_FAST_CELL
+                        } else {
+                            CO_FAST_CELL
+                        }
                     } else {
-                        CO_FAST_CELL
-                    }
-                } else {
-                    CO_FAST_LOCAL
-                };
+                        CO_FAST_LOCAL
+                    };
                 argument_kind
                     | storage_kind
-                    | if self.hidden_names.contains(name) {
+                    | if self.symbols.hidden_names.contains(name) {
                         CO_FAST_HIDDEN
                     } else {
                         0
@@ -1257,15 +1194,16 @@ impl Compiler {
             })
             .collect();
         let output_locals = self
+            .symbols
             .locals
             .iter()
             .map(|name| self.mangled_name(name))
             .collect();
         let parameter_count = usize::try_from(
-            self.arg_count
-                + self.keyword_only_arg_count
-                + u32::from(self.flags & CO_VARARGS != 0)
-                + u32::from(self.flags & CO_VARKEYWORDS != 0),
+            self.unit.arg_count
+                + self.unit.keyword_only_arg_count
+                + u32::from(self.unit.flags & CO_VARARGS != 0)
+                + u32::from(self.unit.flags & CO_VARKEYWORDS != 0),
         )
         .unwrap_or(usize::MAX);
         let AssembledCode {
@@ -1275,76 +1213,79 @@ impl Compiler {
             max_depth: assembled_max_depth,
             removed_max_depth,
         } = self.assembler.finish_code(
-            self.first_line_number,
-            self.fast_local_count,
+            self.unit.first_line_number,
+            self.symbols.fast_local_count,
             parameter_count,
         )?;
-        let max_depth =
-            if removed_max_depth == Some(self.max_depth) && assembled_max_depth < self.max_depth {
-                assembled_max_depth
-            } else {
-                self.max_depth
-            };
-        let stack_size = if self.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR) != 0
-            && self.generator_region_start.is_some()
+        let max_depth = if removed_max_depth == Some(self.control.max_depth)
+            && assembled_max_depth < self.control.max_depth
+        {
+            assembled_max_depth
+        } else {
+            self.control.max_depth
+        };
+        let stack_size = if self.unit.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR)
+            != 0
+            && self.control.generator_region_start.is_some()
         {
             max_depth.max(2)
         } else {
             max_depth.max(1)
         };
         Ok(CodeObject {
-            arg_count: self.arg_count,
-            positional_only_arg_count: self.positional_only_arg_count,
-            keyword_only_arg_count: self.keyword_only_arg_count,
+            arg_count: self.unit.arg_count,
+            positional_only_arg_count: self.unit.positional_only_arg_count,
+            keyword_only_arg_count: self.unit.keyword_only_arg_count,
             stack_size,
-            flags: self.flags,
+            flags: self.unit.flags,
             bytecode,
-            constants: self.constants,
-            names: self.names,
+            constants: self.output.constants,
+            names: self.output.names,
             locals: output_locals,
             local_kinds,
-            filename: self.filename,
-            name: self.name,
-            qualified_name: self.qualified_name,
-            first_line_number: self.first_line_number,
+            filename: self.context.filename.clone(),
+            name: self.unit.name,
+            qualified_name: self.unit.qualified_name,
+            first_line_number: self.unit.first_line_number,
             line_table,
             exception_table,
-            annotation_thunk: self.annotation_thunk,
-            interned_constant_strings: self.interned_constant_strings,
+            annotation_thunk: self.unit.annotation_thunk,
+            interned_constant_strings: self.output.interned_constant_strings,
         })
     }
 
     fn emit_function_prologue(&mut self) -> Result<(), CompileError> {
         self.assembler.set_location(SourceLocation::NONE);
-        if !self.free_names.is_empty() {
+        if !self.symbols.free_names.is_empty() {
             self.emit(
                 COPY_FREE_VARS,
-                to_u32(self.free_names.len(), "free variable count")?,
+                to_u32(self.symbols.free_names.len(), "free variable count")?,
                 0,
             )?;
         }
         let cells: Vec<_> = self
+            .symbols
             .locals
             .iter()
-            .take(self.locals.len() - self.free_names.len())
+            .take(self.symbols.locals.len() - self.symbols.free_names.len())
             .enumerate()
-            .filter(|(_, name)| self.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
             .map(|(index, _)| index)
             .collect();
         for index in cells {
             self.emit(MAKE_CELL, to_u32(index, "cell variable index")?, 0)?;
         }
-        if self.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR) != 0 {
-            let line = i32::try_from(self.first_line_number).unwrap_or(i32::MAX);
+        if self.unit.flags & (CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR) != 0 {
+            let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
             self.assembler
                 .set_location(SourceLocation::new(line, line, -1, -1));
             self.assembler.emit(RETURN_GENERATOR, 0);
             self.assembler.emit(POP_TOP, 0);
             let start = self.assembler.label();
             self.assembler.mark(start);
-            self.generator_region_start = Some(start);
+            self.control.generator_region_start = Some(start);
         }
-        let line = i32::try_from(self.first_line_number).unwrap_or(i32::MAX);
+        let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
         self.assembler
             .set_location(SourceLocation::new(line, line, 0, 0));
         self.emit(RESUME, 0, 0)
@@ -1369,7 +1310,7 @@ impl Compiler {
                             && matches!(statement.test.as_ref(), Expr::BoolOp(boolean) if boolean.op == BoolOp::And && boolean.values.len() > 1) =>
                     {
                         self.compile_terminal_while_and(statement)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::While(statement)
@@ -1377,7 +1318,7 @@ impl Compiler {
                             && suite_contains_loop_break(&statement.body) =>
                     {
                         self.compile_terminal_while_break(statement)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::For(statement)
@@ -1386,12 +1327,12 @@ impl Compiler {
                             && matches!(statement.body.as_slice(), [Stmt::Break(_)]) =>
                     {
                         self.compile_terminal_for_break(statement)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::If(statement) => {
                         self.compile_terminal_if(statement)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Expr(expression) if matches!(expression.value.as_ref(), Expr::If(_)) => {
@@ -1399,7 +1340,7 @@ impl Compiler {
                             unreachable!();
                         };
                         self.compile_terminal_if_expression(expression)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Expr(expression) if matches!(expression.value.as_ref(), Expr::Tuple(tuple) if matches!(tuple.elts.last(), Some(Expr::If(_)))) =>
@@ -1408,7 +1349,7 @@ impl Compiler {
                             unreachable!();
                         };
                         self.compile_terminal_tuple_if_expression(tuple)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Assign(assignment)
@@ -1418,17 +1359,17 @@ impl Compiler {
                             unreachable!();
                         };
                         self.compile_terminal_assignment_if_expression(assignment, expression)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::With(statement) if !statement.is_async => {
                         self.compile_with_items(&statement.items, &statement.body, true)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::With(statement) => {
                         self.compile_async_with_items(&statement.items, &statement.body, true)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Try(statement) => {
@@ -1438,12 +1379,12 @@ impl Compiler {
                         let result = self.compile_try_inner(statement, true, true, false);
                         self.assembler.set_location(previous);
                         result?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Match(statement) => {
                         self.compile_match_inner(statement, true)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Expr(expression)
@@ -1453,7 +1394,7 @@ impl Compiler {
                             unreachable!();
                         };
                         self.compile_terminal_bool_expression(expression)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     Stmt::Expr(expression) if matches!(expression.value.as_ref(), Expr::Compare(compare) if compare.ops.len() > 1) =>
@@ -1462,7 +1403,7 @@ impl Compiler {
                             unreachable!();
                         };
                         self.compile_terminal_compare_expression(expression)?;
-                        self.emitted_fallthrough_return = true;
+                        self.control.emitted_fallthrough_return = true;
                         continue;
                     }
                     _ => {}
@@ -1471,9 +1412,9 @@ impl Compiler {
             if let Stmt::Pass(statement) = statement
                 // CPython retains pass markers in the exceptional copy of a multi-statement
                 // finally body, even though ordinary protected suites omit them.
-                && (self.active_exception_region_exclusions.is_empty()
-                    || self.active_finally_end_blocks > 0)
-                && (self.active_with_region_exclusions.is_empty() || body.len() > 1)
+                && (self.control.active_exception_region_exclusions.is_empty()
+                    || self.control.active_finally_end_blocks > 0)
+                && (self.control.active_with_region_exclusions.is_empty() || body.len() > 1)
             {
                 self.assembler
                     .set_location(self.source_location(statement.range));
@@ -1483,7 +1424,7 @@ impl Compiler {
                 let noop_end = self.assembler.label();
                 self.assembler.mark(noop_end);
                 if is_final {
-                    for exclusions in &mut self.active_with_region_exclusions {
+                    for exclusions in &mut self.control.active_with_region_exclusions {
                         exclusions.push((noop_start, noop_end));
                     }
                 }
@@ -1501,7 +1442,7 @@ impl Compiler {
                 self.assembler.set_location(self.source_location(range));
                 if index + 1 < body.len()
                     || (!final_expression_becomes_return
-                        && !matches!(self.scope, Scope::Class { .. }))
+                        && !matches!(self.unit.scope, Scope::Class { .. }))
                 {
                     let noop_start = self.assembler.label();
                     self.assembler.mark(noop_start);
@@ -1509,15 +1450,16 @@ impl Compiler {
                     let noop_end = self.assembler.label();
                     self.assembler.mark(noop_end);
                     let final_statement = index + 1 == body.len();
-                    if final_statement && self.generator_region_start.is_some() {
-                        self.generator_region_exclusions
+                    if final_statement && self.control.generator_region_start.is_some() {
+                        self.control
+                            .generator_region_exclusions
                             .push((noop_start, noop_end));
                     }
                     if final_statement {
-                        for exclusions in &mut self.active_with_region_exclusions {
+                        for exclusions in &mut self.control.active_with_region_exclusions {
                             exclusions.push((noop_start, noop_end));
                         }
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                        for exclusions in &mut self.control.active_exception_region_exclusions {
                             exclusions.push((noop_start, noop_end));
                         }
                     }
@@ -1525,14 +1467,14 @@ impl Compiler {
             } else {
                 let emit_protected_async_for_end_nop = is_final
                     && matches!(statement, Stmt::For(statement) if statement.is_async)
-                    && (!self.active_with_region_exclusions.is_empty()
-                        || !self.active_exception_region_exclusions.is_empty());
+                    && (!self.control.active_with_region_exclusions.is_empty()
+                        || !self.control.active_exception_region_exclusions.is_empty());
                 let previous = std::mem::replace(
-                    &mut self.emit_protected_async_for_end_nop,
+                    &mut self.control.emit_protected_async_for_end_nop,
                     emit_protected_async_for_end_nop,
                 );
                 let result = self.compile_statement(statement);
-                self.emit_protected_async_for_end_nop = previous;
+                self.control.emit_protected_async_for_end_nop = previous;
                 result?;
             }
             if statement_terminates(statement) {
@@ -1540,7 +1482,7 @@ impl Compiler {
                 // CPython visits unreachable statements before the flow graph removes them.
                 // Its constant compaction always retains slot zero, so the first literal in
                 // an unreachable tail survives when no reachable constant preceded it.
-                if self.constants.is_empty()
+                if self.output.constants.is_empty()
                     && let Some(constant) = first_suite_literal_constant(unreachable)
                 {
                     self.add_constant(constant)?;
@@ -1560,18 +1502,19 @@ impl Compiler {
 
     fn emit_deferred_implicit_return(&mut self) -> Result<(), CompileError> {
         let initialized_locals = self
+            .control
             .unwind_exception_handlers_for_implicit_return
-            .then(|| self.initialized_locals.clone());
-        let exclusion_start = (self.unwind_exception_handlers_for_implicit_return
-            && !self.active_exception_region_exclusions.is_empty())
+            .then(|| self.symbols.initialized_locals.clone());
+        let exclusion_start = (self.control.unwind_exception_handlers_for_implicit_return
+            && !self.control.active_exception_region_exclusions.is_empty())
         .then(|| {
             let start = self.assembler.label();
             self.assembler.mark(start);
             start
         });
-        if self.unwind_exception_handlers_for_implicit_return {
-            for index in (0..self.active_exception_handlers.len()).rev() {
-                let name = self.active_exception_handlers[index].name.clone();
+        if self.control.unwind_exception_handlers_for_implicit_return {
+            for index in (0..self.control.active_exception_handlers.len()).rev() {
+                let name = self.control.active_exception_handlers[index].name.clone();
                 self.emit(POP_EXCEPT, 0, -1)?;
                 if let Some(name) = &name {
                     self.emit_deferred_constant_before_return(Constant::None)?;
@@ -1585,14 +1528,14 @@ impl Compiler {
         if let Some(exclusion_start) = exclusion_start {
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
         }
         if let Some(initialized_locals) = initialized_locals {
             // The cleanup edge returned, so its deletes do not affect subsequently emitted cold
             // handler blocks.
-            self.initialized_locals = initialized_locals;
+            self.symbols.initialized_locals = initialized_locals;
         }
         Ok(())
     }
@@ -1601,12 +1544,12 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtWhile,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let start = self.assembler.label();
         let condition_false = self.assembler.label();
         self.assembler.mark(start);
         if early_condition_truthiness(&statement.test) == Some(true) {
-            if self.constants.is_empty()
+            if self.output.constants.is_empty()
                 && let Some(constant) = fold_constant(&statement.test)
             {
                 self.add_constant(constant)?;
@@ -1617,23 +1560,23 @@ impl Compiler {
         } else {
             self.compile_jump_if(&statement.test, false, condition_false)?;
         }
-        if self.constants.is_empty()
+        if self.output.constants.is_empty()
             && let Some(constant) = first_suite_literal_constant(&statement.body)
         {
             self.add_constant(constant)?;
         }
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: condition_false,
             iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
         self.compile_suite(&statement.body)?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !suite_terminates(&statement.body) {
             if let Some(location) = self.assembler.last_instruction_location() {
                 self.assembler.set_location(location);
@@ -1657,7 +1600,7 @@ impl Compiler {
         let Expr::BoolOp(condition) = statement.test.as_ref() else {
             unreachable!("terminal while-and requires a boolean condition");
         };
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let start = self.assembler.label();
         self.assembler.mark(start);
         let exits = condition
@@ -1670,19 +1613,19 @@ impl Compiler {
             })
             .collect::<Result<Vec<_>, CompileError>>()?;
 
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: exits[0].1,
             iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: true,
             preserve_break_exit: false,
         });
         let body_start = self.assembler.instruction_count();
         self.compile_suite(&statement.body)?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
@@ -1705,7 +1648,7 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtFor,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let cleanup = self.assembler.label();
         self.compile_expression(&statement.iter)?;
         self.assembler
@@ -1747,7 +1690,7 @@ impl Compiler {
                 .is_none_or(|clause| clause.test.is_none())
         {
             if let Some(constant) = fold_constant(&statement.test)
-                && (self.constants.is_empty() || matches!(constant, Constant::None))
+                && (self.output.constants.is_empty() || matches!(constant, Constant::None))
             {
                 self.add_constant(constant)?;
             }
@@ -1773,9 +1716,12 @@ impl Compiler {
             };
             let emitted_fallthrough = if matches!(body.last(), Some(Stmt::If(_))) {
                 let previous_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
                 self.compile_suite_inner(body, true)?;
-                std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+                std::mem::replace(
+                    &mut self.control.emitted_fallthrough_return,
+                    previous_fallthrough,
+                )
             } else {
                 self.compile_suite(body)?;
                 false
@@ -1794,7 +1740,7 @@ impl Compiler {
             return Ok(());
         }
 
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let mut branches: Vec<(Option<&Expr>, &[Stmt])> =
             vec![(Some(&statement.test), statement.body.as_slice())];
         branches.extend(
@@ -1808,33 +1754,38 @@ impl Compiler {
         for (branch_index, (test, body)) in branches.into_iter().enumerate() {
             if let Some(test) = test {
                 let next = self.assembler.label();
-                let exclude_not_taken = self.exclude_terminal_if_not_taken
-                    || (!self.active_with_region_exclusions.is_empty()
+                let exclude_not_taken = self.control.exclude_terminal_if_not_taken
+                    || (!self.control.active_with_region_exclusions.is_empty()
                         && branch_index > 0
                         && suite_terminates(body));
-                let previous_exclusion =
-                    std::mem::replace(&mut self.exclude_terminal_if_not_taken, exclude_not_taken);
-                let exclude_from_generator = self.flags & CO_COROUTINE != 0
-                    && self.generator_region_start.is_some()
+                let previous_exclusion = std::mem::replace(
+                    &mut self.control.exclude_terminal_if_not_taken,
+                    exclude_not_taken,
+                );
+                let exclude_from_generator = self.unit.flags & CO_COROUTINE != 0
+                    && self.control.generator_region_start.is_some()
                     && self.assembler.contains_opcode(YIELD_VALUE)
-                    && self.active_with_region_exclusions.is_empty()
-                    && self.active_exception_region_exclusions.is_empty()
-                    && self.active_normal_finally_bodies == 0;
+                    && self.control.active_with_region_exclusions.is_empty()
+                    && self.control.active_exception_region_exclusions.is_empty()
+                    && self.control.active_normal_finally_bodies == 0;
                 let previous_exception_exclusion = std::mem::replace(
-                    &mut self.exclude_condition_not_taken_from_exception,
+                    &mut self.control.exclude_condition_not_taken_from_exception,
                     exclude_from_generator,
                 );
                 let condition_result = self.compile_jump_if(test, false, next);
-                self.exclude_terminal_if_not_taken = previous_exclusion;
-                self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
+                self.control.exclude_terminal_if_not_taken = previous_exclusion;
+                self.control.exclude_condition_not_taken_from_exception =
+                    previous_exception_exclusion;
                 condition_result?;
                 self.mark_definitely_evaluated_locals(test);
                 let body_start = self.assembler.instruction_count();
                 let previous_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
                 self.compile_suite_inner(body, true)?;
-                let emitted_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
+                let emitted_fallthrough = std::mem::replace(
+                    &mut self.control.emitted_fallthrough_return,
+                    previous_fallthrough,
+                );
                 if !suite_terminates(body) && !emitted_fallthrough {
                     if let Some(statement) = body
                         .last()
@@ -1863,10 +1814,12 @@ impl Compiler {
             } else {
                 let body_start = self.assembler.instruction_count();
                 let previous_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
                 self.compile_suite_inner(body, true)?;
-                let emitted_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
+                let emitted_fallthrough = std::mem::replace(
+                    &mut self.control.emitted_fallthrough_return,
+                    previous_fallthrough,
+                );
                 if !suite_terminates(body) && !emitted_fallthrough {
                     if let Some(statement) = body
                         .last()
@@ -1900,7 +1853,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtIf,
         comparison: &ruff_python_ast::ExprCompare,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let cleanup = self.assembler.label();
         let body = self.assembler.label();
         let condition_false = self.assembler.label();
@@ -1960,7 +1913,7 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprIf,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let otherwise = self.assembler.label();
         self.compile_jump_if(&expression.test, false, otherwise)?;
         self.compile_expression(&expression.body)?;
@@ -1993,11 +1946,11 @@ impl Compiler {
                 "terminal tuple does not end in a conditional expression".to_string(),
             ));
         };
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         for element in leading {
             self.compile_expression(element)?;
         }
-        let branch_depth = self.depth;
+        let branch_depth = self.control.depth;
         let otherwise = self.assembler.label();
         self.compile_jump_if(&expression.test, false, otherwise)?;
         self.compile_expression(&expression.body)?;
@@ -2033,7 +1986,7 @@ impl Compiler {
         expression: &ruff_python_ast::ExprIf,
         preserve_fallthrough_join_nop: bool,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let otherwise = self.assembler.label();
         self.compile_jump_if(&expression.test, false, otherwise)?;
         self.pre_register_expression_names(&expression.body)?;
@@ -2087,7 +2040,7 @@ impl Compiler {
         };
         self.assembler
             .set_location(self.source_location(expression.range));
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let jump = match expression.op {
             BoolOp::And => POP_JUMP_IF_FALSE,
             BoolOp::Or => POP_JUMP_IF_TRUE,
@@ -2180,7 +2133,7 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprCompare,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let cleanup = self.assembler.label();
         self.assembler
             .set_location(self.source_location(expression.range));
@@ -2230,7 +2183,7 @@ impl Compiler {
     }
 
     fn compile_statement_inner(&mut self, statement: &Stmt) -> Result<(), CompileError> {
-        let starting_depth = self.depth;
+        let starting_depth = self.control.depth;
         match statement {
             Stmt::Assign(assignment) => {
                 let unpacked = if let [target] = assignment.targets.as_slice()
@@ -2269,7 +2222,7 @@ impl Compiler {
                     let defer_restore =
                         expression_defers_async_comprehension_restore(&assignment.value);
                     let previous_defer = std::mem::replace(
-                        &mut self.defer_async_comprehension_restore,
+                        &mut self.control.defer_async_comprehension_restore,
                         defer_restore,
                     );
                     let newly_owned = if assignment
@@ -2278,15 +2231,15 @@ impl Compiler {
                         .any(|target| matches!(target, Expr::Name(_)))
                         && let Expr::Name(name) = assignment.value.as_ref()
                     {
-                        self.owned_load_locals.insert(name.id.to_string())
+                        self.symbols.owned_load_locals.insert(name.id.to_string())
                     } else {
                         false
                     };
                     self.compile_expression(&assignment.value)?;
                     if newly_owned && let Expr::Name(name) = assignment.value.as_ref() {
-                        self.owned_load_locals.remove(name.id.as_str());
+                        self.symbols.owned_load_locals.remove(name.id.as_str());
                     }
-                    self.defer_async_comprehension_restore = previous_defer;
+                    self.control.defer_async_comprehension_restore = previous_defer;
                     for (index, target) in assignment.targets.iter().enumerate() {
                         if index + 1 < assignment.targets.len() {
                             self.emit(COPY, 1, 1)?;
@@ -2297,7 +2250,7 @@ impl Compiler {
                         for target in &assignment.targets {
                             let mut names = Vec::new();
                             collect_target_names(target, &mut names);
-                            self.owned_load_locals.extend(names);
+                            self.symbols.owned_load_locals.extend(names);
                         }
                     }
                     self.emit_pending_comprehension_restores()?;
@@ -2390,8 +2343,9 @@ impl Compiler {
             Stmt::For(statement) => self.compile_for(statement)?,
             Stmt::Break(_) => {
                 // Loop-control cleanup runs after CPython unwinds the active exception block.
-                let unreachable_depth = self.depth;
+                let unreachable_depth = self.control.depth;
                 let context = self
+                    .control
                     .loops
                     .last()
                     .copied()
@@ -2399,7 +2353,7 @@ impl Compiler {
                 self.emit(NOP, 0, 0)?;
                 let finally_end_unwind_start =
                     self.emit_finally_end_unwind(context.finally_end_depth, false)?;
-                let exclusion_start = if self.active_exception_region_exclusions.len()
+                let exclusion_start = if self.control.active_exception_region_exclusions.len()
                     == context.exception_region_depth
                 {
                     None
@@ -2410,7 +2364,7 @@ impl Compiler {
                     self.assembler.mark(start);
                     Some(start)
                 };
-                self.emit_loop_control_exception_unwind(self.loops.len())?;
+                self.emit_loop_control_exception_unwind(self.control.loops.len())?;
                 let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 match context.iterator_cleanup {
                     IteratorCleanup::None => {}
@@ -2420,16 +2374,17 @@ impl Compiler {
                 if context.break_returns {
                     self.emit_implicit_return()?;
                 } else {
-                    let jump_exclusion_start = (self.active_exception_region_exclusions.len()
-                        == context.exception_region_depth
-                        && context.exception_region_depth > 0
-                        && context.finally_end_depth == 0
-                        && self.active_exception_handlers.is_empty())
-                    .then(|| {
-                        let start = self.assembler.label();
-                        self.assembler.mark(start);
-                        start
-                    });
+                    let jump_exclusion_start =
+                        (self.control.active_exception_region_exclusions.len()
+                            == context.exception_region_depth
+                            && context.exception_region_depth > 0
+                            && context.finally_end_depth == 0
+                            && self.control.active_exception_handlers.is_empty())
+                        .then(|| {
+                            let start = self.assembler.label();
+                            self.assembler.mark(start);
+                            start
+                        });
                     self.emit_jump_forward(JUMP_FORWARD, context.break_label, 0)?;
                     if context.preserve_break_exit {
                         // CPython inlines small exit blocks before removing a jump to the next
@@ -2441,7 +2396,7 @@ impl Compiler {
                     if let Some(jump_exclusion_start) = jump_exclusion_start {
                         let jump_exclusion_end = self.assembler.label();
                         self.assembler.mark(jump_exclusion_end);
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                        for exclusions in &mut self.control.active_exception_region_exclusions {
                             exclusions.push((jump_exclusion_start, jump_exclusion_end));
                         }
                     }
@@ -2451,6 +2406,7 @@ impl Compiler {
                     self.assembler.mark(exclusion_end);
                     if let Some(exclusion_start) = exclusion_start {
                         for exclusions in self
+                            .control
                             .active_exception_region_exclusions
                             .iter_mut()
                             .skip(context.exception_region_depth)
@@ -2459,7 +2415,7 @@ impl Compiler {
                         }
                     }
                     for (index, unwind_start) in with_unwind_starts {
-                        self.active_with_region_exclusions[index]
+                        self.control.active_with_region_exclusions[index]
                             .push((unwind_start, exclusion_end));
                     }
                 }
@@ -2468,13 +2424,13 @@ impl Compiler {
             Stmt::Continue(_) => {
                 // Loop-control cleanup runs after CPython unwinds the active exception block.
                 let context =
-                    self.loops.last().copied().ok_or_else(|| {
+                    self.control.loops.last().copied().ok_or_else(|| {
                         CompileError::Internal("continue outside loop".to_string())
                     })?;
                 self.emit(NOP, 0, 0)?;
                 let finally_end_unwind_start =
                     self.emit_finally_end_unwind(context.finally_end_depth, false)?;
-                let exclusion_start = if self.active_exception_region_exclusions.len()
+                let exclusion_start = if self.control.active_exception_region_exclusions.len()
                     == context.exception_region_depth
                 {
                     None
@@ -2485,7 +2441,7 @@ impl Compiler {
                     self.assembler.mark(start);
                     Some(start)
                 };
-                self.emit_loop_control_exception_unwind(self.loops.len())?;
+                self.emit_loop_control_exception_unwind(self.control.loops.len())?;
                 let with_unwind_starts = self.emit_active_with_unwind(context.with_depth, false)?;
                 self.emit_jump_backward(JUMP_BACKWARD, context.continue_label, 0)?;
                 // CPython emits a temporary NOP before loop control, so an incoming jump sees
@@ -2496,6 +2452,7 @@ impl Compiler {
                     self.assembler.mark(exclusion_end);
                     if let Some(exclusion_start) = exclusion_start {
                         for exclusions in self
+                            .control
                             .active_exception_region_exclusions
                             .iter_mut()
                             .skip(context.exception_region_depth)
@@ -2504,25 +2461,25 @@ impl Compiler {
                         }
                     }
                     for (index, unwind_start) in with_unwind_starts {
-                        self.active_with_region_exclusions[index]
+                        self.control.active_with_region_exclusions[index]
                             .push((unwind_start, exclusion_end));
                     }
                 }
                 self.set_depth(starting_depth);
             }
             Stmt::Return(statement) => {
-                if !matches!(self.scope, Scope::Function { .. }) {
+                if !matches!(self.unit.scope, Scope::Function { .. }) {
                     return Err(unsupported("return outside a function"));
                 }
-                let return_is_overridden = self.active_overriding_finally_returns > 0;
+                let return_is_overridden = self.control.active_overriding_finally_returns > 0;
                 let preserve_tos = statement
                     .value
                     .as_deref()
                     .is_some_and(|value| !is_literal_constant(value));
-                let unwinds_pass_finally = !self.active_pass_finally_locations.is_empty();
+                let unwinds_pass_finally = !self.control.active_pass_finally_locations.is_empty();
                 let overriding_unwind_start = if return_is_overridden
                     && !preserve_tos
-                    && !self.active_exception_region_exclusions.is_empty()
+                    && !self.control.active_exception_region_exclusions.is_empty()
                 {
                     let start = self.assembler.label();
                     self.assembler.mark(start);
@@ -2548,27 +2505,28 @@ impl Compiler {
                             .then_some(start)
                     })
                     .flatten();
-                let nested_finally_region_unwind_start = (self.active_finally_end_blocks > 0
-                    && self.active_exception_region_exclusions.len()
-                        > self.active_finally_end_blocks)
+                let nested_finally_region_unwind_start = (self.control.active_finally_end_blocks
+                    > 0
+                    && self.control.active_exception_region_exclusions.len()
+                        > self.control.active_finally_end_blocks)
                     .then(|| {
                         let start = self.assembler.label();
                         self.assembler.mark(start);
-                        (self.active_finally_end_blocks, start)
+                        (self.control.active_finally_end_blocks, start)
                     });
                 let finally_end_unwind_start = self.emit_finally_end_unwind(0, preserve_tos)?;
                 let delay_exception_unwind_start = overriding_unwind_start.is_none()
-                    && !self.active_exception_region_exclusions.is_empty()
-                    && self.active_with_exits.is_empty()
+                    && !self.control.active_exception_region_exclusions.is_empty()
+                    && self.control.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                     && preserve_tos
-                    && !self.active_exception_handlers.is_empty();
+                    && !self.control.active_exception_handlers.is_empty();
                 let mut exception_unwind_start = if overriding_unwind_start.is_some() {
                     overriding_unwind_start
                 } else if finally_end_unwind_start.is_some() {
                     finally_end_unwind_start
-                } else if !self.active_exception_region_exclusions.is_empty()
-                    && self.active_with_exits.is_empty()
+                } else if !self.control.active_exception_region_exclusions.is_empty()
+                    && self.control.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                     && !delay_exception_unwind_start
                 {
@@ -2579,17 +2537,17 @@ impl Compiler {
                     None
                 };
                 let handler_count = if !return_is_overridden
-                    && self.active_with_exits.is_empty()
+                    && self.control.active_with_exits.is_empty()
                     && !unwinds_pass_finally
                 {
-                    self.active_exception_handlers.len()
+                    self.control.active_exception_handlers.len()
                 } else {
                     0
                 };
-                let mut next_loop = self.loops.len();
+                let mut next_loop = self.control.loops.len();
                 for handler_index in (0..handler_count).rev() {
                     let (loop_depth, name) = {
-                        let handler = &self.active_exception_handlers[handler_index];
+                        let handler = &self.control.active_exception_handlers[handler_index];
                         (handler.loop_depth, handler.name.clone())
                     };
                     self.emit_loop_iterator_cleanup(loop_depth, next_loop, preserve_tos)?;
@@ -2602,7 +2560,7 @@ impl Compiler {
                         exception_unwind_start = Some(start);
                     }
                     let protected_pop_except = (!return_is_overridden
-                        && !self.active_return_finally_contexts.is_empty())
+                        && !self.control.active_return_finally_contexts.is_empty())
                     .then(|| {
                         let start = self.assembler.label();
                         self.assembler.mark(start);
@@ -2612,7 +2570,7 @@ impl Compiler {
                     if let Some(start) = protected_pop_except {
                         let end = self.assembler.label();
                         self.assembler.mark(end);
-                        for context in &self.active_return_finally_contexts {
+                        for context in &self.control.active_return_finally_contexts {
                             self.assembler.add_exception_region(
                                 start,
                                 end,
@@ -2631,7 +2589,7 @@ impl Compiler {
                     next_loop = loop_depth;
                 }
                 let return_finally_contexts = if !return_is_overridden {
-                    std::mem::take(&mut self.active_return_finally_contexts)
+                    std::mem::take(&mut self.control.active_return_finally_contexts)
                 } else {
                     Vec::new()
                 };
@@ -2641,9 +2599,9 @@ impl Compiler {
                         next_loop,
                         preserve_tos,
                     )?;
-                    let initialized_locals = self.initialized_locals.clone();
+                    let initialized_locals = self.symbols.initialized_locals.clone();
                     let result = self.compile_suite(&finally_context.body);
-                    self.initialized_locals = initialized_locals;
+                    self.symbols.initialized_locals = initialized_locals;
                     result?;
                     if let Some(location) = self.assembler.last_instruction_location() {
                         self.assembler.set_location(location);
@@ -2651,7 +2609,7 @@ impl Compiler {
                     next_loop = finally_context.loop_depth;
                 }
                 if !return_finally_contexts.is_empty() {
-                    self.active_return_finally_contexts = return_finally_contexts;
+                    self.control.active_return_finally_contexts = return_finally_contexts;
                 }
                 self.emit_loop_iterator_cleanup(0, next_loop, preserve_tos)?;
                 let with_unwind_starts = self.emit_active_with_unwind(0, preserve_tos)?;
@@ -2702,7 +2660,7 @@ impl Compiler {
                 }
                 let return_exclusion_start = if exception_unwind_start.is_none()
                     && finally_unwind_start.is_none()
-                    && !self.active_exception_region_exclusions.is_empty()
+                    && !self.control.active_exception_region_exclusions.is_empty()
                 {
                     let start = self.assembler.label();
                     self.assembler.mark(start);
@@ -2726,6 +2684,7 @@ impl Compiler {
                         .or(return_exclusion_start)
                         .expect("return exclusion has a start");
                     for (index, exclusions) in self
+                        .control
                         .active_exception_region_exclusions
                         .iter_mut()
                         .enumerate()
@@ -2740,10 +2699,11 @@ impl Compiler {
                     let unwind_end = self.assembler.label();
                     self.assembler.mark(unwind_end);
                     for (index, unwind_start) in with_unwind_starts {
-                        self.active_with_region_exclusions[index].push((unwind_start, unwind_end));
+                        self.control.active_with_region_exclusions[index]
+                            .push((unwind_start, unwind_end));
                     }
                     if let Some(unwind_start) = finally_unwind_start {
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                        for exclusions in &mut self.control.active_exception_region_exclusions {
                             exclusions.push((unwind_start, unwind_end));
                         }
                     }
@@ -2772,10 +2732,10 @@ impl Compiler {
             }
         }
 
-        if self.depth != starting_depth {
+        if self.control.depth != starting_depth {
             return Err(CompileError::Internal(format!(
                 "statement changed stack depth from {starting_depth} to {}",
-                self.depth
+                self.control.depth
             )));
         }
         Ok(())
@@ -2826,7 +2786,7 @@ impl Compiler {
             return Ok(());
         }
 
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let end = self.assembler.label();
         let mut branches: Vec<(Option<&Expr>, &[Stmt])> =
             vec![(Some(&statement.test), statement.body.as_slice())];
@@ -2848,30 +2808,32 @@ impl Compiler {
         for (branch_index, (test, body)) in branches.into_iter().enumerate() {
             if let Some(test) = test {
                 let next = self.assembler.label();
-                let exclude_not_taken = self.exclude_terminal_if_not_taken
-                    || (!self.active_with_region_exclusions.is_empty()
+                let exclude_not_taken = self.control.exclude_terminal_if_not_taken
+                    || (!self.control.active_with_region_exclusions.is_empty()
                         && branch_index > 0
                         && suite_terminates(body));
-                let previous_exclusion =
-                    std::mem::replace(&mut self.exclude_terminal_if_not_taken, exclude_not_taken);
+                let previous_exclusion = std::mem::replace(
+                    &mut self.control.exclude_terminal_if_not_taken,
+                    exclude_not_taken,
+                );
                 let retain_folded_test_in_protected_region = branch_index == 0
                     && early_condition_truthiness(test) == Some(true)
-                    && (!self.active_with_region_exclusions.is_empty()
-                        || !self.active_exception_region_exclusions.is_empty()
-                        || self.generator_region_start.is_some());
+                    && (!self.control.active_with_region_exclusions.is_empty()
+                        || !self.control.active_exception_region_exclusions.is_empty()
+                        || self.control.generator_region_start.is_some());
                 let condition_result = self.compile_jump_if(test, false, next);
-                self.exclude_terminal_if_not_taken = previous_exclusion;
+                self.control.exclude_terminal_if_not_taken = previous_exclusion;
                 condition_result?;
                 if retain_folded_test_in_protected_region {
                     // CPython keeps the first folded branch marker inside the surrounding
                     // protected region instead of treating it as an artificial condition NOP.
-                    if self.generator_region_start.is_some() {
-                        self.generator_region_exclusions.pop();
+                    if self.control.generator_region_start.is_some() {
+                        self.control.generator_region_exclusions.pop();
                     }
-                    for exclusions in &mut self.active_with_region_exclusions {
+                    for exclusions in &mut self.control.active_with_region_exclusions {
                         exclusions.pop();
                     }
-                    for exclusions in &mut self.active_exception_region_exclusions {
+                    for exclusions in &mut self.control.active_exception_region_exclusions {
                         exclusions.pop();
                     }
                 }
@@ -2889,7 +2851,7 @@ impl Compiler {
                     self.emit(NOP, 0, 0)?;
                 }
                 if branch_index == 0 && first_branch_is_always_true {
-                    first_branch_max_depth = Some(self.max_depth);
+                    first_branch_max_depth = Some(self.control.max_depth);
                 }
                 if !suite_terminates(body) && branch_index + 1 < branch_count {
                     let nested_if_body_falls_through = matches!(
@@ -2947,7 +2909,7 @@ impl Compiler {
         self.assembler.mark(end);
         self.set_depth(base_depth);
         if let Some(max_depth) = first_branch_max_depth {
-            self.max_depth = max_depth;
+            self.control.max_depth = max_depth;
         }
         Ok(())
     }
@@ -3020,21 +2982,21 @@ impl Compiler {
     }
 
     fn add_control_flow_region_exclusion(&mut self, start: Label, end: Label) {
-        if self.generator_region_start.is_some() {
-            self.generator_region_exclusions.push((start, end));
+        if self.control.generator_region_start.is_some() {
+            self.control.generator_region_exclusions.push((start, end));
         }
-        for exclusions in &mut self.active_with_region_exclusions {
+        for exclusions in &mut self.control.active_with_region_exclusions {
             exclusions.push((start, end));
         }
-        for exclusions in &mut self.active_exception_region_exclusions {
+        for exclusions in &mut self.control.active_exception_region_exclusions {
             exclusions.push((start, end));
         }
     }
 
     fn has_active_control_flow_region(&self) -> bool {
-        self.generator_region_start.is_some()
-            || !self.active_with_region_exclusions.is_empty()
-            || !self.active_exception_region_exclusions.is_empty()
+        self.control.generator_region_start.is_some()
+            || !self.control.active_with_region_exclusions.is_empty()
+            || !self.control.active_exception_region_exclusions.is_empty()
     }
 
     fn emit_active_with_unwind(
@@ -3042,10 +3004,10 @@ impl Compiler {
         from_depth: usize,
         preserve_tos: bool,
     ) -> Result<Vec<(usize, Label)>, CompileError> {
-        let context_count = self.active_with_exits.len();
+        let context_count = self.control.active_with_exits.len();
         let mut unwind_starts = Vec::with_capacity(context_count - from_depth);
         for index in (from_depth..context_count).rev() {
-            let context = self.active_with_exits[index];
+            let context = self.control.active_with_exits[index];
             let start = self.assembler.label();
             self.assembler.mark(start);
             unwind_starts.push((index, start));
@@ -3074,7 +3036,7 @@ impl Compiler {
         preserve_tos: bool,
     ) -> Result<(), CompileError> {
         for index in (from_depth..to_depth).rev() {
-            match self.loops[index].iterator_cleanup {
+            match self.control.loops[index].iterator_cleanup {
                 IteratorCleanup::None => {}
                 IteratorCleanup::Sync | IteratorCleanup::Async => {
                     if preserve_tos {
@@ -3088,8 +3050,8 @@ impl Compiler {
     }
 
     fn emit_pass_finally_nops(&mut self) -> Result<(), CompileError> {
-        for index in (0..self.active_pass_finally_locations.len()).rev() {
-            let location = self.active_pass_finally_locations[index];
+        for index in (0..self.control.active_pass_finally_locations.len()).rev() {
+            let location = self.control.active_pass_finally_locations[index];
             self.assembler.set_location(location);
             self.emit(NOP, 0, 0)?;
         }
@@ -3100,9 +3062,9 @@ impl Compiler {
         &mut self,
         loop_depth: usize,
     ) -> Result<(), CompileError> {
-        for index in (0..self.active_exception_handlers.len()).rev() {
+        for index in (0..self.control.active_exception_handlers.len()).rev() {
             let (handler_loop_depth, name) = {
-                let handler = &self.active_exception_handlers[index];
+                let handler = &self.control.active_exception_handlers[index];
                 (handler.loop_depth, handler.name.clone())
             };
             if handler_loop_depth < loop_depth {
@@ -3125,7 +3087,7 @@ impl Compiler {
         preserve_tos: bool,
     ) -> Result<Option<Label>, CompileError> {
         let mut unwind_start = None;
-        for _ in from_depth..self.active_finally_end_blocks {
+        for _ in from_depth..self.control.active_finally_end_blocks {
             if preserve_tos {
                 self.emit(SWAP, 2, 0)?;
             }
@@ -3148,7 +3110,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtWhile,
         restart: Label,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let start = self.assembler.label();
         let body_label = self.assembler.label();
         let control_region = self
@@ -3171,25 +3133,28 @@ impl Compiler {
 
         self.assembler.mark(body_label);
         self.set_depth(base_depth);
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: restart,
             iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: false,
             preserve_break_exit: false,
         });
         let body_start = self.assembler.instruction_count();
         let previous_loop_tail_exclusion = std::mem::replace(
-            &mut self.exclude_loop_tail_not_taken_from_control_flow_regions,
+            &mut self
+                .control
+                .exclude_loop_tail_not_taken_from_control_flow_regions,
             control_region.is_some(),
         );
         let tail_result = self.compile_while_tail_suite(&statement.body, start);
-        self.exclude_loop_tail_not_taken_from_control_flow_regions = previous_loop_tail_exclusion;
+        self.control
+            .exclude_loop_tail_not_taken_from_control_flow_regions = previous_loop_tail_exclusion;
         let tail_jumps = tail_result?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !tail_jumps && !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
@@ -3237,11 +3202,11 @@ impl Compiler {
         statement: &ruff_python_ast::StmtAssert,
         restart: Label,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let failure = self.assembler.label();
         let previous_exclusion = std::mem::replace(
-            &mut self.exclude_terminal_if_not_taken,
-            !self.active_with_region_exclusions.is_empty(),
+            &mut self.control.exclude_terminal_if_not_taken,
+            !self.control.active_with_region_exclusions.is_empty(),
         );
         if let Expr::BoolOp(boolean) = statement.test.as_ref()
             && boolean.op == BoolOp::Or
@@ -3263,7 +3228,7 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
         }
-        self.exclude_terminal_if_not_taken = previous_exclusion;
+        self.control.exclude_terminal_if_not_taken = previous_exclusion;
         self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
 
         self.assembler.mark(failure);
@@ -3288,9 +3253,9 @@ impl Compiler {
         statement: &ruff_python_ast::StmtIf,
         restart: Label,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         if statement.elif_else_clauses.is_empty() {
-            if self.generator_region_start.is_none()
+            if self.control.generator_region_start.is_none()
                 && let Expr::Compare(comparison) = statement.test.as_ref()
                 && comparison.ops.len() > 1
             {
@@ -3331,7 +3296,7 @@ impl Compiler {
                     && self.has_active_control_flow_region())
                 .then(|| (self.assembler.label(), self.assembler.label()));
                 let generator_exclusion = (control_region.is_none()
-                    && self.generator_region_start.is_some())
+                    && self.control.generator_region_start.is_some())
                 .then(|| self.assembler.label());
                 self.compile_jump_if(test, true, body_label)?;
                 if let Some((control_start, _)) = control_region {
@@ -3349,7 +3314,8 @@ impl Compiler {
                 }
                 self.assembler.mark(body_label);
                 if let Some(exclusion_start) = generator_exclusion {
-                    self.generator_region_exclusions
+                    self.control
+                        .generator_region_exclusions
                         .push((exclusion_start, body_label));
                 }
                 self.set_depth(base_depth);
@@ -3367,19 +3333,25 @@ impl Compiler {
             let next = test.map(|_| self.assembler.label());
             if let (Some(test), Some(next)) = (test, next) {
                 let exclude_from_control_flow_regions =
-                    !self.active_exception_region_exclusions.is_empty()
-                        || self.exclude_loop_tail_not_taken_from_control_flow_regions;
+                    !self.control.active_exception_region_exclusions.is_empty()
+                        || self
+                            .control
+                            .exclude_loop_tail_not_taken_from_control_flow_regions;
                 let previous_exception_exclusion = std::mem::replace(
-                    &mut self.exclude_condition_not_taken_from_exception,
+                    &mut self.control.exclude_condition_not_taken_from_exception,
                     exclude_from_control_flow_regions,
                 );
                 let previous_all_exception_exclusions = std::mem::replace(
-                    &mut self.exclude_condition_not_taken_from_all_exception_regions,
-                    !self.active_exception_region_exclusions.is_empty(),
+                    &mut self
+                        .control
+                        .exclude_condition_not_taken_from_all_exception_regions,
+                    !self.control.active_exception_region_exclusions.is_empty(),
                 );
                 let condition_result = self.compile_jump_if(test, false, next);
-                self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
-                self.exclude_condition_not_taken_from_all_exception_regions =
+                self.control.exclude_condition_not_taken_from_exception =
+                    previous_exception_exclusion;
+                self.control
+                    .exclude_condition_not_taken_from_all_exception_regions =
                     previous_all_exception_exclusions;
                 condition_result?;
             }
@@ -3446,7 +3418,7 @@ impl Compiler {
             && self.has_active_control_flow_region())
         .then(|| (self.assembler.label(), self.assembler.label()));
         let generator_exclusion = (control_region.is_none()
-            && self.generator_region_start.is_some())
+            && self.control.generator_region_start.is_some())
         .then(|| self.assembler.label());
         self.compile_jump_if(expression, jump_on, success)?;
         if let Some((control_start, _)) = control_region {
@@ -3463,7 +3435,8 @@ impl Compiler {
             self.add_control_flow_region_exclusion(control_start, control_end);
         }
         if let Some(exclusion_start) = generator_exclusion {
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((exclusion_start, success));
         }
         Ok(())
@@ -3475,7 +3448,7 @@ impl Compiler {
         comparison: &ruff_python_ast::ExprCompare,
         restart: Label,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let cleanup = self.assembler.label();
         let success = self.assembler.label();
         let body = self.assembler.label();
@@ -3543,11 +3516,11 @@ impl Compiler {
         statement: &ruff_python_ast::StmtMatch,
         terminal: bool,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         if matches!(statement.subject.as_ref(), Expr::Tuple(_))
             && let Some(constant) = fold_constant(&statement.subject)
         {
-            if self.constants.is_empty()
+            if self.output.constants.is_empty()
                 && let Some(seed) = first_literal_constant(&statement.subject)
             {
                 self.add_constant(seed)?;
@@ -3653,9 +3626,12 @@ impl Compiler {
                     false
                 } else if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
                     let previous_fallthrough =
-                        std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                        std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
                     self.compile_suite_inner(&case.body, true)?;
-                    std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+                    std::mem::replace(
+                        &mut self.control.emitted_fallthrough_return,
+                        previous_fallthrough,
+                    )
                 } else {
                     self.compile_suite(&case.body)?;
                     false
@@ -3682,7 +3658,7 @@ impl Compiler {
                         if irrefutable_true_guard
                             || (self.assembler.instruction_count() == body_start + 1
                                 && !previous_instruction_covers_branch
-                                && !matches!(self.scope, Scope::Class { .. }))
+                                && !matches!(self.unit.scope, Scope::Class { .. }))
                         {
                             self.assembler.preserve_last_inlined_jump_nop();
                         }
@@ -3730,9 +3706,12 @@ impl Compiler {
             let body_start = self.assembler.instruction_count();
             let emitted_fallthrough = if terminal && matches!(case.body.last(), Some(Stmt::If(_))) {
                 let previous_fallthrough =
-                    std::mem::replace(&mut self.emitted_fallthrough_return, false);
+                    std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
                 self.compile_suite_inner(&case.body, true)?;
-                std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough)
+                std::mem::replace(
+                    &mut self.control.emitted_fallthrough_return,
+                    previous_fallthrough,
+                )
             } else {
                 self.compile_suite(&case.body)?;
                 false
@@ -3759,7 +3738,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtIf,
         match_end: Label,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let false_exit = self.assembler.label();
         self.compile_jump_if(&statement.test, false, false_exit)?;
         self.mark_definitely_evaluated_locals(&statement.test);
@@ -3906,7 +3885,7 @@ impl Compiler {
         pattern: &ruff_python_ast::PatternMatchOr,
         context: &mut MatchContext,
     ) -> Result<(), CompileError> {
-        let entry_depth = self.depth;
+        let entry_depth = self.control.depth;
         let end = self.assembler.label();
         let mut control: Option<Vec<String>> = None;
         for (index, alternative) in pattern.patterns.iter().enumerate() {
@@ -4010,7 +3989,7 @@ impl Compiler {
         self.jump_to_match_fail(context, POP_JUMP_IF_FALSE, -1)?;
         if starred.is_none() || pattern.patterns.len() > 1 {
             self.emit(GET_LEN, 0, 1)?;
-            if self.constants.is_empty() {
+            if self.output.constants.is_empty() {
                 self.add_constant(Constant::Int(u64::try_from(minimum).unwrap_or(u64::MAX)))?;
             }
             self.emit(
@@ -4222,9 +4201,9 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtWhile,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         if let Some(truthiness) = early_condition_truthiness(&statement.test) {
-            if self.constants.is_empty()
+            if self.output.constants.is_empty()
                 && let Some(constant) = fold_constant(&statement.test)
             {
                 self.add_constant(constant)?;
@@ -4247,20 +4226,20 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(statement.test.range()));
             self.emit(NOP, 0, 0)?;
-            self.loops.push(LoopContext {
+            self.control.loops.push(LoopContext {
                 continue_label: start,
                 break_label: end,
                 iterator_cleanup: IteratorCleanup::None,
-                with_depth: self.active_with_exits.len(),
-                finally_end_depth: self.active_finally_end_blocks,
-                exception_region_depth: self.active_exception_region_exclusions.len(),
+                with_depth: self.control.active_with_exits.len(),
+                finally_end_depth: self.control.active_finally_end_blocks,
+                exception_region_depth: self.control.active_exception_region_exclusions.len(),
                 break_returns: false,
-                preserve_break_exit: self.preserve_finally_break_exit_loop_range
+                preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
                     == Some(statement.range),
             });
             let body_start = self.assembler.instruction_count();
             let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
-            self.loops.pop();
+            self.control.loops.pop();
             if !tail_jumps && !suite_terminates(&statement.body) {
                 self.emit_while_backedge(&statement.body, body_start, start)?;
             }
@@ -4285,35 +4264,35 @@ impl Compiler {
 
         self.assembler.mark(start);
         let previous_exception_exclusion = std::mem::replace(
-            &mut self.exclude_condition_not_taken_from_exception,
-            !self.active_exception_region_exclusions.is_empty()
-                || self.active_terminal_withs > 0
-                || self.generator_region_start.is_some(),
+            &mut self.control.exclude_condition_not_taken_from_exception,
+            !self.control.active_exception_region_exclusions.is_empty()
+                || self.control.active_terminal_withs > 0
+                || self.control.generator_region_start.is_some(),
         );
         let condition_result = self.compile_jump_if(&statement.test, false, else_label);
-        self.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
+        self.control.exclude_condition_not_taken_from_exception = previous_exception_exclusion;
         condition_result?;
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::None,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: false,
-            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_while_tail_suite(&statement.body, start)?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !tail_jumps && !suite_terminates(&statement.body) {
             self.emit_while_backedge(&statement.body, body_start, start)?;
         }
 
         self.assembler.mark(else_label);
         self.set_depth(base_depth);
-        if statement.orelse.is_empty() && !self.active_with_region_exclusions.is_empty() {
+        if statement.orelse.is_empty() && !self.control.active_with_region_exclusions.is_empty() {
             let exclusion_start = self.assembler.label();
             self.assembler.mark(exclusion_start);
             self.assembler
@@ -4321,14 +4300,15 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            if self.generator_region_start.is_some() {
-                self.generator_region_exclusions
+            if self.control.generator_region_start.is_some() {
+                self.control
+                    .generator_region_exclusions
                     .push((exclusion_start, exclusion_end));
             }
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
         }
@@ -4343,14 +4323,14 @@ impl Compiler {
     }
 
     fn compile_for(&mut self, statement: &ruff_python_ast::StmtFor) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let has_break = suite_contains_loop_break(&statement.body);
         let start = self.assembler.label();
         let cleanup = self.assembler.label();
         let end = self.assembler.label();
         let mut newly_initialized_targets = Vec::new();
         collect_target_names(&statement.target, &mut newly_initialized_targets);
-        newly_initialized_targets.retain(|name| !self.initialized_locals.contains(name));
+        newly_initialized_targets.retain(|name| !self.symbols.initialized_locals.contains(name));
 
         self.compile_iterable_expression(&statement.iter)?;
         self.assembler
@@ -4360,20 +4340,20 @@ impl Compiler {
         self.emit_jump_forward(FOR_ITER, cleanup, 1)?;
         self.compile_store_target(&statement.target)?;
 
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::Sync,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: false,
-            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !tail_jumps && !suite_terminates(&statement.body) {
             if self.assembler.instruction_count() > body_start
                 && let Some(location) = self.assembler.last_instruction_location()
@@ -4393,14 +4373,14 @@ impl Compiler {
         self.emit(END_FOR, 0, -1)?;
         self.emit(POP_ITER, 0, -1)?;
         for name in &newly_initialized_targets {
-            self.initialized_locals.remove(name);
+            self.symbols.initialized_locals.remove(name);
         }
         let orelse_start = self.assembler.instruction_count();
         self.compile_suite(&statement.orelse)?;
         if self.assembler.instruction_count() == orelse_start
             && let [Stmt::Pass(statement)] = statement.orelse.as_slice()
-            && self.active_exception_region_exclusions.is_empty()
-            && !self.active_with_region_exclusions.is_empty()
+            && self.control.active_exception_region_exclusions.is_empty()
+            && !self.control.active_with_region_exclusions.is_empty()
         {
             let noop_start = self.assembler.label();
             self.assembler.mark(noop_start);
@@ -4409,7 +4389,7 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let noop_end = self.assembler.label();
             self.assembler.mark(noop_end);
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((noop_start, noop_end));
             }
         }
@@ -4424,11 +4404,11 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtFor,
     ) -> Result<(), CompileError> {
-        if self.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
+        if self.unit.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
             return Err(unsupported("async for outside coroutine code"));
         }
 
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let has_break = suite_contains_loop_break(&statement.body);
         let start = self.assembler.label();
         let protected_start = self.assembler.label();
@@ -4442,7 +4422,7 @@ impl Compiler {
         let end = self.assembler.label();
         let mut newly_initialized_targets = Vec::new();
         collect_target_names(&statement.target, &mut newly_initialized_targets);
-        newly_initialized_targets.retain(|name| !self.initialized_locals.contains(name));
+        newly_initialized_targets.retain(|name| !self.symbols.initialized_locals.contains(name));
 
         self.compile_expression(&statement.iter)?;
         let iterator_location = self.source_location(statement.iter.range());
@@ -4469,20 +4449,20 @@ impl Compiler {
         self.emit(NOT_TAKEN, 0, 0)?;
         self.compile_store_target(&statement.target)?;
 
-        self.loops.push(LoopContext {
+        self.control.loops.push(LoopContext {
             continue_label: start,
             break_label: end,
             iterator_cleanup: IteratorCleanup::Async,
-            with_depth: self.active_with_exits.len(),
-            finally_end_depth: self.active_finally_end_blocks,
-            exception_region_depth: self.active_exception_region_exclusions.len(),
+            with_depth: self.control.active_with_exits.len(),
+            finally_end_depth: self.control.active_finally_end_blocks,
+            exception_region_depth: self.control.active_exception_region_exclusions.len(),
             break_returns: false,
-            preserve_break_exit: self.preserve_finally_break_exit_loop_range
+            preserve_break_exit: self.control.preserve_finally_break_exit_loop_range
                 == Some(statement.range),
         });
         let body_start = self.assembler.instruction_count();
         let tail_jumps = self.compile_loop_tail_suite(&statement.body, start)?;
-        self.loops.pop();
+        self.control.loops.pop();
         if !tail_jumps && !suite_terminates(&statement.body) {
             if self.assembler.instruction_count() > body_start
                 && let Some(location) = self.assembler.last_instruction_location()
@@ -4509,12 +4489,13 @@ impl Compiler {
         );
 
         self.assembler.mark(async_cleanup);
-        self.generator_region_exclusions
+        self.control
+            .generator_region_exclusions
             .push((cleanup_throw, async_cleanup));
-        for exclusions in &mut self.active_with_region_exclusions {
+        for exclusions in &mut self.control.active_with_region_exclusions {
             exclusions.push((cleanup_throw_end, async_cleanup));
         }
-        for exclusions in &mut self.active_exception_region_exclusions {
+        for exclusions in &mut self.control.active_exception_region_exclusions {
             exclusions.push((cleanup_throw_end, async_cleanup));
         }
         self.set_depth(base_depth + 2);
@@ -4536,13 +4517,16 @@ impl Compiler {
             false,
         );
         for name in &newly_initialized_targets {
-            self.initialized_locals.remove(name);
+            self.symbols.initialized_locals.remove(name);
         }
         self.compile_suite(&statement.orelse)?;
         if has_break {
             self.assembler.mark(end);
         }
-        if self.emit_protected_async_for_end_nop && statement.orelse.is_empty() && !has_break {
+        if self.control.emit_protected_async_for_end_nop
+            && statement.orelse.is_empty()
+            && !has_break
+        {
             let noop_start = self.assembler.label();
             self.assembler.mark(noop_start);
             self.assembler
@@ -4553,12 +4537,13 @@ impl Compiler {
             // CPython's coroutine stop handler excludes both the synthetic end block and the
             // preceding END_ASYNC_FOR, while the surrounding protected region still owns the
             // END_ASYNC_FOR itself.
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((async_cleanup, noop_end));
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((noop_start, noop_end));
             }
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((noop_start, noop_end));
             }
         }
@@ -4650,9 +4635,9 @@ impl Compiler {
         assignment: &ruff_python_ast::StmtAnnAssign,
     ) -> Result<(), CompileError> {
         if assignment.simple
-            && (matches!(self.scope, Scope::Module)
-                || matches!(self.scope, Scope::Class { .. })
-                    && self.flags & CO_FUTURE_ANNOTATIONS != 0)
+            && (matches!(self.unit.scope, Scope::Module)
+                || matches!(self.unit.scope, Scope::Class { .. })
+                    && self.unit.flags & CO_FUTURE_ANNOTATIONS != 0)
         {
             if let Some(value) = &assignment.value {
                 self.compile_expression(value)?;
@@ -4661,7 +4646,7 @@ impl Compiler {
             let Expr::Name(target) = assignment.target.as_ref() else {
                 return Err(unsupported("simple annotation target"));
             };
-            if self.flags & CO_FUTURE_ANNOTATIONS != 0 {
+            if self.unit.flags & CO_FUTURE_ANNOTATIONS != 0 {
                 self.assembler
                     .set_location(self.source_location(assignment.annotation.range()));
                 let annotation = unparse_annotation(&assignment.annotation);
@@ -4673,9 +4658,9 @@ impl Compiler {
                 self.load_string_constant(&target)?;
                 self.emit(STORE_SUBSCR, 0, -3)?;
             } else {
-                let index = self.module_annotation_index;
-                self.module_annotation_index += 1;
-                if self.constants.is_empty() {
+                let index = self.unit.module_annotation_index;
+                self.unit.module_annotation_index += 1;
+                if self.output.constants.is_empty() {
                     self.add_constant(Constant::Int(u64::from(index)))?;
                 }
                 self.assembler
@@ -4766,14 +4751,14 @@ impl Compiler {
                 .set_location(self.source_location(statement.test.range()));
             return self.emit(NOP, 0, 0);
         }
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let end = self.assembler.label();
         let previous_exclusion = std::mem::replace(
-            &mut self.exclude_terminal_if_not_taken,
-            !self.active_with_region_exclusions.is_empty(),
+            &mut self.control.exclude_terminal_if_not_taken,
+            !self.control.active_with_region_exclusions.is_empty(),
         );
         self.compile_jump_if(&statement.test, true, end)?;
-        self.exclude_terminal_if_not_taken = previous_exclusion;
+        self.control.exclude_terminal_if_not_taken = previous_exclusion;
         self.assembler
             .set_location(self.source_location(statement.range));
         self.emit(LOAD_COMMON_CONSTANT, 0, 1)?;
@@ -4843,7 +4828,7 @@ impl Compiler {
             return Err(unsupported("try statement without handlers"));
         }
 
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let try_start = self.assembler.label();
         let try_end = self.assembler.label();
         let handler_start = self.assembler.label();
@@ -4865,19 +4850,22 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let statement_nop_end = self.assembler.label();
             self.assembler.mark(statement_nop_end);
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((statement_nop_start, statement_nop_end));
             }
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((statement_nop_start, statement_nop_end));
             }
-            if self.generator_region_start.is_some() {
-                self.generator_region_exclusions
+            if self.control.generator_region_start.is_some() {
+                self.control
+                    .generator_region_exclusions
                     .push((statement_nop_start, statement_nop_end));
             }
         }
         self.assembler.mark(try_start);
-        self.active_exception_region_exclusions.push(Vec::new());
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
         let direct_continue =
             statement.orelse.is_empty() && matches!(statement.body.as_slice(), [Stmt::Continue(_)]);
         let body_noop_location = if direct_continue {
@@ -4897,12 +4885,15 @@ impl Compiler {
                 && let Some((last @ Stmt::If(_), leading)) = statement.body.split_last()
             {
                 self.compile_suite(leading)?;
-                let previous = std::mem::replace(&mut self.exclude_terminal_if_not_taken, true);
-                let previous_exception =
-                    std::mem::replace(&mut self.exclude_condition_not_taken_from_exception, true);
+                let previous =
+                    std::mem::replace(&mut self.control.exclude_terminal_if_not_taken, true);
+                let previous_exception = std::mem::replace(
+                    &mut self.control.exclude_condition_not_taken_from_exception,
+                    true,
+                );
                 let result = self.compile_statement(last);
-                self.exclude_terminal_if_not_taken = previous;
-                self.exclude_condition_not_taken_from_exception = previous_exception;
+                self.control.exclude_terminal_if_not_taken = previous;
+                self.control.exclude_condition_not_taken_from_exception = previous_exception;
                 result?;
             } else {
                 self.compile_suite(&statement.body)?;
@@ -4929,8 +4920,8 @@ impl Compiler {
                 self.assembler.set_location(location);
                 self.emit(NOP, 0, 0)?;
                 // The no-op body does not inherit an enclosing finally's exception owner.
-                if self.prevent_try_exit_inlining
-                    && self.active_exception_region_exclusions.len() > 1
+                if self.control.prevent_try_exit_inlining
+                    && self.control.active_exception_region_exclusions.len() > 1
                 {
                     self.assembler.exclude_last_instruction_from_exception();
                 }
@@ -4938,6 +4929,7 @@ impl Compiler {
             location
         };
         let try_exclusions = self
+            .control
             .active_exception_region_exclusions
             .pop()
             .expect("active try region has exclusion collector");
@@ -4986,27 +4978,30 @@ impl Compiler {
                     .as_except_handler()
                     .is_some_and(|handler| matches!(handler.body.as_slice(), [Stmt::Pass(_)]))
             });
-            let body_ends_with_overridden_return = self.active_overriding_finally_returns > 0
+            let body_ends_with_overridden_return = self.control.active_overriding_finally_returns
+                > 0
                 && matches!(statement.body.last(), Some(Stmt::Return(_)));
-            let exit_exclusion_start = if !self.active_exception_region_exclusions.is_empty()
-                && (body_ends_with_overridden_return
-                    || (body_noop_location.is_some()
-                        && (self.active_overriding_finally_returns > 0
-                            || (pass_only_handlers && !self.prevent_try_exit_inlining))))
-            {
-                let start = self.assembler.label();
-                self.assembler.mark(start);
-                Some(start)
-            } else {
-                None
-            };
+            let exit_exclusion_start =
+                if !self.control.active_exception_region_exclusions.is_empty()
+                    && (body_ends_with_overridden_return
+                        || (body_noop_location.is_some()
+                            && (self.control.active_overriding_finally_returns > 0
+                                || (pass_only_handlers
+                                    && !self.control.prevent_try_exit_inlining))))
+                {
+                    let start = self.assembler.label();
+                    self.assembler.mark(start);
+                    Some(start)
+                } else {
+                    None
+                };
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
             // A pass-only nested try leaves an ownerless exit NOP unless the enclosing region
             // is the synthetic protected body of try/finally.
             if body_noop_location.is_some()
                 && statement.orelse.is_empty()
-                && !self.active_exception_region_exclusions.is_empty()
-                && self.active_finally_try_bodies == 0
+                && !self.control.active_exception_region_exclusions.is_empty()
+                && self.control.active_finally_try_bodies == 0
             {
                 self.assembler.exclude_last_instruction_from_exception();
             }
@@ -5024,11 +5019,11 @@ impl Compiler {
             if let Some(exit_exclusion_start) = exit_exclusion_start {
                 let exit_exclusion_end = self.assembler.label();
                 self.assembler.mark(exit_exclusion_end);
-                for exclusions in &mut self.active_exception_region_exclusions {
+                for exclusions in &mut self.control.active_exception_region_exclusions {
                     exclusions.push((exit_exclusion_start, exit_exclusion_end));
                 }
             }
-            if self.prevent_try_exit_inlining {
+            if self.control.prevent_try_exit_inlining {
                 self.assembler.prevent_last_jump_inlining();
             }
         }
@@ -5063,11 +5058,11 @@ impl Compiler {
                 let newly_owned: Vec<_> = references
                     .references
                     .into_iter()
-                    .filter(|name| self.owned_load_locals.insert(name.clone()))
+                    .filter(|name| self.symbols.owned_load_locals.insert(name.clone()))
                     .collect();
                 self.compile_expression(exception_type)?;
                 for name in newly_owned {
-                    self.owned_load_locals.remove(&name);
+                    self.symbols.owned_load_locals.remove(&name);
                 }
                 self.assembler.set_location(handler_location);
                 self.emit(CHECK_EXC_MATCH, 0, 0)?;
@@ -5080,7 +5075,7 @@ impl Compiler {
                 if handler_index > 0
                     || matches!(exception_type.as_ref(), Expr::BoolOp(_) | Expr::If(_))
                 {
-                    for exclusions in &mut self.active_exception_region_exclusions {
+                    for exclusions in &mut self.control.active_exception_region_exclusions {
                         exclusions.push((exclusion_start, exclusion_end));
                     }
                     not_taken_exclusion = Some((exclusion_start, exclusion_end));
@@ -5121,6 +5116,7 @@ impl Compiler {
                     self.delete_name(name.as_str())?;
                 }
                 let continue_label = self
+                    .control
                     .loops
                     .last()
                     .map(|context| context.continue_label)
@@ -5163,8 +5159,9 @@ impl Compiler {
                 self.assembler
                     .set_location(self.source_location(handler.body[0].range()));
                 self.emit(POP_EXCEPT, 0, -1)?;
-                let unreachable_depth = self.depth;
+                let unreachable_depth = self.control.depth;
                 let context = self
+                    .control
                     .loops
                     .last()
                     .copied()
@@ -5186,7 +5183,7 @@ impl Compiler {
                 continue;
             }
             if handler.name.is_none()
-                && !self.active_pass_finally_locations.is_empty()
+                && !self.control.active_pass_finally_locations.is_empty()
                 && let [Stmt::Return(return_statement)] = handler.body.as_slice()
                 && return_statement
                     .value
@@ -5217,7 +5214,7 @@ impl Compiler {
                 self.emit(RETURN_VALUE, 0, -1)?;
                 let unwind_end = self.assembler.label();
                 self.assembler.mark(unwind_end);
-                for exclusions in &mut self.active_exception_region_exclusions {
+                for exclusions in &mut self.control.active_exception_region_exclusions {
                     exclusions.push((unwind_start, unwind_end));
                 }
                 self.assembler.mark(next_handler);
@@ -5226,8 +5223,8 @@ impl Compiler {
             }
             let handler_body_start = self.assembler.instruction_count();
             let newly_owned_handler_locals = {
-                let initialized_locals = &self.initialized_locals;
-                let owned_load_locals = &mut self.owned_load_locals;
+                let initialized_locals = &self.symbols.initialized_locals;
+                let owned_load_locals = &mut self.symbols.owned_load_locals;
                 initialized_locals
                     .iter()
                     .filter(|name| owned_load_locals.insert((*name).clone()))
@@ -5237,7 +5234,7 @@ impl Compiler {
             let previously_owned = handler
                 .name
                 .as_ref()
-                .is_some_and(|name| !self.owned_load_locals.insert(name.to_string()));
+                .is_some_and(|name| !self.symbols.owned_load_locals.insert(name.to_string()));
             let terminal_handler_if = if terminal
                 && let Some(name) = &handler.name
                 && let [Stmt::If(statement)] = handler.body.as_slice()
@@ -5264,18 +5261,22 @@ impl Compiler {
                         Vec::new(),
                     )
                 } else {
-                    self.active_exception_region_exclusions.push(Vec::new());
-                    self.active_exception_handlers
+                    self.control
+                        .active_exception_region_exclusions
+                        .push(Vec::new());
+                    self.control
+                        .active_exception_handlers
                         .push(ExceptionHandlerContext {
                             name: handler.name.as_ref().map(ToString::to_string),
-                            loop_depth: self.loops.len(),
+                            loop_depth: self.control.loops.len(),
                         });
                     let previous_unwind = std::mem::replace(
-                        &mut self.unwind_exception_handlers_for_implicit_return,
+                        &mut self.control.unwind_exception_handlers_for_implicit_return,
                         terminal_handler_try,
                     );
-                    let previous_fallthrough = terminal_handler_try
-                        .then(|| std::mem::replace(&mut self.emitted_fallthrough_return, false));
+                    let previous_fallthrough = terminal_handler_try.then(|| {
+                        std::mem::replace(&mut self.control.emitted_fallthrough_return, false)
+                    });
                     let strict_owned_loads = matches!(
                         handler.body.last(),
                         Some(Stmt::Break(_) | Stmt::Continue(_))
@@ -5288,18 +5289,19 @@ impl Compiler {
                                 compiler.compile_suite(&handler.body)
                             }
                         });
-                    self.unwind_exception_handlers_for_implicit_return = previous_unwind;
+                    self.control.unwind_exception_handlers_for_implicit_return = previous_unwind;
                     if let Some(previous_fallthrough) = previous_fallthrough {
                         terminal_handler_try_return = std::mem::replace(
-                            &mut self.emitted_fallthrough_return,
+                            &mut self.control.emitted_fallthrough_return,
                             previous_fallthrough,
                         );
                     }
-                    self.active_exception_handlers.pop();
+                    self.control.active_exception_handlers.pop();
                     result?;
                     (
                         None,
-                        self.active_exception_region_exclusions
+                        self.control
+                            .active_exception_region_exclusions
                             .pop()
                             .expect("exception handler has an exclusion collector"),
                     )
@@ -5310,10 +5312,10 @@ impl Compiler {
             if let Some(name) = &handler.name
                 && !previously_owned
             {
-                self.owned_load_locals.remove(name.as_str());
+                self.symbols.owned_load_locals.remove(name.as_str());
             }
             for name in newly_owned_handler_locals {
-                self.owned_load_locals.remove(&name);
+                self.symbols.owned_load_locals.remove(&name);
             }
             let handler_body_has_instructions =
                 self.assembler.instruction_count() > handler_body_start;
@@ -5373,15 +5375,15 @@ impl Compiler {
                     // A pass-only finally keeps these extended handler exits in its protected
                     // region; executable finally bodies use CPython's stale-owner exclusion.
                     if !handler_body_has_instructions
-                        && !self.active_exception_region_exclusions.is_empty()
-                        && self.active_pass_finally_locations.is_empty()
+                        && !self.control.active_exception_region_exclusions.is_empty()
+                        && self.control.active_pass_finally_locations.is_empty()
                     {
                         self.assembler
                             .exclude_last_instruction_from_exception_if_extended();
                     }
-                    let return_is_overridden = self.active_overriding_finally_returns > 0
+                    let return_is_overridden = self.control.active_overriding_finally_returns > 0
                         && matches!(handler.body.last(), Some(Stmt::Return(_)));
-                    if self.prevent_try_exit_inlining && !return_is_overridden {
+                    if self.control.prevent_try_exit_inlining && !return_is_overridden {
                         self.assembler.prevent_last_jump_inlining();
                     }
                 }
@@ -5453,7 +5455,7 @@ impl Compiler {
         terminal: bool,
         emit_statement_nop: bool,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let try_start = self.assembler.label();
         let try_end = self.assembler.label();
         let handler_start = self.assembler.label();
@@ -5471,12 +5473,14 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let statement_nop_end = self.assembler.label();
             self.assembler.mark(statement_nop_end);
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((statement_nop_start, statement_nop_end));
             }
         }
         self.assembler.mark(try_start);
-        self.active_exception_region_exclusions.push(Vec::new());
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
         let body_instruction_start = self.assembler.instruction_count();
         self.compile_suite(&statement.body)?;
         let body_noop_location = (self.assembler.instruction_count() == body_instruction_start)
@@ -5491,8 +5495,8 @@ impl Compiler {
             body_noop_location.or_else(|| self.assembler.last_instruction_location());
         let exit_exclusion_start = if body_noop_location.is_some()
             && statement.orelse.is_empty()
-            && !self.prevent_try_exit_inlining
-            && !self.active_exception_region_exclusions.is_empty()
+            && !self.control.prevent_try_exit_inlining
+            && !self.control.active_exception_region_exclusions.is_empty()
         {
             let start = self.assembler.label();
             self.assembler.mark(start);
@@ -5506,6 +5510,7 @@ impl Compiler {
         }
         self.assembler.mark(try_end);
         let try_exclusions = self
+            .control
             .active_exception_region_exclusions
             .pop()
             .expect("active try-star region has exclusion collector");
@@ -5518,7 +5523,7 @@ impl Compiler {
         if let Some(exit_exclusion_start) = exit_exclusion_start {
             let exit_exclusion_end = self.assembler.label();
             self.assembler.mark(exit_exclusion_end);
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((exit_exclusion_start, exit_exclusion_end));
             }
         }
@@ -5575,7 +5580,7 @@ impl Compiler {
                 handler_region_exclusions.push((start, end));
                 // The synthetic second-handler marker belongs to neither the group handler nor
                 // an enclosing finally region.
-                for exclusions in &mut self.active_exception_region_exclusions {
+                for exclusions in &mut self.control.active_exception_region_exclusions {
                     exclusions.push((start, end));
                 }
             }
@@ -5689,7 +5694,7 @@ impl Compiler {
         let exclusion_end = self.assembler.label();
         self.assembler.mark(exclusion_end);
         handler_region_exclusions.push((exclusion_start, exclusion_end));
-        for exclusions in &mut self.active_exception_region_exclusions {
+        for exclusions in &mut self.control.active_exception_region_exclusions {
             exclusions.push((exclusion_start, exclusion_end));
         }
         self.emit(POP_TOP, 0, -1)?;
@@ -5766,12 +5771,13 @@ impl Compiler {
                 last_test = test;
                 let next = self.assembler.label();
                 if branch_index > 0 && branch_index + 1 == branch_count && !has_else {
-                    self.active_with_region_exclusions.push(Vec::new());
-                    self.exclude_terminal_if_not_taken = true;
+                    self.control.active_with_region_exclusions.push(Vec::new());
+                    self.control.exclude_terminal_if_not_taken = true;
                     self.compile_jump_if(test, false, next)?;
-                    self.exclude_terminal_if_not_taken = false;
+                    self.control.exclude_terminal_if_not_taken = false;
                     exclusions.extend(
-                        self.active_with_region_exclusions
+                        self.control
+                            .active_with_region_exclusions
                             .pop()
                             .expect("terminal handler has exclusion collector"),
                     );
@@ -5878,7 +5884,7 @@ impl Compiler {
         {
             return self.compile_try_finally_continue_break(statement);
         }
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
         let finally_handler = self.assembler.label();
@@ -5900,31 +5906,34 @@ impl Compiler {
         self.emit(NOP, 0, 0)?;
         let statement_nop_end = self.assembler.label();
         self.assembler.mark(statement_nop_end);
-        for exclusions in &mut self.active_exception_region_exclusions {
+        for exclusions in &mut self.control.active_exception_region_exclusions {
             exclusions.push((statement_nop_start, statement_nop_end));
         }
-        for exclusions in &mut self.active_with_region_exclusions {
+        for exclusions in &mut self.control.active_with_region_exclusions {
             exclusions.push((statement_nop_start, statement_nop_end));
         }
-        if self.generator_region_start.is_some() {
-            self.generator_region_exclusions
+        if self.control.generator_region_start.is_some() {
+            self.control
+                .generator_region_exclusions
                 .push((statement_nop_start, statement_nop_end));
         }
         self.assembler.mark(protected_start);
-        self.active_exception_region_exclusions.push(Vec::new());
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
         let pass_finally_location = match statement.finalbody.as_slice() {
             [Stmt::Pass(statement)] => Some(self.source_location(statement.range)),
             _ => None,
         };
         if let Some(location) = pass_finally_location {
-            self.active_pass_finally_locations.push(location);
+            self.control.active_pass_finally_locations.push(location);
         }
-        let previous_overriding_finally_returns = self.active_overriding_finally_returns;
+        let previous_overriding_finally_returns = self.control.active_overriding_finally_returns;
         if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
-            self.active_overriding_finally_returns += 1;
+            self.control.active_overriding_finally_returns += 1;
         }
-        let previous_break_exit_loop_range = self.preserve_finally_break_exit_loop_range;
-        self.preserve_finally_break_exit_loop_range =
+        let previous_break_exit_loop_range = self.control.preserve_finally_break_exit_loop_range;
+        self.control.preserve_finally_break_exit_loop_range =
             if matches!(statement.finalbody.last(), Some(Stmt::Return(_))) {
                 match statement.body.last() {
                     Some(Stmt::While(loop_statement))
@@ -5946,18 +5955,19 @@ impl Compiler {
             };
         let copy_finally_on_return = pass_finally_location.is_none()
             && !suite_terminates(&statement.finalbody)
-            && self.active_exception_handlers.is_empty()
-            && self.active_return_finally_contexts.is_empty();
+            && self.control.active_exception_handlers.is_empty()
+            && self.control.active_return_finally_contexts.is_empty();
         if copy_finally_on_return {
-            self.active_return_finally_contexts
+            self.control
+                .active_return_finally_contexts
                 .push(ReturnFinallyContext {
                     body: statement.finalbody.to_vec(),
-                    loop_depth: self.loops.len(),
+                    loop_depth: self.control.loops.len(),
                     handler: finally_handler,
                     depth: base_depth.cast_unsigned(),
                 });
         }
-        self.active_finally_try_bodies += 1;
+        self.control.active_finally_try_bodies += 1;
         let protected_result = (|| -> Result<bool, CompileError> {
             if statement.handlers.is_empty() {
                 let instruction_count = self.assembler.instruction_count();
@@ -5977,30 +5987,31 @@ impl Compiler {
                     }
                     self.emit(NOP, 0, 0)?;
                     // A no-op protected body does not acquire an enclosing try's handler.
-                    if self.active_exception_region_exclusions.len() > 1 {
+                    if self.control.active_exception_region_exclusions.len() > 1 {
                         self.assembler.exclude_last_instruction_from_exception();
                     }
                 }
                 Ok(has_instructions)
             } else {
-                let previous = std::mem::replace(&mut self.prevent_try_exit_inlining, true);
+                let previous = std::mem::replace(&mut self.control.prevent_try_exit_inlining, true);
                 let result = self.compile_try_except(statement, false, false, false);
-                self.prevent_try_exit_inlining = previous;
+                self.control.prevent_try_exit_inlining = previous;
                 result?;
                 Ok(true)
             }
         })();
-        self.active_finally_try_bodies -= 1;
+        self.control.active_finally_try_bodies -= 1;
         if copy_finally_on_return {
-            self.active_return_finally_contexts.pop();
+            self.control.active_return_finally_contexts.pop();
         }
-        self.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
-        self.active_overriding_finally_returns = previous_overriding_finally_returns;
+        self.control.preserve_finally_break_exit_loop_range = previous_break_exit_loop_range;
+        self.control.active_overriding_finally_returns = previous_overriding_finally_returns;
         let protected_has_instructions = protected_result?;
         if pass_finally_location.is_some() {
-            self.active_pass_finally_locations.pop();
+            self.control.active_pass_finally_locations.pop();
         }
         let protected_exclusions = self
+            .control
             .active_exception_region_exclusions
             .pop()
             .expect("active protected region has exclusion collector");
@@ -6027,8 +6038,9 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let exit_nop_end = self.assembler.label();
             self.assembler.mark(exit_nop_end);
-            if self.generator_region_start.is_some() {
-                self.generator_region_exclusions
+            if self.control.generator_region_start.is_some() {
+                self.control
+                    .generator_region_exclusions
                     .push((exit_nop_start, exit_nop_end));
             }
         }
@@ -6048,10 +6060,11 @@ impl Compiler {
         } else {
             self.assembler.preserve_last_no_location();
         }
-        let previous_fallthrough = std::mem::replace(&mut self.emitted_fallthrough_return, false);
+        let previous_fallthrough =
+            std::mem::replace(&mut self.control.emitted_fallthrough_return, false);
         if let Some(location) = pass_finally_location {
             self.assembler.set_location(location);
-            if self.active_exception_region_exclusions.is_empty() {
+            if self.control.active_exception_region_exclusions.is_empty() {
                 self.emit(NOP, 0, 0)?;
             } else {
                 // The normal finally copy is outside an enclosing try's exception ownership.
@@ -6062,18 +6075,20 @@ impl Compiler {
                 self.assembler.exclude_last_instruction_from_exception();
                 let pass_end = self.assembler.label();
                 self.assembler.mark(pass_end);
-                for exclusions in &mut self.active_exception_region_exclusions {
+                for exclusions in &mut self.control.active_exception_region_exclusions {
                     exclusions.push((pass_start, pass_end));
                 }
             }
         } else {
-            self.active_normal_finally_bodies += 1;
+            self.control.active_normal_finally_bodies += 1;
             let result = self.compile_suite_inner(&statement.finalbody, terminal);
-            self.active_normal_finally_bodies -= 1;
+            self.control.active_normal_finally_bodies -= 1;
             result?;
         }
-        let finalbody_emitted_fallthrough =
-            std::mem::replace(&mut self.emitted_fallthrough_return, previous_fallthrough);
+        let finalbody_emitted_fallthrough = std::mem::replace(
+            &mut self.control.emitted_fallthrough_return,
+            previous_fallthrough,
+        );
         if terminal && !finalbody_emitted_fallthrough && !suite_terminates(&statement.finalbody) {
             if let Some(statement) = statement
                 .finalbody
@@ -6092,7 +6107,7 @@ impl Compiler {
             }
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
             if pass_finally_location.is_some()
-                && !self.active_exception_region_exclusions.is_empty()
+                && !self.control.active_exception_region_exclusions.is_empty()
             {
                 self.assembler.exclude_last_instruction_from_exception();
             }
@@ -6121,7 +6136,9 @@ impl Compiler {
         self.assembler.set_location(SourceLocation::NONE);
         self.emit(PUSH_EXC_INFO, 0, 1)?;
         let handler_start = finally_handler;
-        self.active_exception_region_exclusions.push(Vec::new());
+        self.control
+            .active_exception_region_exclusions
+            .push(Vec::new());
         let mut explicit_handler_end = None;
         if let Some((Stmt::Return(return_statement), leading)) = statement.finalbody.split_last() {
             self.compile_suite(leading)?;
@@ -6132,9 +6149,9 @@ impl Compiler {
         {
             let condition_false = self.assembler.label();
             self.compile_jump_if(&final_if.test, false, condition_false)?;
-            self.active_finally_end_blocks += 1;
+            self.control.active_finally_end_blocks += 1;
             let body_result = self.compile_suite(&final_if.body);
-            self.active_finally_end_blocks -= 1;
+            self.control.active_finally_end_blocks -= 1;
             body_result?;
             if !suite_terminates(&final_if.body) {
                 if let Some(location) = self.assembler.last_instruction_location() {
@@ -6152,9 +6169,9 @@ impl Compiler {
                 self.assembler.set_location(location);
                 self.emit(NOP, 0, 0)?;
             } else {
-                self.active_finally_end_blocks += 1;
+                self.control.active_finally_end_blocks += 1;
                 let finalbody_result = self.compile_suite(&statement.finalbody);
-                self.active_finally_end_blocks -= 1;
+                self.control.active_finally_end_blocks -= 1;
                 finalbody_result?;
             }
             if !suite_terminates(&statement.finalbody) {
@@ -6179,6 +6196,7 @@ impl Compiler {
             handler_end
         };
         let handler_exclusions = self
+            .control
             .active_exception_region_exclusions
             .pop()
             .expect("active finally handler has exclusion collector");
@@ -6206,8 +6224,9 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtTry,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let context = self
+            .control
             .loops
             .last()
             .copied()
@@ -6312,10 +6331,10 @@ impl Compiler {
         let handler_end = self.assembler.label();
         self.assembler.mark(handler_end);
         self.emit(POP_EXCEPT, 0, -1)?;
-        self.emit_loop_iterator_cleanup(0, self.loops.len(), preserve_value)?;
+        self.emit_loop_iterator_cleanup(0, self.control.loops.len(), preserve_value)?;
 
-        let pass_finally_unwind_start =
-            (!self.active_pass_finally_locations.is_empty()).then(|| {
+        let pass_finally_unwind_start = (!self.control.active_pass_finally_locations.is_empty())
+            .then(|| {
                 let start = self.assembler.label();
                 self.assembler.mark(start);
                 start
@@ -6335,10 +6354,12 @@ impl Compiler {
             let unwind_end = self.assembler.label();
             self.assembler.mark(unwind_end);
             let outer_region_count = self
+                .control
                 .active_exception_region_exclusions
                 .len()
                 .saturating_sub(1);
             for exclusions in self
+                .control
                 .active_exception_region_exclusions
                 .iter_mut()
                 .take(outer_region_count)
@@ -6362,7 +6383,7 @@ impl Compiler {
         let Some((item, remaining)) = items.split_first() else {
             return self.compile_suite(body);
         };
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
         let handler = self.assembler.label();
@@ -6370,14 +6391,14 @@ impl Compiler {
         let handler_end = self.assembler.label();
         let cleanup = self.assembler.label();
         let end = self.assembler.label();
-        self.max_depth = self.max_depth.max((base_depth + 7).cast_unsigned());
+        self.control.max_depth = self.control.max_depth.max((base_depth + 7).cast_unsigned());
         let newly_initialized_targets =
             item.optional_vars
                 .as_deref()
                 .map_or_else(Vec::new, |target| {
                     let mut names = Vec::new();
                     collect_target_names(target, &mut names);
-                    names.retain(|name| !self.initialized_locals.contains(name));
+                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
                     names
                 });
 
@@ -6396,12 +6417,12 @@ impl Compiler {
         } else {
             self.emit(POP_TOP, 0, -1)?;
         }
-        self.active_with_exits.push(WithExitContext {
+        self.control.active_with_exits.push(WithExitContext {
             location: self.source_location(item.context_expr.range()),
             is_async: false,
         });
-        self.active_with_region_exclusions.push(Vec::new());
-        self.active_terminal_withs += usize::from(terminal);
+        self.control.active_with_region_exclusions.push(Vec::new());
+        self.control.active_terminal_withs += usize::from(terminal);
         let mut body_noop = None;
         if remaining.is_empty() {
             let body_start = self.assembler.instruction_count();
@@ -6423,9 +6444,9 @@ impl Compiler {
             if terminal_if || terminal_branching {
                 let (last, leading) = body.split_last().expect("with body has a final if");
                 self.compile_suite(leading)?;
-                self.exclude_terminal_if_not_taken = true;
+                self.control.exclude_terminal_if_not_taken = true;
                 self.compile_statement(last)?;
-                self.exclude_terminal_if_not_taken = false;
+                self.control.exclude_terminal_if_not_taken = false;
             } else if !matches!(body, [Stmt::Pass(_)]) {
                 // Keep direct pass-only bodies on the with compiler's fallback path. CPython
                 // retains that NOP inside the protected range, unlike a terminal pass in a
@@ -6454,12 +6475,13 @@ impl Compiler {
         } else {
             self.compile_with_items(remaining, body, false)?;
         }
-        self.active_terminal_withs -= usize::from(terminal);
+        self.control.active_terminal_withs -= usize::from(terminal);
         let region_exclusions = self
+            .control
             .active_with_region_exclusions
             .pop()
             .expect("active with statement has region exclusions");
-        self.active_with_exits.pop();
+        self.control.active_with_exits.pop();
         self.assembler.mark(protected_end);
         if !remaining.is_empty() && suite_terminates(body) {
             // A nested manager can suppress the terminal body's exception. CPython keeps the
@@ -6475,12 +6497,13 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
             let noop_end = self.assembler.label();
             self.assembler.mark(noop_end);
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((noop_start, noop_end));
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((noop_start, noop_end));
             }
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((noop_start, noop_end));
             }
         }
@@ -6498,7 +6521,7 @@ impl Compiler {
                 self.emit_implicit_return()?;
             } else {
                 self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-                if self.active_finally_try_bodies > 0 {
+                if self.control.active_finally_try_bodies > 0 {
                     self.assembler.prevent_last_jump_inlining();
                 }
             }
@@ -6551,7 +6574,7 @@ impl Compiler {
             self.emit_implicit_return()?;
         } else {
             self.emit_jump_forward(JUMP_FORWARD, end, 0)?;
-            if self.active_finally_try_bodies > 0 {
+            if self.control.active_finally_try_bodies > 0 {
                 self.assembler.prevent_last_jump_inlining();
             }
         }
@@ -6565,7 +6588,7 @@ impl Compiler {
         self.assembler.mark(end);
         self.set_depth(base_depth);
         for name in newly_initialized_targets {
-            self.initialized_locals.remove(&name);
+            self.symbols.initialized_locals.remove(&name);
         }
         Ok(())
     }
@@ -6574,7 +6597,7 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtWith,
     ) -> Result<(), CompileError> {
-        if self.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
+        if self.unit.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
             return Err(unsupported("async with outside coroutine code"));
         }
         self.compile_async_with_items(&statement.items, &statement.body, false)
@@ -6589,7 +6612,7 @@ impl Compiler {
         let Some((item, remaining)) = items.split_first() else {
             return self.compile_suite(body);
         };
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
         let handler = self.assembler.label();
@@ -6603,7 +6626,7 @@ impl Compiler {
                 .map_or_else(Vec::new, |target| {
                     let mut names = Vec::new();
                     collect_target_names(target, &mut names);
-                    names.retain(|name| !self.initialized_locals.contains(name));
+                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
                     names
                 });
 
@@ -6618,13 +6641,13 @@ impl Compiler {
         self.emit(CALL, 0, -1)?;
         self.compile_awaitable_on_stack(1)?;
         self.assembler.mark(protected_start);
-        self.active_with_region_exclusions.push(Vec::new());
+        self.control.active_with_region_exclusions.push(Vec::new());
         if let Some(target) = &item.optional_vars {
             self.compile_store_target(target)?;
         } else {
             self.emit(POP_TOP, 0, -1)?;
         }
-        self.active_with_exits.push(WithExitContext {
+        self.control.active_with_exits.push(WithExitContext {
             location: self.source_location(item.context_expr.range()),
             is_async: true,
         });
@@ -6645,10 +6668,11 @@ impl Compiler {
             self.emit(NOP, 0, 0)?;
         }
         let mut region_exclusions = self
+            .control
             .active_with_region_exclusions
             .pop()
             .expect("active async with statement has region exclusions");
-        self.active_with_exits.pop();
+        self.control.active_with_exits.pop();
         if remaining.is_empty()
             && matches!(body, [Stmt::Expr(expression)] if fold_constant(&expression.value).is_some())
         {
@@ -6703,9 +6727,10 @@ impl Compiler {
         self.emit(NOT_TAKEN, 0, 0)?;
         let not_taken_end = self.assembler.label();
         self.assembler.mark(not_taken_end);
-        self.generator_region_exclusions
+        self.control
+            .generator_region_exclusions
             .push((not_taken_start, not_taken_end));
-        for exclusions in &mut self.active_with_region_exclusions {
+        for exclusions in &mut self.control.active_with_region_exclusions {
             exclusions.push((not_taken_start, not_taken_end));
         }
         self.emit(RERAISE, 2, -5)?;
@@ -6746,7 +6771,7 @@ impl Compiler {
         self.assembler.mark(end);
         self.set_depth(base_depth);
         for name in newly_initialized_targets {
-            self.initialized_locals.remove(&name);
+            self.symbols.initialized_locals.remove(&name);
         }
         Ok(())
     }
@@ -6756,7 +6781,7 @@ impl Compiler {
         statement: &ruff_python_ast::StmtImport,
     ) -> Result<(), CompileError> {
         for alias in &statement.names {
-            if self.constants.is_empty() {
+            if self.output.constants.is_empty() {
                 self.add_constant(Constant::Int(0))?;
             }
             self.emit(LOAD_SMALL_INT, 0, 1)?;
@@ -6800,7 +6825,7 @@ impl Compiler {
         &mut self,
         statement: &ruff_python_ast::StmtImportFrom,
     ) -> Result<(), CompileError> {
-        if self.constants.is_empty() {
+        if self.output.constants.is_empty() {
             self.add_constant(Constant::Int(u64::from(statement.level)))?;
         }
         self.emit(LOAD_SMALL_INT, statement.level, 1)?;
@@ -6891,7 +6916,7 @@ impl Compiler {
             .filter(|name| self.can_provide_closure(name))
             .cloned()
             .collect();
-        if matches!(self.scope, Scope::Class { .. }) {
+        if matches!(self.unit.scope, Scope::Class { .. }) {
             freevars.insert("__classdict__".to_string());
         }
         let plan = FunctionPlan {
@@ -6912,11 +6937,9 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        } | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(statement.range.start())),
@@ -6926,14 +6949,18 @@ impl Compiler {
             0,
             wrapper_flags,
         )?;
-        wrapper.private_name.clone_from(&self.private_name);
         wrapper
+            .unit
+            .private_name
+            .clone_from(&self.unit.private_name);
+        wrapper
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        wrapper.type_parameter_names = type_names;
-        wrapper.generic_target_qualified_name = Some(self.child_qualified_name(name));
-        if matches!(self.scope, Scope::Class { .. }) {
-            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+            .clone_from(&self.symbols.imported_scope_names);
+        wrapper.symbols.type_parameter_names = type_names;
+        wrapper.unit.generic_target_qualified_name = Some(self.child_qualified_name(name));
+        if matches!(self.unit.scope, Scope::Class { .. }) {
+            wrapper.unit.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
         }
         wrapper.emit_function_prologue()?;
         wrapper
@@ -7003,7 +7030,7 @@ impl Compiler {
             .map(|parameter| parameter.name().as_str().to_string())
             .collect();
         let mut child_plan =
-            FunctionPlan::build(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0);
+            FunctionPlan::build(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0);
         for name in child_plan.resolve() {
             if type_names.contains(&name) || self.can_provide_closure(&name) {
                 child_plan.freevars.insert(name);
@@ -7045,7 +7072,7 @@ impl Compiler {
                 wrapper_plan.mark_global(&name);
             }
         }
-        if matches!(self.scope, Scope::Class { .. }) {
+        if matches!(self.unit.scope, Scope::Class { .. }) {
             wrapper_plan.freevars.insert("__classdict__".to_string());
         }
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
@@ -7054,11 +7081,9 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        } | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(
@@ -7078,14 +7103,18 @@ impl Compiler {
             0,
             wrapper_flags,
         )?;
-        wrapper.private_name.clone_from(&self.private_name);
         wrapper
+            .unit
+            .private_name
+            .clone_from(&self.unit.private_name);
+        wrapper
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        wrapper.type_parameter_names = type_names;
-        wrapper.generic_target_qualified_name = Some(target_qualified_name);
-        if matches!(self.scope, Scope::Class { .. }) {
-            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+            .clone_from(&self.symbols.imported_scope_names);
+        wrapper.symbols.type_parameter_names = type_names;
+        wrapper.unit.generic_target_qualified_name = Some(target_qualified_name);
+        if matches!(self.unit.scope, Scope::Class { .. }) {
+            wrapper.unit.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
         }
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
@@ -7185,22 +7214,22 @@ impl Compiler {
                 self.compile_function_defaults(definition, definition_location)?
             };
 
-        let plan = if let Some(parent) = &self.function_plan {
+        let plan = if let Some(parent) = &self.unit.function_plan {
             parent.child(definition).ok_or_else(|| {
                 CompileError::Internal(format!(
                     "missing scope plan for nested function `{}`",
                     definition.name
                 ))
             })?
-        } else if matches!(self.scope, Scope::Class { .. }) {
-            let class_freevars = self.free_names.iter().map(String::as_str).collect();
+        } else if matches!(self.unit.scope, Scope::Class { .. }) {
+            let class_freevars = self.symbols.free_names.iter().map(String::as_str).collect();
             FunctionPlan::analyze_in_class(
                 definition,
-                self.flags & CO_FUTURE_ANNOTATIONS != 0,
+                self.unit.flags & CO_FUTURE_ANNOTATIONS != 0,
                 &class_freevars,
             )
         } else {
-            FunctionPlan::analyze(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0)
+            FunctionPlan::analyze(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0)
         };
         let closure_names: Vec<_> = plan.freevars.iter().cloned().collect();
         let annotation_child = self.compile_function_annotations(definition, &plan)?;
@@ -7223,18 +7252,18 @@ impl Compiler {
             CO_VARKEYWORDS
         } else {
             0
-        } | if matches!(self.scope, Scope::Function { .. }) {
+        } | if matches!(self.unit.scope, Scope::Function { .. }) {
             CO_NESTED
-        } else if matches!(self.scope, Scope::Class { .. }) {
+        } else if matches!(self.unit.scope, Scope::Class { .. }) {
             CO_METHOD
-                | if self.class_scope_is_nested {
+                | if self.unit.class_scope_is_nested {
                     CO_NESTED
                 } else {
                     0
                 }
         } else {
             0
-        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        }) | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         if definition.is_async && suite_contains_yield(&definition.body) {
             parameter_flags |= CO_ASYNC_GENERATOR;
         } else if definition.is_async {
@@ -7243,6 +7272,7 @@ impl Compiler {
             parameter_flags |= CO_GENERATOR;
         }
         let qualified_name = self
+            .unit
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
@@ -7258,9 +7288,7 @@ impl Compiler {
                 definition.range.start()
             }));
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             definition.name.as_str(),
             qualified_name,
             first_line_number,
@@ -7270,10 +7298,11 @@ impl Compiler {
             keyword_only_arg_count,
             parameter_flags,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
+            .clone_from(&self.symbols.imported_scope_names);
         let child = child.compile_function_body(&definition.body)?;
 
         self.assembler.set_location(definition_location);
@@ -7321,7 +7350,7 @@ impl Compiler {
             }
         }
         self.assembler.set_location(definition_location);
-        if self.generic_target_qualified_name.is_some() {
+        if self.unit.generic_target_qualified_name.is_some() {
             Ok(())
         } else {
             self.store_name(definition.name.as_str())
@@ -7414,7 +7443,7 @@ impl Compiler {
         locals.push(".generic_base".to_string());
         locals.push(".type_params".to_string());
         let required_names =
-            class_required_names(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0);
+            class_required_names(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0);
         let type_parameter_requirements = type_parameter_required_names(type_params);
         let mut type_parameter_cell_requirements = type_parameter_requirements.clone();
         let mut wrapper_requirements = type_parameter_requirements.clone();
@@ -7445,7 +7474,7 @@ impl Compiler {
         // A type-parameter scope nested directly in a class can resolve names through the
         // class namespace. CPython provides that namespace through the synthetic
         // `__classdict__` closure, even when no type-parameter expression uses a class name.
-        if matches!(self.scope, Scope::Class { .. }) {
+        if matches!(self.unit.scope, Scope::Class { .. }) {
             freevars.insert("__classdict__".to_string());
         }
         let plan = FunctionPlan {
@@ -7471,11 +7500,9 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        } | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(
@@ -7492,15 +7519,19 @@ impl Compiler {
             0,
             wrapper_flags,
         )?;
-        wrapper.private_name.clone_from(&self.private_name);
         wrapper
+            .unit
+            .private_name
+            .clone_from(&self.unit.private_name);
+        wrapper
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        wrapper.type_parameter_names = type_names;
-        wrapper.generic_target_qualified_name = Some(target_qualified_name);
-        wrapper.child_qualified_name_parent = Some(wrapper_child_qualified_name_parent);
-        if matches!(self.scope, Scope::Class { .. }) {
-            wrapper.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
+            .clone_from(&self.symbols.imported_scope_names);
+        wrapper.symbols.type_parameter_names = type_names;
+        wrapper.unit.generic_target_qualified_name = Some(target_qualified_name);
+        wrapper.unit.child_qualified_name_parent = Some(wrapper_child_qualified_name_parent);
+        if matches!(self.unit.scope, Scope::Class { .. }) {
+            wrapper.unit.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
         }
         wrapper.emit_function_prologue()?;
         wrapper.compile_type_parameters(type_params)?;
@@ -7556,18 +7587,18 @@ impl Compiler {
                 self.compile_expression(&decorator.expression)?;
             }
         }
-        let is_generic = self.generic_target_qualified_name.is_some();
+        let is_generic = self.unit.generic_target_qualified_name.is_some();
 
         let mut class_bindings = LocalCollector::default();
         class_bindings.collect_globals(&definition.body);
         class_bindings.collect_suite(&definition.body);
         let mut freevars =
-            class_required_names(definition, self.flags & CO_FUTURE_ANNOTATIONS != 0)
+            class_required_names(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0)
                 .into_iter()
-                .filter(|name| match &self.scope {
+                .filter(|name| match &self.unit.scope {
                     Scope::Module => false,
                     Scope::Class { free_indices, .. } => {
-                        self.cell_names.contains(name) || free_indices.contains_key(name)
+                        self.symbols.cell_names.contains(name) || free_indices.contains_key(name)
                     }
                     Scope::Function {
                         indices,
@@ -7585,6 +7616,7 @@ impl Compiler {
         }
         let closure_names = freevars.iter().cloned().collect::<Vec<_>>();
         let qualified_name = self
+            .unit
             .generic_target_qualified_name
             .clone()
             .unwrap_or_else(|| self.child_qualified_name(definition.name.as_str()));
@@ -7599,18 +7631,18 @@ impl Compiler {
             } else {
                 definition.range.start()
             }));
-        let needs_class_closure =
-            class_needs_class_closure(&definition.body, self.flags & CO_FUTURE_ANNOTATIONS != 0);
+        let needs_class_closure = class_needs_class_closure(
+            &definition.body,
+            self.unit.flags & CO_FUTURE_ANNOTATIONS != 0,
+        );
         let needs_classdict = contains_type_alias(&definition.body)
             || contains_generic_definition(&definition.body)
-            || self.flags & CO_FUTURE_ANNOTATIONS == 0
+            || self.unit.flags & CO_FUTURE_ANNOTATIONS == 0
                 && (contains_function_definition(&definition.body)
                     || has_simple_annotations(&definition.body));
         let class_scope_is_nested = self.child_function_is_nested();
         let mut child = Self::class(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             definition.name.as_str(),
             qualified_name,
             first_line_number,
@@ -7620,15 +7652,17 @@ impl Compiler {
             class_bindings.seen,
             needs_class_closure,
             needs_classdict,
-            self.flags & SUPPORTED_FUTURE_FLAGS,
+            self.unit.flags & SUPPORTED_FUTURE_FLAGS,
         );
-        child.class_scope_is_nested = class_scope_is_nested;
+        child.unit.class_scope_is_nested = class_scope_is_nested;
         child
+            .symbols
             .type_parameter_names
-            .clone_from(&self.type_parameter_names);
+            .clone_from(&self.symbols.type_parameter_names);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
+            .clone_from(&self.symbols.imported_scope_names);
         let child = child.compile_class_body(&definition.body)?;
 
         let definition_location =
@@ -7794,7 +7828,7 @@ impl Compiler {
             }
         }
         self.assembler.set_location(definition_location);
-        if self.generic_target_qualified_name.is_some() {
+        if self.unit.generic_target_qualified_name.is_some() {
             Ok(())
         } else {
             self.store_name(definition.name.as_str())
@@ -7877,12 +7911,16 @@ impl Compiler {
         let mut freevars: BTreeSet<_> = required_names
             .iter()
             .filter(|name| {
-                self.type_parameter_names.contains(*name) || self.can_provide_closure(name)
+                self.symbols.type_parameter_names.contains(*name) || self.can_provide_closure(name)
             })
             .cloned()
             .collect();
-        let can_see_class_scope = matches!(self.scope, Scope::Class { .. })
-            || self.free_names.iter().any(|name| name == "__classdict__");
+        let can_see_class_scope = matches!(self.unit.scope, Scope::Class { .. })
+            || self
+                .symbols
+                .free_names
+                .iter()
+                .any(|name| name == "__classdict__");
         if can_see_class_scope {
             freevars.insert("__classdict__".to_string());
         }
@@ -7908,43 +7946,46 @@ impl Compiler {
         // Definitions inside an annotation scope are qualified against that
         // scope's parent. Generic-parameter wrappers are themselves annotation
         // scopes even though this compiler represents them as functions.
-        let child_qualified_name_parent = if self.generic_target_qualified_name.is_some() {
-            self.qualified_name.clone()
+        let child_qualified_name_parent = if self.unit.generic_target_qualified_name.is_some() {
+            self.unit.qualified_name.clone()
         } else {
-            match self.scope {
+            match self.unit.scope {
                 Scope::Module => String::new(),
-                Scope::Class { .. } => self.qualified_name.clone(),
-                Scope::Function { .. } => format!("{}.<locals>", self.qualified_name),
+                Scope::Class { .. } => self.unit.qualified_name.clone(),
+                Scope::Function { .. } => format!("{}.<locals>", self.unit.qualified_name),
             }
         };
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             name,
-            self.generic_target_qualified_name.as_ref().map_or_else(
-                || self.child_qualified_name(name),
-                |qualified_name| {
-                    qualified_name.rsplit_once('.').map_or_else(
-                        || name.to_string(),
-                        |(parent, _)| format!("{parent}.{name}"),
-                    )
-                },
-            ),
+            self.unit
+                .generic_target_qualified_name
+                .as_ref()
+                .map_or_else(
+                    || self.child_qualified_name(name),
+                    |qualified_name| {
+                        qualified_name.rsplit_once('.').map_or_else(
+                            || name.to_string(),
+                            |(parent, _)| format!("{parent}.{name}"),
+                        )
+                    },
+                ),
             self.line_number(u32::from(setup_range.start())),
             plan,
             1,
             1,
             0,
-            (if nested { CO_NESTED } else { 0 }) | (self.flags & SUPPORTED_FUTURE_FLAGS),
+            (if nested { CO_NESTED } else { 0 })
+                | (self.unit.flags & SUPPORTED_FUTURE_FLAGS),
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        child.child_qualified_name_parent = Some(child_qualified_name_parent);
+            .clone_from(&self.symbols.imported_scope_names);
+        child.unit.child_qualified_name_parent = Some(child_qualified_name_parent);
         if can_see_class_scope {
-            child.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
+            child.unit.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
         }
         child.emit_function_prologue()?;
         child
@@ -7976,6 +8017,7 @@ impl Compiler {
 
     fn emit_annotation_format_guard(&mut self) -> Result<(), CompileError> {
         let parameter = self
+            .symbols
             .locals
             .first()
             .map_or_else(|| "format".to_string(), Clone::clone);
@@ -8028,17 +8070,22 @@ impl Compiler {
         }
 
         let mut freevars = function_plan.annotation_freevars.clone();
-        if self.flags & CO_FUTURE_ANNOTATIONS == 0 {
+        if self.unit.flags & CO_FUTURE_ANNOTATIONS == 0 {
             freevars.extend(
-                self.type_parameter_names
+                self.symbols
+                    .type_parameter_names
                     .iter()
                     .filter(|name| function_plan.annotation_references.contains(*name))
                     .cloned(),
             );
         }
-        let can_see_class_scope = self.flags & CO_FUTURE_ANNOTATIONS == 0
-            && (matches!(self.scope, Scope::Class { .. })
-                || self.free_names.iter().any(|name| name == "__classdict__"));
+        let can_see_class_scope = self.unit.flags & CO_FUTURE_ANNOTATIONS == 0
+            && (matches!(self.unit.scope, Scope::Class { .. })
+                || self
+                    .symbols
+                    .free_names
+                    .iter()
+                    .any(|name| name == "__classdict__"));
         if can_see_class_scope {
             freevars.insert("__classdict__".to_string());
         }
@@ -8059,21 +8106,22 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        }) | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             "__annotate__",
-            self.generic_target_qualified_name.as_ref().map_or_else(
-                || self.child_qualified_name("__annotate__"),
-                |qualified_name| {
-                    qualified_name.rsplit_once('.').map_or_else(
-                        || "__annotate__".to_string(),
-                        |(parent, _)| format!("{parent}.__annotate__"),
-                    )
-                },
-            ),
+            self.unit
+                .generic_target_qualified_name
+                .as_ref()
+                .map_or_else(
+                    || self.child_qualified_name("__annotate__"),
+                    |qualified_name| {
+                        qualified_name.rsplit_once('.').map_or_else(
+                            || "__annotate__".to_string(),
+                            |(parent, _)| format!("{parent}.__annotate__"),
+                        )
+                    },
+                ),
             self.line_number(u32::from(definition.name.range().start())),
             plan,
             1,
@@ -8081,13 +8129,14 @@ impl Compiler {
             0,
             parameter_flags,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        child.annotation_thunk = true;
+            .clone_from(&self.symbols.imported_scope_names);
+        child.unit.annotation_thunk = true;
         if can_see_class_scope {
-            child.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
+            child.unit.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
         }
         child.emit_function_prologue()?;
         let location = self.definition_location(
@@ -8100,7 +8149,7 @@ impl Compiler {
 
         child.emit_annotation_format_guard()?;
 
-        let future_annotations = self.flags & CO_FUTURE_ANNOTATIONS != 0;
+        let future_annotations = self.unit.flags & CO_FUTURE_ANNOTATIONS != 0;
         for (name, annotation) in &annotations {
             child.assembler.set_location(location);
             let name = child.mangled_name(name);
@@ -8139,7 +8188,7 @@ impl Compiler {
         for annotation in &annotations {
             references.visit_expr(&annotation.annotation);
         }
-        let available_freevars: FxHashSet<_> = self.free_names.iter().cloned().collect();
+        let available_freevars: FxHashSet<_> = self.symbols.free_names.iter().cloned().collect();
         let mut freevars: BTreeSet<_> = references
             .references
             .iter()
@@ -8167,32 +8216,32 @@ impl Compiler {
             annotation_freevars: BTreeSet::new(),
             children: Vec::new(),
         };
-        let parameter_flags = if self.child_function_is_nested() || !self.free_names.is_empty() {
-            CO_NESTED
-        } else {
-            0
-        };
+        let parameter_flags =
+            if self.child_function_is_nested() || !self.symbols.free_names.is_empty() {
+                CO_NESTED
+            } else {
+                0
+            };
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             "__annotate__",
             self.child_qualified_name("__annotate__"),
-            self.first_line_number,
+            self.unit.first_line_number,
             plan,
             1,
             1,
             0,
             parameter_flags,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        child.annotation_thunk = true;
-        child.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
+            .clone_from(&self.symbols.imported_scope_names);
+        child.unit.annotation_thunk = true;
+        child.unit.annotation_classdict_index = Some(child.closure_index("__classdict__")?);
         child.emit_function_prologue()?;
-        let line = i32::try_from(self.first_line_number).unwrap_or(i32::MAX);
+        let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
         let setup_location = SourceLocation::new(line, line, 0, 0);
         child.assembler.set_location(setup_location);
         child.emit_annotation_format_guard()?;
@@ -8241,9 +8290,7 @@ impl Compiler {
             children: Vec::new(),
         };
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             "__annotate__",
             "__annotate__".to_string(),
             self.line_number(u32::from(
@@ -8255,11 +8302,12 @@ impl Compiler {
             0,
             0,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
-        child.annotation_thunk = true;
+            .clone_from(&self.symbols.imported_scope_names);
+        child.unit.annotation_thunk = true;
         child.emit_function_prologue()?;
         let setup_location = self.source_location(body.first().map_or(first.range, Ranged::range));
         child.assembler.set_location(setup_location);
@@ -8312,7 +8360,7 @@ impl Compiler {
     }
 
     fn compile_expression_inner(&mut self, expression: &Expr) -> Result<(), CompileError> {
-        let starting_depth = self.depth;
+        let starting_depth = self.control.depth;
         if matches!(expression, Expr::BoolOp(_))
             && let Some((origin, constant)) = folded_bool_operand(expression)
         {
@@ -8369,7 +8417,7 @@ impl Compiler {
                 if let Number::Int(value) = &number.value
                     && let Some(value) = value.as_u8()
                 {
-                    if self.constants.is_empty() {
+                    if self.output.constants.is_empty() {
                         self.add_constant(constant)?;
                     }
                     self.emit(LOAD_SMALL_INT, u32::from(value), 1)?;
@@ -8491,7 +8539,7 @@ impl Compiler {
             )?,
             Expr::Generator(generator) => self.compile_generator_expression(generator)?,
             Expr::Yield(expression) => {
-                if self.flags & (CO_GENERATOR | CO_ASYNC_GENERATOR) == 0 {
+                if self.unit.flags & (CO_GENERATOR | CO_ASYNC_GENERATOR) == 0 {
                     return Err(unsupported("yield outside generator code"));
                 }
                 if let Some(value) = &expression.value {
@@ -8502,13 +8550,14 @@ impl Compiler {
                 }
                 self.assembler
                     .set_location(self.source_location(expression.range));
-                if self.flags & CO_ASYNC_GENERATOR != 0 {
+                if self.unit.flags & CO_ASYNC_GENERATOR != 0 {
                     self.emit(CALL_INTRINSIC_1, 4, 0)?;
                 }
                 self.emit(YIELD_VALUE, 0, 0)?;
-                let wrapper_is_only_exception_region = self.generator_region_start.is_some()
-                    && self.active_exception_region_exclusions.is_empty()
-                    && self.active_with_region_exclusions.is_empty();
+                let wrapper_is_only_exception_region =
+                    self.control.generator_region_start.is_some()
+                        && self.control.active_exception_region_exclusions.is_empty()
+                        && self.control.active_with_region_exclusions.is_empty();
                 self.emit(
                     RESUME,
                     if wrapper_is_only_exception_region {
@@ -8520,7 +8569,7 @@ impl Compiler {
                 )?;
             }
             Expr::YieldFrom(expression) => {
-                if self.flags & CO_GENERATOR == 0 {
+                if self.unit.flags & CO_GENERATOR == 0 {
                     return Err(unsupported("yield from outside generator code"));
                 }
                 self.compile_expression(&expression.value)?;
@@ -8539,7 +8588,7 @@ impl Compiler {
                 self.assembler.mark(yielded_end);
                 self.emit(
                     RESUME,
-                    if self.generator_region_start.is_some() {
+                    if self.control.generator_region_start.is_some() {
                         2
                     } else {
                         6
@@ -8578,21 +8627,22 @@ impl Compiler {
         }
 
         let deferred_restores = self
+            .control
             .pending_comprehension_restores
             .iter()
             .map(|(indices, _)| indices.len())
             .sum::<usize>();
         let expected_depth = starting_depth
             + 1
-            + if self.defer_async_comprehension_restore {
+            + if self.control.defer_async_comprehension_restore {
                 i32::try_from(deferred_restores).unwrap()
             } else {
                 0
             };
-        if self.depth != expected_depth {
+        if self.control.depth != expected_depth {
             return Err(CompileError::Internal(format!(
                 "expression changed stack depth from {starting_depth} to {}",
-                self.depth
+                self.control.depth
             )));
         }
         Ok(())
@@ -8709,7 +8759,7 @@ impl Compiler {
         if let Some(constant) = fold_constant(expression)
             && !matches!(constant, Constant::Int(value) if u8::try_from(value).is_ok())
         {
-            self.deferred_constants.push((None, constant));
+            self.output.deferred_constants.push((None, constant));
         }
         Ok(())
     }
@@ -8722,7 +8772,7 @@ impl Compiler {
         if let Constant::Int(value) = constant
             && let Ok(value) = u8::try_from(value)
         {
-            if self.constants.is_empty()
+            if self.output.constants.is_empty()
                 && let Some(seed) = first_literal_constant(expression)
             {
                 self.add_constant(seed)?;
@@ -8982,12 +9032,14 @@ impl Compiler {
             && interpolation.conversion == ConversionFlag::None
             && let Expr::Compare(comparison) = interpolation.expression.as_ref()
             && comparison.ops.contains(&CmpOp::NotEq)
-            && let Some(offset) = self.source[start..expression_end].find("!=")
+            && let Some(offset) = self.context.source[start..expression_end].find("!=")
         {
-            return strip_expression_comments(self.source[start..start + offset].trim_end());
+            return strip_expression_comments(
+                self.context.source[start..start + offset].trim_end(),
+            );
         }
         let interpolation_end = usize::from(interpolation.range.end()).saturating_sub(1);
-        let trailing = &self.source[expression_end..interpolation_end];
+        let trailing = &self.context.source[expression_end..interpolation_end];
         let delimiter = if interpolation.debug_text.is_some() {
             trailing.find('=')
         } else if interpolation.conversion != ConversionFlag::None {
@@ -8998,7 +9050,7 @@ impl Compiler {
             None
         };
         let end = delimiter.map_or(interpolation_end, |offset| expression_end + offset);
-        strip_expression_comments(&self.source[start..end])
+        strip_expression_comments(&self.context.source[start..end])
             .trim_end()
             .to_string()
     }
@@ -9178,7 +9230,7 @@ impl Compiler {
         &mut self,
         expression: &ruff_python_ast::ExprAwait,
     ) -> Result<(), CompileError> {
-        if self.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
+        if self.unit.flags & (CO_COROUTINE | CO_ASYNC_GENERATOR) == 0 {
             return Err(unsupported("await outside coroutine code"));
         }
 
@@ -9190,7 +9242,7 @@ impl Compiler {
         &mut self,
         get_awaitable_argument: u32,
     ) -> Result<(), CompileError> {
-        let base_depth = self.depth - 1;
+        let base_depth = self.control.depth - 1;
         let cleanup_location = self.assembler.location();
         self.emit(GET_AWAITABLE, get_awaitable_argument, 0)?;
         let none = self.add_constant(Constant::None)?;
@@ -9263,13 +9315,13 @@ impl Compiler {
                 .any(expression_contains_inlined_comprehension)
                 && let Expr::Name(name) = call.func.as_ref()
             {
-                self.owned_load_locals.insert(name.id.to_string())
+                self.symbols.owned_load_locals.insert(name.id.to_string())
             } else {
                 false
             };
             self.compile_expression(&call.func)?;
             if newly_owned_callable && let Expr::Name(name) = call.func.as_ref() {
-                self.owned_load_locals.remove(name.id.as_str());
+                self.symbols.owned_load_locals.remove(name.id.as_str());
             }
             self.assembler
                 .set_location(self.source_location(call.func.range()));
@@ -9411,7 +9463,7 @@ impl Compiler {
             _ => unreachable!("optimized generator call must use all, any, or tuple"),
         };
         let callable_location = self.source_location(call.func.range());
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let fallback = self.assembler.label();
         let end = self.assembler.label();
 
@@ -9431,7 +9483,7 @@ impl Compiler {
 
         let loop_start = self.assembler.label();
         let exhausted = self.assembler.label();
-        let iterator_depth = self.depth;
+        let iterator_depth = self.control.depth;
         self.assembler.mark(loop_start);
         self.assembler.set_location(callable_location);
         self.emit_jump_forward(FOR_ITER, exhausted, 1)?;
@@ -9530,7 +9582,7 @@ impl Compiler {
             return false;
         };
         // CPython only checks whether the name is import-originated in the module symbol table.
-        self.imported_scope_names.contains(name.id.as_str())
+        self.symbols.imported_scope_names.contains(name.id.as_str())
     }
 
     fn compile_super_attribute(
@@ -9547,8 +9599,11 @@ impl Compiler {
         if super_name.id.as_str() != "super"
             || attribute.attr.as_str() == "__class__"
             || !call.arguments.keywords.is_empty()
-            || self.imported_scope_names.contains("super")
-            || self.imported_scope_names.contains(SHADOWED_SUPER_SENTINEL)
+            || self.symbols.imported_scope_names.contains("super")
+            || self
+                .symbols
+                .imported_scope_names
+                .contains(SHADOWED_SUPER_SENTINEL)
         {
             return Ok(false);
         }
@@ -9561,7 +9616,7 @@ impl Compiler {
             }
             _ => return Ok(false),
         };
-        let globally_resolved = match &self.scope {
+        let globally_resolved = match &self.unit.scope {
             Scope::Module => true,
             Scope::Function {
                 indices,
@@ -9599,10 +9654,10 @@ impl Compiler {
             return Ok(true);
         }
 
-        if self.arg_count == 0 {
+        if self.unit.arg_count == 0 {
             return Ok(false);
         }
-        let (class_index, first_parameter) = match &self.scope {
+        let (class_index, first_parameter) = match &self.unit.scope {
             Scope::Function {
                 indices,
                 free_indices,
@@ -9612,7 +9667,7 @@ impl Compiler {
                 let Some(class_index) = free_indices.get("__class__").copied() else {
                     return Ok(false);
                 };
-                let Some(first_parameter) = self.locals.first() else {
+                let Some(first_parameter) = self.symbols.locals.first() else {
                     return Ok(false);
                 };
                 let Some(first_parameter) = indices.get(first_parameter).copied() else {
@@ -9646,13 +9701,13 @@ impl Compiler {
     }
 
     fn compile_direct_global_callable(&mut self, expression: &Expr) -> Result<bool, CompileError> {
-        if self.annotation_classdict_index.is_some() {
+        if self.unit.annotation_classdict_index.is_some() {
             return Ok(false);
         }
         let Expr::Name(name) = expression else {
             return Ok(false);
         };
-        let is_global = match &self.scope {
+        let is_global = match &self.unit.scope {
             Scope::Function {
                 indices,
                 free_indices,
@@ -9773,29 +9828,29 @@ impl Compiler {
             CO_VARKEYWORDS
         } else {
             0
-        } | if matches!(self.scope, Scope::Function { .. }) {
+        } | if matches!(self.unit.scope, Scope::Function { .. }) {
             CO_NESTED
-        } else if matches!(self.scope, Scope::Class { .. }) {
+        } else if matches!(self.unit.scope, Scope::Class { .. }) {
             CO_METHOD
-                | if self.class_scope_is_nested {
+                | if self.unit.class_scope_is_nested {
                     CO_NESTED
                 } else {
                     0
                 }
-        } else if !closure_names.is_empty() || !self.active_comprehension_cleanups.is_empty() {
+        } else if !closure_names.is_empty()
+            || !self.control.active_comprehension_cleanups.is_empty()
+        {
             CO_NESTED
         } else {
             0
-        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        }) | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         if expression_contains_yield(&lambda.body) {
             parameter_flags |= CO_GENERATOR;
         }
         let qualified_name = self.child_qualified_name("<lambda>");
         let first_line_number = self.line_number(u32::from(lambda.range.start()));
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             "<lambda>",
             qualified_name,
             first_line_number,
@@ -9805,15 +9860,16 @@ impl Compiler {
             keyword_only,
             parameter_flags,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
+            .clone_from(&self.symbols.imported_scope_names);
         child.emit_function_prologue()?;
         if parameter_flags & CO_GENERATOR != 0 {
             // CPython does not wrap generator lambdas in the stop-iteration
             // handler used by `def` generators and generator expressions.
-            child.generator_region_start = None;
+            child.control.generator_region_start = None;
         }
         child.compile_expression(&lambda.body)?;
         child
@@ -9855,7 +9911,7 @@ impl Compiler {
             ));
         }
         let comprehension_cell_names = comprehension_cell_names(generators, key, value);
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let comprehension_location = self.assembler.location();
         if generators[0].is_async {
             self.compile_expression(&generators[0].iter)?;
@@ -9891,7 +9947,7 @@ impl Compiler {
         }
         collect_nested_comprehension_target_names(value, &mut temporary_names);
         let active_temporary_names = temporary_names.clone();
-        if matches!(self.scope, Scope::Module) {
+        if matches!(self.unit.scope, Scope::Module) {
             // CPython assigns a hidden fast-local slot to module-scope walrus targets while
             // inlining a comprehension. Function-scope targets remain bindings in the
             // containing function and are not part of the comprehension's save set.
@@ -9912,7 +9968,7 @@ impl Compiler {
             let index = self.ensure_temporary(name)?;
             temporary_indices.push(index);
             self.emit(LOAD_FAST_AND_CLEAR, index, 1)?;
-            if comprehension_cell_names.contains(name) && self.cell_names.contains(name) {
+            if comprehension_cell_names.contains(name) && self.symbols.cell_names.contains(name) {
                 self.emit(MAKE_CELL, index, 0)?;
             }
         }
@@ -9923,36 +9979,40 @@ impl Compiler {
                 0,
             )?;
         }
-        self.active_temporaries
+        self.symbols
+            .active_temporaries
             .extend(active_temporary_names.iter().cloned());
 
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
         let cleanup = self.assembler.label();
-        let parent_cleanup = self.active_comprehension_cleanups.last().copied();
+        let parent_cleanup = self.control.active_comprehension_cleanups.last().copied();
         let cleanup_location = self.assembler.location();
         self.assembler.mark(protected_start);
         self.emit(build_opcode, 0, 1)?;
         self.emit(SWAP, 2, 0)?;
-        self.active_comprehension_cleanups.push((
+        self.control.active_comprehension_cleanups.push((
             cleanup,
             (base_depth + i32::try_from(temporary_names.len()).unwrap() + 1).cast_unsigned(),
         ));
-        self.active_comprehension_region_exclusions.push(Vec::new());
+        self.control
+            .active_comprehension_region_exclusions
+            .push(Vec::new());
         let previous_reorder_cleanup = std::mem::replace(
-            &mut self.reorder_async_comprehension_cleanup_throw,
+            &mut self.control.reorder_async_comprehension_cleanup_throw,
             // CPython 3.14.5's flow graph leaves the throw cleanup immediately before
             // `END_SEND` for a discarded async comprehension whose target is captured.
             discard_result && !comprehension_cell_names.is_empty(),
         );
         let result = self.compile_comprehension_generator(generators, 0, key, value, add_opcode);
-        self.reorder_async_comprehension_cleanup_throw = previous_reorder_cleanup;
+        self.control.reorder_async_comprehension_cleanup_throw = previous_reorder_cleanup;
         result?;
         let region_exclusions = self
+            .control
             .active_comprehension_region_exclusions
             .pop()
             .expect("active comprehension has region exclusions");
-        self.active_comprehension_cleanups.pop();
+        self.control.active_comprehension_cleanups.pop();
         self.assembler.mark(protected_end);
 
         if temporary_names.is_empty() {
@@ -9996,11 +10056,12 @@ impl Compiler {
         }
         self.assembler.mark(normal_cleanup);
 
-        let deferred_normal_restore = self.defer_async_comprehension_restore;
+        let deferred_normal_restore = self.control.defer_async_comprehension_restore;
         self.set_depth(base_depth + i32::try_from(temporary_names.len()).unwrap() + 1);
         self.assembler.set_location(comprehension_location);
         if deferred_normal_restore {
-            self.pending_comprehension_restores
+            self.control
+                .pending_comprehension_restores
                 .push((temporary_indices.clone(), comprehension_location));
         } else {
             if discard_result {
@@ -10041,7 +10102,7 @@ impl Compiler {
             self.assembler.prevent_last_instruction_fusion();
         }
         for name in &active_temporary_names {
-            self.active_temporaries.remove(name);
+            self.symbols.active_temporaries.remove(name);
         }
 
         let cleanup_depth =
@@ -10130,15 +10191,13 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | if matches!(self.scope, Scope::Class { .. }) {
+        } | if matches!(self.unit.scope, Scope::Class { .. }) {
             CO_METHOD
         } else {
             0
-        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
+        } | (self.unit.flags & SUPPORTED_FUTURE_FLAGS);
         let mut child = Self::function(
-            &self.filename,
-            Arc::clone(&self.source),
-            self.line_index.clone(),
+            Arc::clone(&self.context),
             "<genexpr>",
             self.child_qualified_name("<genexpr>"),
             self.line_number(u32::from(generator_range.start())),
@@ -10148,12 +10207,13 @@ impl Compiler {
             0,
             flags,
         )?;
-        child.private_name.clone_from(&self.private_name);
+        child.unit.private_name.clone_from(&self.unit.private_name);
         child
+            .symbols
             .imported_scope_names
-            .clone_from(&self.imported_scope_names);
+            .clone_from(&self.symbols.imported_scope_names);
         // CPython only inserts `.<locals>` for function, async-function, and lambda parents.
-        child.child_qualified_name_parent = Some(child.qualified_name.clone());
+        child.unit.child_qualified_name_parent = Some(child.unit.qualified_name.clone());
         child.emit_function_prologue()?;
         let generator_location = child.source_location(generator_range);
         child.assembler.set_location(generator_location);
@@ -10214,7 +10274,7 @@ impl Compiler {
                 generator_location,
             );
         }
-        let loop_depth = self.depth;
+        let loop_depth = self.control.depth;
         let start = self.assembler.label();
         let cleanup = self.assembler.label();
         self.assembler.mark(start);
@@ -10256,7 +10316,7 @@ impl Compiler {
             self.compile_expression(element)?;
             self.assembler
                 .set_location(self.source_location(element.range()));
-            if self.flags & CO_ASYNC_GENERATOR != 0 {
+            if self.unit.flags & CO_ASYNC_GENERATOR != 0 {
                 self.emit(CALL_INTRINSIC_1, 4, 0)?;
             }
             self.emit(YIELD_VALUE, 0, 0)?;
@@ -10281,7 +10341,7 @@ impl Compiler {
         generator_location: SourceLocation,
     ) -> Result<(), CompileError> {
         let generator = &generators[index];
-        let loop_depth = self.depth;
+        let loop_depth = self.control.depth;
         let cleanup_location = generator_location;
         let start = self.assembler.label();
         let protected_start = self.assembler.label();
@@ -10368,7 +10428,8 @@ impl Compiler {
             false,
         );
         self.assembler.mark(async_cleanup);
-        self.generator_region_exclusions
+        self.control
+            .generator_region_exclusions
             .push((cleanup_throw, async_cleanup));
         self.set_depth(loop_depth + 1);
         self.apply_stack_effect(-2)?;
@@ -10440,7 +10501,8 @@ impl Compiler {
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((exclusion_start, exclusion_end));
             return Ok(());
         }
@@ -10457,7 +10519,8 @@ impl Compiler {
         self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
         let exclusion_end = self.assembler.label();
         self.assembler.mark(exclusion_end);
-        self.generator_region_exclusions
+        self.control
+            .generator_region_exclusions
             .push((exclusion_start, exclusion_end));
         Ok(())
     }
@@ -10523,9 +10586,10 @@ impl Compiler {
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((exclusion_start, exclusion_end));
-            for exclusions in &mut self.active_comprehension_region_exclusions {
+            for exclusions in &mut self.control.active_comprehension_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
             return Ok(());
@@ -10533,7 +10597,7 @@ impl Compiler {
         if let Expr::Compare(comparison) = condition
             && comparison.ops.len() > 1
         {
-            let base_depth = self.depth;
+            let base_depth = self.control.depth;
             let cleanup = self.assembler.label();
             let residue = self.assembler.label();
             let comparison_location = self.source_location(comparison.range);
@@ -10586,8 +10650,8 @@ impl Compiler {
                 (terminal_exclusion_start, terminal_exclusion_end),
                 (cleanup_exclusion_start, cleanup_exclusion_end),
             ] {
-                self.generator_region_exclusions.push((start, end));
-                for exclusions in &mut self.active_comprehension_region_exclusions {
+                self.control.generator_region_exclusions.push((start, end));
+                for exclusions in &mut self.control.active_comprehension_region_exclusions {
                     exclusions.push((start, end));
                 }
             }
@@ -10616,9 +10680,10 @@ impl Compiler {
             self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((exclusion_start, exclusion_end));
-            for exclusions in &mut self.active_comprehension_region_exclusions {
+            for exclusions in &mut self.control.active_comprehension_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
             return Ok(());
@@ -10635,9 +10700,10 @@ impl Compiler {
         self.emit_jump_backward(JUMP_BACKWARD, restart, 0)?;
         let exclusion_end = self.assembler.label();
         self.assembler.mark(exclusion_end);
-        self.generator_region_exclusions
+        self.control
+            .generator_region_exclusions
             .push((exclusion_start, exclusion_end));
-        for exclusions in &mut self.active_comprehension_region_exclusions {
+        for exclusions in &mut self.control.active_comprehension_region_exclusions {
             exclusions.push((exclusion_start, exclusion_end));
         }
         Ok(())
@@ -10656,7 +10722,7 @@ impl Compiler {
             return self
                 .compile_async_comprehension_generator(generators, index, key, value, add_opcode);
         }
-        let loop_depth = self.depth;
+        let loop_depth = self.control.depth;
         let start = self.assembler.label();
         let cleanup = self.assembler.label();
         self.assembler.mark(start);
@@ -10787,8 +10853,8 @@ impl Compiler {
         add_opcode: Opcode,
     ) -> Result<(), CompileError> {
         let generator = &generators[index];
-        let reorder_cleanup = self.reorder_async_comprehension_cleanup_throw;
-        let loop_depth = self.depth;
+        let reorder_cleanup = self.control.reorder_async_comprehension_cleanup_throw;
+        let loop_depth = self.control.depth;
         let cleanup_location = self.assembler.location();
         let start = self.assembler.label();
         let protected_start = self.assembler.label();
@@ -10908,7 +10974,8 @@ impl Compiler {
         if reorder_cleanup {
             let async_cleanup_end = self.assembler.label();
             self.assembler.mark(async_cleanup_end);
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((cleanup_throw, async_cleanup_end));
             self.assembler.add_exception_region(
                 protected_start,
@@ -10925,15 +10992,16 @@ impl Compiler {
                 false,
             );
         } else {
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .push((cleanup_throw, async_cleanup));
-            for exclusions in &mut self.active_comprehension_region_exclusions {
+            for exclusions in &mut self.control.active_comprehension_region_exclusions {
                 exclusions.push((cleanup_throw_end, async_cleanup));
             }
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((cleanup_throw_end, async_cleanup));
             }
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.push((cleanup_throw_end, async_cleanup));
             }
             self.assembler.add_exception_region(
@@ -10955,24 +11023,26 @@ impl Compiler {
     }
 
     fn ensure_temporary(&mut self, name: &str) -> Result<u32, CompileError> {
-        if let Some(index) = self.temporary_indices.get(name).copied() {
+        if let Some(index) = self.symbols.temporary_indices.get(name).copied() {
             return Ok(index);
         }
-        let existing = match &self.scope {
+        let existing = match &self.unit.scope {
             Scope::Function { indices, .. } => indices.get(name).copied(),
             Scope::Module | Scope::Class { .. } => None,
         };
         let index = if let Some(index) = existing {
             index
         } else {
-            let index = to_u32(self.locals.len(), "comprehension local count")?;
-            self.locals.push(name.to_string());
-            if !matches!(self.scope, Scope::Function { .. }) {
-                self.hidden_names.insert(name.to_string());
+            let index = to_u32(self.symbols.locals.len(), "comprehension local count")?;
+            self.symbols.locals.push(name.to_string());
+            if !matches!(self.unit.scope, Scope::Function { .. }) {
+                self.symbols.hidden_names.insert(name.to_string());
             }
             index
         };
-        self.temporary_indices.insert(name.to_string(), index);
+        self.symbols
+            .temporary_indices
+            .insert(name.to_string(), index);
         Ok(index)
     }
 
@@ -11268,7 +11338,7 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         if let Some(truthiness) = early_condition_truthiness(&expression.test) {
             if let Some(constant) = fold_constant(&expression.test)
-                && (self.constants.is_empty() || matches!(constant, Constant::None))
+                && (self.output.constants.is_empty() || matches!(constant, Constant::None))
             {
                 self.add_constant(constant)?;
             }
@@ -11295,7 +11365,7 @@ impl Compiler {
             self.assembler.prevent_next_borrow_reachability();
             return Ok(());
         }
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let else_label = self.assembler.label();
         let end = self.assembler.label();
         self.compile_jump_if(&expression.test, false, else_label)?;
@@ -11362,7 +11432,7 @@ impl Compiler {
             // jump as a source-position NOP when the next operand starts on another line.
             self.emit(NOP, 0, 0)?;
         }
-        let base_depth = self.depth;
+        let base_depth = self.control.depth;
         let end = self.assembler.label();
         let jump = match expression.op {
             BoolOp::And => POP_JUMP_IF_FALSE,
@@ -11414,7 +11484,7 @@ impl Compiler {
             return self.emit(opcode, argument, -1);
         }
 
-        let base_depth = self.depth - 1;
+        let base_depth = self.control.depth - 1;
         let cleanup = self.assembler.label();
         for (operator, comparator) in expression
             .ops
@@ -11475,7 +11545,7 @@ impl Compiler {
             && let Some(truthiness) = early_condition_truthiness(&conditional.test)
         {
             if let Some(constant) = fold_constant(&conditional.test)
-                && (self.constants.is_empty() || matches!(constant, Constant::None))
+                && (self.output.constants.is_empty() || matches!(constant, Constant::None))
             {
                 self.add_constant(constant)?;
             }
@@ -11505,14 +11575,15 @@ impl Compiler {
                 self.emit(NOP, 0, 0)?;
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
-                if self.generator_region_start.is_some() {
-                    self.generator_region_exclusions
+                if self.control.generator_region_start.is_some() {
+                    self.control
+                        .generator_region_exclusions
                         .push((exclusion_start, exclusion_end));
                 }
-                for exclusions in &mut self.active_with_region_exclusions {
+                for exclusions in &mut self.control.active_with_region_exclusions {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
-                for exclusions in &mut self.active_exception_region_exclusions {
+                for exclusions in &mut self.control.active_exception_region_exclusions {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
             }
@@ -11556,7 +11627,7 @@ impl Compiler {
         if let Expr::Compare(comparison) = expression
             && comparison.ops.len() > 1
         {
-            let base_depth = self.depth;
+            let base_depth = self.control.depth;
             let cleanup = self.assembler.label();
             let end = self.assembler.label();
             self.compile_expression(&comparison.left)?;
@@ -11633,33 +11704,40 @@ impl Compiler {
                 label,
                 -1,
             )?;
-            if self.exclude_terminal_if_not_taken || self.exclude_condition_not_taken_from_exception
+            if self.control.exclude_terminal_if_not_taken
+                || self.control.exclude_condition_not_taken_from_exception
             {
-                let exclude_from_generator = self.exclude_condition_not_taken_from_exception
-                    && self.generator_region_start.is_some();
-                let exclude_from_exception = self.exclude_condition_not_taken_from_exception
-                    || (self.exclude_terminal_if_not_taken
-                        && !self.active_with_region_exclusions.is_empty());
-                self.exclude_terminal_if_not_taken = false;
+                let exclude_from_generator =
+                    self.control.exclude_condition_not_taken_from_exception
+                        && self.control.generator_region_start.is_some();
+                let exclude_from_exception =
+                    self.control.exclude_condition_not_taken_from_exception
+                        || (self.control.exclude_terminal_if_not_taken
+                            && !self.control.active_with_region_exclusions.is_empty());
+                self.control.exclude_terminal_if_not_taken = false;
                 let exclusion_start = self.assembler.label();
                 self.assembler.mark(exclusion_start);
                 self.emit(NOT_TAKEN, 0, 0)?;
                 let exclusion_end = self.assembler.label();
                 self.assembler.mark(exclusion_end);
                 if exclude_from_generator {
-                    self.generator_region_exclusions
+                    self.control
+                        .generator_region_exclusions
                         .push((exclusion_start, exclusion_end));
                 }
-                for exclusions in &mut self.active_with_region_exclusions {
+                for exclusions in &mut self.control.active_with_region_exclusions {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
                 if exclude_from_exception {
-                    if self.exclude_condition_not_taken_from_all_exception_regions {
-                        for exclusions in &mut self.active_exception_region_exclusions {
+                    if self
+                        .control
+                        .exclude_condition_not_taken_from_all_exception_regions
+                    {
+                        for exclusions in &mut self.control.active_exception_region_exclusions {
                             exclusions.push((exclusion_start, exclusion_end));
                         }
                     } else if let Some(exclusions) =
-                        self.active_exception_region_exclusions.last_mut()
+                        self.control.active_exception_region_exclusions.last_mut()
                     {
                         exclusions.push((exclusion_start, exclusion_end));
                     }
@@ -11668,7 +11746,7 @@ impl Compiler {
             }
             self.emit(NOT_TAKEN, 0, 0)?;
             self.assembler
-                .set_last_normalized_exception_owner(self.active_normal_finally_bodies > 0);
+                .set_last_normalized_exception_owner(self.control.active_normal_finally_bodies > 0);
             return Ok(());
         }
         let comparison_is_boolean = if let Expr::Compare(comparison) = expression
@@ -11699,13 +11777,15 @@ impl Compiler {
             label,
             -1,
         )?;
-        if self.exclude_terminal_if_not_taken || self.exclude_condition_not_taken_from_exception {
-            let exclude_from_generator = self.exclude_condition_not_taken_from_exception
-                && self.generator_region_start.is_some();
-            let exclude_from_exception = self.exclude_condition_not_taken_from_exception
-                || (self.exclude_terminal_if_not_taken
-                    && !self.active_with_region_exclusions.is_empty());
-            self.exclude_terminal_if_not_taken = false;
+        if self.control.exclude_terminal_if_not_taken
+            || self.control.exclude_condition_not_taken_from_exception
+        {
+            let exclude_from_generator = self.control.exclude_condition_not_taken_from_exception
+                && self.control.generator_region_start.is_some();
+            let exclude_from_exception = self.control.exclude_condition_not_taken_from_exception
+                || (self.control.exclude_terminal_if_not_taken
+                    && !self.control.active_with_region_exclusions.is_empty());
+            self.control.exclude_terminal_if_not_taken = false;
             let exclusion_start = self.assembler.label();
             self.assembler.mark(exclusion_start);
             self.emit(NOT_TAKEN, 0, 0)?;
@@ -11714,18 +11794,23 @@ impl Compiler {
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
             if exclude_from_generator {
-                self.generator_region_exclusions
+                self.control
+                    .generator_region_exclusions
                     .push((exclusion_start, exclusion_end));
             }
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.push((exclusion_start, exclusion_end));
             }
             if exclude_from_exception {
-                if self.exclude_condition_not_taken_from_all_exception_regions {
-                    for exclusions in &mut self.active_exception_region_exclusions {
+                if self
+                    .control
+                    .exclude_condition_not_taken_from_all_exception_regions
+                {
+                    for exclusions in &mut self.control.active_exception_region_exclusions {
                         exclusions.push((exclusion_start, exclusion_end));
                     }
-                } else if let Some(exclusions) = self.active_exception_region_exclusions.last_mut()
+                } else if let Some(exclusions) =
+                    self.control.active_exception_region_exclusions.last_mut()
                 {
                     exclusions.push((exclusion_start, exclusion_end));
                 }
@@ -11734,7 +11819,7 @@ impl Compiler {
         } else {
             self.emit(NOT_TAKEN, 0, 0)?;
             self.assembler.set_last_normalized_exception_owner(
-                comparison_is_boolean || self.active_normal_finally_bodies > 0,
+                comparison_is_boolean || self.control.active_normal_finally_bodies > 0,
             );
             Ok(())
         }
@@ -11840,10 +11925,10 @@ impl Compiler {
     }
 
     fn load_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.active_temporaries.contains(name) {
-            let index = self.temporary_indices[name];
+        if self.symbols.active_temporaries.contains(name) {
+            let index = self.symbols.temporary_indices[name];
             return self.emit(
-                if self.cell_names.contains(name) {
+                if self.symbols.cell_names.contains(name) {
                     LOAD_DEREF
                 } else {
                     LOAD_FAST
@@ -11852,11 +11937,11 @@ impl Compiler {
                 1,
             );
         }
-        let annotation_classdict_index = self.annotation_classdict_index;
-        match &self.scope {
+        let annotation_classdict_index = self.unit.annotation_classdict_index;
+        match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.module_globals.contains(name) {
+                if self.symbols.module_globals.contains(name) {
                     self.emit(LOAD_GLOBAL, index << 1, 1)
                 } else {
                     self.emit(LOAD_NAME, index, 1)
@@ -11906,8 +11991,8 @@ impl Compiler {
                         } else {
                             self.emit(LOAD_DEREF, index, 1)
                         }
-                    } else if self.initialized_locals.contains(name) {
-                        if self.owned_load_locals.contains(name) {
+                    } else if self.symbols.initialized_locals.contains(name) {
+                        if self.symbols.owned_load_locals.contains(name) {
                             self.emit_owned_fast(index, 1)
                         } else {
                             self.emit(LOAD_FAST, index, 1)
@@ -11941,10 +12026,10 @@ impl Compiler {
         let Some(references) = definitely_evaluated_references(expression) else {
             return;
         };
-        let Scope::Function { indices, .. } = &self.scope else {
+        let Scope::Function { indices, .. } = &self.unit.scope else {
             return;
         };
-        self.initialized_locals.extend(
+        self.symbols.initialized_locals.extend(
             references
                 .into_iter()
                 .filter(|name| indices.contains_key(name)),
@@ -11952,10 +12037,10 @@ impl Compiler {
     }
 
     fn store_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.active_temporaries.contains(name) {
-            let index = self.temporary_indices[name];
+        if self.symbols.active_temporaries.contains(name) {
+            let index = self.symbols.temporary_indices[name];
             return self.emit(
-                if self.cell_names.contains(name) {
+                if self.symbols.cell_names.contains(name) {
                     STORE_DEREF
                 } else {
                     STORE_FAST
@@ -11964,10 +12049,10 @@ impl Compiler {
                 -1,
             );
         }
-        match &self.scope {
+        match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.module_globals.contains(name) {
+                if self.symbols.module_globals.contains(name) {
                     self.emit(STORE_GLOBAL, index, -1)
                 } else {
                     self.emit(STORE_NAME, index, -1)
@@ -12003,7 +12088,7 @@ impl Compiler {
                     return self.emit(STORE_GLOBAL, index, -1);
                 }
                 if let Some(index) = indices.get(name).copied() {
-                    self.initialized_locals.insert(name.to_string());
+                    self.symbols.initialized_locals.insert(name.to_string());
                     if cells.contains(name) {
                         self.emit(STORE_DEREF, index, -1)
                     } else {
@@ -12021,10 +12106,10 @@ impl Compiler {
     }
 
     fn delete_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.active_temporaries.contains(name) {
-            let index = self.temporary_indices[name];
+        if self.symbols.active_temporaries.contains(name) {
+            let index = self.symbols.temporary_indices[name];
             return self.emit(
-                if self.cell_names.contains(name) {
+                if self.symbols.cell_names.contains(name) {
                     DELETE_DEREF
                 } else {
                     DELETE_FAST
@@ -12033,10 +12118,10 @@ impl Compiler {
                 0,
             );
         }
-        match &self.scope {
+        match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.module_globals.contains(name) {
+                if self.symbols.module_globals.contains(name) {
                     self.emit(DELETE_GLOBAL, index, 0)
                 } else {
                     self.emit(DELETE_NAME, index, 0)
@@ -12072,7 +12157,7 @@ impl Compiler {
                     return self.emit(DELETE_GLOBAL, index, 0);
                 }
                 if let Some(index) = indices.get(name).copied() {
-                    self.initialized_locals.remove(name);
+                    self.symbols.initialized_locals.remove(name);
                     if cells.contains(name) {
                         self.emit(DELETE_DEREF, index, 0)
                     } else {
@@ -12090,19 +12175,17 @@ impl Compiler {
     }
 
     fn closure_index(&self, name: &str) -> Result<u32, CompileError> {
-        match &self.scope {
-            Scope::Module => self
-                .temporary_indices
+        match &self.unit.scope {
+            Scope::Module => self.symbols.temporary_indices
                 .get(name)
                 .copied()
-                .filter(|_| self.cell_names.contains(name))
+                .filter(|_| self.symbols.cell_names.contains(name))
                 .ok_or_else(|| {
                     CompileError::Internal(format!(
                         "module cannot provide closure variable `{name}`"
                     ))
                 }),
-            Scope::Class { .. } => self
-                .locals
+            Scope::Class { .. } => self.symbols.locals
                 .iter()
                 .position(|local| local == name)
                 .map(|index| to_u32(index, "class closure variable index"))
@@ -12110,7 +12193,7 @@ impl Compiler {
                 .ok_or_else(|| {
                     CompileError::Internal(format!(
                         "class `{}` cannot provide closure variable `{name}` (locals: {:?}; free names: {:?})",
-                        self.qualified_name, self.locals, self.free_names
+                        self.unit.qualified_name, self.symbols.locals, self.symbols.free_names
                     ))
                 }),
             Scope::Function {
@@ -12128,10 +12211,10 @@ impl Compiler {
     }
 
     fn can_provide_closure(&self, name: &str) -> bool {
-        match &self.scope {
-            Scope::Module => self.cell_names.contains(name),
+        match &self.unit.scope {
+            Scope::Module => self.symbols.cell_names.contains(name),
             Scope::Class { free_indices, .. } => {
-                self.cell_names.contains(name) || free_indices.contains_key(name)
+                self.symbols.cell_names.contains(name) || free_indices.contains_key(name)
             }
             Scope::Function {
                 indices,
@@ -12157,7 +12240,7 @@ impl Compiler {
     }
 
     fn emit_pending_comprehension_restores(&mut self) -> Result<(), CompileError> {
-        let restores = std::mem::take(&mut self.pending_comprehension_restores);
+        let restores = std::mem::take(&mut self.control.pending_comprehension_restores);
         for (indices, location) in restores {
             self.assembler.set_location(location);
             for (position, index) in indices.iter().enumerate() {
@@ -12176,42 +12259,43 @@ impl Compiler {
     }
 
     fn child_function_is_nested(&self) -> bool {
-        match self.scope {
+        match self.unit.scope {
             Scope::Function { .. } => true,
-            Scope::Class { .. } => self.class_scope_is_nested,
+            Scope::Class { .. } => self.unit.class_scope_is_nested,
             Scope::Module => false,
         }
     }
 
     fn child_qualified_name(&self, name: &str) -> String {
-        if let Some(parent) = &self.child_qualified_name_parent {
+        if let Some(parent) = &self.unit.child_qualified_name_parent {
             return if parent.is_empty() {
                 name.to_string()
             } else {
                 format!("{parent}.{name}")
             };
         }
-        if self.annotation_thunk
-            && let Some(prefix) = self.qualified_name.strip_suffix("__annotate__")
+        if self.unit.annotation_thunk
+            && let Some(prefix) = self.unit.qualified_name.strip_suffix("__annotate__")
         {
             return format!("{prefix}{name}");
         }
-        match &self.scope {
+        match &self.unit.scope {
             Scope::Module => name.to_string(),
-            Scope::Class { .. } => format!("{}.{}", self.qualified_name, name),
+            Scope::Class { .. } => format!("{}.{}", self.unit.qualified_name, name),
             Scope::Function { globals, .. } if globals.contains(name) => name.to_string(),
-            Scope::Function { .. } => format!("{}.<locals>.{name}", self.qualified_name),
+            Scope::Function { .. } => format!("{}.<locals>.{name}", self.unit.qualified_name),
         }
     }
 
     fn annotation_mangled_name(&self, name: &str) -> String {
-        if self.private_name.is_some() {
+        if self.unit.private_name.is_some() {
             return self.mangled_name(name);
         }
         if !name.starts_with("__") || name.ends_with("__") || name.contains('.') {
             return name.to_string();
         }
         let Some(class_name) = self
+            .unit
             .qualified_name
             .strip_suffix(".__annotate__")
             .and_then(|parent| parent.rsplit('.').next())
@@ -12228,6 +12312,7 @@ impl Compiler {
             return name.to_string();
         }
         let Some(class_name) = self
+            .unit
             .private_name
             .as_deref()
             .map(|name| name.trim_start_matches('_'))
@@ -12239,8 +12324,13 @@ impl Compiler {
     }
 
     fn line_number(&self, offset: u32) -> u32 {
-        u32::try_from(self.line_index.line_index(self.source_offset(offset)).get())
-            .unwrap_or(u32::MAX)
+        u32::try_from(
+            self.context
+                .line_index
+                .line_index(self.source_offset(offset))
+                .get(),
+        )
+        .unwrap_or(u32::MAX)
     }
 
     fn source_location(&self, range: ruff_text_size::TextRange) -> SourceLocation {
@@ -12278,7 +12368,7 @@ impl Compiler {
             })
         }
 
-        let bytes = self.source.as_bytes();
+        let bytes = self.context.source.as_bytes();
         let range_start = usize::from(range.start());
         let name_start = usize::from(name_range.start());
         let keyword_start = find_keyword(bytes, range_start, name_start, keyword)
@@ -12294,7 +12384,7 @@ impl Compiler {
     }
 
     fn definition_end_position(&self, range: ruff_text_size::TextRange) -> (i32, i32) {
-        let bytes = self.source.as_bytes();
+        let bytes = self.context.source.as_bytes();
         let original_end = usize::from(range.end());
         let mut end = original_end;
         loop {
@@ -12321,8 +12411,11 @@ impl Compiler {
 
     fn source_position(&self, offset: u32) -> (i32, i32) {
         let offset = self.source_offset(offset);
-        let line = self.line_index.line_index(offset);
-        let line_start = self.line_index.line_start(line, &self.source);
+        let line = self.context.line_index.line_index(offset);
+        let line_start = self
+            .context
+            .line_index
+            .line_start(line, &self.context.source);
         (
             i32::try_from(line.get()).unwrap_or(i32::MAX),
             i32::try_from(u32::from(offset - line_start)).unwrap_or(i32::MAX),
@@ -12330,13 +12423,13 @@ impl Compiler {
     }
 
     fn source_offset(&self, offset: u32) -> TextSize {
-        TextSize::new(offset.min(u32::try_from(self.source.len()).unwrap_or(u32::MAX)))
+        TextSize::new(offset.min(u32::try_from(self.context.source.len()).unwrap_or(u32::MAX)))
     }
 
     fn source_text(&self, range: ruff_text_size::TextRange) -> &str {
         let start = usize::from(range.start());
         let end = usize::from(range.end());
-        &self.source[start..end]
+        &self.context.source[start..end]
     }
 
     fn string_literal_constant(&self, string: &ruff_python_ast::ExprStringLiteral) -> Constant {
@@ -12363,10 +12456,10 @@ impl Compiler {
         &self,
         range: ruff_text_size::TextRange,
     ) -> ruff_text_size::TextRange {
-        let bytes = self.source.as_bytes();
+        let bytes = self.context.source.as_bytes();
         let original_start = usize::from(range.start());
         let original_end = usize::from(range.end());
-        if range_is_wrapped_in_parentheses(&self.source, original_start, original_end) {
+        if range_is_wrapped_in_parentheses(&self.context.source, original_start, original_end) {
             return range;
         }
         let mut start = usize::from(range.start());
@@ -12423,7 +12516,7 @@ impl Compiler {
     ) -> ruff_text_size::TextRange {
         let start = usize::from(range.start());
         let end = usize::from(range.end());
-        let text = &self.source.as_bytes()[start..end];
+        let text = &self.context.source.as_bytes()[start..end];
         let Some(quote_offset) = text.iter().position(|byte| matches!(byte, b'\'' | b'"')) else {
             return range;
         };
@@ -12693,7 +12786,7 @@ impl Compiler {
         }
         for (name, force_name) in collector.names {
             let is_local_or_free = matches!(
-                &self.scope,
+                &self.unit.scope,
                 Scope::Function {
                     indices,
                     free_indices,
@@ -12701,7 +12794,7 @@ impl Compiler {
                     ..
                 } if indices.contains_key(&name) && !globals.contains(&name)
                     || free_indices.contains_key(&name)
-            ) || self.temporary_indices.contains_key(&name);
+            ) || self.symbols.temporary_indices.contains_key(&name);
             if force_name || !is_local_or_free {
                 self.name_index(&name)?;
             }
@@ -12734,7 +12827,7 @@ impl Compiler {
         collector.visit_expr(expression);
         for (name, force_name) in collector.names {
             let is_local_or_free = matches!(
-                &self.scope,
+                &self.unit.scope,
                 Scope::Function {
                     indices,
                     free_indices,
@@ -12776,30 +12869,32 @@ impl Compiler {
 
     fn name_index(&mut self, name: &str) -> Result<u32, CompileError> {
         let name = self.mangled_name(name);
-        if let Some(index) = self.name_indices.get(&name) {
+        if let Some(index) = self.output.name_indices.get(&name) {
             return Ok(*index);
         }
-        let index = to_u32(self.names.len(), "name count")?;
-        self.names.push(name.clone());
-        self.name_indices.insert(name, index);
+        let index = to_u32(self.output.names.len(), "name count")?;
+        self.output.names.push(name.clone());
+        self.output.name_indices.insert(name, index);
         Ok(index)
     }
 
     fn add_constant(&mut self, constant: Constant) -> Result<u32, CompileError> {
         if let Some(index) = self
+            .output
             .constants
             .iter()
             .position(|existing| constants_equal(existing, &constant))
         {
             return to_u32(index, "constant index");
         }
-        let index = to_u32(self.constants.len(), "constant count")?;
-        self.constants.push(constant);
+        let index = to_u32(self.output.constants.len(), "constant count")?;
+        self.output.constants.push(constant);
         Ok(index)
     }
 
     fn add_interned_string_tuple(&mut self, values: Vec<Constant>) -> Result<u32, CompileError> {
-        self.interned_constant_strings
+        self.output
+            .interned_constant_strings
             .extend(values.iter().filter_map(|value| match value {
                 Constant::String(value) => Some(value.clone()),
                 _ => None,
@@ -12809,9 +12904,12 @@ impl Compiler {
 
     fn remove_unused_constants(&mut self) -> Result<(), CompileError> {
         let used = self.assembler.used_constant_indices(LOAD_CONST);
-        let mut index_map = vec![None; self.constants.len()];
-        let mut retained = Vec::with_capacity(self.constants.len());
-        for (old_index, constant) in std::mem::take(&mut self.constants).into_iter().enumerate() {
+        let mut index_map = vec![None; self.output.constants.len()];
+        let mut retained = Vec::with_capacity(self.output.constants.len());
+        for (old_index, constant) in std::mem::take(&mut self.output.constants)
+            .into_iter()
+            .enumerate()
+        {
             if old_index == 0 || used.contains(&u32::try_from(old_index).unwrap()) {
                 let new_index = to_u32(retained.len(), "constant count")?;
                 index_map[old_index] = Some(new_index);
@@ -12820,7 +12918,7 @@ impl Compiler {
         }
         self.assembler
             .remap_constant_indices(LOAD_CONST, &index_map);
-        self.constants = retained;
+        self.output.constants = retained;
         Ok(())
     }
 
@@ -12828,8 +12926,10 @@ impl Compiler {
         self.apply_stack_effect(1)?;
         let instruction = self
             .assembler
-            .emit_placeholder_with_depth(LOAD_CONST, self.depth.cast_unsigned());
-        self.deferred_constants.push((Some(instruction), constant));
+            .emit_placeholder_with_depth(LOAD_CONST, self.control.depth.cast_unsigned());
+        self.output
+            .deferred_constants
+            .push((Some(instruction), constant));
         Ok(())
     }
 
@@ -12840,8 +12940,9 @@ impl Compiler {
         self.apply_stack_effect(1)?;
         let instruction = self
             .assembler
-            .emit_placeholder_with_depth(LOAD_CONST, self.depth.cast_unsigned());
-        self.deferred_constants_before_return
+            .emit_placeholder_with_depth(LOAD_CONST, self.control.depth.cast_unsigned());
+        self.output
+            .deferred_constants_before_return
             .push((instruction, constant));
         Ok(())
     }
@@ -12850,22 +12951,24 @@ impl Compiler {
         self.apply_stack_effect(-1)?;
         let instruction = self
             .assembler
-            .emit_placeholder_with_depth(STORE_NAME, self.depth.cast_unsigned());
-        self.deferred_names.push((instruction, name.to_string()));
+            .emit_placeholder_with_depth(STORE_NAME, self.control.depth.cast_unsigned());
+        self.output
+            .deferred_names
+            .push((instruction, name.to_string()));
         Ok(())
     }
 
     fn emit(&mut self, opcode: Opcode, argument: u32, effect: i32) -> Result<(), CompileError> {
         self.apply_stack_effect(effect)?;
         self.assembler
-            .emit_with_depth(opcode, argument, self.depth.cast_unsigned());
+            .emit_with_depth(opcode, argument, self.control.depth.cast_unsigned());
         Ok(())
     }
 
     fn emit_owned_fast(&mut self, argument: u32, effect: i32) -> Result<(), CompileError> {
         self.apply_stack_effect(effect)?;
         self.assembler
-            .emit_owned_fast_with_depth(argument, self.depth.cast_unsigned());
+            .emit_owned_fast_with_depth(argument, self.control.depth.cast_unsigned());
         Ok(())
     }
 
@@ -12884,7 +12987,7 @@ impl Compiler {
         }
         self.apply_stack_effect(effect)?;
         self.assembler
-            .emit_forward_with_depth(opcode, label, self.depth.cast_unsigned());
+            .emit_forward_with_depth(opcode, label, self.control.depth.cast_unsigned());
         Ok(())
     }
 
@@ -12903,22 +13006,23 @@ impl Compiler {
         }
         self.apply_stack_effect(effect)?;
         self.assembler
-            .emit_backward_with_depth(opcode, label, self.depth.cast_unsigned());
+            .emit_backward_with_depth(opcode, label, self.control.depth.cast_unsigned());
         Ok(())
     }
 
     fn take_trailing_nop_location(&mut self) -> Option<SourceLocation> {
         let (location, exclusion) = self.assembler.take_trailing_nop_location()?;
         if let Some(exclusion) = exclusion {
-            self.generator_region_exclusions
+            self.control
+                .generator_region_exclusions
                 .retain(|candidate| *candidate != exclusion);
-            for exclusions in &mut self.active_with_region_exclusions {
+            for exclusions in &mut self.control.active_with_region_exclusions {
                 exclusions.retain(|candidate| *candidate != exclusion);
             }
-            for exclusions in &mut self.active_exception_region_exclusions {
+            for exclusions in &mut self.control.active_exception_region_exclusions {
                 exclusions.retain(|candidate| *candidate != exclusion);
             }
-            for exclusions in &mut self.active_comprehension_region_exclusions {
+            for exclusions in &mut self.control.active_comprehension_region_exclusions {
                 exclusions.retain(|candidate| *candidate != exclusion);
             }
         }
@@ -12926,20 +13030,23 @@ impl Compiler {
     }
 
     fn apply_stack_effect(&mut self, effect: i32) -> Result<(), CompileError> {
-        self.depth += effect;
-        if self.depth < 0 {
+        self.control.depth += effect;
+        if self.control.depth < 0 {
             return Err(CompileError::Internal(
                 "compiler produced a negative stack depth".to_string(),
             ));
         }
-        self.max_depth = self.max_depth.max(self.depth.cast_unsigned());
+        self.control.max_depth = self
+            .control
+            .max_depth
+            .max(self.control.depth.cast_unsigned());
         Ok(())
     }
 
     fn set_depth(&mut self, depth: i32) {
         debug_assert!(depth >= 0);
-        self.depth = depth;
-        self.max_depth = self.max_depth.max(depth.cast_unsigned());
+        self.control.depth = depth;
+        self.control.max_depth = self.control.max_depth.max(depth.cast_unsigned());
     }
 }
 
