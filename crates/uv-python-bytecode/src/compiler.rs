@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_pattern, walk_stmt};
 use ruff_python_ast::{
@@ -189,54 +189,49 @@ impl CollectionKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct FunctionPlan {
-    key: (u32, u32),
     locals: Vec<String>,
     globals: FxHashSet<String>,
-    nonlocals: FxHashSet<String>,
-    references: FxHashSet<String>,
     annotation_references: FxHashSet<String>,
     cellvars: FxHashSet<String>,
     inlined_comprehension_cellvars: FxHashSet<String>,
     freevars: BTreeSet<String>,
     annotation_freevars: BTreeSet<String>,
-    children: Vec<Self>,
+    required: BTreeSet<String>,
+    type_parameter_names: FxHashSet<String>,
 }
 
 impl FunctionPlan {
-    fn analyze(definition: &StmtFunctionDef, future_annotations: bool) -> Self {
-        let mut plan = Self::build(definition, future_annotations);
-        for name in plan.resolve() {
-            plan.mark_global(&name);
+    fn absorb_child_requirements(
+        &mut self,
+        required_names: impl IntoIterator<Item = String>,
+        annotation_references: impl IntoIterator<Item = String>,
+    ) {
+        let local_names: FxHashSet<_> = self.locals.iter().map(String::as_str).collect();
+        for name in required_names {
+            if local_names.contains(name.as_str()) {
+                self.cellvars.insert(name);
+            } else if !self.globals.contains(&name) {
+                self.required.insert(name);
+            }
         }
-        plan
+        for name in annotation_references {
+            if local_names.contains(name.as_str()) {
+                self.cellvars.insert(name);
+            } else if !self.globals.contains(&name) {
+                self.required.insert(name);
+            }
+        }
     }
 
-    fn analyze_in_class(
+    fn build(
         definition: &StmtFunctionDef,
         future_annotations: bool,
-        class_freevars: &FxHashSet<&str>,
+        nested_function_requirements: &FxHashSet<String>,
+        nested_function_annotation_references: &FxHashSet<String>,
+        class_requirements: &BTreeSet<String>,
     ) -> Self {
-        let mut plan = Self::build(definition, future_annotations);
-        for name in plan.resolve() {
-            if name == "__class__" || class_freevars.contains(name.as_str()) {
-                plan.freevars.insert(name);
-            } else {
-                plan.mark_global(&name);
-            }
-        }
-        // Method annotation thunks are created by the class body, so they can close over the
-        // class body's free variables even when the method body does not reference them.
-        for name in &plan.annotation_references {
-            if class_freevars.contains(name.as_str()) {
-                plan.annotation_freevars.insert(name.clone());
-            }
-        }
-        plan
-    }
-
-    fn build(definition: &StmtFunctionDef, future_annotations: bool) -> Self {
         let mut bindings = LocalCollector::default();
         bindings.collect_globals(&definition.body);
         bindings.collect_suite(&definition.body);
@@ -302,24 +297,16 @@ impl FunctionPlan {
             }
         }
 
-        let mut children = Vec::new();
-        collect_nested_functions(&definition.body, &mut children, future_annotations);
         if locals.annotation_only.contains("__class__")
             && !reference_collector.explicit_dunder_class_reference
         {
             reference_collector.references.remove("__class__");
         }
         let local_names: FxHashSet<_> = locals.names.iter().cloned().collect();
-        let class_requirements = nested_class_required_names(&definition.body, future_annotations);
         let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
         let generator_requirements = nested_generator_required_names_in_suite(&definition.body);
         let annotation_scope_requirements =
             nested_annotation_scope_required_names_in_suite(&definition.body);
-        let nested_function_requirements = children
-            .iter()
-            .cloned()
-            .flat_map(|mut child| child.resolve())
-            .collect::<FxHashSet<_>>();
         locals.names.retain(|name| {
             !locals.annotation_only.contains(name)
                 || reference_collector.references.contains(name)
@@ -348,8 +335,9 @@ impl FunctionPlan {
             .collect::<FxHashSet<_>>();
         cellvars.extend(
             class_requirements
-                .into_iter()
-                .filter(|name| local_names.contains(name)),
+                .iter()
+                .filter(|name| local_names.contains(name.as_str()))
+                .cloned(),
         );
         cellvars.extend(
             lambda_requirements
@@ -368,54 +356,37 @@ impl FunctionPlan {
         );
         let inlined_comprehension_cellvars =
             inlined_comprehension_cell_names_in_suite(&definition.body);
-        Self {
-            key: function_key(definition),
+        let retained_local_names: FxHashSet<_> = locals.names.iter().map(String::as_str).collect();
+        let required: BTreeSet<_> = reference_collector
+            .references
+            .iter()
+            .chain(&locals.nonlocals)
+            .filter(|name| {
+                !retained_local_names.contains(name.as_str()) && !locals.globals.contains(*name)
+            })
+            .cloned()
+            .collect();
+        let mut plan = Self {
             locals: locals.names,
             globals: locals.globals,
-            nonlocals: locals.nonlocals,
-            references: reference_collector.references,
             annotation_references: annotation_collector.references,
             cellvars,
             inlined_comprehension_cellvars,
             freevars: BTreeSet::new(),
             annotation_freevars: BTreeSet::new(),
-            children,
-        }
-    }
-
-    fn resolve(&mut self) -> BTreeSet<String> {
-        let local_names: FxHashSet<_> = self.locals.iter().map(String::as_str).collect();
-        let mut needed: BTreeSet<_> = self
-            .references
-            .iter()
-            .chain(&self.nonlocals)
-            .filter(|name| !local_names.contains(name.as_str()) && !self.globals.contains(*name))
-            .cloned()
-            .collect();
-
-        for child in &mut self.children {
-            for name in child.resolve() {
-                if local_names.contains(name.as_str()) {
-                    child.freevars.insert(name.clone());
-                    self.cellvars.insert(name);
-                } else if self.globals.contains(&name) {
-                    child.mark_global(&name);
-                } else if !self.globals.contains(&name) {
-                    child.freevars.insert(name.clone());
-                    needed.insert(name);
-                }
-            }
-            for name in &child.annotation_references {
-                if local_names.contains(name.as_str()) {
-                    child.annotation_freevars.insert(name.clone());
-                    self.cellvars.insert(name.clone());
-                } else if !self.globals.contains(name) {
-                    child.annotation_freevars.insert(name.clone());
-                    needed.insert(name.clone());
-                }
-            }
-        }
-        needed
+            required,
+            type_parameter_names: definition
+                .type_params
+                .iter()
+                .flat_map(|parameters| parameters.iter())
+                .map(|parameter| parameter.name().as_str().to_string())
+                .collect(),
+        };
+        plan.absorb_child_requirements(
+            nested_function_requirements.iter().cloned(),
+            nested_function_annotation_references.iter().cloned(),
+        );
+        plan
     }
 
     fn mark_global(&mut self, name: &str) {
@@ -425,17 +396,334 @@ impl FunctionPlan {
         }
         self.freevars.remove(name);
         self.globals.insert(name.to_string());
-        for child in &mut self.children {
-            child.annotation_freevars.remove(name);
-            if child.freevars.contains(name) {
-                child.mark_global(name);
+        self.required.remove(name);
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct ClassPlan {
+    globals: FxHashSet<String>,
+    nonlocals: FxHashSet<String>,
+    bound_names: FxHashSet<String>,
+    required: BTreeSet<String>,
+    needs_class_closure: bool,
+    needs_classdict: bool,
+}
+
+impl ClassPlan {
+    fn build(
+        definition: &StmtClassDef,
+        future_annotations: bool,
+        method_requirements: &BTreeSet<String>,
+        method_annotation_references: &FxHashSet<String>,
+        nested_class_requirements: &BTreeSet<String>,
+        child_needs_class_closure: bool,
+    ) -> Self {
+        let mut locals = LocalCollector::default();
+        locals.collect_globals(&definition.body);
+        locals.collect_suite(&definition.body);
+
+        let mut references = ReferenceCollector {
+            skip_annotations: future_annotations,
+            ..ReferenceCollector::default()
+        };
+        for statement in &definition.body {
+            references.visit_stmt(statement);
+        }
+        let mut body_explicitly_references_dunder_class =
+            references.explicit_dunder_class_reference;
+        let mut required = references
+            .references
+            .into_iter()
+            .filter(|name| {
+                locals.nonlocals.contains(name)
+                    || (!locals.globals.contains(name) && !locals.seen.contains(name))
+            })
+            .collect::<BTreeSet<_>>();
+        required.extend(locals.nonlocals.iter().cloned());
+        let annotation_scope_requirements =
+            nested_annotation_scope_required_names_in_suite(&definition.body);
+        body_explicitly_references_dunder_class |=
+            annotation_scope_requirements.contains("__class__");
+        required.extend(
+            annotation_scope_requirements
+                .into_iter()
+                .filter(|name| !locals.seen.contains(name) && !locals.globals.contains(name)),
+        );
+        let body_requires_dunder_class =
+            body_explicitly_references_dunder_class && required.contains("__class__");
+
+        required.extend(method_requirements.iter().cloned());
+        if !future_annotations {
+            required.extend(
+                method_annotation_references
+                    .iter()
+                    .filter(|name| !locals.seen.contains(*name) && !locals.globals.contains(*name))
+                    .cloned(),
+            );
+        }
+        required.extend(nested_class_requirements.iter().cloned());
+        if !body_requires_dunder_class && !locals.nonlocals.contains("__class__") {
+            required.remove("__class__");
+        }
+        required.remove("__classdict__");
+        required.remove("__conditional_annotations__");
+
+        let needs_class_closure = child_needs_class_closure
+            || nested_lambda_required_names_in_suite(&definition.body).contains("__class__");
+        let needs_classdict = contains_type_alias(&definition.body)
+            || contains_generic_definition(&definition.body)
+            || !future_annotations
+                && (contains_function_definition(&definition.body)
+                    || has_simple_annotations(&definition.body));
+        Self {
+            globals: locals.globals,
+            nonlocals: locals.nonlocals,
+            bound_names: locals.seen,
+            required,
+            needs_class_closure,
+            needs_classdict,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ScopeId(usize);
+
+impl ScopeId {
+    const MODULE: Self = Self(0);
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum ScopeOrigin {
+    Function(u32, u32),
+    Class(u32, u32),
+}
+
+impl ScopeOrigin {
+    fn function(definition: &StmtFunctionDef) -> Self {
+        Self::Function(
+            u32::from(definition.range.start()),
+            u32::from(definition.range.end()),
+        )
+    }
+
+    fn class(definition: &StmtClassDef) -> Self {
+        Self::Class(
+            u32::from(definition.range.start()),
+            u32::from(definition.range.end()),
+        )
+    }
+}
+
+#[derive(Debug)]
+enum ScopePlan {
+    Module,
+    Function(FunctionPlan),
+    Class(ClassPlan),
+}
+
+#[derive(Debug)]
+struct ScopeNode {
+    plan: ScopePlan,
+    children: Vec<ScopeId>,
+}
+
+#[derive(Debug)]
+struct ScopeArena {
+    nodes: Vec<ScopeNode>,
+    by_parent_and_origin: FxHashMap<(ScopeId, ScopeOrigin), ScopeId>,
+}
+
+impl Default for ScopeArena {
+    fn default() -> Self {
+        Self {
+            nodes: vec![ScopeNode {
+                plan: ScopePlan::Module,
+                children: Vec::new(),
+            }],
+            by_parent_and_origin: FxHashMap::default(),
+        }
+    }
+}
+
+impl ScopeArena {
+    fn analyze(body: &[Stmt], future_annotations: bool) -> Self {
+        let mut arena = Self::default();
+        arena.build_suite(ScopeId::MODULE, body, future_annotations);
+        arena
+    }
+
+    fn build_suite(&mut self, parent: ScopeId, body: &[Stmt], future_annotations: bool) {
+        for statement in body {
+            match statement {
+                Stmt::FunctionDef(definition) => {
+                    self.build_function(parent, definition, future_annotations);
+                }
+                Stmt::ClassDef(definition) => {
+                    self.build_class(parent, definition, future_annotations);
+                }
+                Stmt::If(statement) => {
+                    self.build_suite(parent, &statement.body, future_annotations);
+                    for clause in &statement.elif_else_clauses {
+                        self.build_suite(parent, &clause.body, future_annotations);
+                    }
+                }
+                Stmt::For(statement) => {
+                    self.build_suite(parent, &statement.body, future_annotations);
+                    self.build_suite(parent, &statement.orelse, future_annotations);
+                }
+                Stmt::While(statement) => {
+                    self.build_suite(parent, &statement.body, future_annotations);
+                    self.build_suite(parent, &statement.orelse, future_annotations);
+                }
+                Stmt::Try(statement) => {
+                    self.build_suite(parent, &statement.body, future_annotations);
+                    for handler in &statement.handlers {
+                        if let Some(handler) = handler.as_except_handler() {
+                            self.build_suite(parent, &handler.body, future_annotations);
+                        }
+                    }
+                    self.build_suite(parent, &statement.orelse, future_annotations);
+                    self.build_suite(parent, &statement.finalbody, future_annotations);
+                }
+                Stmt::With(statement) => {
+                    self.build_suite(parent, &statement.body, future_annotations);
+                }
+                Stmt::Match(statement) => {
+                    for case in &statement.cases {
+                        self.build_suite(parent, &case.body, future_annotations);
+                    }
+                }
+                _ => {}
             }
         }
     }
 
-    fn child(&self, definition: &StmtFunctionDef) -> Option<Self> {
-        let key = function_key(definition);
-        self.children.iter().find(|child| child.key == key).cloned()
+    fn add_scope(&mut self, parent: ScopeId, origin: ScopeOrigin, plan: ScopePlan) -> ScopeId {
+        let id = ScopeId(self.nodes.len());
+        self.nodes.push(ScopeNode {
+            plan,
+            children: Vec::new(),
+        });
+        self.nodes[parent.0].children.push(id);
+        self.by_parent_and_origin.insert((parent, origin), id);
+        id
+    }
+
+    fn build_function(
+        &mut self,
+        parent: ScopeId,
+        definition: &StmtFunctionDef,
+        future_annotations: bool,
+    ) {
+        let id = self.add_scope(
+            parent,
+            ScopeOrigin::function(definition),
+            ScopePlan::Function(FunctionPlan::default()),
+        );
+        self.build_suite(id, &definition.body, future_annotations);
+        let (nested_function_requirements, nested_function_annotation_references) =
+            self.nested_function_requirements(id);
+        let class_requirements = self.nested_class_requirements(id);
+        self.nodes[id.0].plan = ScopePlan::Function(FunctionPlan::build(
+            definition,
+            future_annotations,
+            &nested_function_requirements,
+            &nested_function_annotation_references,
+            &class_requirements,
+        ));
+    }
+
+    fn build_class(
+        &mut self,
+        parent: ScopeId,
+        definition: &StmtClassDef,
+        future_annotations: bool,
+    ) {
+        let id = self.add_scope(
+            parent,
+            ScopeOrigin::class(definition),
+            ScopePlan::Class(ClassPlan::default()),
+        );
+        self.build_suite(id, &definition.body, future_annotations);
+        let (method_requirements, method_annotation_references) =
+            self.nested_function_requirements(id);
+        let nested_class_requirements = self.nested_class_requirements(id);
+        let child_needs_class_closure =
+            self.nodes[id.0]
+                .children
+                .iter()
+                .any(|child| match &self.nodes[child.0].plan {
+                    ScopePlan::Function(plan) => plan.required.contains("__class__"),
+                    ScopePlan::Class(plan) => plan.required.contains("__class__"),
+                    ScopePlan::Module => false,
+                });
+        self.nodes[id.0].plan = ScopePlan::Class(ClassPlan::build(
+            definition,
+            future_annotations,
+            &method_requirements.iter().cloned().collect(),
+            &method_annotation_references,
+            &nested_class_requirements,
+            child_needs_class_closure,
+        ));
+    }
+
+    fn nested_function_requirements(
+        &self,
+        parent: ScopeId,
+    ) -> (FxHashSet<String>, FxHashSet<String>) {
+        let mut required = FxHashSet::default();
+        let mut annotation_references = FxHashSet::default();
+        for child in &self.nodes[parent.0].children {
+            let ScopePlan::Function(plan) = &self.nodes[child.0].plan else {
+                continue;
+            };
+            required.extend(
+                plan.required
+                    .iter()
+                    .filter(|name| !plan.type_parameter_names.contains(*name))
+                    .cloned(),
+            );
+            annotation_references.extend(
+                plan.annotation_references
+                    .iter()
+                    .filter(|name| !plan.type_parameter_names.contains(*name))
+                    .cloned(),
+            );
+        }
+        (required, annotation_references)
+    }
+
+    fn nested_class_requirements(&self, parent: ScopeId) -> BTreeSet<String> {
+        self.nodes[parent.0]
+            .children
+            .iter()
+            .filter_map(|child| match &self.nodes[child.0].plan {
+                ScopePlan::Class(plan) => Some(&plan.required),
+                ScopePlan::Module | ScopePlan::Function(_) => None,
+            })
+            .flatten()
+            .cloned()
+            .collect()
+    }
+
+    fn child(&self, parent: ScopeId, origin: ScopeOrigin) -> Option<ScopeId> {
+        self.by_parent_and_origin.get(&(parent, origin)).copied()
+    }
+
+    fn function(&self, id: ScopeId) -> Option<&FunctionPlan> {
+        match &self.nodes.get(id.0)?.plan {
+            ScopePlan::Function(plan) => Some(plan),
+            ScopePlan::Module | ScopePlan::Class(_) => None,
+        }
+    }
+
+    fn class(&self, id: ScopeId) -> Option<&ClassPlan> {
+        match &self.nodes.get(id.0)?.plan {
+            ScopePlan::Class(plan) => Some(plan),
+            ScopePlan::Module | ScopePlan::Function(_) => None,
+        }
     }
 }
 
@@ -444,12 +732,13 @@ struct CompilationContext {
     filename: String,
     source: Arc<str>,
     line_index: LineIndex,
+    scopes: OnceLock<ScopeArena>,
 }
 
 #[derive(Debug)]
 struct CodeUnit {
     scope: Scope,
-    function_plan: Option<FunctionPlan>,
+    scope_id: ScopeId,
     generic_target_qualified_name: Option<String>,
     child_qualified_name_parent: Option<String>,
     class_scope_is_nested: bool,
@@ -469,7 +758,7 @@ struct CodeUnit {
 #[derive(Debug)]
 struct CodeUnitSpec {
     scope: Scope,
-    function_plan: Option<FunctionPlan>,
+    scope_id: ScopeId,
     name: String,
     qualified_name: String,
     private_name: Option<String>,
@@ -484,7 +773,7 @@ impl CodeUnit {
     fn from_spec(spec: CodeUnitSpec) -> Self {
         Self {
             scope: spec.scope,
-            function_plan: spec.function_plan,
+            scope_id: spec.scope_id,
             generic_target_qualified_name: None,
             child_qualified_name_parent: None,
             class_scope_is_nested: false,
@@ -589,15 +878,93 @@ impl Compiler {
         }
     }
 
+    fn scope_arena(&self) -> Result<&ScopeArena, CompileError> {
+        self.context
+            .scopes
+            .get()
+            .ok_or_else(|| CompileError::Internal("scope arena was not initialized".to_string()))
+    }
+
+    fn function_scope_id(&self, definition: &StmtFunctionDef) -> Result<ScopeId, CompileError> {
+        self.scope_arena()?
+            .child(self.unit.scope_id, ScopeOrigin::function(definition))
+            .ok_or_else(|| {
+                CompileError::Internal(format!(
+                    "missing scope plan for nested function `{}`",
+                    definition.name
+                ))
+            })
+    }
+
+    fn class_scope_id(&self, definition: &StmtClassDef) -> Result<ScopeId, CompileError> {
+        self.scope_arena()?
+            .child(self.unit.scope_id, ScopeOrigin::class(definition))
+            .ok_or_else(|| {
+                CompileError::Internal(format!(
+                    "missing scope plan for nested class `{}`",
+                    definition.name
+                ))
+            })
+    }
+
+    fn resolved_function_plan(
+        &self,
+        definition: &StmtFunctionDef,
+    ) -> Result<(ScopeId, FunctionPlan), CompileError> {
+        let scope_id = self.function_scope_id(definition)?;
+        let mut plan = self
+            .scope_arena()?
+            .function(scope_id)
+            .ok_or_else(|| CompileError::Internal("function scope has no plan".to_string()))?
+            .clone();
+        let required = plan.required.iter().cloned().collect::<Vec<_>>();
+        for name in required {
+            let captures_name = match &self.unit.scope {
+                Scope::Class { .. } => {
+                    name == "__class__" || self.symbols.free_names.iter().any(|free| free == &name)
+                }
+                Scope::Module | Scope::Function { .. } => self.can_provide_closure(&name),
+            };
+            if captures_name {
+                plan.freevars.insert(name);
+            } else {
+                plan.mark_global(&name);
+            }
+        }
+        for name in &plan.annotation_references {
+            let captures_name = match &self.unit.scope {
+                // Method annotation thunks are created by the class body and can capture the
+                // class body's free variables, but not arbitrary class-local bindings.
+                Scope::Class { .. } => self.symbols.free_names.iter().any(|free| free == name),
+                Scope::Module | Scope::Function { .. } => self.can_provide_closure(name),
+            };
+            if captures_name {
+                plan.annotation_freevars.insert(name.clone());
+            }
+        }
+        Ok((scope_id, plan))
+    }
+
+    fn class_plan(&self, definition: &StmtClassDef) -> Result<(ScopeId, ClassPlan), CompileError> {
+        let scope_id = self.class_scope_id(definition)?;
+        let plan = self
+            .scope_arena()?
+            .class(scope_id)
+            .ok_or_else(|| CompileError::Internal("class scope has no plan".to_string()))?
+            .clone();
+        Ok((scope_id, plan))
+    }
+
     pub(crate) fn module(filename: &str, source: &str) -> Self {
         let context = Arc::new(CompilationContext {
             filename: filename.to_string(),
             source: Arc::from(source),
             line_index: LineIndex::from_source_text(source),
+            scopes: OnceLock::new(),
         });
         let unit = CodeUnit::from_spec(CodeUnitSpec {
             scope: Scope::Module,
-            function_plan: None,
+            scope_id: ScopeId::MODULE,
             name: "<module>".to_string(),
             qualified_name: "<module>".to_string(),
             private_name: None,
@@ -615,7 +982,8 @@ impl Compiler {
         name: &str,
         qualified_name: String,
         first_line_number: u32,
-        plan: FunctionPlan,
+        plan: &FunctionPlan,
+        scope_id: ScopeId,
         arg_count: u32,
         positional_only_arg_count: u32,
         keyword_only_arg_count: u32,
@@ -688,7 +1056,7 @@ impl Compiler {
                 cells: plan.cellvars.clone(),
                 globals: plan.globals.clone(),
             },
-            function_plan: Some(plan),
+            scope_id,
             name: name.to_string(),
             qualified_name,
             private_name: None,
@@ -706,6 +1074,7 @@ impl Compiler {
         name: &str,
         qualified_name: String,
         first_line_number: u32,
+        scope_id: ScopeId,
         globals: FxHashSet<String>,
         nonlocals: FxHashSet<String>,
         freevars: BTreeSet<String>,
@@ -750,7 +1119,7 @@ impl Compiler {
                 free_indices,
                 bound_names,
             },
-            function_plan: None,
+            scope_id,
             name: name.to_string(),
             qualified_name,
             private_name: Some(name.to_string()),
@@ -860,6 +1229,20 @@ impl Compiler {
     }
 
     pub(crate) fn compile_module(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
+        let future_flags = future_feature_flags(body);
+        if self
+            .context
+            .scopes
+            .set(ScopeArena::analyze(
+                body,
+                future_flags & CO_FUTURE_ANNOTATIONS != 0,
+            ))
+            .is_err()
+        {
+            return Err(CompileError::Internal(
+                "scope arena was initialized more than once".to_string(),
+            ));
+        }
         self.symbols.module_globals = module_global_names(body);
         self.symbols.imported_scope_names = module_imported_names(body);
         let mut module_bindings = LocalCollector::default();
@@ -894,7 +1277,7 @@ impl Compiler {
                 .imported_scope_names
                 .insert(SHADOWED_SUPER_SENTINEL.to_string());
         }
-        self.unit.flags |= future_feature_flags(body);
+        self.unit.flags |= future_flags;
         let simple_module_annotations = has_simple_annotations(body);
         let module_annotations = has_annotations(body);
         let future_module_annotations =
@@ -6953,17 +7336,10 @@ impl Compiler {
             freevars.insert("__classdict__".to_string());
         }
         let plan = FunctionPlan {
-            key: (0, 0),
             locals,
-            globals: FxHashSet::default(),
-            nonlocals: FxHashSet::default(),
-            references: FxHashSet::default(),
-            annotation_references: FxHashSet::default(),
             cellvars,
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let wrapper_name = format!("<generic parameters of {name}>");
         let wrapper_flags = if self.child_function_is_nested() {
@@ -6976,7 +7352,8 @@ impl Compiler {
             &wrapper_name,
             self.child_qualified_name(&wrapper_name),
             self.line_number(u32::from(statement.range.start())),
-            plan,
+            &plan,
+            self.unit.scope_id,
             0,
             0,
             0,
@@ -7062,9 +7439,13 @@ impl Compiler {
             .iter()
             .map(|parameter| parameter.name().as_str().to_string())
             .collect();
-        let mut child_plan =
-            FunctionPlan::build(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0);
-        for name in child_plan.resolve() {
+        let child_scope_id = self.function_scope_id(definition)?;
+        let mut child_plan = self
+            .scope_arena()?
+            .function(child_scope_id)
+            .ok_or_else(|| CompileError::Internal("function scope has no plan".to_string()))?
+            .clone();
+        for name in child_plan.required.iter().cloned().collect::<Vec<_>>() {
             if type_names.contains(&name) || self.can_provide_closure(&name) {
                 child_plan.freevars.insert(name);
             } else {
@@ -7082,23 +7463,25 @@ impl Compiler {
                 .map(|parameter| parameter.name().as_str().to_string()),
         );
         let type_parameter_requirements = type_parameter_required_names(type_params);
+        let wrapper_local_names: FxHashSet<_> = locals.iter().cloned().collect();
         let mut wrapper_plan = FunctionPlan {
-            key: (0, 0),
             locals,
-            globals: FxHashSet::default(),
-            nonlocals: FxHashSet::default(),
-            references: type_parameter_requirements.iter().cloned().collect(),
-            annotation_references: FxHashSet::default(),
             cellvars: type_parameter_requirements
                 .intersection(&type_names)
                 .cloned()
                 .collect(),
-            inlined_comprehension_cellvars: FxHashSet::default(),
-            freevars: BTreeSet::new(),
-            annotation_freevars: BTreeSet::new(),
-            children: vec![child_plan],
+            required: type_parameter_requirements
+                .iter()
+                .filter(|name| !wrapper_local_names.contains(*name))
+                .cloned()
+                .collect(),
+            ..FunctionPlan::default()
         };
-        for name in wrapper_plan.resolve() {
+        wrapper_plan.absorb_child_requirements(
+            child_plan.required.iter().cloned(),
+            child_plan.annotation_references.iter().cloned(),
+        );
+        for name in wrapper_plan.required.iter().cloned().collect::<Vec<_>>() {
             if self.can_provide_closure(&name) {
                 wrapper_plan.freevars.insert(name);
             } else {
@@ -7127,7 +7510,8 @@ impl Compiler {
                         decorator.expression.range().start()
                     }),
             )),
-            wrapper_plan,
+            &wrapper_plan,
+            self.unit.scope_id,
             to_u32(
                 default_argument_count,
                 "generic function default argument count",
@@ -7247,23 +7631,7 @@ impl Compiler {
                 self.compile_function_defaults(definition, definition_location)?
             };
 
-        let plan = if let Some(parent) = &self.unit.function_plan {
-            parent.child(definition).ok_or_else(|| {
-                CompileError::Internal(format!(
-                    "missing scope plan for nested function `{}`",
-                    definition.name
-                ))
-            })?
-        } else if matches!(self.unit.scope, Scope::Class { .. }) {
-            let class_freevars = self.symbols.free_names.iter().map(String::as_str).collect();
-            FunctionPlan::analyze_in_class(
-                definition,
-                self.unit.flags & CO_FUTURE_ANNOTATIONS != 0,
-                &class_freevars,
-            )
-        } else {
-            FunctionPlan::analyze(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0)
-        };
+        let (scope_id, plan) = self.resolved_function_plan(definition)?;
         let closure_names: Vec<_> = plan.freevars.iter().cloned().collect();
         let annotation_child = self.compile_function_annotations(definition, &plan)?;
 
@@ -7325,7 +7693,8 @@ impl Compiler {
             definition.name.as_str(),
             qualified_name,
             first_line_number,
-            plan,
+            &plan,
+            scope_id,
             arg_count,
             positional_only_arg_count,
             keyword_only_arg_count,
@@ -7475,8 +7844,8 @@ impl Compiler {
             .collect();
         locals.push(".generic_base".to_string());
         locals.push(".type_params".to_string());
-        let required_names =
-            class_required_names(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0);
+        let (_, class_plan) = self.class_plan(definition)?;
+        let required_names = &class_plan.required;
         let type_parameter_requirements = type_parameter_required_names(type_params);
         let mut type_parameter_cell_requirements = type_parameter_requirements.clone();
         let mut wrapper_requirements = type_parameter_requirements.clone();
@@ -7492,7 +7861,7 @@ impl Compiler {
             }
         }
         let mut cellvars: FxHashSet<_> = type_names
-            .intersection(&required_names)
+            .intersection(required_names)
             .chain(type_names.intersection(&type_parameter_cell_requirements))
             .cloned()
             .collect();
@@ -7511,17 +7880,10 @@ impl Compiler {
             freevars.insert("__classdict__".to_string());
         }
         let plan = FunctionPlan {
-            key: (0, 0),
             locals,
-            globals: FxHashSet::default(),
-            nonlocals: FxHashSet::default(),
-            references: FxHashSet::default(),
-            annotation_references: FxHashSet::default(),
             cellvars,
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let wrapper_name = format!("<generic parameters of {}>", definition.name);
         let target_qualified_name = self.child_qualified_name(definition.name.as_str());
@@ -7546,7 +7908,8 @@ impl Compiler {
                         decorator.expression.range().start()
                     }),
             )),
-            plan,
+            &plan,
+            self.unit.scope_id,
             0,
             0,
             0,
@@ -7622,28 +7985,28 @@ impl Compiler {
         }
         let is_generic = self.unit.generic_target_qualified_name.is_some();
 
-        let mut class_bindings = LocalCollector::default();
-        class_bindings.collect_globals(&definition.body);
-        class_bindings.collect_suite(&definition.body);
-        let mut freevars =
-            class_required_names(definition, self.unit.flags & CO_FUTURE_ANNOTATIONS != 0)
-                .into_iter()
-                .filter(|name| match &self.unit.scope {
-                    Scope::Module => false,
-                    Scope::Class { free_indices, .. } => {
-                        self.symbols.cell_names.contains(name) || free_indices.contains_key(name)
-                    }
-                    Scope::Function {
-                        indices,
-                        free_indices,
-                        cells,
-                        ..
-                    } => {
-                        indices.contains_key(name) && cells.contains(name)
-                            || free_indices.contains_key(name)
-                    }
-                })
-                .collect::<BTreeSet<_>>();
+        let (scope_id, class_plan) = self.class_plan(definition)?;
+        let mut freevars = class_plan
+            .required
+            .iter()
+            .filter(|name| match &self.unit.scope {
+                Scope::Module => false,
+                Scope::Class { free_indices, .. } => {
+                    self.symbols.cell_names.contains(name.as_str())
+                        || free_indices.contains_key(name.as_str())
+                }
+                Scope::Function {
+                    indices,
+                    free_indices,
+                    cells,
+                    ..
+                } => {
+                    indices.contains_key(name.as_str()) && cells.contains(name.as_str())
+                        || free_indices.contains_key(name.as_str())
+                }
+            })
+            .cloned()
+            .collect::<BTreeSet<_>>();
         if is_generic {
             freevars.insert(".type_params".to_string());
         }
@@ -7664,27 +8027,19 @@ impl Compiler {
             } else {
                 definition.range.start()
             }));
-        let needs_class_closure = class_needs_class_closure(
-            &definition.body,
-            self.unit.flags & CO_FUTURE_ANNOTATIONS != 0,
-        );
-        let needs_classdict = contains_type_alias(&definition.body)
-            || contains_generic_definition(&definition.body)
-            || self.unit.flags & CO_FUTURE_ANNOTATIONS == 0
-                && (contains_function_definition(&definition.body)
-                    || has_simple_annotations(&definition.body));
         let class_scope_is_nested = self.child_function_is_nested();
         let mut child = Self::class(
             Arc::clone(&self.context),
             definition.name.as_str(),
             qualified_name,
             first_line_number,
-            class_bindings.globals,
-            class_bindings.nonlocals,
+            scope_id,
+            class_plan.globals,
+            class_plan.nonlocals,
             freevars,
-            class_bindings.seen,
-            needs_class_closure,
-            needs_classdict,
+            class_plan.bound_names,
+            class_plan.needs_class_closure,
+            class_plan.needs_classdict,
             self.unit.flags & SUPPORTED_FUTURE_FLAGS,
         );
         child.unit.class_scope_is_nested = class_scope_is_nested;
@@ -7964,17 +8319,10 @@ impl Compiler {
             .collect();
         let closure_names: Vec<_> = freevars.iter().cloned().collect();
         let plan = FunctionPlan {
-            key: (0, 0),
             locals: vec![".format".to_string()],
             globals,
-            nonlocals: FxHashSet::default(),
-            references: references.references,
-            annotation_references: FxHashSet::default(),
-            cellvars: FxHashSet::default(),
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         // Definitions inside an annotation scope are qualified against that
         // scope's parent. Generic-parameter wrappers are themselves annotation
@@ -8004,7 +8352,8 @@ impl Compiler {
                     },
                 ),
             self.line_number(u32::from(setup_range.start())),
-            plan,
+            &plan,
+            self.unit.scope_id,
             1,
             1,
             0,
@@ -8122,17 +8471,9 @@ impl Compiler {
             freevars.insert("__classdict__".to_string());
         }
         let plan = FunctionPlan {
-            key: (0, 0),
             locals: vec!["format".to_string()],
-            globals: FxHashSet::default(),
-            nonlocals: FxHashSet::default(),
-            references: FxHashSet::default(),
-            annotation_references: FxHashSet::default(),
-            cellvars: FxHashSet::default(),
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let parameter_flags = (if self.child_function_is_nested() {
             CO_NESTED
@@ -8155,7 +8496,8 @@ impl Compiler {
                     },
                 ),
             self.line_number(u32::from(definition.name.range().start())),
-            plan,
+            &plan,
+            self.unit.scope_id,
             1,
             1,
             0,
@@ -8236,17 +8578,10 @@ impl Compiler {
             .collect();
         let closure_names: Vec<_> = freevars.iter().cloned().collect();
         let plan = FunctionPlan {
-            key: (0, 0),
             locals: vec!["format".to_string()],
             globals,
-            nonlocals: FxHashSet::default(),
-            references: references.references,
-            annotation_references: FxHashSet::default(),
-            cellvars: FxHashSet::default(),
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let parameter_flags =
             if self.child_function_is_nested() || !self.symbols.free_names.is_empty() {
@@ -8259,7 +8594,8 @@ impl Compiler {
             "__annotate__",
             self.child_qualified_name("__annotate__"),
             self.unit.first_line_number,
-            plan,
+            &plan,
+            self.unit.scope_id,
             1,
             1,
             0,
@@ -8309,17 +8645,8 @@ impl Compiler {
             CompileError::Internal("module annotation thunk has no annotations".to_string())
         })?;
         let plan = FunctionPlan {
-            key: (0, 0),
             locals: vec!["format".to_string()],
-            globals: FxHashSet::default(),
-            nonlocals: FxHashSet::default(),
-            references: FxHashSet::default(),
-            annotation_references: FxHashSet::default(),
-            cellvars: FxHashSet::default(),
-            inlined_comprehension_cellvars: FxHashSet::default(),
-            freevars: BTreeSet::new(),
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let mut child = Self::function(
             Arc::clone(&self.context),
@@ -8328,7 +8655,8 @@ impl Compiler {
             self.line_number(u32::from(
                 body.first().map_or(first.range, Ranged::range).start(),
             )),
-            plan,
+            &plan,
+            self.unit.scope_id,
             1,
             1,
             0,
@@ -9827,17 +10155,12 @@ impl Compiler {
         let globals = analysis.required.difference(&freevars).cloned().collect();
         let closure_names = freevars.iter().cloned().collect::<Vec<_>>();
         let plan = FunctionPlan {
-            key: (0, 0),
             locals: analysis.locals,
             globals,
-            nonlocals: FxHashSet::default(),
-            references: analysis.references,
-            annotation_references: FxHashSet::default(),
             cellvars: analysis.cellvars,
             inlined_comprehension_cellvars: analysis.inlined_comprehension_cellvars,
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
 
         let arg_count = to_u32(
@@ -9886,7 +10209,8 @@ impl Compiler {
             "<lambda>",
             qualified_name,
             first_line_number,
-            plan,
+            &plan,
+            self.unit.scope_id,
             arg_count,
             positional_only,
             keyword_only,
@@ -10194,17 +10518,11 @@ impl Compiler {
         let closure_names: Vec<_> = freevars.iter().cloned().collect();
         let generator_range = self.generator_expression_range(generator.range);
         let plan = FunctionPlan {
-            key: (0, 0),
             locals,
             globals,
-            nonlocals: FxHashSet::default(),
-            references: FxHashSet::default(),
-            annotation_references: FxHashSet::default(),
             cellvars: generator_cellvars,
-            inlined_comprehension_cellvars: FxHashSet::default(),
             freevars,
-            annotation_freevars: BTreeSet::new(),
-            children: Vec::new(),
+            ..FunctionPlan::default()
         };
         let flags = if is_async {
             CO_ASYNC_GENERATOR
@@ -10224,7 +10542,8 @@ impl Compiler {
             "<genexpr>",
             self.child_qualified_name("<genexpr>"),
             self.line_number(u32::from(generator_range.start())),
-            plan,
+            &plan,
+            self.unit.scope_id,
             1,
             0,
             0,
@@ -13535,7 +13854,6 @@ fn definitely_evaluated_references(expression: &Expr) -> Option<FxHashSet<String
 
 struct LambdaScopeAnalysis {
     locals: Vec<String>,
-    references: FxHashSet<String>,
     cellvars: FxHashSet<String>,
     inlined_comprehension_cellvars: FxHashSet<String>,
     required: BTreeSet<String>,
@@ -13580,7 +13898,6 @@ fn analyze_lambda_scope(lambda: &ruff_python_ast::ExprLambda) -> LambdaScopeAnal
         .collect();
     LambdaScopeAnalysis {
         locals: locals.names,
-        references: references.references,
         cellvars,
         inlined_comprehension_cellvars: inlined_comprehension_cell_names_in_expression(
             &lambda.body,
@@ -13799,252 +14116,6 @@ fn nested_lambda_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
         collector.visit_stmt(statement);
     }
     collector.required
-}
-
-fn class_required_names(definition: &StmtClassDef, future_annotations: bool) -> BTreeSet<String> {
-    let mut locals = LocalCollector::default();
-    locals.collect_globals(&definition.body);
-    locals.collect_suite(&definition.body);
-
-    let mut references = ReferenceCollector {
-        skip_annotations: future_annotations,
-        ..ReferenceCollector::default()
-    };
-    for statement in &definition.body {
-        references.visit_stmt(statement);
-    }
-    let mut body_explicitly_references_dunder_class = references.explicit_dunder_class_reference;
-    let mut required = references
-        .references
-        .into_iter()
-        .filter(|name| {
-            locals.nonlocals.contains(name)
-                || (!locals.globals.contains(name) && !locals.seen.contains(name))
-        })
-        .collect::<BTreeSet<_>>();
-    required.extend(locals.nonlocals.iter().cloned());
-    let annotation_scope_requirements =
-        nested_annotation_scope_required_names_in_suite(&definition.body);
-    body_explicitly_references_dunder_class |= annotation_scope_requirements.contains("__class__");
-    required.extend(
-        annotation_scope_requirements
-            .into_iter()
-            .filter(|name| !locals.seen.contains(name) && !locals.globals.contains(name)),
-    );
-    let body_requires_dunder_class =
-        body_explicitly_references_dunder_class && required.contains("__class__");
-
-    let mut methods = Vec::new();
-    collect_nested_functions(&definition.body, &mut methods, future_annotations);
-    for mut method in methods {
-        required.extend(method.resolve());
-        if !future_annotations {
-            required.extend(
-                method
-                    .annotation_references
-                    .iter()
-                    .filter(|name| !locals.seen.contains(*name) && !locals.globals.contains(*name))
-                    .cloned(),
-            );
-        }
-    }
-    required.extend(nested_class_required_names(
-        &definition.body,
-        future_annotations,
-    ));
-    if !body_requires_dunder_class && !locals.nonlocals.contains("__class__") {
-        required.remove("__class__");
-    }
-    required.remove("__classdict__");
-    required.remove("__conditional_annotations__");
-    required
-}
-
-fn nested_class_required_names(body: &[Stmt], future_annotations: bool) -> BTreeSet<String> {
-    let mut required = BTreeSet::new();
-    for statement in body {
-        match statement {
-            Stmt::ClassDef(definition) => {
-                required.extend(class_required_names(definition, future_annotations));
-            }
-            Stmt::FunctionDef(_) => {}
-            Stmt::If(statement) => {
-                required.extend(nested_class_required_names(
-                    &statement.body,
-                    future_annotations,
-                ));
-                for clause in &statement.elif_else_clauses {
-                    required.extend(nested_class_required_names(
-                        &clause.body,
-                        future_annotations,
-                    ));
-                }
-            }
-            Stmt::For(statement) => {
-                required.extend(nested_class_required_names(
-                    &statement.body,
-                    future_annotations,
-                ));
-                required.extend(nested_class_required_names(
-                    &statement.orelse,
-                    future_annotations,
-                ));
-            }
-            Stmt::While(statement) => {
-                required.extend(nested_class_required_names(
-                    &statement.body,
-                    future_annotations,
-                ));
-                required.extend(nested_class_required_names(
-                    &statement.orelse,
-                    future_annotations,
-                ));
-            }
-            Stmt::Try(statement) => {
-                required.extend(nested_class_required_names(
-                    &statement.body,
-                    future_annotations,
-                ));
-                for handler in &statement.handlers {
-                    if let Some(handler) = handler.as_except_handler() {
-                        required.extend(nested_class_required_names(
-                            &handler.body,
-                            future_annotations,
-                        ));
-                    }
-                }
-                required.extend(nested_class_required_names(
-                    &statement.orelse,
-                    future_annotations,
-                ));
-                required.extend(nested_class_required_names(
-                    &statement.finalbody,
-                    future_annotations,
-                ));
-            }
-            Stmt::With(statement) => {
-                required.extend(nested_class_required_names(
-                    &statement.body,
-                    future_annotations,
-                ));
-            }
-            Stmt::Match(statement) => {
-                for case in &statement.cases {
-                    required.extend(nested_class_required_names(&case.body, future_annotations));
-                }
-            }
-            _ => {}
-        }
-    }
-    required
-}
-
-fn class_needs_class_closure(body: &[Stmt], future_annotations: bool) -> bool {
-    fn suite_needs_class_closure(body: &[Stmt], future_annotations: bool) -> bool {
-        body.iter().any(|statement| match statement {
-            Stmt::FunctionDef(definition) => {
-                let mut plan = FunctionPlan::build(definition, future_annotations);
-                plan.resolve().contains("__class__")
-            }
-            Stmt::ClassDef(definition) => {
-                class_required_names(definition, future_annotations).contains("__class__")
-            }
-            Stmt::If(statement) => {
-                suite_needs_class_closure(&statement.body, future_annotations)
-                    || statement
-                        .elif_else_clauses
-                        .iter()
-                        .any(|clause| suite_needs_class_closure(&clause.body, future_annotations))
-            }
-            Stmt::For(statement) => {
-                suite_needs_class_closure(&statement.body, future_annotations)
-                    || suite_needs_class_closure(&statement.orelse, future_annotations)
-            }
-            Stmt::While(statement) => {
-                suite_needs_class_closure(&statement.body, future_annotations)
-                    || suite_needs_class_closure(&statement.orelse, future_annotations)
-            }
-            Stmt::Try(statement) => {
-                suite_needs_class_closure(&statement.body, future_annotations)
-                    || statement
-                        .handlers
-                        .iter()
-                        .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
-                        .any(|handler| suite_needs_class_closure(&handler.body, future_annotations))
-                    || suite_needs_class_closure(&statement.orelse, future_annotations)
-                    || suite_needs_class_closure(&statement.finalbody, future_annotations)
-            }
-            Stmt::With(statement) => suite_needs_class_closure(&statement.body, future_annotations),
-            Stmt::Match(statement) => statement
-                .cases
-                .iter()
-                .any(|case| suite_needs_class_closure(&case.body, future_annotations)),
-            _ => false,
-        })
-    }
-
-    suite_needs_class_closure(body, future_annotations)
-        || nested_lambda_required_names_in_suite(body).contains("__class__")
-}
-
-fn collect_nested_functions(
-    body: &[Stmt],
-    functions: &mut Vec<FunctionPlan>,
-    future_annotations: bool,
-) {
-    for statement in body {
-        match statement {
-            Stmt::FunctionDef(definition) => {
-                let mut plan = FunctionPlan::build(definition, future_annotations);
-                // This plan is used only to determine which names cross the surrounding scope.
-                // A generic function's type-parameter scope binds these names between the
-                // surrounding scope and the function body, so they cannot propagate outward.
-                if let Some(type_params) = definition.type_params.as_deref() {
-                    for parameter in type_params {
-                        let name = parameter.name().as_str();
-                        if !plan.locals.iter().any(|local| local == name) {
-                            plan.locals.push(name.to_string());
-                        }
-                        plan.annotation_references.remove(name);
-                    }
-                }
-                functions.push(plan);
-            }
-            Stmt::If(statement) => {
-                collect_nested_functions(&statement.body, functions, future_annotations);
-                for clause in &statement.elif_else_clauses {
-                    collect_nested_functions(&clause.body, functions, future_annotations);
-                }
-            }
-            Stmt::For(statement) => {
-                collect_nested_functions(&statement.body, functions, future_annotations);
-                collect_nested_functions(&statement.orelse, functions, future_annotations);
-            }
-            Stmt::While(statement) => {
-                collect_nested_functions(&statement.body, functions, future_annotations);
-                collect_nested_functions(&statement.orelse, functions, future_annotations);
-            }
-            Stmt::Try(statement) => {
-                collect_nested_functions(&statement.body, functions, future_annotations);
-                for handler in &statement.handlers {
-                    if let Some(handler) = handler.as_except_handler() {
-                        collect_nested_functions(&handler.body, functions, future_annotations);
-                    }
-                }
-                collect_nested_functions(&statement.orelse, functions, future_annotations);
-                collect_nested_functions(&statement.finalbody, functions, future_annotations);
-            }
-            Stmt::With(statement) => {
-                collect_nested_functions(&statement.body, functions, future_annotations);
-            }
-            Stmt::Match(statement) => {
-                for case in &statement.cases {
-                    collect_nested_functions(&case.body, functions, future_annotations);
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 fn contains_function_definition(body: &[Stmt]) -> bool {
@@ -14516,13 +14587,6 @@ fn generator_named_targets_in_suite(body: &[Stmt]) -> FxHashSet<String> {
         collector.visit_stmt(statement);
     }
     collector.names
-}
-
-fn function_key(definition: &StmtFunctionDef) -> (u32, u32) {
-    (
-        u32::from(definition.range.start()),
-        u32::from(definition.range.end()),
-    )
 }
 
 fn explicit_surrogate_string(value: &str, source: &str) -> Option<Vec<u8>> {
