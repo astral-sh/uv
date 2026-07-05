@@ -1,4 +1,14 @@
-use super::super::*;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::super::{
+    CLEANUP_THROW, COMPARE_OP, CONTAINS_OP, COPY, END_ASYNC_FOR, END_SEND, IS_OP, Instruction,
+    InstructionFlags, Item, JUMP_BACKWARD, JUMP_BACKWARD_NO_INTERRUPT, JUMP_FORWARD, LOAD_GLOBAL,
+    NOP, NOT_TAKEN, Operand, POP_JUMP_IF_FALSE, POP_JUMP_IF_TRUE, POP_TOP, RAISE_VARARGS,
+    STORE_FAST, TO_BOOL, UNARY_NOT, block_has_fallthrough, block_jump_target,
+    cleanup_block_creation_order, ends_scope, is_unconditional_jump,
+};
+use crate::assembler::{Assembler, ExceptionRegion, Label, SourceLocation};
+use crate::target::Opcode;
 
 impl Assembler {
     /// Replaces an overwritten local store with a stack pop.
@@ -92,8 +102,9 @@ impl Assembler {
         let mut item_blocks = vec![0_usize; self.items.len()];
         let mut label_blocks = FxHashMap::default();
         for (block, (start, end)) in block_ranges.iter().copied().enumerate() {
-            for index in start..end {
-                item_blocks[index] = block;
+            for (offset, item_block) in item_blocks[start..end].iter_mut().enumerate() {
+                let index = start + offset;
+                *item_block = block;
                 if let Item::Label(label) = self.items[index] {
                     label_blocks.insert(label, block);
                 }
@@ -1269,9 +1280,8 @@ impl Assembler {
                 blocks[source].extend(copied);
                 // The copied jump can turn this source into another eligible unlocated block.
                 // Revisit earlier jump predecessors until the chain reaches a fixed point.
-                for predecessor in 0..source {
-                    if block_jump_target(&blocks[predecessor])
-                        .and_then(|label| label_blocks.get(&label).copied())
+                for (predecessor, block) in blocks.iter().enumerate().take(source) {
+                    if block_jump_target(block).and_then(|label| label_blocks.get(&label).copied())
                         == Some(source)
                     {
                         sources.push(predecessor);
@@ -1328,7 +1338,7 @@ impl Assembler {
                 && first.has_flag(InstructionFlags::CONVERTED_POP_BLOCK)
                 && first.location.line < 0
                 && !first.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
-                && let Some(location) = blocks.iter().enumerate().find_map(|(_, block)| {
+                && let Some(location) = blocks.iter().find_map(|block| {
                     block_jump_target(block)
                         .and_then(|label| label_blocks.get(&label).copied())
                         .filter(|index| *index == target)

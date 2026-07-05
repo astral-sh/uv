@@ -1,4 +1,12 @@
-use super::*;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::{
+    EXTENDED_ARG, Item, LOAD_FAST_BORROW_LOAD_FAST_BORROW, LOAD_FAST_LOAD_FAST, LOAD_GLOBAL,
+    NOT_TAKEN, Operand, STORE_FAST_LOAD_FAST, STORE_FAST_STORE_FAST, ends_scope,
+    is_conditional_jump,
+};
+use crate::CompileError;
+use crate::assembler::{Assembler, Instruction, InstructionFlags, Label, SourceLocation};
 
 impl Assembler {
     pub(in crate::assembler) fn exception_table(

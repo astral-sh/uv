@@ -1,4 +1,7 @@
-use super::*;
+use rustc_hash::FxHashMap;
+
+use super::{AssembledCode, Assembler, AssemblerStage, Item, Label, Operand, extended_arg_count};
+use crate::CompileError;
 
 mod control_flow;
 mod locals;

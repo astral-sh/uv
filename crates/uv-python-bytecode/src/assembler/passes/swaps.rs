@@ -1,4 +1,7 @@
-use super::super::*;
+use rustc_hash::FxHashSet;
+
+use super::super::{Instruction, Item, NOP, Operand, POP_TOP, STORE_FAST, SWAP, ends_scope};
+use crate::assembler::Assembler;
 
 impl Assembler {
     pub(in crate::assembler) fn remove_redundant_swaps_before_pops(&mut self) {

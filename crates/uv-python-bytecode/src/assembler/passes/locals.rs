@@ -1,4 +1,18 @@
-use super::super::*;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::super::{
+    CHECK_EXC_MATCH, COMPARE_OP, COPY, DELETE_DEREF, DELETE_FAST, DICT_MERGE, DICT_UPDATE,
+    END_SEND, FOR_ITER, FORMAT_SIMPLE, GET_ANEXT, GET_LEN, GET_YIELD_FROM_ITER, IMPORT_FROM,
+    Instruction, InstructionFlags, Item, LIST_APPEND, LIST_EXTEND, LOAD_ATTR, LOAD_COMMON_CONSTANT,
+    LOAD_CONST, LOAD_FAST, LOAD_FAST_AND_CLEAR, LOAD_FAST_BORROW,
+    LOAD_FAST_BORROW_LOAD_FAST_BORROW, LOAD_FAST_CHECK, LOAD_FAST_LOAD_FAST, LOAD_SMALL_INT,
+    LOAD_SPECIAL, LOAD_SUPER_ATTR, MAP_ADD, MATCH_KEYS, MATCH_MAPPING, MATCH_SEQUENCE, NOP,
+    Operand, POP_EXCEPT, POP_TOP, PUSH_EXC_INFO, RERAISE, RETURN_VALUE, SEND, SET_ADD,
+    SET_FUNCTION_ATTRIBUTE, SET_UPDATE, STORE_DEREF, STORE_FAST, STORE_FAST_LOAD_FAST,
+    STORE_FAST_STORE_FAST, STORE_GLOBAL, SWAP, WITH_EXCEPT_START, block_has_fallthrough,
+    block_jump_target, ends_scope, opcode_num_popped, opcode_num_pushed, opcode_stack_effect,
+};
+use crate::assembler::Assembler;
 
 impl Assembler {
     /// Converts potentially uninitialized local loads to checked loads.
@@ -104,8 +118,12 @@ impl Assembler {
         }
 
         let mut unsafe_at_entry = vec![vec![false; local_count]; blocks.len()];
-        for local in parameter_count.min(local_count)..local_count {
-            unsafe_at_entry[0][local] = true;
+        for unsafe_local in unsafe_at_entry[0]
+            .iter_mut()
+            .take(local_count)
+            .skip(parameter_count.min(local_count))
+        {
+            *unsafe_local = true;
         }
         let mut needs_check = FxHashSet::default();
         let mut checked_loads_needing_check = FxHashSet::default();
@@ -115,8 +133,8 @@ impl Assembler {
         while let Some(block_index) = pending.pop() {
             queued[block_index] = false;
             let mut unsafe_locals = unsafe_at_entry[block_index].clone();
-            for local in 64..local_count {
-                unsafe_locals[local] = true;
+            for unsafe_local in unsafe_locals.iter_mut().take(local_count).skip(64) {
+                *unsafe_local = true;
             }
 
             let mut propagate = |target: usize, state: &[bool]| {
