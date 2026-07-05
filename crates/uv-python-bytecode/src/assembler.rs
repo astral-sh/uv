@@ -4,7 +4,13 @@ use crate::CompileError;
 
 const EXTENDED_ARG: u8 = 69;
 
-type EncodedCode = (Vec<u8>, Vec<u8>, Vec<u8>, u32, Option<u32>);
+pub(crate) struct AssembledCode {
+    pub(crate) bytecode: Vec<u8>,
+    pub(crate) line_table: Vec<u8>,
+    pub(crate) exception_table: Vec<u8>,
+    pub(crate) max_depth: u32,
+    pub(crate) removed_max_depth: Option<u32>,
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct Label(u32);
@@ -603,7 +609,7 @@ impl Assembler {
     #[cfg(test)]
     pub(crate) fn finish(self) -> Result<Vec<u8>, CompileError> {
         self.finish_code(1, 0, 0)
-            .map(|(bytecode, _, _, _, _)| bytecode)
+            .map(|assembled| assembled.bytecode)
     }
 
     pub(crate) fn finish_code(
@@ -611,7 +617,7 @@ impl Assembler {
         first_line_number: u32,
         local_count: usize,
         parameter_count: usize,
-    ) -> Result<EncodedCode, CompileError> {
+    ) -> Result<AssembledCode, CompileError> {
         let mut removed_max_depth = self.remove_unreachable_instructions();
         self.optimize_boolean_conversions();
         self.thread_forward_jumps();
@@ -689,13 +695,13 @@ impl Assembler {
                     })
                     .max()
                     .unwrap_or(0);
-                return Ok((
-                    self.encode(&extended_args, &resolved_arguments),
+                return Ok(AssembledCode {
+                    bytecode: self.encode(&extended_args, &resolved_arguments),
                     line_table,
                     exception_table,
                     max_depth,
                     removed_max_depth,
-                ));
+                });
             }
         }
 

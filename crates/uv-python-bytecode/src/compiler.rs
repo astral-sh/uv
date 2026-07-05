@@ -13,7 +13,7 @@ use ruff_text_size::{Ranged, TextSize};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
-use crate::assembler::{Assembler, InstructionId, Label, Opcode, SourceLocation};
+use crate::assembler::{AssembledCode, Assembler, InstructionId, Label, Opcode, SourceLocation};
 
 const RESUME: Opcode = Opcode::new(128, 0);
 const BUILD_TEMPLATE: Opcode = Opcode::new(2, 0);
@@ -267,15 +267,6 @@ enum IteratorCleanup {
     None,
     Sync,
     Async,
-}
-
-#[derive(Clone, Debug)]
-struct DeferredComprehensionCleanup {
-    label: Label,
-    base_depth: i32,
-    temporary_indices: Vec<u32>,
-    location: SourceLocation,
-    parent: Option<(Label, u32)>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -617,7 +608,6 @@ pub(crate) struct Compiler {
     exclude_loop_tail_not_taken_from_control_flow_regions: bool,
     unwind_exception_handlers_for_implicit_return: bool,
     prevent_try_exit_inlining: bool,
-    deferred_comprehension_cleanups: Vec<DeferredComprehensionCleanup>,
     scope: Scope,
     function_plan: Option<FunctionPlan>,
     module_globals: FxHashSet<String>,
@@ -693,7 +683,6 @@ impl Compiler {
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
             unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
-            deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Module,
             function_plan: None,
             module_globals: FxHashSet::default(),
@@ -832,7 +821,6 @@ impl Compiler {
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
             unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
-            deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Function {
                 indices,
                 free_indices,
@@ -949,7 +937,6 @@ impl Compiler {
             exclude_loop_tail_not_taken_from_control_flow_regions: false,
             unwind_exception_handlers_for_implicit_return: false,
             prevent_try_exit_inlining: false,
-            deferred_comprehension_cleanups: Vec::new(),
             scope: Scope::Class {
                 globals,
                 nonlocals,
@@ -1301,44 +1288,6 @@ impl Compiler {
         {
             self.add_constant(Constant::None)?;
         }
-        let deferred_cleanups = std::mem::take(&mut self.deferred_comprehension_cleanups);
-        for cleanup in deferred_cleanups {
-            self.assembler.mark(cleanup.label);
-            self.set_depth(
-                cleanup.base_depth + i32::try_from(cleanup.temporary_indices.len()).unwrap() + 2,
-            );
-            self.assembler.set_location(SourceLocation::NONE);
-            self.emit(SWAP, 2, 0)?;
-            self.emit(POP_TOP, 0, -1)?;
-            self.assembler.set_location(cleanup.location);
-            self.emit(
-                SWAP,
-                to_u32(
-                    cleanup.temporary_indices.len() + 1,
-                    "comprehension local count",
-                )?,
-                0,
-            )?;
-            for (position, index) in cleanup.temporary_indices.iter().rev().enumerate() {
-                if position > 0 {
-                    self.assembler.fusion_barrier();
-                }
-                self.emit(STORE_FAST, *index, -1)?;
-            }
-            self.emit(RERAISE, 0, -1)?;
-            let cleanup_end = self.assembler.label();
-            self.assembler.mark(cleanup_end);
-            if let Some((parent, depth)) = cleanup.parent {
-                self.assembler.add_exception_region(
-                    cleanup.label,
-                    cleanup_end,
-                    parent,
-                    depth,
-                    false,
-                );
-            }
-            self.set_depth(0);
-        }
         if let Some(start) = self.generator_region_start {
             let handler = self.assembler.label();
             self.assembler.mark(handler);
@@ -1437,12 +1386,17 @@ impl Compiler {
                 + u32::from(self.flags & CO_VARKEYWORDS != 0),
         )
         .unwrap_or(usize::MAX);
-        let (bytecode, line_table, exception_table, assembled_max_depth, removed_max_depth) =
-            self.assembler.finish_code(
-                self.first_line_number,
-                self.fast_local_count,
-                parameter_count,
-            )?;
+        let AssembledCode {
+            bytecode,
+            line_table,
+            exception_table,
+            max_depth: assembled_max_depth,
+            removed_max_depth,
+        } = self.assembler.finish_code(
+            self.first_line_number,
+            self.fast_local_count,
+            parameter_count,
+        )?;
         let max_depth =
             if removed_max_depth == Some(self.max_depth) && assembled_max_depth < self.max_depth {
                 assembled_max_depth
@@ -10104,41 +10058,38 @@ impl Compiler {
             return Ok(());
         }
 
-        let inline_cleanup = true;
-        if inline_cleanup {
-            let normal_cleanup = self.assembler.label();
-            self.emit_jump_forward(JUMP_FORWARD, normal_cleanup, 0)?;
-            if discard_result && generators.iter().any(|generator| generator.is_async) {
-                self.assembler.prevent_last_jump_inlining();
-            }
-            self.assembler.mark(cleanup);
-            self.set_depth(base_depth + i32::try_from(temporary_indices.len()).unwrap() + 2);
-            self.assembler.set_location(SourceLocation::NONE);
-            self.emit(SWAP, 2, 0)?;
-            self.emit(POP_TOP, 0, -1)?;
-            self.assembler.set_location(cleanup_location);
-            self.emit(
-                SWAP,
-                to_u32(temporary_indices.len() + 1, "comprehension local count")?,
-                0,
-            )?;
-            for (position, index) in temporary_indices.iter().rev().enumerate() {
-                if position > 0 {
-                    self.assembler.fusion_barrier();
-                }
-                self.emit(STORE_FAST, *index, -1)?;
-            }
-            self.emit(RERAISE, 0, -1)?;
-            let cleanup_end = self.assembler.label();
-            self.assembler.mark(cleanup_end);
-            if let Some((parent, depth)) = parent_cleanup {
-                self.assembler
-                    .add_exception_region(cleanup, cleanup_end, parent, depth, false);
-            }
-            self.assembler.mark(normal_cleanup);
+        let normal_cleanup = self.assembler.label();
+        self.emit_jump_forward(JUMP_FORWARD, normal_cleanup, 0)?;
+        if discard_result && generators.iter().any(|generator| generator.is_async) {
+            self.assembler.prevent_last_jump_inlining();
         }
+        self.assembler.mark(cleanup);
+        self.set_depth(base_depth + i32::try_from(temporary_indices.len()).unwrap() + 2);
+        self.assembler.set_location(SourceLocation::NONE);
+        self.emit(SWAP, 2, 0)?;
+        self.emit(POP_TOP, 0, -1)?;
+        self.assembler.set_location(cleanup_location);
+        self.emit(
+            SWAP,
+            to_u32(temporary_indices.len() + 1, "comprehension local count")?,
+            0,
+        )?;
+        for (position, index) in temporary_indices.iter().rev().enumerate() {
+            if position > 0 {
+                self.assembler.fusion_barrier();
+            }
+            self.emit(STORE_FAST, *index, -1)?;
+        }
+        self.emit(RERAISE, 0, -1)?;
+        let cleanup_end = self.assembler.label();
+        self.assembler.mark(cleanup_end);
+        if let Some((parent, depth)) = parent_cleanup {
+            self.assembler
+                .add_exception_region(cleanup, cleanup_end, parent, depth, false);
+        }
+        self.assembler.mark(normal_cleanup);
 
-        let deferred_normal_restore = inline_cleanup && self.defer_async_comprehension_restore;
+        let deferred_normal_restore = self.defer_async_comprehension_restore;
         self.set_depth(base_depth + i32::try_from(temporary_names.len()).unwrap() + 1);
         self.assembler.set_location(comprehension_location);
         if deferred_normal_restore {
@@ -10206,16 +10157,6 @@ impl Compiler {
             cleanup_depth,
             false,
         );
-        if !inline_cleanup {
-            self.deferred_comprehension_cleanups
-                .push(DeferredComprehensionCleanup {
-                    label: cleanup,
-                    base_depth,
-                    temporary_indices,
-                    location: cleanup_location,
-                    parent: parent_cleanup,
-                });
-        }
         self.set_depth(
             base_depth
                 + if deferred_normal_restore {
