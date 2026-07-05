@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{InvalidNameError, validate_and_normalize_owned, validate_and_normalize_ref};
+use crate::{InvalidNameError, validate_and_normalize_ref};
 
 /// Either the literal "all" or a list of extras
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -116,8 +116,11 @@ pub struct ExtraName(SmallString);
 
 impl ExtraName {
     /// Create a validated, normalized extra name.
+    ///
+    /// At present, this is no more efficient than calling [`ExtraName::from_str`].
+    #[expect(clippy::needless_pass_by_value)]
     pub fn from_owned(name: String) -> Result<Self, InvalidNameError> {
-        validate_and_normalize_owned(name).map(Self)
+        validate_and_normalize_ref(&name).map(Self)
     }
 
     /// Return the underlying extra name as a string.

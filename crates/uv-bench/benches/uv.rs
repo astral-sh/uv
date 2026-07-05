@@ -32,30 +32,42 @@ const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
 const MANY_FILES_SDIST_FILENAME: &str = "manyfiles-0.0.0.tar.gz";
 const MANY_FILES_SDIST_TOP_LEVEL: &str = "manyfiles-0.0.0";
 const MANY_FILES_SDIST_FILE_COUNT: usize = 10_000;
-const PACKAGE_NAMES: &[&str] = &[
+const NORMALIZED_PACKAGE_NAMES: &[&str] = &[
     "anyio",
     "aiohttp",
     "apache-airflow",
-    "Babel",
     "black",
     "click",
     "cryptography",
-    "Flask-Login",
-    "google.auth",
     "grpcio-status",
-    "importlib_metadata",
-    "Jinja2",
     "jsonschema-specifications",
-    "opentelemetry.api",
     "protobuf",
-    "pydantic_core",
     "python-dateutil",
     "requests",
     "setuptools-scm",
+    "werkzeug",
+];
+const UNNORMALIZED_PACKAGE_NAMES: &[&str] = &[
+    "AnyIO",
+    "aiohttp",
+    "apache_airflow",
+    "Babel",
+    "BLACK",
+    "Flask-Login",
+    "google.auth",
+    "grpcio_status",
+    "importlib_metadata",
+    "Jinja2",
+    "jsonschema.specifications",
+    "opentelemetry.api",
+    "protobuf",
+    "pydantic_core",
+    "python.dateutil",
+    "Requests",
+    "setuptools_scm",
     "SQLAlchemy",
     "typing_extensions",
-    "werkzeug",
-    "zope.interface",
+    "Werkzeug",
 ];
 
 fn create_many_files_wheel() -> tempfile::NamedTempFile {
@@ -309,9 +321,9 @@ fn layout(root: &Path) -> Layout {
 }
 
 fn normalize_package_names(c: &mut Criterion<WallTime>) {
-    c.bench_function("normalize_package_names_ref", |b| {
+    c.bench_function("normalize_package_names_ref_normalized", |b| {
         b.iter(|| {
-            for name in PACKAGE_NAMES {
+            for name in NORMALIZED_PACKAGE_NAMES {
                 black_box(
                     PackageName::from_str(black_box(name)).expect("package name should be valid"),
                 );
@@ -319,10 +331,20 @@ fn normalize_package_names(c: &mut Criterion<WallTime>) {
         });
     });
 
-    c.bench_function("normalize_package_names_owned", |b| {
+    c.bench_function("normalize_package_names_ref_unnormalized", |b| {
+        b.iter(|| {
+            for name in UNNORMALIZED_PACKAGE_NAMES {
+                black_box(
+                    PackageName::from_str(black_box(name)).expect("package name should be valid"),
+                );
+            }
+        });
+    });
+
+    c.bench_function("normalize_package_names_owned_unnormalized", |b| {
         b.iter_batched(
             || {
-                PACKAGE_NAMES
+                UNNORMALIZED_PACKAGE_NAMES
                     .iter()
                     .map(|name| (*name).to_string())
                     .collect::<Vec<_>>()

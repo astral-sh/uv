@@ -6822,6 +6822,7 @@ dependencies = [
 name = "uv-normalize"
 version = "0.0.59"
 dependencies = [
+ "arcstr",
  "rkyv",
  "schemars",
  "serde",

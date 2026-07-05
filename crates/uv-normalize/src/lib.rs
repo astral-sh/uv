@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::mem::MaybeUninit;
 
 pub use dist_info_name::DistInfoName;
 pub use extra_name::{DefaultExtras, ExtraName};
@@ -21,48 +22,54 @@ pub(crate) fn validate_and_normalize_ref(
     if is_normalized(name)? {
         Ok(SmallString::from(name))
     } else {
-        Ok(SmallString::from(normalize(name)?))
-    }
-}
-
-/// Validate and normalize an owned package or extra name.
-pub(crate) fn validate_and_normalize_owned(name: String) -> Result<SmallString, InvalidNameError> {
-    if is_normalized(&name)? {
-        Ok(SmallString::from(name))
-    } else {
-        Ok(SmallString::from(normalize(&name)?))
+        normalize(name)
     }
 }
 
 /// Normalize an unowned package or extra name.
-fn normalize(name: &str) -> Result<String, InvalidNameError> {
+#[expect(
+    unsafe_code,
+    reason = "directly initialize ArcStr with validated ASCII"
+)]
+fn normalize(name: &str) -> Result<SmallString, InvalidNameError> {
+    let len = normalized_len(name)?;
+    // SAFETY: `normalized_len` validates that `name` contains only ASCII alphanumerics and
+    // supported separators, and returns the exact length written by `write_normalized`. The writer
+    // initializes every byte in the output buffer with valid UTF-8.
+    let normalized = unsafe {
+        arcstr::ArcStr::init_with_unchecked(len, |bytes| {
+            write_normalized(name, bytes);
+        })
+    };
+
+    Ok(SmallString::from(normalized))
+}
+
+fn normalized_len(name: &str) -> Result<usize, InvalidNameError> {
     // An empty string is not a valid package, extra, or group name.
     if name.is_empty() {
         return Err(InvalidNameError(name.to_string()));
     }
 
-    let mut normalized = String::with_capacity(name.len());
-
+    let mut len = 0;
     let mut last = None;
-    for char in name.bytes() {
-        match char {
-            b'A'..=b'Z' => {
-                normalized.push(char.to_ascii_lowercase() as char);
-            }
+    for byte in name.bytes() {
+        match byte {
+            b'A'..=b'Z' => len += 1,
             b'a'..=b'z' | b'0'..=b'9' => {
-                normalized.push(char as char);
+                len += 1;
             }
             b'-' | b'_' | b'.' => {
                 match last {
                     // Names can't start with punctuation.
                     None => return Err(InvalidNameError(name.to_string())),
                     Some(b'-' | b'_' | b'.') => {}
-                    Some(_) => normalized.push('-'),
+                    Some(_) => len += 1,
                 }
             }
             _ => return Err(InvalidNameError(name.to_string())),
         }
-        last = Some(char);
+        last = Some(byte);
     }
 
     // Names can't end with punctuation.
@@ -70,7 +77,32 @@ fn normalize(name: &str) -> Result<String, InvalidNameError> {
         return Err(InvalidNameError(name.to_string()));
     }
 
-    Ok(normalized)
+    Ok(len)
+}
+
+fn write_normalized(name: &str, normalized: &mut [MaybeUninit<u8>]) {
+    let mut index = 0;
+    let mut last = None;
+    for byte in name.bytes() {
+        match byte {
+            b'A'..=b'Z' => {
+                normalized[index].write(byte.to_ascii_lowercase());
+                index += 1;
+            }
+            b'a'..=b'z' | b'0'..=b'9' => {
+                normalized[index].write(byte);
+                index += 1;
+            }
+            b'-' | b'_' | b'.' if !matches!(last, None | Some(b'-' | b'_' | b'.')) => {
+                normalized[index].write(b'-');
+                index += 1;
+            }
+            b'-' | b'_' | b'.' => {}
+            _ => {}
+        }
+        last = Some(byte);
+    }
+    debug_assert_eq!(index, normalized.len());
 }
 
 /// Returns `true` if the name is already normalized.
@@ -242,7 +274,7 @@ mod tests {
         ];
         for input in inputs {
             assert_eq!(
-                validate_and_normalize_owned(input.to_string())
+                validate_and_normalize_ref(input.to_string())
                     .unwrap()
                     .as_ref(),
                 "friendly-bard"
@@ -265,7 +297,7 @@ mod tests {
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
             assert!(is_normalized(input).is_err());
-            assert!(validate_and_normalize_owned(input.to_string()).is_err());
+            assert!(validate_and_normalize_ref(input.to_string()).is_err());
         }
     }
 }
