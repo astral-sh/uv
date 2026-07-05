@@ -9,6 +9,7 @@ use super::super::{
 };
 use crate::assembler::{Assembler, ExceptionRegion, Label, SourceLocation};
 use crate::target::Opcode;
+use crate::target::operands::ComparisonOperation;
 
 impl Assembler {
     /// Replaces an overwritten local store with a stack pop.
@@ -207,7 +208,7 @@ impl Assembler {
                 continue;
             };
             let replacement = match current.opcode {
-                COMPARE_OP => Some((COMPARE_OP, argument | 16)),
+                COMPARE_OP => Some((COMPARE_OP, ComparisonOperation::force_boolean(argument))),
                 CONTAINS_OP => Some((CONTAINS_OP, argument)),
                 IS_OP => Some((IS_OP, argument)),
                 _ => None,

@@ -42,6 +42,12 @@ impl Assembler {
                 Operand::Forward(target) => (target, true),
                 Operand::Backward(target) => (target, false),
             };
+            if !instruction.opcode.has_jump() {
+                return Err(invariant_error(format!(
+                    "instruction {index} uses a label operand with non-jump opcode {}",
+                    instruction.opcode.code()
+                )));
+            }
             let Some(target_index) = label_positions.get(&target).copied() else {
                 return Err(invariant_error(format!(
                     "instruction {index} targets unbound label {}",

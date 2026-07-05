@@ -15,13 +15,15 @@ use crate::target::opcodes::{
     LOAD_COMMON_CONSTANT, LOAD_CONST, LOAD_FAST, LOAD_FAST_AND_CLEAR, LOAD_FAST_BORROW,
     LOAD_FAST_BORROW_LOAD_FAST_BORROW, LOAD_FAST_CHECK, LOAD_FAST_LOAD_FAST, LOAD_GLOBAL,
     LOAD_SMALL_INT, LOAD_SPECIAL, LOAD_SUPER_ATTR, MAP_ADD, MATCH_KEYS, MATCH_MAPPING,
-    MATCH_SEQUENCE, NOP, NOT_TAKEN, POP_EXCEPT, POP_JUMP_IF_FALSE, POP_JUMP_IF_NONE,
-    POP_JUMP_IF_NOT_NONE, POP_JUMP_IF_TRUE, POP_TOP, PUSH_EXC_INFO, RAISE_VARARGS, RERAISE,
-    RETURN_VALUE, SEND, SET_ADD, SET_FUNCTION_ATTRIBUTE, SET_UPDATE, STORE_DEREF, STORE_FAST,
-    STORE_FAST_LOAD_FAST, STORE_FAST_STORE_FAST, STORE_GLOBAL, SWAP, TO_BOOL, UNARY_NOT,
-    WITH_EXCEPT_START,
+    MATCH_SEQUENCE, NOP, NOT_TAKEN, POP_EXCEPT, POP_JUMP_IF_FALSE, POP_JUMP_IF_TRUE, POP_TOP,
+    PUSH_EXC_INFO, RAISE_VARARGS, RERAISE, RETURN_VALUE, SEND, SET_ADD, SET_FUNCTION_ATTRIBUTE,
+    SET_UPDATE, STORE_DEREF, STORE_FAST, STORE_FAST_LOAD_FAST, STORE_FAST_STORE_FAST, STORE_GLOBAL,
+    SWAP, TO_BOOL, UNARY_NOT, WITH_EXCEPT_START,
 };
-use crate::target::{Opcode, num_popped as opcode_num_popped, num_pushed as opcode_num_pushed};
+use crate::target::{
+    Opcode, is_conditional_jump, is_scope_exit as ends_scope, is_unconditional_jump,
+    num_popped as opcode_num_popped, num_pushed as opcode_num_pushed,
+};
 
 pub(crate) use ir::{AssembledCode, Assembler, InstructionId, Label, SourceLocation};
 use ir::{AssemblerStage, ExceptionRegion, Instruction, InstructionFlags, Item, Operand};
@@ -482,24 +484,6 @@ impl Assembler {
 fn opcode_stack_effect(opcode: Opcode, argument: u32) -> i64 {
     i64::try_from(opcode_num_pushed(opcode, argument)).unwrap()
         - i64::try_from(opcode_num_popped(opcode, argument)).unwrap()
-}
-
-const fn ends_scope(opcode: Opcode) -> bool {
-    matches!(opcode, RETURN_VALUE | RAISE_VARARGS | RERAISE)
-}
-
-const fn is_unconditional_jump(opcode: Opcode) -> bool {
-    matches!(
-        opcode,
-        JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
-    )
-}
-
-const fn is_conditional_jump(opcode: Opcode) -> bool {
-    matches!(
-        opcode,
-        POP_JUMP_IF_FALSE | POP_JUMP_IF_NONE | POP_JUMP_IF_NOT_NONE | POP_JUMP_IF_TRUE
-    )
 }
 
 fn block_has_fallthrough(block: &[Item]) -> bool {

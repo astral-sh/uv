@@ -173,6 +173,23 @@ fn structural_validation_rejects_a_misdirected_operand() {
 }
 
 #[test]
+fn structural_validation_rejects_a_label_operand_on_a_non_jump() {
+    let mut assembler = Assembler::default();
+    let target = assembler.label();
+    assembler.emit_operand(NOP, Operand::Forward(target));
+    assembler.mark(target);
+
+    let error = assembler
+        .validate_structure(AssemblerStage::RemoveUnreachableInitial)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("label operand with non-jump opcode")
+    );
+}
+
+#[test]
 fn exception_regions_only_require_final_order_after_cfg_passes() {
     let mut assembler = Assembler::default();
     let end = assembler.label();

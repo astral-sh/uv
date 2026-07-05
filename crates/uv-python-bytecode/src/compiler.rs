@@ -14,7 +14,6 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
 use crate::assembler::{AssembledCode, Assembler, InstructionId, Label, SourceLocation};
-use crate::target::Opcode;
 use crate::target::code_flags::{
     CO_ASYNC_GENERATOR, CO_COROUTINE, CO_FUTURE_ANNOTATIONS, CO_FUTURE_BARRY_AS_BDFL, CO_GENERATOR,
     CO_HAS_DOCSTRING, CO_METHOD, CO_NESTED, CO_NEWLOCALS, CO_OPTIMIZED, CO_VARARGS, CO_VARKEYWORDS,
@@ -24,6 +23,11 @@ use crate::target::local_kinds::{
     CO_FAST_LOCAL,
 };
 use crate::target::opcodes::*;
+use crate::target::operands::{
+    BinaryIntrinsic, BinaryOperation, CommonConstant, ComparisonOperation, Conversion,
+    FunctionAttribute, ResumeLocation, SpecialMethod, UnaryIntrinsic,
+};
+use crate::target::{Opcode, is_unconditional_jump};
 
 // CPython initially emits owned local loads, then strength-reduces safe loads
 // to borrowed references after the control-flow graph has reached its final
@@ -1913,7 +1917,7 @@ impl Compiler {
             self.emit(MAKE_CELL, annotation_cell, 0)?;
         }
         self.assembler.set_location(SourceLocation::new(0, 1, 0, 0));
-        self.emit(RESUME, 0, 0)?;
+        self.emit_resume(ResumeLocation::AT_FUNC_START, false)?;
         if module_annotations {
             self.name_index("__conditional_annotations__")?;
             if let Some(statement) = body.first() {
@@ -2041,7 +2045,7 @@ impl Compiler {
         let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
         self.assembler
             .set_location(SourceLocation::new(line, line, 0, 0));
-        self.emit(RESUME, 0, 0)?;
+        self.emit_resume(ResumeLocation::AT_FUNC_START, false)?;
         self.load_name("__name__")?;
         self.store_name("__module__")?;
         let qualified_name =
@@ -2139,7 +2143,7 @@ impl Compiler {
             let annotation = self.add_constant(Constant::Code(Box::new(annotation_child)))?;
             self.emit(LOAD_CONST, annotation, 1)?;
             self.emit(MAKE_FUNCTION, 0, 0)?;
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
             self.store_name("__annotate_func__")?;
         }
 
@@ -2218,7 +2222,7 @@ impl Compiler {
                 .add_exception_region(region_start, handler, handler, 0, true);
             self.assembler.set_location(SourceLocation::NONE);
             self.set_depth(1);
-            self.emit(CALL_INTRINSIC_1, 3, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::STOPITERATION_ERROR)?;
             self.emit(RERAISE, 1, -1)?;
         }
 
@@ -2385,7 +2389,7 @@ impl Compiler {
         let line = i32::try_from(self.unit.first_line_number).unwrap_or(i32::MAX);
         self.assembler
             .set_location(SourceLocation::new(line, line, 0, 0));
-        self.emit(RESUME, 0, 0)
+        self.emit_resume(ResumeLocation::AT_FUNC_START, false)
     }
 
     fn compile_suite(&mut self, body: &[Stmt]) -> Result<(), CompileError> {
@@ -4296,7 +4300,7 @@ impl Compiler {
         self.set_depth(base_depth);
         self.assembler
             .set_location(self.source_location(statement.range));
-        self.emit(LOAD_COMMON_CONSTANT, 0, 1)?;
+        self.emit_common_constant(CommonConstant::ASSERTIONERROR)?;
         if let Some(message) = &statement.msg {
             self.compile_expression(message)?;
             self.assembler
@@ -4870,7 +4874,7 @@ impl Compiler {
                 }
                 self.assembler
                     .set_location(self.source_location(pattern.range));
-                self.emit(COMPARE_OP, 88, -1)?;
+                self.emit_comparison(ComparisonOperation::EQ, true)?;
                 self.jump_to_match_fail(context, POP_JUMP_IF_FALSE, -1)
             }
             Pattern::MatchSingleton(pattern) => {
@@ -5050,7 +5054,14 @@ impl Compiler {
                 to_u32(minimum, "sequence pattern length")?,
                 1,
             )?;
-            self.emit(COMPARE_OP, if starred.is_some() { 172 } else { 72 }, -1)?;
+            self.emit_comparison(
+                if starred.is_some() {
+                    ComparisonOperation::GE
+                } else {
+                    ComparisonOperation::EQ
+                },
+                false,
+            )?;
             self.jump_to_match_fail(context, POP_JUMP_IF_FALSE, -1)?;
         }
         context.on_top -= 1;
@@ -5080,9 +5091,9 @@ impl Compiler {
                         )?,
                         1,
                     )?;
-                    self.emit(BINARY_OP, binary_operator(Operator::Sub, false), -1)?;
+                    self.emit_binary_operation(binary_operator(Operator::Sub, false))?;
                 }
-                self.emit(BINARY_OP, 26, -1)?;
+                self.emit_binary_operation(BinaryOperation::SUBSCR)?;
                 self.compile_stack_pattern(subpattern, context)?;
             }
             context.on_top -= 1;
@@ -5138,7 +5149,7 @@ impl Compiler {
                 to_u32(pattern.keys.len(), "mapping pattern key count")?,
                 1,
             )?;
-            self.emit(COMPARE_OP, 172, -1)?;
+            self.emit_comparison(ComparisonOperation::GE, false)?;
             self.jump_to_match_fail(context, POP_JUMP_IF_FALSE, -1)?;
         }
         if let Some(keys) = pattern
@@ -5484,7 +5495,7 @@ impl Compiler {
         self.assembler.mark(yielded);
         self.emit(YIELD_VALUE, 1, 0)?;
         self.assembler.mark(yielded_end);
-        self.emit(RESUME, 3, 0)?;
+        self.emit_resume(ResumeLocation::AFTER_AWAIT, false)?;
         self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
         self.assembler.mark(send_end);
         self.set_depth(base_depth + 3);
@@ -5605,7 +5616,7 @@ impl Compiler {
                 self.compile_expression(&assignment.value)?;
                 self.assembler
                     .set_location(self.source_location(assignment.range));
-                self.emit(BINARY_OP, binary_operator(assignment.op, true), -1)?;
+                self.emit_binary_operation(binary_operator(assignment.op, true))?;
                 self.assembler.set_location(target_location);
                 self.store_name(target.id.as_str())?;
             }
@@ -5621,7 +5632,7 @@ impl Compiler {
                 self.compile_expression(&assignment.value)?;
                 self.assembler
                     .set_location(self.source_location(assignment.range));
-                self.emit(BINARY_OP, binary_operator(assignment.op, true), -1)?;
+                self.emit_binary_operation(binary_operator(assignment.op, true))?;
                 self.assembler.set_location(attribute_location);
                 self.emit(SWAP, 2, 0)?;
                 self.emit(STORE_ATTR, index, -2)?;
@@ -5649,12 +5660,12 @@ impl Compiler {
                 } else {
                     self.emit(COPY, 2, 1)?;
                     self.emit(COPY, 2, 1)?;
-                    self.emit(BINARY_OP, 26, -1)?;
+                    self.emit_binary_operation(BinaryOperation::SUBSCR)?;
                 }
                 self.compile_expression(&assignment.value)?;
                 self.assembler
                     .set_location(self.source_location(assignment.range));
-                self.emit(BINARY_OP, binary_operator(assignment.op, true), -1)?;
+                self.emit_binary_operation(binary_operator(assignment.op, true))?;
                 self.assembler.set_location(target_location);
                 if optimized_slice {
                     self.emit(SWAP, 4, 0)?;
@@ -5803,7 +5814,7 @@ impl Compiler {
         )?;
         self.assembler
             .set_location(self.source_location(statement.range));
-        self.emit(LOAD_COMMON_CONSTANT, 0, 1)?;
+        self.emit_common_constant(CommonConstant::ASSERTIONERROR)?;
         if let Some(message) = &statement.msg {
             self.compile_expression(message)?;
             self.assembler
@@ -6725,7 +6736,7 @@ impl Compiler {
         self.assembler.mark(reraise_star);
         self.set_depth(base_depth + 3);
         self.assembler.set_location(SourceLocation::NONE);
-        self.emit(CALL_INTRINSIC_2, 1, -1)?;
+        self.emit_binary_intrinsic(BinaryIntrinsic::PREP_RERAISE_STAR)?;
         self.emit(COPY, 1, 1)?;
         self.emit_jump_forward(POP_JUMP_IF_NOT_NONE, reraise, -1)?;
         let exclusion_start = self.assembler.label();
@@ -7490,10 +7501,10 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(item.context_expr.range()));
         self.emit(COPY, 1, 1)?;
-        self.emit(LOAD_SPECIAL, 1, 1)?;
+        self.emit_special_method(SpecialMethod::__EXIT__)?;
         self.emit(SWAP, 2, 0)?;
         self.emit(SWAP, 3, 0)?;
-        self.emit(LOAD_SPECIAL, 0, 1)?;
+        self.emit_special_method(SpecialMethod::__ENTER__)?;
         self.emit(CALL, 0, -1)?;
         self.assembler.mark(protected_start);
         if let Some(target) = &item.optional_vars {
@@ -7666,10 +7677,10 @@ impl Compiler {
         self.assembler
             .set_location(self.source_location(item.context_expr.range()));
         self.emit(COPY, 1, 1)?;
-        self.emit(LOAD_SPECIAL, 3, 1)?;
+        self.emit_special_method(SpecialMethod::__AEXIT__)?;
         self.emit(SWAP, 2, 0)?;
         self.emit(SWAP, 3, 0)?;
-        self.emit(LOAD_SPECIAL, 2, 1)?;
+        self.emit_special_method(SpecialMethod::__AENTER__)?;
         self.emit(CALL, 0, -1)?;
         self.compile_awaitable_on_stack(1)?;
         self.assembler.mark(protected_start);
@@ -7876,7 +7887,7 @@ impl Compiler {
         self.emit(IMPORT_NAME, module_index, -1)?;
 
         if statement.names.len() == 1 && statement.names[0].name.as_str() == "*" {
-            self.emit(CALL_INTRINSIC_1, 2, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::IMPORT_STAR)?;
             self.emit(POP_TOP, 0, -1)?;
             return Ok(());
         }
@@ -7923,7 +7934,7 @@ impl Compiler {
             self.child_function_is_nested(),
         )?;
         self.emit_build(BUILD_TUPLE, 3)?;
-        self.emit(CALL_INTRINSIC_1, 11, 0)?;
+        self.emit_unary_intrinsic(UnaryIntrinsic::TYPEALIAS)?;
         self.store_name(name.id.as_str())
     }
 
@@ -8003,7 +8014,7 @@ impl Compiler {
         wrapper.compile_type_parameters(type_params)?;
         wrapper.compile_type_parameter_thunk(name, value, statement.range, true)?;
         wrapper.emit_build(BUILD_TUPLE, 3)?;
-        wrapper.emit(CALL_INTRINSIC_1, 11, 0)?;
+        wrapper.emit_unary_intrinsic(UnaryIntrinsic::TYPEALIAS)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
 
@@ -8021,7 +8032,7 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !wrapper_closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         self.emit(PUSH_NULL, 0, 1)?;
         self.emit(CALL, 0, -1)?;
@@ -8183,7 +8194,7 @@ impl Compiler {
             DefinitionDecorators::AlreadyCompiled,
         )?;
         wrapper.emit(SWAP, 2, 0)?;
-        wrapper.emit(CALL_INTRINSIC_2, 4, -1)?;
+        wrapper.emit_binary_intrinsic(BinaryIntrinsic::SET_FUNCTION_TYPE_PARAMS)?;
         wrapper.emit(RETURN_VALUE, 0, -1)?;
         let wrapper = wrapper.finish_inner(false)?;
 
@@ -8202,7 +8213,7 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !wrapper_closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         if default_argument_count == 0 {
             self.emit(PUSH_NULL, 0, 1)?;
@@ -8352,7 +8363,7 @@ impl Compiler {
             self.emit(LOAD_CONST, annotation, 1)?;
             self.emit(MAKE_FUNCTION, 0, 0)?;
             if !annotation_closure_names.is_empty() {
-                self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+                self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
             }
         }
         if !closure_names.is_empty() {
@@ -8362,16 +8373,16 @@ impl Compiler {
         self.emit(LOAD_CONST, constant, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         if function_has_annotations(definition) {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 16, -1)?;
+            self.emit_function_attribute(FunctionAttribute::ANNOTATE)?;
         }
         if has_keyword_defaults {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 2, -1)?;
+            self.emit_function_attribute(FunctionAttribute::KWDEFAULTS)?;
         }
         if has_positional_defaults {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 1, -1)?;
+            self.emit_function_attribute(FunctionAttribute::DEFAULTS)?;
         }
         if decorators == DefinitionDecorators::Compile {
             for decorator in definition.decorator_list.iter().rev() {
@@ -8593,7 +8604,7 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !wrapper_closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         self.emit(PUSH_NULL, 0, 1)?;
         self.emit(CALL, 0, -1)?;
@@ -8697,13 +8708,13 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         let name = self.add_constant(Constant::String(definition.name.as_str().to_string()))?;
         self.emit(LOAD_CONST, name, 1)?;
         if is_generic {
             self.load_name(".type_params")?;
-            self.emit(CALL_INTRINSIC_1, 10, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::SUBSCRIPT_GENERIC)?;
             self.store_name(".generic_base")?;
         }
 
@@ -8755,7 +8766,7 @@ impl Compiler {
                     self.load_name(".generic_base")?;
                     self.emit(LIST_APPEND, 1, -1)?;
                 }
-                self.emit(CALL_INTRINSIC_1, 6, 0)?;
+                self.emit_unary_intrinsic(UnaryIntrinsic::LIST_TO_TUPLE)?;
             } else {
                 if let Some(arguments) = arguments {
                     for argument in &arguments.args {
@@ -8886,27 +8897,26 @@ impl Compiler {
                         self.compile_type_parameter_thunk(name, bound, bound.range(), true)?;
                         self.assembler
                             .set_location(self.source_location(parameter.range()));
-                        self.emit(
-                            CALL_INTRINSIC_2,
-                            if matches!(bound.as_ref(), Expr::Tuple(_)) {
-                                3
-                            } else {
-                                2
-                            },
-                            -1,
-                        )?;
+                        let intrinsic = if matches!(bound.as_ref(), Expr::Tuple(_)) {
+                            BinaryIntrinsic::TYPEVAR_WITH_CONSTRAINTS
+                        } else {
+                            BinaryIntrinsic::TYPEVAR_WITH_BOUND
+                        };
+                        self.emit_binary_intrinsic(intrinsic)?;
                     } else {
-                        self.emit(CALL_INTRINSIC_1, 7, 0)?;
+                        self.emit_unary_intrinsic(UnaryIntrinsic::TYPEVAR)?;
                     }
                 }
-                TypeParam::ParamSpec(_) => self.emit(CALL_INTRINSIC_1, 8, 0)?,
-                TypeParam::TypeVarTuple(_) => self.emit(CALL_INTRINSIC_1, 9, 0)?,
+                TypeParam::ParamSpec(_) => self.emit_unary_intrinsic(UnaryIntrinsic::PARAMSPEC)?,
+                TypeParam::TypeVarTuple(_) => {
+                    self.emit_unary_intrinsic(UnaryIntrinsic::TYPEVARTUPLE)?;
+                }
             }
             if let Some(default) = parameter.default() {
                 self.compile_type_parameter_thunk(name, default, default.range(), true)?;
                 self.assembler
                     .set_location(self.source_location(parameter.range()));
-                self.emit(CALL_INTRINSIC_2, 5, -1)?;
+                self.emit_binary_intrinsic(BinaryIntrinsic::SET_TYPEPARAM_DEFAULT)?;
             }
             self.emit(COPY, 1, 1)?;
             self.store_name(name)?;
@@ -9021,9 +9031,9 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
-        self.emit(SET_FUNCTION_ATTRIBUTE, 1, -1)
+        self.emit_function_attribute(FunctionAttribute::DEFAULTS)
     }
 
     fn emit_annotation_format_guard(&mut self) -> Result<(), CompileError> {
@@ -9035,11 +9045,11 @@ impl Compiler {
         self.load_name(&parameter)?;
         self.add_constant(Constant::Int(2))?;
         self.emit(LOAD_SMALL_INT, 2, 1)?;
-        self.emit(COMPARE_OP, 132, -1)?;
+        self.emit_comparison(ComparisonOperation::GT, false)?;
         let supported = self.assembler.label();
         self.emit_jump_forward(POP_JUMP_IF_FALSE, supported, -1)?;
         self.emit(NOT_TAKEN, 0, 0)?;
-        self.emit(LOAD_COMMON_CONSTANT, 1, 1)?;
+        self.emit_common_constant(CommonConstant::NOTIMPLEMENTEDERROR)?;
         self.emit(RAISE_VARARGS, 1, -1)?;
         self.assembler.mark(supported);
         self.set_depth(0);
@@ -9304,11 +9314,11 @@ impl Compiler {
         child.load_name("format")?;
         child.add_constant(Constant::Int(2))?;
         child.emit(LOAD_SMALL_INT, 2, 1)?;
-        child.emit(COMPARE_OP, 132, -1)?;
+        child.emit_comparison(ComparisonOperation::GT, false)?;
         let supported = child.assembler.label();
         child.emit_jump_forward(POP_JUMP_IF_FALSE, supported, -1)?;
         child.emit(NOT_TAKEN, 0, 0)?;
-        child.emit(LOAD_COMMON_CONSTANT, 1, 1)?;
+        child.emit_common_constant(CommonConstant::NOTIMPLEMENTEDERROR)?;
         child.emit(RAISE_VARARGS, 1, -1)?;
         child.assembler.mark(supported);
         child.set_depth(0);
@@ -9428,7 +9438,7 @@ impl Compiler {
                 if !self.compile_optimized_percent_format(binary)? {
                     self.compile_expression(&binary.left)?;
                     self.compile_expression(&binary.right)?;
-                    self.emit(BINARY_OP, binary_operator(binary.op, false), -1)?;
+                    self.emit_binary_operation(binary_operator(binary.op, false))?;
                 }
             }
             Expr::UnaryOp(unary) => {
@@ -9439,7 +9449,7 @@ impl Compiler {
                         self.emit(TO_BOOL, 0, 0)?;
                         self.emit(UNARY_NOT, 0, 0)?;
                     }
-                    UnaryOp::UAdd => self.emit(CALL_INTRINSIC_1, 5, 0)?,
+                    UnaryOp::UAdd => self.emit_unary_intrinsic(UnaryIntrinsic::UNARY_POSITIVE)?,
                     UnaryOp::USub => self.emit(UNARY_NEGATIVE, 0, 0)?,
                 }
             }
@@ -9478,7 +9488,7 @@ impl Compiler {
                         self.assembler.set_location(slice_location);
                         self.emit(LOAD_CONST, index, 1)?;
                         self.assembler.set_location(subscript_location);
-                        self.emit(BINARY_OP, 26, -1)?;
+                        self.emit_binary_operation(BinaryOperation::SUBSCR)?;
                     } else if slice.step.is_none() {
                         self.compile_optional_slice_bound(slice.lower.as_deref(), slice_location)?;
                         self.compile_optional_slice_bound(slice.upper.as_deref(), slice_location)?;
@@ -9486,11 +9496,11 @@ impl Compiler {
                         self.emit(BINARY_SLICE, 0, -2)?;
                     } else {
                         self.compile_expression(&subscript.slice)?;
-                        self.emit(BINARY_OP, 26, -1)?;
+                        self.emit_binary_operation(BinaryOperation::SUBSCR)?;
                     }
                 } else {
                     self.compile_expression(&subscript.slice)?;
-                    self.emit(BINARY_OP, 26, -1)?;
+                    self.emit_binary_operation(BinaryOperation::SUBSCR)?;
                 }
             }
             Expr::If(expression) => self.compile_if_expression(expression)?,
@@ -9541,21 +9551,16 @@ impl Compiler {
                 self.assembler
                     .set_location(self.source_location(expression.range));
                 if self.unit.flags & CO_ASYNC_GENERATOR != 0 {
-                    self.emit(CALL_INTRINSIC_1, 4, 0)?;
+                    self.emit_unary_intrinsic(UnaryIntrinsic::ASYNC_GEN_WRAP)?;
                 }
                 self.emit(YIELD_VALUE, 0, 0)?;
                 let wrapper_is_only_exception_region =
                     self.control.generator_region_start.is_some()
                         && self.control.active_exception_region_exclusions.is_empty()
                         && self.control.active_with_region_exclusions.is_empty();
-                self.emit(
-                    RESUME,
-                    if wrapper_is_only_exception_region {
-                        5
-                    } else {
-                        1
-                    },
-                    0,
+                self.emit_resume(
+                    ResumeLocation::AFTER_YIELD,
+                    wrapper_is_only_exception_region,
                 )?;
             }
             Expr::YieldFrom(expression) => {
@@ -9576,14 +9581,9 @@ impl Compiler {
                 self.assembler.mark(yielded);
                 self.emit(YIELD_VALUE, 1, 0)?;
                 self.assembler.mark(yielded_end);
-                self.emit(
-                    RESUME,
-                    if self.control.generator_region_start.is_some() {
-                        2
-                    } else {
-                        6
-                    },
-                    0,
+                self.emit_resume(
+                    ResumeLocation::AFTER_YIELD_FROM,
+                    self.control.generator_region_start.is_none(),
                 )?;
                 self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
                 self.assembler.mark(cleanup);
@@ -10126,12 +10126,12 @@ impl Compiler {
             ConversionFlag::None
                 if interpolation.debug_text.is_some() && interpolation.format_spec.is_none() =>
             {
-                self.emit(CONVERT_VALUE, 2, 0)?;
+                self.emit_conversion(Conversion::REPR)?;
             }
             ConversionFlag::None => {}
-            ConversionFlag::Str => self.emit(CONVERT_VALUE, 1, 0)?,
-            ConversionFlag::Repr => self.emit(CONVERT_VALUE, 2, 0)?,
-            ConversionFlag::Ascii => self.emit(CONVERT_VALUE, 3, 0)?,
+            ConversionFlag::Str => self.emit_conversion(Conversion::STR)?,
+            ConversionFlag::Repr => self.emit_conversion(Conversion::REPR)?,
+            ConversionFlag::Ascii => self.emit_conversion(Conversion::ASCII)?,
         }
         if let Some(format_spec) = &interpolation.format_spec {
             self.compile_interpolated_elements(&format_spec.elements, format_spec.range)?;
@@ -10169,7 +10169,7 @@ impl Compiler {
                     self.compile_expression(expression)?;
                     let location = self.source_location(expression.range());
                     self.assembler.set_location(location);
-                    self.emit(CONVERT_VALUE, conversion, 0)?;
+                    self.emit_conversion(conversion)?;
                     if let Some(format_spec) = format_spec {
                         self.assembler.set_location(SourceLocation::NONE);
                         self.load_string_constant(&format_spec)?;
@@ -10248,7 +10248,7 @@ impl Compiler {
         self.assembler.mark(yielded);
         self.emit(YIELD_VALUE, 1, 0)?;
         self.assembler.mark(yielded_end);
-        self.emit(RESUME, 3, 0)?;
+        self.emit_resume(ResumeLocation::AFTER_AWAIT, false)?;
         self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
 
         self.assembler.mark(cleanup);
@@ -10449,9 +10449,9 @@ impl Compiler {
         callable: &str,
     ) -> Result<(), CompileError> {
         let (common_constant, initial_result, collect_tuple) = match callable {
-            "all" => (3, true, false),
-            "any" => (4, false, false),
-            "tuple" => (2, false, true),
+            "all" => (CommonConstant::BUILTIN_ALL, true, false),
+            "any" => (CommonConstant::BUILTIN_ANY, false, false),
+            "tuple" => (CommonConstant::BUILTIN_TUPLE, false, true),
             _ => unreachable!("optimized generator call must use all, any, or tuple"),
         };
         let callable_location = self.source_location(call.func.range());
@@ -10462,7 +10462,7 @@ impl Compiler {
         self.compile_expression(&call.func)?;
         self.assembler.set_location(callable_location);
         self.emit(COPY, 1, 1)?;
-        self.emit(LOAD_COMMON_CONSTANT, common_constant, 1)?;
+        self.emit_common_constant(common_constant)?;
         self.emit(IS_OP, 0, -1)?;
         self.emit_jump_forward(POP_JUMP_IF_FALSE, fallback, -1)?;
         self.emit(NOT_TAKEN, 0, 0)?;
@@ -10510,7 +10510,7 @@ impl Compiler {
         self.emit(POP_ITER, 0, -1)?;
         self.assembler.set_location(callable_location);
         if collect_tuple {
-            self.emit(CALL_INTRINSIC_1, 6, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::LIST_TO_TUPLE)?;
         } else {
             let result = self.add_constant(Constant::Bool(initial_result))?;
             self.emit(LOAD_CONST, result, 1)?;
@@ -10870,13 +10870,13 @@ impl Compiler {
         self.emit(LOAD_CONST, constant, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         if !keyword_defaults.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 2, -1)?;
+            self.emit_function_attribute(FunctionAttribute::KWDEFAULTS)?;
         }
         if !positional_defaults.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 1, -1)?;
+            self.emit_function_attribute(FunctionAttribute::DEFAULTS)?;
         }
         Ok(())
     }
@@ -11210,7 +11210,7 @@ impl Compiler {
         self.emit(LOAD_CONST, code, 1)?;
         self.emit(MAKE_FUNCTION, 0, 0)?;
         if !closure_names.is_empty() {
-            self.emit(SET_FUNCTION_ATTRIBUTE, 8, -1)?;
+            self.emit_function_attribute(FunctionAttribute::CLOSURE)?;
         }
         if generator.generators[0].is_async {
             self.compile_expression(&generator.generators[0].iter)?;
@@ -11292,10 +11292,10 @@ impl Compiler {
             self.assembler
                 .set_location(self.source_location(element.range()));
             if self.unit.flags & CO_ASYNC_GENERATOR != 0 {
-                self.emit(CALL_INTRINSIC_1, 4, 0)?;
+                self.emit_unary_intrinsic(UnaryIntrinsic::ASYNC_GEN_WRAP)?;
             }
             self.emit(YIELD_VALUE, 0, 0)?;
-            self.emit(RESUME, 5, 0)?;
+            self.emit_resume(ResumeLocation::AFTER_YIELD, true)?;
             self.emit(POP_TOP, 0, -1)?;
         }
         self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
@@ -11339,7 +11339,7 @@ impl Compiler {
         self.assembler.mark(yielded);
         self.emit(YIELD_VALUE, 1, 0)?;
         self.assembler.mark(yielded_end);
-        self.emit(RESUME, 3, 0)?;
+        self.emit_resume(ResumeLocation::AFTER_AWAIT, false)?;
         self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
         self.assembler.mark(send_end);
         self.set_depth(loop_depth + 2);
@@ -11381,9 +11381,9 @@ impl Compiler {
             self.compile_expression(element)?;
             self.assembler
                 .set_location(self.source_location(element.range()));
-            self.emit(CALL_INTRINSIC_1, 4, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::ASYNC_GEN_WRAP)?;
             self.emit(YIELD_VALUE, 0, 0)?;
-            self.emit(RESUME, 5, 0)?;
+            self.emit_resume(ResumeLocation::AFTER_YIELD, true)?;
             self.emit(POP_TOP, 0, -1)?;
         }
         self.emit_jump_backward(JUMP_BACKWARD, start, 0)?;
@@ -11854,7 +11854,7 @@ impl Compiler {
         self.assembler.mark(yielded);
         self.emit(YIELD_VALUE, 1, 0)?;
         self.assembler.mark(yielded_end);
-        self.emit(RESUME, 3, 0)?;
+        self.emit_resume(ResumeLocation::AFTER_AWAIT, false)?;
         self.emit_jump_backward(JUMP_BACKWARD_NO_INTERRUPT, send, 0)?;
         if reorder_cleanup {
             self.assembler.mark(protected_before_cleanup_end);
@@ -12044,7 +12044,7 @@ impl Compiler {
                     self.emit(kind.append_opcode(), 1, -1)?;
                 }
                 if kind == CollectionKind::Tuple {
-                    self.emit(CALL_INTRINSIC_1, 6, 0)?;
+                    self.emit_unary_intrinsic(UnaryIntrinsic::LIST_TO_TUPLE)?;
                 }
                 return Ok(());
             }
@@ -12137,7 +12137,7 @@ impl Compiler {
             }
         }
         if kind == CollectionKind::Tuple {
-            self.emit(CALL_INTRINSIC_1, 6, 0)?;
+            self.emit_unary_intrinsic(UnaryIntrinsic::LIST_TO_TUPLE)?;
         }
         Ok(())
     }
@@ -13950,6 +13950,58 @@ impl Compiler {
         Ok(())
     }
 
+    fn emit_unary_intrinsic(&mut self, intrinsic: UnaryIntrinsic) -> Result<(), CompileError> {
+        self.emit(CALL_INTRINSIC_1, intrinsic.argument(), 0)
+    }
+
+    fn emit_binary_intrinsic(&mut self, intrinsic: BinaryIntrinsic) -> Result<(), CompileError> {
+        self.emit(CALL_INTRINSIC_2, intrinsic.argument(), -1)
+    }
+
+    fn emit_function_attribute(
+        &mut self,
+        attribute: FunctionAttribute,
+    ) -> Result<(), CompileError> {
+        self.emit(SET_FUNCTION_ATTRIBUTE, attribute.argument(), -1)
+    }
+
+    fn emit_common_constant(&mut self, constant: CommonConstant) -> Result<(), CompileError> {
+        self.emit(LOAD_COMMON_CONSTANT, constant.argument(), 1)
+    }
+
+    fn emit_resume(
+        &mut self,
+        location: ResumeLocation,
+        depth_one: bool,
+    ) -> Result<(), CompileError> {
+        self.emit(RESUME, location.at_depth(depth_one), 0)
+    }
+
+    fn emit_binary_operation(&mut self, operation: BinaryOperation) -> Result<(), CompileError> {
+        self.emit(BINARY_OP, operation.argument(), -1)
+    }
+
+    fn emit_comparison(
+        &mut self,
+        operation: ComparisonOperation,
+        force_boolean: bool,
+    ) -> Result<(), CompileError> {
+        let argument = if force_boolean {
+            operation.boolean_argument()
+        } else {
+            operation.argument()
+        };
+        self.emit(COMPARE_OP, argument, -1)
+    }
+
+    fn emit_conversion(&mut self, conversion: Conversion) -> Result<(), CompileError> {
+        self.emit(CONVERT_VALUE, conversion.argument(), 0)
+    }
+
+    fn emit_special_method(&mut self, method: SpecialMethod) -> Result<(), CompileError> {
+        self.emit(LOAD_SPECIAL, method.argument(), 1)
+    }
+
     fn emit_owned_fast(&mut self, argument: u32, effect: i32) -> Result<(), CompileError> {
         self.apply_stack_effect(effect)?;
         self.assembler
@@ -13963,10 +14015,8 @@ impl Compiler {
         label: Label,
         effect: i32,
     ) -> Result<(), CompileError> {
-        if matches!(
-            opcode,
-            JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
-        ) && let Some(location) = self.take_trailing_nop_location()
+        if is_unconditional_jump(opcode)
+            && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }
@@ -13982,10 +14032,8 @@ impl Compiler {
         label: Label,
         effect: i32,
     ) -> Result<(), CompileError> {
-        if matches!(
-            opcode,
-            JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
-        ) && let Some(location) = self.take_trailing_nop_location()
+        if is_unconditional_jump(opcode)
+            && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }
@@ -16127,7 +16175,7 @@ enum PercentFormatPart<'a> {
     Literal(String),
     Formatted {
         expression: &'a Expr,
-        conversion: u32,
+        conversion: Conversion,
         format_spec: Option<String>,
     },
 }
@@ -16187,7 +16235,10 @@ fn optimized_percent_format(expression: &ExprBinOp) -> Option<Vec<PercentFormatP
     (argument_index == arguments.elts.len()).then_some(parts)
 }
 
-fn parse_percent_format(format: &[char], position: &mut usize) -> Option<(u32, Option<String>)> {
+fn parse_percent_format(
+    format: &[char],
+    position: &mut usize,
+) -> Option<(Conversion, Option<String>)> {
     const MAX_DIGITS: usize = 3;
 
     let mut next = || {
@@ -16240,9 +16291,9 @@ fn parse_percent_format(format: &[char], position: &mut usize) -> Option<(u32, O
     }
 
     let conversion = match character {
-        's' => 1,
-        'r' => 2,
-        'a' => 3,
+        's' => Conversion::STR,
+        'r' => Conversion::REPR,
+        'a' => Conversion::ASCII,
         _ => return None,
     };
     let mut format_spec = String::new();
@@ -17199,33 +17250,37 @@ fn big_integer_digits(token: &str) -> Vec<u16> {
     value
 }
 
-fn binary_operator(operator: Operator, inplace: bool) -> u32 {
-    let base = match operator {
-        Operator::Add => 0,
-        Operator::BitAnd => 1,
-        Operator::FloorDiv => 2,
-        Operator::LShift => 3,
-        Operator::MatMult => 4,
-        Operator::Mult => 5,
-        Operator::Mod => 6,
-        Operator::BitOr => 7,
-        Operator::Pow => 8,
-        Operator::RShift => 9,
-        Operator::Sub => 10,
-        Operator::Div => 11,
-        Operator::BitXor => 12,
+fn binary_operator(operator: Operator, inplace: bool) -> BinaryOperation {
+    let operation = match operator {
+        Operator::Add => BinaryOperation::ADD,
+        Operator::BitAnd => BinaryOperation::AND,
+        Operator::FloorDiv => BinaryOperation::FLOOR_DIVIDE,
+        Operator::LShift => BinaryOperation::LSHIFT,
+        Operator::MatMult => BinaryOperation::MATRIX_MULTIPLY,
+        Operator::Mult => BinaryOperation::MULTIPLY,
+        Operator::Mod => BinaryOperation::REMAINDER,
+        Operator::BitOr => BinaryOperation::OR,
+        Operator::Pow => BinaryOperation::POWER,
+        Operator::RShift => BinaryOperation::RSHIFT,
+        Operator::Sub => BinaryOperation::SUBTRACT,
+        Operator::Div => BinaryOperation::TRUE_DIVIDE,
+        Operator::BitXor => BinaryOperation::XOR,
     };
-    if inplace { base + 13 } else { base }
+    if inplace {
+        operation.inplace()
+    } else {
+        operation
+    }
 }
 
 fn comparison_operator(operator: CmpOp) -> (Opcode, u32) {
     match operator {
-        CmpOp::Lt => (COMPARE_OP, 2),
-        CmpOp::LtE => (COMPARE_OP, 42),
-        CmpOp::Eq => (COMPARE_OP, 72),
-        CmpOp::NotEq => (COMPARE_OP, 103),
-        CmpOp::Gt => (COMPARE_OP, 132),
-        CmpOp::GtE => (COMPARE_OP, 172),
+        CmpOp::Lt => (COMPARE_OP, ComparisonOperation::LT.argument()),
+        CmpOp::LtE => (COMPARE_OP, ComparisonOperation::LE.argument()),
+        CmpOp::Eq => (COMPARE_OP, ComparisonOperation::EQ.argument()),
+        CmpOp::NotEq => (COMPARE_OP, ComparisonOperation::NE.argument()),
+        CmpOp::Gt => (COMPARE_OP, ComparisonOperation::GT.argument()),
+        CmpOp::GtE => (COMPARE_OP, ComparisonOperation::GE.argument()),
         CmpOp::Is => (IS_OP, 0),
         CmpOp::IsNot => (IS_OP, 1),
         CmpOp::In => (CONTAINS_OP, 0),
@@ -17239,7 +17294,7 @@ fn comparison_operator_boolean(operator: CmpOp) -> (Opcode, u32) {
         operator,
         CmpOp::Lt | CmpOp::LtE | CmpOp::Eq | CmpOp::NotEq | CmpOp::Gt | CmpOp::GtE
     ) {
-        (opcode, argument | 16)
+        (opcode, ComparisonOperation::force_boolean(argument))
     } else {
         (opcode, argument)
     }
