@@ -1,4 +1,4 @@
-use rustc_hash::FxHashSet;
+use std::collections::HashSet;
 
 use crate::compiler::{CodeObject, Constant};
 
@@ -28,7 +28,7 @@ fn code_object(constants: Vec<Constant>) -> CodeObject {
         line_table: Vec::new(),
         exception_table: Vec::new(),
         annotation_thunk: false,
-        interned_constant_strings: FxHashSet::default(),
+        interned_constant_strings: HashSet::default(),
     }
 }
 

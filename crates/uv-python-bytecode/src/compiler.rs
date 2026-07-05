@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_pattern, walk_stmt};
@@ -79,7 +79,7 @@ pub(crate) struct CodeObject {
     pub(crate) line_table: Vec<u8>,
     pub(crate) exception_table: Vec<u8>,
     pub(crate) annotation_thunk: bool,
-    pub(crate) interned_constant_strings: FxHashSet<String>,
+    pub(crate) interned_constant_strings: HashSet<String>,
 }
 
 #[derive(Debug)]
@@ -977,7 +977,7 @@ struct OutputState {
     deferred_names: Vec<(InstructionId, String)>,
     names: Vec<String>,
     name_indices: FxHashMap<String, u32>,
-    interned_constant_strings: FxHashSet<String>,
+    interned_constant_strings: HashSet<String>,
 }
 
 #[derive(Debug, Default)]
