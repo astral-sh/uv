@@ -19,7 +19,7 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
+    ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations, Name,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, Resolution,
 };
 use uv_fs::Simplified;
@@ -308,8 +308,19 @@ pub(crate) async fn pip_install(
         interpreter,
     )?;
 
-    // Determine the set of installed packages.
-    let site_packages = SitePackages::from_environment(&environment)?;
+    // With sufficient modifications, installation only needs installed distributions selected by
+    // the resolution. A `pylock.toml` resolution never consults the environment, while reinstalling
+    // every package excludes all installed distributions from candidate selection, including for
+    // transitive dependencies. Delay the environment scan in either case, then restrict it to the
+    // resolved package names.
+    let defer_site_packages = matches!(modifications, Modifications::Sufficient)
+        && (pylock.is_some() || matches!(&reinstall, Reinstall::All));
+
+    let site_packages = if defer_site_packages {
+        None
+    } else {
+        Some(SitePackages::from_environment(&environment)?)
+    };
 
     // Check if the current environment satisfies the requirements.
     // Ideally, the resolver would be fast enough to let us remove this check. But right now, for large environments,
@@ -320,6 +331,7 @@ pub(crate) async fn pip_install(
         && groups.is_empty()
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
+        && let Some(site_packages) = &site_packages
     {
         match site_packages.satisfies_spec(
             &requirements,
@@ -595,6 +607,15 @@ pub(crate) async fn pip_install(
 
     // If necessary, convert editable distributions to non-editable.
     let resolution = apply_editable_mode(resolution, editable);
+
+    let site_packages = match site_packages {
+        // Only resolved packages can be modified when using sufficient installation semantics.
+        None => SitePackages::from_environment_for_packages(
+            &environment,
+            resolution.distributions().map(Name::name),
+        )?,
+        Some(site_packages) => site_packages,
+    };
 
     // Constrain any build requirements marked as `match-runtime = true`.
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
