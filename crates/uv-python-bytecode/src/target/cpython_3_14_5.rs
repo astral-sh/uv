@@ -144,26 +144,26 @@ pub(crate) mod opcodes {
 
 #[allow(dead_code)]
 pub(crate) mod code_flags {
-    pub(crate) const CO_OPTIMIZED: u32 = 0x00000001;
-    pub(crate) const CO_NEWLOCALS: u32 = 0x00000002;
-    pub(crate) const CO_VARARGS: u32 = 0x00000004;
-    pub(crate) const CO_VARKEYWORDS: u32 = 0x00000008;
-    pub(crate) const CO_NESTED: u32 = 0x00000010;
-    pub(crate) const CO_GENERATOR: u32 = 0x00000020;
-    pub(crate) const CO_COROUTINE: u32 = 0x00000080;
-    pub(crate) const CO_ITERABLE_COROUTINE: u32 = 0x00000100;
-    pub(crate) const CO_ASYNC_GENERATOR: u32 = 0x00000200;
-    pub(crate) const CO_FUTURE_DIVISION: u32 = 0x00020000;
-    pub(crate) const CO_FUTURE_ABSOLUTE_IMPORT: u32 = 0x00040000;
-    pub(crate) const CO_FUTURE_WITH_STATEMENT: u32 = 0x00080000;
-    pub(crate) const CO_FUTURE_PRINT_FUNCTION: u32 = 0x00100000;
-    pub(crate) const CO_FUTURE_UNICODE_LITERALS: u32 = 0x00200000;
-    pub(crate) const CO_FUTURE_BARRY_AS_BDFL: u32 = 0x00400000;
-    pub(crate) const CO_FUTURE_GENERATOR_STOP: u32 = 0x00800000;
-    pub(crate) const CO_FUTURE_ANNOTATIONS: u32 = 0x01000000;
-    pub(crate) const CO_NO_MONITORING_EVENTS: u32 = 0x02000000;
-    pub(crate) const CO_HAS_DOCSTRING: u32 = 0x04000000;
-    pub(crate) const CO_METHOD: u32 = 0x08000000;
+    pub(crate) const CO_OPTIMIZED: u32 = 0x0000_0001;
+    pub(crate) const CO_NEWLOCALS: u32 = 0x0000_0002;
+    pub(crate) const CO_VARARGS: u32 = 0x0000_0004;
+    pub(crate) const CO_VARKEYWORDS: u32 = 0x0000_0008;
+    pub(crate) const CO_NESTED: u32 = 0x0000_0010;
+    pub(crate) const CO_GENERATOR: u32 = 0x0000_0020;
+    pub(crate) const CO_COROUTINE: u32 = 0x0000_0080;
+    pub(crate) const CO_ITERABLE_COROUTINE: u32 = 0x0000_0100;
+    pub(crate) const CO_ASYNC_GENERATOR: u32 = 0x0000_0200;
+    pub(crate) const CO_FUTURE_DIVISION: u32 = 0x0002_0000;
+    pub(crate) const CO_FUTURE_ABSOLUTE_IMPORT: u32 = 0x0004_0000;
+    pub(crate) const CO_FUTURE_WITH_STATEMENT: u32 = 0x0008_0000;
+    pub(crate) const CO_FUTURE_PRINT_FUNCTION: u32 = 0x0010_0000;
+    pub(crate) const CO_FUTURE_UNICODE_LITERALS: u32 = 0x0020_0000;
+    pub(crate) const CO_FUTURE_BARRY_AS_BDFL: u32 = 0x0040_0000;
+    pub(crate) const CO_FUTURE_GENERATOR_STOP: u32 = 0x0080_0000;
+    pub(crate) const CO_FUTURE_ANNOTATIONS: u32 = 0x0100_0000;
+    pub(crate) const CO_NO_MONITORING_EVENTS: u32 = 0x0200_0000;
+    pub(crate) const CO_HAS_DOCSTRING: u32 = 0x0400_0000;
+    pub(crate) const CO_METHOD: u32 = 0x0800_0000;
 }
 
 pub(crate) mod local_kinds {

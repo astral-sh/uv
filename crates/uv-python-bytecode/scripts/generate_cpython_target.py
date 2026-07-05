@@ -158,6 +158,18 @@ def parse_numeric_defines(source: str, prefix: str) -> list[tuple[str, int]]:
     return definitions
 
 
+def rust_hex(value: int, digits: int) -> str:
+    """Format a Rust hexadecimal literal with four-digit separators."""
+    hexadecimal = f"{value:0{digits}x}"
+    first_group = len(hexadecimal) % 4 or 4
+    groups = [hexadecimal[:first_group]]
+    groups.extend(
+        hexadecimal[index : index + 4]
+        for index in range(first_group, len(hexadecimal), 4)
+    )
+    return "0x" + "_".join(groups)
+
+
 def render(sources: dict[str, str]) -> str:
     opcode_ids = sources["Include/opcode_ids.h"]
     metadata = sources["Include/internal/pycore_opcode_metadata.h"]
@@ -238,10 +250,10 @@ def render(sources: dict[str, str]) -> str:
         )
     lines.extend(["}", "", "#[allow(dead_code)]", "pub(crate) mod code_flags {"])
     for name, value in code_flags:
-        lines.append(f"    pub(crate) const {name}: u32 = 0x{value:08x};")
+        lines.append(f"    pub(crate) const {name}: u32 = {rust_hex(value, 8)};")
     lines.extend(["}", "", "pub(crate) mod local_kinds {"])
     for name, value in local_kinds:
-        lines.append(f"    pub(crate) const {name}: u8 = 0x{value:02x};")
+        lines.append(f"    pub(crate) const {name}: u8 = {rust_hex(value, 2)};")
     lines.extend(["}", ""])
 
     for direction, effects in (("popped", popped), ("pushed", pushed)):
