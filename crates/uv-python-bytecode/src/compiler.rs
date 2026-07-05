@@ -198,6 +198,73 @@ struct NameInterner {
     by_name: HashMap<String, NameId>,
 }
 
+#[derive(Clone, Debug, Default)]
+struct NameSet {
+    words: Vec<u64>,
+}
+
+impl NameSet {
+    fn contains(&self, name: NameId) -> bool {
+        let index = usize::try_from(name.0).expect("name ID should fit in usize");
+        self.words
+            .get(index / u64::BITS as usize)
+            .is_some_and(|word| word & (1 << (index % u64::BITS as usize)) != 0)
+    }
+
+    fn insert(&mut self, name: NameId) -> bool {
+        let index = usize::try_from(name.0).expect("name ID should fit in usize");
+        let word_index = index / u64::BITS as usize;
+        self.words.resize(self.words.len().max(word_index + 1), 0);
+        let bit = 1 << (index % u64::BITS as usize);
+        let inserted = self.words[word_index] & bit == 0;
+        self.words[word_index] |= bit;
+        inserted
+    }
+
+    fn remove(&mut self, name: NameId) -> bool {
+        let index = usize::try_from(name.0).expect("name ID should fit in usize");
+        let Some(word) = self.words.get_mut(index / u64::BITS as usize) else {
+            return false;
+        };
+        let bit = 1 << (index % u64::BITS as usize);
+        let removed = *word & bit != 0;
+        *word &= !bit;
+        removed
+    }
+
+    fn iter_unordered(&self) -> impl Iterator<Item = NameId> + '_ {
+        self.words
+            .iter()
+            .enumerate()
+            .flat_map(|(word_index, word)| {
+                (0..u64::BITS)
+                    .filter(move |bit| word & (1 << bit) != 0)
+                    .map(move |bit| {
+                        NameId(
+                            u32::try_from(word_index * u64::BITS as usize + bit as usize)
+                                .expect("name ID should fit in u32"),
+                        )
+                    })
+            })
+    }
+}
+
+impl Extend<NameId> for NameSet {
+    fn extend<T: IntoIterator<Item = NameId>>(&mut self, iter: T) {
+        for name in iter {
+            self.insert(name);
+        }
+    }
+}
+
+impl FromIterator<NameId> for NameSet {
+    fn from_iter<T: IntoIterator<Item = NameId>>(iter: T) -> Self {
+        let mut names = Self::default();
+        names.extend(iter);
+        names
+    }
+}
+
 impl NameInterner {
     fn intern(&mut self, name: String) -> NameId {
         if let Some(id) = self.by_name.get(&name) {
@@ -497,8 +564,8 @@ impl FunctionPlan {
             type_parameter_names: names.intern_set(type_parameter_names),
         };
         plan.absorb_child_requirements(
-            nested_function_requirements.iter().cloned(),
-            nested_function_annotation_references.iter().cloned(),
+            nested_function_requirements.iter().copied(),
+            nested_function_annotation_references.iter().copied(),
         );
         plan
     }
@@ -724,6 +791,26 @@ impl Default for ScopeArena {
 impl ScopeArena {
     fn analyze(body: &[Stmt], future_annotations: bool) -> Self {
         let mut arena = Self::default();
+        for name in [
+            SHADOWED_SUPER_SENTINEL,
+            ".0",
+            ".defaults",
+            ".format",
+            ".generic_base",
+            ".kwdefaults",
+            ".type_params",
+            "__class__",
+            "__classdict__",
+            "__conditional_annotations__",
+            "format",
+            "super",
+        ] {
+            arena.names.intern(name.to_string());
+        }
+        ModuleNameCollector {
+            names: &mut arena.names,
+        }
+        .collect_suite(body);
         arena.build_suite(ScopeId::MODULE, body, future_annotations);
         arena
     }
@@ -904,6 +991,131 @@ impl ScopeArena {
     }
 }
 
+struct ModuleNameCollector<'a> {
+    names: &'a mut NameInterner,
+}
+
+impl ModuleNameCollector<'_> {
+    fn collect_suite(&mut self, body: &[Stmt]) {
+        for statement in body {
+            self.visit_stmt(statement);
+        }
+    }
+
+    fn collect_parameters(&mut self, parameters: &ruff_python_ast::Parameters) {
+        for parameter in parameters
+            .posonlyargs
+            .iter()
+            .chain(&parameters.args)
+            .chain(&parameters.kwonlyargs)
+        {
+            self.names.intern(parameter.name().as_str().to_string());
+        }
+        if let Some(parameter) = &parameters.vararg {
+            self.names.intern(parameter.name.as_str().to_string());
+        }
+        if let Some(parameter) = &parameters.kwarg {
+            self.names.intern(parameter.name.as_str().to_string());
+        }
+    }
+
+    fn collect_type_parameters(&mut self, parameters: Option<&ruff_python_ast::TypeParams>) {
+        if let Some(parameters) = parameters {
+            for parameter in parameters {
+                self.names.intern(parameter.name().as_str().to_string());
+            }
+        }
+    }
+}
+
+impl<'ast> Visitor<'ast> for ModuleNameCollector<'_> {
+    fn visit_stmt(&mut self, statement: &'ast Stmt) {
+        match statement {
+            Stmt::FunctionDef(definition) => {
+                self.names.intern(definition.name.as_str().to_string());
+                self.collect_parameters(&definition.parameters);
+                self.collect_type_parameters(definition.type_params.as_deref());
+            }
+            Stmt::ClassDef(definition) => {
+                self.names.intern(definition.name.as_str().to_string());
+                self.collect_type_parameters(definition.type_params.as_deref());
+            }
+            Stmt::TypeAlias(statement) => {
+                self.collect_type_parameters(statement.type_params.as_deref());
+            }
+            Stmt::Global(statement) => {
+                for name in &statement.names {
+                    self.names.intern(name.as_str().to_string());
+                }
+            }
+            Stmt::Nonlocal(statement) => {
+                for name in &statement.names {
+                    self.names.intern(name.as_str().to_string());
+                }
+            }
+            Stmt::Import(statement) => {
+                for alias in &statement.names {
+                    let name = alias.asname.as_ref().map_or_else(
+                        || alias.name.as_str().split('.').next().unwrap_or(""),
+                        |name| name.as_str(),
+                    );
+                    self.names.intern(name.to_string());
+                }
+            }
+            Stmt::ImportFrom(statement) => {
+                for alias in &statement.names {
+                    if alias.name.as_str() != "*" {
+                        let name = alias
+                            .asname
+                            .as_ref()
+                            .map_or(alias.name.as_str(), |name| name.as_str());
+                        self.names.intern(name.to_string());
+                    }
+                }
+            }
+            Stmt::Try(statement) => {
+                for handler in &statement.handlers {
+                    if let Some(handler) = handler.as_except_handler()
+                        && let Some(name) = &handler.name
+                    {
+                        self.names.intern(name.as_str().to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+        walk_stmt(self, statement);
+    }
+
+    fn visit_expr(&mut self, expression: &'ast Expr) {
+        match expression {
+            Expr::Name(name) => {
+                self.names.intern(name.id.as_str().to_string());
+            }
+            Expr::Lambda(lambda) => {
+                if let Some(parameters) = lambda.parameters.as_deref() {
+                    self.collect_parameters(parameters);
+                }
+            }
+            _ => {}
+        }
+        walk_expr(self, expression);
+    }
+
+    fn visit_pattern(&mut self, pattern: &'ast Pattern) {
+        let name = match pattern {
+            Pattern::MatchAs(pattern) => pattern.name.as_ref(),
+            Pattern::MatchStar(pattern) => pattern.name.as_ref(),
+            Pattern::MatchMapping(pattern) => pattern.rest.as_ref(),
+            _ => None,
+        };
+        if let Some(name) = name {
+            self.names.intern(name.as_str().to_string());
+        }
+        walk_pattern(self, pattern);
+    }
+}
+
 #[derive(Debug)]
 struct CompilationContext {
     filename: String,
@@ -984,16 +1196,16 @@ struct OutputState {
 struct SymbolState {
     locals: Vec<String>,
     fast_local_count: usize,
-    cell_names: FxHashSet<String>,
+    cell_names: NameSet,
     free_names: Vec<String>,
-    temporary_indices: FxHashMap<String, u32>,
-    hidden_names: FxHashSet<String>,
-    active_temporaries: FxHashSet<String>,
-    initialized_locals: FxHashSet<String>,
-    owned_load_locals: FxHashSet<String>,
-    imported_scope_names: FxHashSet<String>,
-    type_parameter_names: BTreeSet<String>,
-    module_globals: FxHashSet<String>,
+    temporary_indices: FxHashMap<NameId, u32>,
+    hidden_names: NameSet,
+    active_temporaries: NameSet,
+    initialized_locals: NameSet,
+    owned_load_locals: NameSet,
+    imported_scope_names: NameSet,
+    type_parameter_names: NameSet,
+    module_globals: NameSet,
 }
 
 #[derive(Debug, Default)]
@@ -1060,6 +1272,56 @@ impl Compiler {
             .scopes
             .get()
             .ok_or_else(|| CompileError::Internal("scope arena was not initialized".to_string()))
+    }
+
+    fn name_id(&self, name: &str) -> Option<NameId> {
+        self.context.scopes.get()?.names.get(name)
+    }
+
+    fn required_name_id(&self, name: &str) -> NameId {
+        self.name_id(name)
+            .unwrap_or_else(|| panic!("module analysis did not intern `{name}`"))
+    }
+
+    fn contains_name(&self, names: &NameSet, name: &str) -> bool {
+        self.name_id(name).is_some_and(|name| names.contains(name))
+    }
+
+    fn is_cell(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.cell_names, name)
+    }
+
+    fn is_hidden(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.hidden_names, name)
+    }
+
+    fn is_active_temporary(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.active_temporaries, name)
+    }
+
+    fn is_initialized(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.initialized_locals, name)
+    }
+
+    fn is_owned_load(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.owned_load_locals, name)
+    }
+
+    fn is_imported(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.imported_scope_names, name)
+    }
+
+    fn is_type_parameter(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.type_parameter_names, name)
+    }
+
+    fn is_module_global(&self, name: &str) -> bool {
+        self.contains_name(&self.symbols.module_globals, name)
+    }
+
+    fn temporary_index(&self, name: &str) -> Option<u32> {
+        self.name_id(name)
+            .and_then(|name| self.symbols.temporary_indices.get(&name).copied())
     }
 
     fn function_scope_id(&self, definition: &StmtFunctionDef) -> Result<ScopeId, CompileError> {
@@ -1226,13 +1488,36 @@ impl Compiler {
                 ))
             })
             .collect::<Result<FxHashMap<_, _>, CompileError>>()?;
-        let initialized_locals = locals.iter().take(parameter_count).cloned().collect();
         locals.extend(plan.freevars.iter().cloned());
+
+        let names = &context
+            .scopes
+            .get()
+            .expect("scope arena should be initialized before child compilation")
+            .names;
+        let cell_names = plan
+            .cellvars
+            .iter()
+            .map(|name| {
+                names
+                    .get(name)
+                    .unwrap_or_else(|| panic!("module analysis did not intern `{name}`"))
+            })
+            .collect();
+        let initialized_locals = locals
+            .iter()
+            .take(parameter_count)
+            .map(|name| {
+                names
+                    .get(name)
+                    .unwrap_or_else(|| panic!("module analysis did not intern `{name}`"))
+            })
+            .collect();
 
         let symbols = SymbolState {
             locals,
             fast_local_count,
-            cell_names: plan.cellvars.clone(),
+            cell_names,
             free_names: plan.freevars.iter().cloned().collect(),
             initialized_locals,
             ..SymbolState::default()
@@ -1272,14 +1557,27 @@ impl Compiler {
         future_flags: u32,
     ) -> Self {
         let mut locals = Vec::new();
-        let mut cell_names = FxHashSet::default();
+        let mut cell_names = NameSet::default();
+        let names = &context
+            .scopes
+            .get()
+            .expect("scope arena should be initialized before child compilation")
+            .names;
         if needs_class_closure {
             locals.push("__class__".to_string());
-            cell_names.insert("__class__".to_string());
+            cell_names.insert(
+                names
+                    .get("__class__")
+                    .expect("module analysis should intern `__class__`"),
+            );
         }
         if has_methods {
             locals.push("__classdict__".to_string());
-            cell_names.insert("__classdict__".to_string());
+            cell_names.insert(
+                names
+                    .get("__classdict__")
+                    .expect("module analysis should intern `__classdict__`"),
+            );
         }
         let free_start = locals.len();
         let free_indices = freevars
@@ -1550,32 +1848,34 @@ impl Compiler {
 
     pub(crate) fn compile_module(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
         let future_flags = future_feature_flags(body);
-        if self
-            .context
-            .scopes
-            .set(ScopeArena::analyze(
-                body,
-                future_flags & CO_FUTURE_ANNOTATIONS != 0,
-            ))
-            .is_err()
-        {
+        let arena = ScopeArena::analyze(body, future_flags & CO_FUTURE_ANNOTATIONS != 0);
+        if self.context.scopes.set(arena).is_err() {
             return Err(CompileError::Internal(
                 "scope arena was initialized more than once".to_string(),
             ));
         }
-        self.symbols.module_globals = module_global_names(body);
-        self.symbols.imported_scope_names = module_imported_names(body);
+        self.symbols.module_globals = module_global_names(body)
+            .into_iter()
+            .map(|name| self.required_name_id(&name))
+            .collect();
+        self.symbols.imported_scope_names = module_imported_names(body)
+            .into_iter()
+            .map(|name| self.required_name_id(&name))
+            .collect();
         let mut module_bindings = LocalCollector::default();
         module_bindings.collect_suite(body);
         for name in &module_bindings.comprehension_targets {
             let index = to_u32(self.symbols.locals.len(), "module local count")?;
             self.symbols.locals.push(name.clone());
-            self.symbols.temporary_indices.insert(name.clone(), index);
-            self.symbols.hidden_names.insert(name.clone());
+            let name = self.required_name_id(name);
+            self.symbols.temporary_indices.insert(name, index);
+            self.symbols.hidden_names.insert(name);
         }
-        self.symbols
-            .cell_names
-            .extend(inlined_comprehension_cell_names_in_suite(body));
+        let comprehension_cell_names = inlined_comprehension_cell_names_in_suite(body)
+            .into_iter()
+            .map(|name| self.required_name_id(&name))
+            .collect::<Vec<_>>();
+        self.symbols.cell_names.extend(comprehension_cell_names);
         self.symbols.fast_local_count = self.symbols.locals.len();
         self.assembler.set_location(SourceLocation::NONE);
         let comprehension_cells = self
@@ -1583,7 +1883,7 @@ impl Compiler {
             .locals
             .iter()
             .enumerate()
-            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.is_cell(name))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         for index in comprehension_cells {
@@ -1593,9 +1893,8 @@ impl Compiler {
             // This set is propagated to every child compiler. An impossible
             // Python identifier keeps the module-shadowing fact alongside the
             // imported-name facts used by the same optimization checks.
-            self.symbols
-                .imported_scope_names
-                .insert(SHADOWED_SUPER_SENTINEL.to_string());
+            let sentinel = self.required_name_id(SHADOWED_SUPER_SENTINEL);
+            self.symbols.imported_scope_names.insert(sentinel);
         }
         self.unit.flags |= future_flags;
         let simple_module_annotations = has_simple_annotations(body);
@@ -1608,9 +1907,8 @@ impl Compiler {
             self.symbols
                 .locals
                 .push("__conditional_annotations__".to_string());
-            self.symbols
-                .cell_names
-                .insert("__conditional_annotations__".to_string());
+            let annotation_name = self.required_name_id("__conditional_annotations__");
+            self.symbols.cell_names.insert(annotation_name);
             self.assembler.set_location(SourceLocation::NONE);
             self.emit(MAKE_CELL, annotation_cell, 0)?;
         }
@@ -1718,8 +2016,8 @@ impl Compiler {
     }
 
     fn compile_class_body(mut self, body: &Suite) -> Result<CodeObject, CompileError> {
-        let has_classdict_cell = self.symbols.cell_names.contains("__classdict__");
-        let has_class_cell = self.symbols.cell_names.contains("__class__");
+        let has_classdict_cell = self.is_cell("__classdict__");
+        let has_class_cell = self.is_cell("__class__");
         self.assembler.set_location(SourceLocation::NONE);
         if !self.symbols.free_names.is_empty() {
             self.emit(
@@ -1734,7 +2032,7 @@ impl Compiler {
             .iter()
             .take(self.symbols.locals.len() - self.symbols.free_names.len())
             .enumerate()
-            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.is_cell(name))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         for index in cell_indices {
@@ -1974,7 +2272,7 @@ impl Compiler {
                 let storage_kind =
                     if index >= self.symbols.locals.len() - self.symbols.free_names.len() {
                         CO_FAST_FREE
-                    } else if self.symbols.cell_names.contains(name) {
+                    } else if self.is_cell(name) {
                         if index < self.symbols.fast_local_count {
                             CO_FAST_LOCAL | CO_FAST_CELL
                         } else {
@@ -1985,7 +2283,7 @@ impl Compiler {
                     };
                 argument_kind
                     | storage_kind
-                    | if self.symbols.hidden_names.contains(name) {
+                    | if self.is_hidden(name) {
                         CO_FAST_HIDDEN
                     } else {
                         0
@@ -2068,7 +2366,7 @@ impl Compiler {
             .iter()
             .take(self.symbols.locals.len() - self.symbols.free_names.len())
             .enumerate()
-            .filter(|(_, name)| self.symbols.cell_names.contains(name.as_str()))
+            .filter(|(_, name)| self.is_cell(name))
             .map(|(index, _)| index)
             .collect();
         for index in cells {
@@ -2995,16 +3293,15 @@ impl Compiler {
                                 .any(|target| matches!(target, Expr::Name(_)))
                                 && let Expr::Name(name) = assignment.value.as_ref()
                             {
-                                compiler
-                                    .symbols
-                                    .owned_load_locals
-                                    .insert(name.id.to_string())
+                                let name = compiler.required_name_id(name.id.as_str());
+                                compiler.symbols.owned_load_locals.insert(name)
                             } else {
                                 false
                             };
                             compiler.compile_expression(&assignment.value)?;
                             if newly_owned && let Expr::Name(name) = assignment.value.as_ref() {
-                                compiler.symbols.owned_load_locals.remove(name.id.as_str());
+                                let name = compiler.required_name_id(name.id.as_str());
+                                compiler.symbols.owned_load_locals.remove(name);
                             }
                             Ok(())
                         },
@@ -3019,6 +3316,10 @@ impl Compiler {
                         for target in &assignment.targets {
                             let mut names = Vec::new();
                             collect_target_names(target, &mut names);
+                            let names = names
+                                .into_iter()
+                                .map(|name| self.required_name_id(&name))
+                                .collect::<Vec<_>>();
                             self.symbols.owned_load_locals.extend(names);
                         }
                     }
@@ -5075,7 +5376,7 @@ impl Compiler {
         let end = self.assembler.label();
         let mut newly_initialized_targets = Vec::new();
         collect_target_names(&statement.target, &mut newly_initialized_targets);
-        newly_initialized_targets.retain(|name| !self.symbols.initialized_locals.contains(name));
+        newly_initialized_targets.retain(|name| !self.is_initialized(name));
 
         self.compile_iterable_expression(&statement.iter)?;
         self.assembler
@@ -5115,6 +5416,7 @@ impl Compiler {
         self.emit(END_FOR, 0, -1)?;
         self.emit(POP_ITER, 0, -1)?;
         for name in &newly_initialized_targets {
+            let name = self.required_name_id(name);
             self.symbols.initialized_locals.remove(name);
         }
         let orelse_start = self.assembler.instruction_count();
@@ -5164,7 +5466,7 @@ impl Compiler {
         let end = self.assembler.label();
         let mut newly_initialized_targets = Vec::new();
         collect_target_names(&statement.target, &mut newly_initialized_targets);
-        newly_initialized_targets.retain(|name| !self.symbols.initialized_locals.contains(name));
+        newly_initialized_targets.retain(|name| !self.is_initialized(name));
 
         self.compile_expression(&statement.iter)?;
         let iterator_location = self.source_location(statement.iter.range());
@@ -5256,6 +5558,7 @@ impl Compiler {
             false,
         );
         for name in &newly_initialized_targets {
+            let name = self.required_name_id(name);
             self.symbols.initialized_locals.remove(name);
         }
         self.compile_suite(&statement.orelse)?;
@@ -5795,14 +6098,18 @@ impl Compiler {
             if let Some(exception_type) = &handler.type_ {
                 let mut references = ReferenceCollector::default();
                 references.visit_expr(exception_type);
-                let newly_owned: Vec<_> = references
+                let reference_names = references
                     .references
                     .into_iter()
-                    .filter(|name| self.symbols.owned_load_locals.insert(name.clone()))
+                    .map(|name| self.required_name_id(&name))
+                    .collect::<Vec<_>>();
+                let newly_owned: Vec<_> = reference_names
+                    .into_iter()
+                    .filter(|name| self.symbols.owned_load_locals.insert(*name))
                     .collect();
                 self.compile_expression(exception_type)?;
                 for name in newly_owned {
-                    self.symbols.owned_load_locals.remove(&name);
+                    self.symbols.owned_load_locals.remove(name);
                 }
                 self.assembler.set_location(handler_location);
                 self.emit(CHECK_EXC_MATCH, 0, 0)?;
@@ -5966,15 +6273,16 @@ impl Compiler {
                 let initialized_locals = &self.symbols.initialized_locals;
                 let owned_load_locals = &mut self.symbols.owned_load_locals;
                 initialized_locals
-                    .iter()
-                    .filter(|name| owned_load_locals.insert((*name).clone()))
-                    .cloned()
+                    .iter_unordered()
+                    .filter(|name| owned_load_locals.insert(*name))
                     .collect::<Vec<_>>()
             };
-            let previously_owned = handler
+            let handler_name = handler
                 .name
                 .as_ref()
-                .is_some_and(|name| !self.symbols.owned_load_locals.insert(name.to_string()));
+                .map(|name| self.required_name_id(name.as_str()));
+            let previously_owned =
+                handler_name.is_some_and(|name| !self.symbols.owned_load_locals.insert(name));
             let terminal_handler_if = if terminal
                 && let Some(name) = &handler.name
                 && let [Stmt::If(statement)] = handler.body.as_slice()
@@ -6041,13 +6349,13 @@ impl Compiler {
             if let Some(exclusions) = &terminal_handler_exclusions {
                 handler_region_exclusions.extend_from_slice(exclusions);
             }
-            if let Some(name) = &handler.name
+            if let Some(name) = handler_name
                 && !previously_owned
             {
-                self.symbols.owned_load_locals.remove(name.as_str());
+                self.symbols.owned_load_locals.remove(name);
             }
             for name in newly_owned_handler_locals {
-                self.symbols.owned_load_locals.remove(&name);
+                self.symbols.owned_load_locals.remove(name);
             }
             let handler_body_has_instructions =
                 self.assembler.instruction_count() > handler_body_start;
@@ -7174,7 +7482,7 @@ impl Compiler {
                 .map_or_else(Vec::new, |target| {
                     let mut names = Vec::new();
                     collect_target_names(target, &mut names);
-                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
+                    names.retain(|name| !self.is_initialized(name));
                     names
                 });
 
@@ -7311,7 +7619,8 @@ impl Compiler {
         self.assembler.mark(end);
         self.set_depth(base_depth);
         for name in newly_initialized_targets {
-            self.symbols.initialized_locals.remove(&name);
+            let name = self.required_name_id(&name);
+            self.symbols.initialized_locals.remove(name);
         }
         Ok(())
     }
@@ -7349,7 +7658,7 @@ impl Compiler {
                 .map_or_else(Vec::new, |target| {
                     let mut names = Vec::new();
                     collect_target_names(target, &mut names);
-                    names.retain(|name| !self.symbols.initialized_locals.contains(name));
+                    names.retain(|name| !self.is_initialized(name));
                     names
                 });
 
@@ -7496,7 +7805,8 @@ impl Compiler {
         self.assembler.mark(end);
         self.set_depth(base_depth);
         for name in newly_initialized_targets {
-            self.symbols.initialized_locals.remove(&name);
+            let name = self.required_name_id(&name);
+            self.symbols.initialized_locals.remove(name);
         }
         Ok(())
     }
@@ -7676,7 +7986,11 @@ impl Compiler {
             .symbols
             .imported_scope_names
             .clone_from(&self.symbols.imported_scope_names);
-        wrapper.symbols.type_parameter_names = type_names;
+        let type_parameter_names = type_names
+            .iter()
+            .map(|name| wrapper.required_name_id(name))
+            .collect();
+        wrapper.symbols.type_parameter_names = type_parameter_names;
         wrapper.unit.generic_target_qualified_name = Some(self.child_qualified_name(name));
         if matches!(self.unit.scope, Scope::Class { .. }) {
             wrapper.unit.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
@@ -7839,7 +8153,11 @@ impl Compiler {
             .symbols
             .imported_scope_names
             .clone_from(&self.symbols.imported_scope_names);
-        wrapper.symbols.type_parameter_names = type_names;
+        let type_parameter_names = type_names
+            .iter()
+            .map(|name| wrapper.required_name_id(name))
+            .collect();
+        wrapper.symbols.type_parameter_names = type_parameter_names;
         wrapper.unit.generic_target_qualified_name = Some(target_qualified_name);
         if matches!(self.unit.scope, Scope::Class { .. }) {
             wrapper.unit.annotation_classdict_index = Some(wrapper.closure_index("__classdict__")?);
@@ -8234,7 +8552,11 @@ impl Compiler {
             .symbols
             .imported_scope_names
             .clone_from(&self.symbols.imported_scope_names);
-        wrapper.symbols.type_parameter_names = type_names;
+        let type_parameter_names = type_names
+            .iter()
+            .map(|name| wrapper.required_name_id(name))
+            .collect();
+        wrapper.symbols.type_parameter_names = type_parameter_names;
         wrapper.unit.generic_target_qualified_name = Some(target_qualified_name);
         wrapper.unit.child_qualified_name_parent = Some(wrapper_child_qualified_name_parent);
         if matches!(self.unit.scope, Scope::Class { .. }) {
@@ -8303,8 +8625,7 @@ impl Compiler {
             .filter(|name| match &self.unit.scope {
                 Scope::Module => false,
                 Scope::Class { free_indices, .. } => {
-                    self.symbols.cell_names.contains(name.as_str())
-                        || free_indices.contains_key(name.as_str())
+                    self.is_cell(name) || free_indices.contains_key(name.as_str())
                 }
                 Scope::Function {
                     indices,
@@ -8609,9 +8930,7 @@ impl Compiler {
         let required_names = expression_required_names(expression);
         let mut freevars: BTreeSet<_> = required_names
             .iter()
-            .filter(|name| {
-                self.symbols.type_parameter_names.contains(*name) || self.can_provide_closure(name)
-            })
+            .filter(|name| self.is_type_parameter(name) || self.can_provide_closure(name))
             .cloned()
             .collect();
         let can_see_class_scope = matches!(self.unit.scope, Scope::Class { .. })
@@ -8764,10 +9083,10 @@ impl Compiler {
         let mut freevars = function_plan.annotation_freevars.clone();
         if self.unit.flags & CO_FUTURE_ANNOTATIONS == 0 {
             freevars.extend(
-                self.symbols
-                    .type_parameter_names
+                function_plan
+                    .annotation_references
                     .iter()
-                    .filter(|name| function_plan.annotation_references.contains(*name))
+                    .filter(|name| self.is_type_parameter(name))
                     .cloned(),
             );
         }
@@ -9986,13 +10305,15 @@ impl Compiler {
                 .any(expression_contains_inlined_comprehension)
                 && let Expr::Name(name) = call.func.as_ref()
             {
-                self.symbols.owned_load_locals.insert(name.id.to_string())
+                let name = self.required_name_id(name.id.as_str());
+                self.symbols.owned_load_locals.insert(name)
             } else {
                 false
             };
             self.compile_expression(&call.func)?;
             if newly_owned_callable && let Expr::Name(name) = call.func.as_ref() {
-                self.symbols.owned_load_locals.remove(name.id.as_str());
+                let name = self.required_name_id(name.id.as_str());
+                self.symbols.owned_load_locals.remove(name);
             }
             self.assembler
                 .set_location(self.source_location(call.func.range()));
@@ -10253,7 +10574,7 @@ impl Compiler {
             return false;
         };
         // CPython only checks whether the name is import-originated in the module symbol table.
-        self.symbols.imported_scope_names.contains(name.id.as_str())
+        self.is_imported(name.id.as_str())
     }
 
     fn compile_super_attribute(
@@ -10270,11 +10591,8 @@ impl Compiler {
         if super_name.id.as_str() != "super"
             || attribute.attr.as_str() == "__class__"
             || !call.arguments.keywords.is_empty()
-            || self.symbols.imported_scope_names.contains("super")
-            || self
-                .symbols
-                .imported_scope_names
-                .contains(SHADOWED_SUPER_SENTINEL)
+            || self.is_imported("super")
+            || self.is_imported(SHADOWED_SUPER_SENTINEL)
         {
             return Ok(false);
         }
@@ -10635,7 +10953,7 @@ impl Compiler {
             let index = self.ensure_temporary(name)?;
             temporary_indices.push(index);
             self.emit(LOAD_FAST_AND_CLEAR, index, 1)?;
-            if comprehension_cell_names.contains(name) && self.symbols.cell_names.contains(name) {
+            if comprehension_cell_names.contains(name) && self.is_cell(name) {
                 self.emit(MAKE_CELL, index, 0)?;
             }
         }
@@ -10646,9 +10964,13 @@ impl Compiler {
                 0,
             )?;
         }
+        let active_temporary_ids: Vec<_> = active_temporary_names
+            .iter()
+            .map(|name| self.required_name_id(name))
+            .collect();
         self.symbols
             .active_temporaries
-            .extend(active_temporary_names.iter().cloned());
+            .extend(active_temporary_ids.iter().copied());
 
         let protected_start = self.assembler.label();
         let protected_end = self.assembler.label();
@@ -10761,7 +11083,7 @@ impl Compiler {
             // CPython converts STORE_FAST_MAYBE_NULL only after inserting superinstructions.
             self.assembler.prevent_last_instruction_fusion();
         }
-        for name in &active_temporary_names {
+        for name in active_temporary_ids {
             self.symbols.active_temporaries.remove(name);
         }
 
@@ -11676,9 +11998,10 @@ impl Compiler {
     }
 
     fn ensure_temporary(&mut self, name: &str) -> Result<u32, CompileError> {
-        if let Some(index) = self.symbols.temporary_indices.get(name).copied() {
+        if let Some(index) = self.temporary_index(name) {
             return Ok(index);
         }
+        let name_id = self.required_name_id(name);
         let existing = match &self.unit.scope {
             Scope::Function { indices, .. } => indices.get(name).copied(),
             Scope::Module | Scope::Class { .. } => None,
@@ -11689,13 +12012,11 @@ impl Compiler {
             let index = to_u32(self.symbols.locals.len(), "comprehension local count")?;
             self.symbols.locals.push(name.to_string());
             if !matches!(self.unit.scope, Scope::Function { .. }) {
-                self.symbols.hidden_names.insert(name.to_string());
+                self.symbols.hidden_names.insert(name_id);
             }
             index
         };
-        self.symbols
-            .temporary_indices
-            .insert(name.to_string(), index);
+        self.symbols.temporary_indices.insert(name_id, index);
         Ok(index)
     }
 
@@ -12578,10 +12899,12 @@ impl Compiler {
     }
 
     fn load_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.symbols.active_temporaries.contains(name) {
-            let index = self.symbols.temporary_indices[name];
+        if self.is_active_temporary(name) {
+            let index = self
+                .temporary_index(name)
+                .expect("active temporary should have an index");
             return self.emit(
-                if self.symbols.cell_names.contains(name) {
+                if self.is_cell(name) {
                     LOAD_DEREF
                 } else {
                     LOAD_FAST
@@ -12594,7 +12917,7 @@ impl Compiler {
         match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.symbols.module_globals.contains(name) {
+                if self.is_module_global(name) {
                     self.emit(LOAD_GLOBAL, index << 1, 1)
                 } else {
                     self.emit(LOAD_NAME, index, 1)
@@ -12644,8 +12967,8 @@ impl Compiler {
                         } else {
                             self.emit(LOAD_DEREF, index, 1)
                         }
-                    } else if self.symbols.initialized_locals.contains(name) {
-                        if self.symbols.owned_load_locals.contains(name) {
+                    } else if self.is_initialized(name) {
+                        if self.is_owned_load(name) {
                             self.emit_owned_fast(index, 1)
                         } else {
                             self.emit(LOAD_FAST, index, 1)
@@ -12682,18 +13005,23 @@ impl Compiler {
         let Scope::Function { indices, .. } = &self.unit.scope else {
             return;
         };
-        self.symbols.initialized_locals.extend(
-            references
-                .into_iter()
-                .filter(|name| indices.contains_key(name)),
-        );
+        let references = references
+            .into_iter()
+            .filter(|name| indices.contains_key(name))
+            .collect::<Vec<_>>();
+        for name in references {
+            let name = self.required_name_id(&name);
+            self.symbols.initialized_locals.insert(name);
+        }
     }
 
     fn store_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.symbols.active_temporaries.contains(name) {
-            let index = self.symbols.temporary_indices[name];
+        if self.is_active_temporary(name) {
+            let index = self
+                .temporary_index(name)
+                .expect("active temporary should have an index");
             return self.emit(
-                if self.symbols.cell_names.contains(name) {
+                if self.is_cell(name) {
                     STORE_DEREF
                 } else {
                     STORE_FAST
@@ -12705,7 +13033,7 @@ impl Compiler {
         match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.symbols.module_globals.contains(name) {
+                if self.is_module_global(name) {
                     self.emit(STORE_GLOBAL, index, -1)
                 } else {
                     self.emit(STORE_NAME, index, -1)
@@ -12741,7 +13069,8 @@ impl Compiler {
                     return self.emit(STORE_GLOBAL, index, -1);
                 }
                 if let Some(index) = indices.get(name).copied() {
-                    self.symbols.initialized_locals.insert(name.to_string());
+                    let name_id = self.required_name_id(name);
+                    self.symbols.initialized_locals.insert(name_id);
                     if cells.contains(name) {
                         self.emit(STORE_DEREF, index, -1)
                     } else {
@@ -12759,10 +13088,12 @@ impl Compiler {
     }
 
     fn delete_name(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.symbols.active_temporaries.contains(name) {
-            let index = self.symbols.temporary_indices[name];
+        if self.is_active_temporary(name) {
+            let index = self
+                .temporary_index(name)
+                .expect("active temporary should have an index");
             return self.emit(
-                if self.symbols.cell_names.contains(name) {
+                if self.is_cell(name) {
                     DELETE_DEREF
                 } else {
                     DELETE_FAST
@@ -12774,7 +13105,7 @@ impl Compiler {
         match &self.unit.scope {
             Scope::Module => {
                 let index = self.name_index(name)?;
-                if self.symbols.module_globals.contains(name) {
+                if self.is_module_global(name) {
                     self.emit(DELETE_GLOBAL, index, 0)
                 } else {
                     self.emit(DELETE_NAME, index, 0)
@@ -12810,7 +13141,9 @@ impl Compiler {
                     return self.emit(DELETE_GLOBAL, index, 0);
                 }
                 if let Some(index) = indices.get(name).copied() {
-                    self.symbols.initialized_locals.remove(name);
+                    if let Some(name) = self.name_id(name) {
+                        self.symbols.initialized_locals.remove(name);
+                    }
                     if cells.contains(name) {
                         self.emit(DELETE_DEREF, index, 0)
                     } else {
@@ -12829,10 +13162,9 @@ impl Compiler {
 
     fn closure_index(&self, name: &str) -> Result<u32, CompileError> {
         match &self.unit.scope {
-            Scope::Module => self.symbols.temporary_indices
-                .get(name)
-                .copied()
-                .filter(|_| self.symbols.cell_names.contains(name))
+            Scope::Module => self
+                .temporary_index(name)
+                .filter(|_| self.is_cell(name))
                 .ok_or_else(|| {
                     CompileError::Internal(format!(
                         "module cannot provide closure variable `{name}`"
@@ -12865,9 +13197,9 @@ impl Compiler {
 
     fn can_provide_closure(&self, name: &str) -> bool {
         match &self.unit.scope {
-            Scope::Module => self.symbols.cell_names.contains(name),
+            Scope::Module => self.is_cell(name),
             Scope::Class { free_indices, .. } => {
-                self.symbols.cell_names.contains(name) || free_indices.contains_key(name)
+                self.is_cell(name) || free_indices.contains_key(name)
             }
             Scope::Function {
                 indices,
@@ -13447,7 +13779,7 @@ impl Compiler {
                     ..
                 } if indices.contains_key(&name) && !globals.contains(&name)
                     || free_indices.contains_key(&name)
-            ) || self.symbols.temporary_indices.contains_key(&name);
+            ) || self.temporary_index(&name).is_some();
             if force_name || !is_local_or_free {
                 self.name_index(&name)?;
             }
