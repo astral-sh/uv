@@ -438,11 +438,13 @@ impl ProgressReporter {
 
         state.headers += 1;
         state.bars.insert(id, ProgressBarKind::Spinner { progress });
-        state.suspensions += 1;
-        if state.suspensions == 1 {
-            // Git can prompt on the terminal, so prevent every bar in the shared progress
-            // display from redrawing until all checkouts have finished.
-            multi_progress.set_draw_target(ProgressDrawTarget::hidden());
+        if url.scheme() == "ssh" {
+            state.suspensions += 1;
+            if state.suspensions == 1 {
+                // SSH can prompt on the terminal, so prevent every bar in the shared progress
+                // display from redrawing until all SSH checkouts have finished.
+                multi_progress.set_draw_target(ProgressDrawTarget::hidden());
+            }
         }
         id
     }
@@ -459,9 +461,11 @@ impl ProgressReporter {
         let (progress, progress_output) = {
             let mut state = state.lock().unwrap();
             state.headers -= 1;
-            state.suspensions -= 1;
-            if state.suspensions == 0 {
-                multi_progress.set_draw_target(self.printer.target());
+            if url.scheme() == "ssh" {
+                state.suspensions -= 1;
+                if state.suspensions == 0 {
+                    multi_progress.set_draw_target(self.printer.target());
+                }
             }
             (
                 state.bars.remove(&id).unwrap(),
@@ -1032,7 +1036,7 @@ mod tests {
     }
 
     #[test]
-    fn checkout_suspends_all_progress_draws() {
+    fn ssh_checkout_suspends_all_progress_draws() {
         let terminal = RecordingTerm::default();
         let multi_progress = MultiProgress::with_draw_target(ProgressDrawTarget::term_like(
             Box::new(terminal.clone()),
@@ -1059,5 +1063,23 @@ mod tests {
         assert_eq!(terminal.writes(), writes_before_updates);
 
         reporter.on_checkout_complete(&url, "other", second_checkout);
+    }
+
+    #[test]
+    fn https_checkout_keeps_progress_draws_active() {
+        let terminal = RecordingTerm::default();
+        let multi_progress =
+            MultiProgress::with_draw_target(ProgressDrawTarget::term_like(Box::new(terminal)));
+        let root = multi_progress.add(ProgressBar::new_spinner());
+        let reporter = ProgressReporter::new(root, multi_progress.clone(), Printer::Silent);
+        let url = DisplaySafeUrl::parse("https://example.com/project.git")
+            .expect("test URL should be valid");
+
+        let checkout = reporter.on_checkout_start(&url, "main");
+
+        assert!(!multi_progress.is_hidden());
+
+        reporter.on_checkout_complete(&url, "main", checkout);
+        assert!(!multi_progress.is_hidden());
     }
 }
