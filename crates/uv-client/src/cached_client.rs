@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use std::{borrow::Cow, path::Path};
+use std::{borrow::Cow, io::Read, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
@@ -825,12 +825,26 @@ impl DataWithCachePolicy {
     /// file given fails, then this returns an error.
     #[instrument]
     fn from_path_sync(path: &Path) -> Result<Self, Error> {
-        let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
-        // Note that we don't wrap our file in a buffer because it will just
-        // get passed to AlignedVec::extend_from_reader, which doesn't benefit
-        // from an intermediary buffer. In effect, the AlignedVec acts as the
-        // buffer.
-        Self::from_reader(file)
+        let mut file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+        let file_size = file.metadata().map_err(ErrorKind::Io)?.len();
+        let file_size = usize::try_from(file_size)
+            .ok()
+            .filter(|&file_size| file_size <= AlignedVec::<16>::MAX_CAPACITY)
+            .ok_or_else(|| {
+                ErrorKind::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "cache entry file size of {file_size} bytes exceeds the maximum supported \
+                         size of {} bytes",
+                        AlignedVec::<16>::MAX_CAPACITY,
+                    ),
+                ))
+            })?;
+
+        let mut aligned_bytes = AlignedVec::with_capacity(file_size);
+        aligned_bytes.resize(file_size, 0);
+        file.read_exact(&mut aligned_bytes).map_err(ErrorKind::Io)?;
+        Self::from_aligned_bytes(aligned_bytes)
     }
 
     /// Loads cached data and its associated HTTP cache policy from the given
