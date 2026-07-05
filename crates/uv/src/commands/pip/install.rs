@@ -315,11 +315,10 @@ pub(crate) async fn pip_install(
         && matches!(modifications, Modifications::Sufficient)
         && pylock.is_none();
 
-    // Determine the set of installed packages.
     let site_packages = if direct_reinstall {
-        SitePackages::empty(interpreter)
+        None
     } else {
-        SitePackages::from_environment(&environment)?
+        Some(SitePackages::from_environment(&environment)?)
     };
 
     // Check if the current environment satisfies the requirements.
@@ -331,6 +330,7 @@ pub(crate) async fn pip_install(
         && groups.is_empty()
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
+        && let Some(site_packages) = &site_packages
     {
         match site_packages.satisfies_spec(
             &requirements,
@@ -607,14 +607,13 @@ pub(crate) async fn pip_install(
     // If necessary, convert editable distributions to non-editable.
     let resolution = apply_editable_mode(resolution, editable);
 
-    // For direct reinstalls, only the resolved packages can be removed from the environment.
-    let site_packages = if direct_reinstall {
-        SitePackages::from_environment_for_packages(
+    let site_packages = match site_packages {
+        // For direct reinstalls, only the resolved packages can be removed from the environment.
+        None => SitePackages::from_environment_for_packages(
             &environment,
             resolution.distributions().map(Name::name),
-        )?
-    } else {
-        site_packages
+        )?,
+        Some(site_packages) => site_packages,
     };
 
     // Constrain any build requirements marked as `match-runtime = true`.

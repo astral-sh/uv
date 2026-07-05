@@ -46,16 +46,6 @@ pub struct SitePackages {
 }
 
 impl SitePackages {
-    /// Create an empty index for the given Python interpreter.
-    pub fn empty(interpreter: &Interpreter) -> Self {
-        Self {
-            interpreter: interpreter.clone(),
-            distributions: Vec::new(),
-            by_name: FxHashMap::default(),
-            by_url: FxHashMap::default(),
-        }
-    }
-
     /// Build an index of installed packages from the given Python environment.
     pub fn from_environment(environment: &PythonEnvironment) -> Result<Self> {
         Self::from_interpreter(environment.interpreter())
