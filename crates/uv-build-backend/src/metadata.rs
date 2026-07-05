@@ -2201,15 +2201,16 @@ mod tests {
         // Versions are ordered from oldest to latest
         let last_compatible =
             Version::from_str(COMPATIBLE_VERSIONS[COMPATIBLE_VERSIONS.len() - 1]).unwrap();
-        if last_compatible.release()[0] != current_version.release()[0]
-            && last_compatible.release()[0] != current_version.release()[1]
-        {
-            panic!(
-                "Please update the list of compatible versions for the uv build backend: \
-                If there was no breaking change in uv-build, add the last release before the \
-                breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
-                to an empty list"
-            );
-        }
+        // uv is versioned as `0.<minor>.<patch>`, so a breaking release bumps the minor segment.
+        // The list is kept one minor behind the current release, so if the newest compatible
+        // version isn't the immediately preceding minor, we likely missed updating the list on a
+        // breaking release.
+        assert!(
+            last_compatible.release()[1] + 1 == current_version.release()[1],
+            "Please update the list of compatible versions for the uv build backend: \
+            If there was no breaking change in uv-build, add the last release before the \
+            breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
+            to an empty list"
+        );
     }
 }
