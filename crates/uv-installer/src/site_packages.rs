@@ -125,8 +125,8 @@ impl SitePackages {
                     }
                 };
 
-                if package_names
-                    .is_some_and(|package_names| !package_names.contains(dist_info.name()))
+                if let Some(package_names) = package_names
+                    && !package_names.contains(dist_info.name())
                 {
                     continue;
                 }
