@@ -2794,6 +2794,94 @@ fn requirements_txt_export_group() -> Result<()> {
 }
 
 #[test]
+fn requirements_txt_multi_export_group() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    context
+        .export()
+        .arg("--frozen")
+        .arg("--quiet")
+        .arg("--no-header")
+        .arg("--no-group")
+        .arg("dev")
+        .arg("--output-file")
+        .arg("multi-main.txt")
+        .arg("--only-group-output-file")
+        .arg("foo=multi-foo.txt")
+        .arg("--only-group-output-file")
+        .arg("bar=multi-bar.txt")
+        .assert()
+        .success();
+
+    context
+        .export()
+        .arg("--frozen")
+        .arg("--quiet")
+        .arg("--no-header")
+        .arg("--no-group")
+        .arg("dev")
+        .arg("--output-file")
+        .arg("single-main.txt")
+        .assert()
+        .success();
+    context
+        .export()
+        .arg("--frozen")
+        .arg("--quiet")
+        .arg("--no-header")
+        .arg("--only-group")
+        .arg("foo")
+        .arg("--output-file")
+        .arg("single-foo.txt")
+        .assert()
+        .success();
+    context
+        .export()
+        .arg("--frozen")
+        .arg("--quiet")
+        .arg("--no-header")
+        .arg("--only-group")
+        .arg("bar")
+        .arg("--output-file")
+        .arg("single-bar.txt")
+        .assert()
+        .success();
+
+    assert_eq!(
+        context.read("multi-main.txt"),
+        context.read("single-main.txt")
+    );
+    assert_eq!(
+        context.read("multi-foo.txt"),
+        context.read("single-foo.txt")
+    );
+    assert_eq!(
+        context.read("multi-bar.txt"),
+        context.read("single-bar.txt")
+    );
+
+    Ok(())
+}
+
+#[test]
 fn requirements_txt_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

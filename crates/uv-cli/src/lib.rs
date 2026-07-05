@@ -5031,6 +5031,12 @@ pub struct ExportArgs {
     #[arg(long, short, value_hint = ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
+    /// Write an additional `--only-group` requirements export to the given file.
+    ///
+    /// May be provided multiple times as `GROUP=PATH`.
+    #[arg(long, value_name = "GROUP=PATH", hide = true)]
+    pub only_group_output_file: Vec<String>,
+
     /// Do not emit the current project.
     ///
     /// By default, the current project is included in the exported requirements file with all of

@@ -12,10 +12,11 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, EditableMode, ExportFormat,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::Verbatim;
-use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, GroupName, PackageName};
 use uv_preview::Preview;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
@@ -67,6 +68,7 @@ pub(crate) async fn export(
     hashes: bool,
     install_options: InstallOptions,
     output_file: Option<PathBuf>,
+    only_group_output_file: Vec<String>,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     editable: Option<EditableMode>,
@@ -90,6 +92,11 @@ pub(crate) async fn export(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
+    let only_group_output_file = only_group_output_file
+        .iter()
+        .map(|value| parse_only_group_output_file(value))
+        .collect::<Result<Vec<_>>>()?;
+
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
@@ -147,8 +154,9 @@ pub(crate) async fn export(
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
 
-    let groups = groups.with_defaults(default_groups);
-    let extras = extras.with_defaults(default_extras);
+    let groups = groups.with_defaults(default_groups.clone());
+    let extras = extras.with_defaults(default_extras.clone());
+    let only_group_extras = ExtrasSpecification::default().with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen.is_some() {
@@ -308,21 +316,43 @@ pub(crate) async fn export(
     // Validate that the set of requested extras and development groups are defined in the lockfile.
     target.validate_extras(&extras)?;
     target.validate_groups(&groups)?;
+    target.validate_extras(&only_group_extras)?;
 
-    if output_file
-        .as_deref()
-        .and_then(Path::file_name)
-        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
-    {
-        return Err(anyhow!(
-            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
-            "uv export".green(),
-            ExportFormat::value_variants()
-                .iter()
-                .filter_map(clap::ValueEnum::to_possible_value)
-                .map(|value| value.get_name().to_string())
-                .join(", ")
-        ));
+    let only_group_output_file = only_group_output_file
+        .into_iter()
+        .map(|(group, output_file)| {
+            let groups = DependencyGroups::from_args(
+                false,
+                false,
+                false,
+                vec![],
+                vec![],
+                false,
+                vec![group],
+                false,
+            )
+            .with_defaults(default_groups.clone());
+            target.validate_groups(&groups)?;
+            Ok((output_file, groups))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut output_files = FxHashSet::default();
+    if let Some(output_file) = &output_file {
+        output_files.insert(output_file.clone());
+    }
+    for (additional_output_file, _) in &only_group_output_file {
+        if !output_files.insert(additional_output_file.clone()) {
+            return Err(anyhow!(
+                "Cannot write multiple exports to the same output file: `{}`",
+                additional_output_file.display()
+            ));
+        }
+    }
+
+    validate_output_file(output_file.as_deref())?;
+    for (additional_output_file, _) in &only_group_output_file {
+        validate_output_file(Some(additional_output_file))?;
     }
 
     // Write the resolved dependencies to the output channel.
@@ -348,9 +378,18 @@ pub(crate) async fn export(
         }
     });
 
+    if !only_group_output_file.is_empty() && !matches!(format, ExportFormat::RequirementsTxt) {
+        return Err(anyhow!(
+            "`--only-group-output-file` is only supported with `requirements.txt` exports"
+        ));
+    }
+
     // Skip conflict detection for CycloneDX exports, as SBOMs are meant to document all dependencies including conflicts.
     if !matches!(format, ExportFormat::CycloneDX1_5) {
         detect_conflicts(&target, &extras, &groups)?;
+        for (_, groups) in &only_group_output_file {
+            detect_conflicts(&target, &only_group_extras, groups)?;
+        }
     }
 
     // If the user is exporting to PEP 751, ensure the filename matches the specification.
@@ -371,71 +410,21 @@ pub(crate) async fn export(
     // Generate the export.
     match format {
         ExportFormat::RequirementsTxt => {
-            let export = RequirementsTxtExport::from_lock(
+            write_requirements_txt_export(
+                &mut writer,
                 &target,
                 &prune,
-                &extras,
-                &groups,
-                include_annotations,
-                editable,
                 hashes,
                 &install_options,
+                &extras,
+                &groups,
+                editable.as_ref(),
+                include_annotations,
+                include_header,
+                include_index_url,
+                include_find_links,
+                &settings,
             )?;
-
-            if include_header {
-                writeln!(
-                    writer,
-                    "{}",
-                    "# This file was autogenerated by uv via the following command:".green()
-                )?;
-                writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
-            }
-
-            let mut wrote_preamble = false;
-
-            // If necessary, include the `--index-url` and `--extra-index-url` locations.
-            if include_index_url {
-                let mut seen = FxHashSet::default();
-                let mut emitted_explicit_index = false;
-
-                if let Some(index) = settings.index_locations.default_index() {
-                    writeln!(writer, "--index-url {}", index.url().verbatim())?;
-                    seen.insert(index.url());
-                    wrote_preamble = true;
-                    emitted_explicit_index |= index.explicit;
-                }
-                for index in settings
-                    .index_locations
-                    .implicit_indexes()
-                    .chain(settings.index_locations.explicit_indexes())
-                {
-                    if seen.insert(index.url()) {
-                        writeln!(writer, "--extra-index-url {}", index.url().verbatim())?;
-                        wrote_preamble = true;
-                    }
-                    emitted_explicit_index |= index.explicit;
-                }
-
-                if emitted_explicit_index {
-                    warn_user!(
-                        "`requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`."
-                    );
-                }
-            }
-
-            // If necessary, include the `--find-links` locations.
-            if include_find_links {
-                for flat_index in settings.index_locations.flat_indexes() {
-                    writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
-                    wrote_preamble = true;
-                }
-            }
-
-            if wrote_preamble {
-                writeln!(writer)?;
-            }
-
-            write!(writer, "{export}")?;
         }
         ExportFormat::PylockToml => {
             let export = PylockToml::from_lock(
@@ -476,7 +465,151 @@ pub(crate) async fn export(
 
     writer.commit().await?;
 
+    for (output_file, groups) in only_group_output_file {
+        let mut writer = OutputWriter::new(false, Some(&output_file));
+        write_requirements_txt_export(
+            &mut writer,
+            &target,
+            &prune,
+            hashes,
+            &install_options,
+            &only_group_extras,
+            &groups,
+            editable.as_ref(),
+            include_annotations,
+            include_header,
+            include_index_url,
+            include_find_links,
+            &settings,
+        )?;
+        writer.commit().await?;
+    }
+
     Ok(ExitStatus::Success)
+}
+
+fn validate_output_file(output_file: Option<&Path>) -> Result<()> {
+    if output_file
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (supported formats: {})",
+            "uv export".green(),
+            ExportFormat::value_variants()
+                .iter()
+                .filter_map(clap::ValueEnum::to_possible_value)
+                .map(|value| value.get_name().to_string())
+                .join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
+fn parse_only_group_output_file(value: &str) -> Result<(GroupName, PathBuf)> {
+    let Some((group, output_file)) = value.split_once('=') else {
+        return Err(anyhow!(
+            "Expected `--only-group-output-file` to use `GROUP=PATH`, got `{value}`"
+        ));
+    };
+
+    if group.is_empty() || output_file.is_empty() {
+        return Err(anyhow!(
+            "Expected `--only-group-output-file` to use `GROUP=PATH`, got `{value}`"
+        ));
+    }
+
+    let group = group
+        .parse::<GroupName>()
+        .map_err(|err| anyhow!("Invalid group in `--only-group-output-file`: {err}"))?;
+
+    Ok((group, PathBuf::from(output_file)))
+}
+
+#[expect(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+fn write_requirements_txt_export(
+    writer: &mut impl Write,
+    target: &InstallTarget<'_>,
+    prune: &[PackageName],
+    hashes: bool,
+    install_options: &InstallOptions,
+    extras: &ExtrasSpecificationWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
+    editable: Option<&EditableMode>,
+    include_annotations: bool,
+    include_header: bool,
+    include_index_url: bool,
+    include_find_links: bool,
+    settings: &ResolverSettings,
+) -> Result<()> {
+    let export = RequirementsTxtExport::from_lock(
+        target,
+        prune,
+        extras,
+        groups,
+        include_annotations,
+        editable.cloned(),
+        hashes,
+        install_options,
+    )?;
+
+    if include_header {
+        writeln!(
+            writer,
+            "{}",
+            "# This file was autogenerated by uv via the following command:".green()
+        )?;
+        writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+    }
+
+    let mut wrote_preamble = false;
+
+    // If necessary, include the `--index-url` and `--extra-index-url` locations.
+    if include_index_url {
+        let mut seen = FxHashSet::default();
+        let mut emitted_explicit_index = false;
+
+        if let Some(index) = settings.index_locations.default_index() {
+            writeln!(writer, "--index-url {}", index.url().verbatim())?;
+            seen.insert(index.url());
+            wrote_preamble = true;
+            emitted_explicit_index |= index.explicit;
+        }
+        for index in settings
+            .index_locations
+            .implicit_indexes()
+            .chain(settings.index_locations.explicit_indexes())
+        {
+            if seen.insert(index.url()) {
+                writeln!(writer, "--extra-index-url {}", index.url().verbatim())?;
+                wrote_preamble = true;
+            }
+            emitted_explicit_index |= index.explicit;
+        }
+
+        if emitted_explicit_index {
+            warn_user!(
+                "`requirements.txt` does not support per-package index pinning; explicit indexes were emitted globally via `--extra-index-url`."
+            );
+        }
+    }
+
+    // If necessary, include the `--find-links` locations.
+    if include_find_links {
+        for flat_index in settings.index_locations.flat_indexes() {
+            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
+            wrote_preamble = true;
+        }
+    }
+
+    if wrote_preamble {
+        writeln!(writer)?;
+    }
+
+    write!(writer, "{export}")?;
+
+    Ok(())
 }
 
 /// Format the uv command used to generate the output file.
