@@ -11,11 +11,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use cpu_time::ProcessTime;
-use uv_python_bytecode::{CompiledModule, compile};
+use uv_python_bytecode::{CPYTHON_TARGET, CompiledModule, compile};
 use walkdir::WalkDir;
 
-const EXPECTED_VERSION: &str = "3.14.5";
-const EXPECTED_MAGIC: &str = "2b0e0d0a";
 const BOOTSTRAP_SAMPLES: usize = 10_000;
 const BOOTSTRAP_SEED: u64 = 0x75_76_2d_62_79_74_65;
 
@@ -26,20 +24,31 @@ import sys
 import time
 import warnings
 
-EXPECTED_VERSION = (3, 14, 5)
-EXPECTED_MAGIC = "2b0e0d0a"
+EXPECTED_IMPLEMENTATION = sys.argv[1]
+EXPECTED_VERSION = tuple(map(int, sys.argv[2].split(".")))
+EXPECTED_MAGIC = sys.argv[3]
 
+implementation = sys.implementation.name
 version = sys.version_info[:3]
 magic = importlib.util.MAGIC_NUMBER.hex()
-if version != EXPECTED_VERSION or magic != EXPECTED_MAGIC:
+if (
+    implementation != EXPECTED_IMPLEMENTATION
+    or version != EXPECTED_VERSION
+    or magic != EXPECTED_MAGIC
+):
     print(
-        f"ERROR\texpected CPython 3.14.5 magic {EXPECTED_MAGIC}, "
-        f"got {'.'.join(map(str, version))} magic {magic}",
+        f"ERROR\texpected {EXPECTED_IMPLEMENTATION} "
+        f"{'.'.join(map(str, EXPECTED_VERSION))} "
+        f"magic {EXPECTED_MAGIC}, "
+        f"got {implementation} {'.'.join(map(str, version))} magic {magic}",
         flush=True,
     )
     raise SystemExit(2)
 
-print(f"READY\t{'.'.join(map(str, version))}\t{magic}", flush=True)
+print(
+    f"READY\t{implementation}\t{'.'.join(map(str, version))}\t{magic}",
+    flush=True,
+)
 warnings.simplefilter("ignore", SyntaxWarning)
 stream = sys.stdin.buffer
 sources = []
@@ -608,8 +617,17 @@ fn load_sources(paths: Vec<PathBuf>) -> Result<Vec<SourceFile>, String> {
 
 impl PythonRunner {
     fn start(python: &str) -> Result<Self, String> {
+        let version = CPYTHON_TARGET.version_string();
+        let magic = CPYTHON_TARGET.magic_hex();
         let mut child = Command::new(python)
-            .args(["-u", "-c", PYTHON_HELPER])
+            .args([
+                "-u",
+                "-c",
+                PYTHON_HELPER,
+                CPYTHON_TARGET.implementation,
+                version.as_str(),
+                magic.as_str(),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -629,7 +647,10 @@ impl PythonRunner {
             stdout: BufReader::new(stdout),
         };
         let ready = runner.read_line()?;
-        let expected = format!("READY\t{EXPECTED_VERSION}\t{EXPECTED_MAGIC}");
+        let expected = format!(
+            "READY\t{}\t{}\t{}",
+            CPYTHON_TARGET.implementation, version, magic
+        );
         if ready != expected {
             return Err(format!("invalid CPython identity: {ready}"));
         }
@@ -904,8 +925,14 @@ fn metadata(
                 ],
             )?,
         ),
-        ("python_version".to_string(), EXPECTED_VERSION.to_string()),
-        ("python_magic".to_string(), EXPECTED_MAGIC.to_string()),
+        (
+            "python_version".to_string(),
+            CPYTHON_TARGET.version_string(),
+        ),
+        (
+            "python_magic".to_string(),
+            CPYTHON_TARGET.magic_hex(),
+        ),
         ("phase".to_string(), options.phase.label().to_string()),
         ("warmups".to_string(), options.warmups.to_string()),
         ("samples".to_string(), options.samples.to_string()),

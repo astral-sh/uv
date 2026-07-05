@@ -1,12 +1,12 @@
 # uv-python-bytecode
 
-`uv-python-bytecode` is an experimental Rust compiler from Python source to CPython 3.14
-bytecode. It uses Ruff's parser and does not embed or link a Python runtime. CPython 3.14 is only
+`uv-python-bytecode` is an experimental Rust compiler from Python source to CPython 3.14.5
+bytecode. It uses Ruff's parser and does not embed or link a Python runtime. CPython 3.14.5 is only
 needed to execute generated `.pyc` files and to serve as the compatibility oracle in tests.
 
 The backend currently implements:
 
-- CPython 3.14 code objects, inline caches, extended arguments, jumps, source-location tables,
+- CPython 3.14.5 code objects, inline caches, extended arguments, jumps, source-location tables,
   marshal references and interning, and timestamp-invalidated `.pyc` files;
 - literals, collections and unpacking, f-strings, names, attributes, subscripts, slices, unary and
   binary operations, comparisons, boolean operations, conditional expressions, calls, and named
@@ -25,15 +25,22 @@ parser, and ty semantic test resources. For each CPython-accepted file it compar
 `marshal.dumps(compile(...))` directly with this crate's marshal output:
 
 ```console
-cargo run -p uv-python-bytecode --example compare_cpython_corpus
+cargo run -p uv-python-bytecode --example compare_cpython_corpus -- \
+  --python /path/to/cpython-3.14.5 \
+  --expected-files 2451 \
+  --require-all
 ```
 
+The comparator refuses any interpreter whose implementation, three-part version, or magic number
+does not exactly match this backend. It also fails on a missing corpus root or an empty corpus.
 Pass `--require-all` to return a failure status unless every CPython-accepted file matches exactly.
+CPython-rejected fixtures are reported separately and are outside the bytecode-compatibility gate.
 Additional roots can be supplied explicitly, and `--python`, `--limit`, and `--examples` control
-the oracle executable and report size. Pass `--dump-mismatches DIR` to save mismatch inputs and
-outputs for inspection.
+the oracle executable and report size. `--expected-files` pins the discovered corpus size. Pass
+`--dump-mismatches DIR` to save mismatch inputs and outputs for inspection.
 
-The frozen compatibility gate is pinned to CPython 3.14.0rc1 and 2,451 Ruff and ty files. Its
+The frozen compatibility gate is pinned to CPython 3.14.5 with magic number `2b0e0d0a` and 2,451
+Ruff and ty files. Its
 current result is:
 
 ```text

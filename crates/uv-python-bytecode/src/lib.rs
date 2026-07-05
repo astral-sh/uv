@@ -1,8 +1,8 @@
 //! Compile Python source to CPython bytecode without starting a Python interpreter.
 //!
-//! This crate currently targets CPython 3.14 exclusively. The bytecode, code object,
+//! This crate currently targets CPython 3.14.5 exclusively. The bytecode, code object,
 //! marshal, and `.pyc` formats are all implementation details that can change between
-//! Python minor versions, so future targets should be implemented as separate backends.
+//! Python releases, so future targets should be implemented as separate backends.
 
 mod assembler;
 mod compiler;
@@ -13,10 +13,45 @@ use std::fmt;
 
 use compiler::{CodeObject, Compiler};
 
-/// CPython 3.14's bytecode and `.pyc` magic number.
-pub const PYTHON_314_MAGIC_NUMBER: [u8; 4] = [0x2b, 0x0e, 0x0d, 0x0a];
+/// The exact CPython implementation targeted by this compiler backend.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CpythonTarget {
+    /// The value of `sys.implementation.name`.
+    pub implementation: &'static str,
+    /// The value of `sys.version_info[:3]`.
+    pub version: (u8, u8, u8),
+    /// The value of `importlib.util.MAGIC_NUMBER`.
+    pub magic_number: [u8; 4],
+}
 
-/// A compiled CPython 3.14 module code object.
+impl CpythonTarget {
+    /// Return the dotted form of [`Self::version`].
+    pub fn version_string(self) -> String {
+        let (major, minor, micro) = self.version;
+        format!("{major}.{minor}.{micro}")
+    }
+
+    /// Return the lowercase hexadecimal form of [`Self::magic_number`].
+    pub fn magic_hex(self) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+
+        let mut output = String::with_capacity(self.magic_number.len() * 2);
+        for byte in self.magic_number {
+            output.push(char::from(HEX[usize::from(byte >> 4)]));
+            output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        output
+    }
+}
+
+/// The sole CPython target currently implemented by this crate.
+pub const CPYTHON_TARGET: CpythonTarget = CpythonTarget {
+    implementation: "cpython",
+    version: (3, 14, 5),
+    magic_number: [0x2b, 0x0e, 0x0d, 0x0a],
+};
+
+/// A compiled CPython 3.14.5 module code object.
 #[derive(Clone, Debug)]
 pub struct CompiledModule {
     code: CodeObject,
@@ -28,12 +63,12 @@ impl CompiledModule {
         &self.code.bytecode
     }
 
-    /// Marshal the module code object using CPython 3.14's format.
+    /// Marshal the module code object using CPython 3.14.5's format.
     pub fn marshal(&self) -> Vec<u8> {
         marshal::encode_code(&self.code)
     }
 
-    /// Build a timestamp-invalidated CPython 3.14 `.pyc` file.
+    /// Build a timestamp-invalidated CPython 3.14.5 `.pyc` file.
     ///
     /// `source_mtime` is the source file's modification time in whole seconds since the
     /// Unix epoch. `source_size` is the source file's byte length, truncated to 32 bits as
@@ -41,7 +76,7 @@ impl CompiledModule {
     pub fn to_timestamp_pyc(&self, source_mtime: u32, source_size: u32) -> Vec<u8> {
         let marshalled = self.marshal();
         let mut output = Vec::with_capacity(16 + marshalled.len());
-        output.extend_from_slice(&PYTHON_314_MAGIC_NUMBER);
+        output.extend_from_slice(&CPYTHON_TARGET.magic_number);
         output.extend_from_slice(&0_u32.to_le_bytes());
         output.extend_from_slice(&source_mtime.to_le_bytes());
         output.extend_from_slice(&source_size.to_le_bytes());
@@ -73,7 +108,7 @@ impl fmt::Display for CompileError {
 
 impl Error for CompileError {}
 
-/// Compile a Python module for CPython 3.14.
+/// Compile a Python module for CPython 3.14.5.
 pub fn compile(source: &str, filename: &str) -> Result<CompiledModule, CompileError> {
     let normalized;
     let source = if source.contains('\r') {
@@ -83,13 +118,17 @@ pub fn compile(source: &str, filename: &str) -> Result<CompiledModule, CompileEr
         source
     };
     let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let parsed = ruff_python_parser::parse_module(source)
-        .map_err(|error| CompileError::Parse(error.to_string()))?;
+    let options = ruff_python_parser::ParseOptions::from(ruff_python_parser::Mode::Module)
+        .with_target_version(ruff_python_ast::PythonVersion::PY314);
+    let parsed = ruff_python_parser::parse(source, options)
+        .map_err(|error| CompileError::Parse(error.to_string()))?
+        .try_into_module()
+        .ok_or_else(|| CompileError::Internal("parser did not return a module".to_string()))?;
     let code = Compiler::module(filename, source).compile_module(parsed.suite())?;
     Ok(CompiledModule { code })
 }
 
-/// Compile a Python module directly to a timestamp-invalidated CPython 3.14 `.pyc` file.
+/// Compile a Python module directly to a timestamp-invalidated CPython 3.14.5 `.pyc` file.
 pub fn compile_to_pyc(
     source: &str,
     filename: &str,
@@ -109,24 +148,41 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{PYTHON_314_MAGIC_NUMBER, compile, compile_to_pyc};
+    use super::{CPYTHON_TARGET, compile, compile_to_pyc};
 
     const CPYTHON_MARSHAL: &str = "import marshal, sys; code = compile(sys.stdin.read(), sys.argv[1], 'exec', dont_inherit=True, optimize=0); sys.stdout.buffer.write(marshal.dumps(code))";
 
-    fn python_314() -> Option<String> {
-        let executable = "python3";
-        let status = Command::new(executable)
+    fn python_3145() -> Option<String> {
+        let configured = std::env::var("UV_PYTHON_BYTECODE_TEST_PYTHON").ok();
+        let executable = configured.as_deref().unwrap_or("python3.14");
+        let version = CPYTHON_TARGET.version_string();
+        let magic = CPYTHON_TARGET.magic_hex();
+        let output = Command::new(executable)
             .args([
                 "-c",
-                "import sys; raise SystemExit(sys.version_info[:2] != (3, 14))",
+                "import importlib.util, sys; expected = tuple(map(int, sys.argv[2].split('.'))); actual = sys.version_info[:3]; magic = importlib.util.MAGIC_NUMBER.hex(); ok = sys.implementation.name == sys.argv[1] and actual == expected and magic == sys.argv[3]; print(f'{sys.implementation.name} {'.'.join(map(str, actual))} magic {magic}', file=sys.stderr); raise SystemExit(not ok)",
+                CPYTHON_TARGET.implementation,
+                version.as_str(),
+                magic.as_str(),
             ])
-            .status()
+            .output()
             .ok()?;
-        status.success().then(|| executable.to_string())
+        if output.status.success() {
+            return Some(executable.to_string());
+        }
+        if configured.is_some() {
+            panic!(
+                "UV_PYTHON_BYTECODE_TEST_PYTHON must name CPython {} with magic {}: {}",
+                version,
+                magic,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        None
     }
 
     fn assert_matches_cpython_marshal(source: &str, filename: &str) {
-        let Some(python) = python_314() else {
+        let Some(python) = python_3145() else {
             return;
         };
         let expected = Command::new(python)
@@ -147,7 +203,7 @@ mod tests {
     }
 
     fn assert_executes(source: &str, expected: &str) {
-        let Some(python) = python_314() else {
+        let Some(python) = python_3145() else {
             return;
         };
         let temporary = tempdir().unwrap();
@@ -165,9 +221,9 @@ mod tests {
     }
 
     #[test]
-    fn emits_a_python_314_pyc_header() {
+    fn emits_a_python_3145_pyc_header() {
         let pyc = compile_to_pyc("answer = 42\n", "answer.py", 123).unwrap();
-        assert_eq!(&pyc[..4], &PYTHON_314_MAGIC_NUMBER);
+        assert_eq!(&pyc[..4], &CPYTHON_TARGET.magic_number);
         assert_eq!(&pyc[4..8], &0_u32.to_le_bytes());
         assert_eq!(&pyc[8..12], &123_u32.to_le_bytes());
         assert_eq!(&pyc[12..16], &12_u32.to_le_bytes());
@@ -463,6 +519,12 @@ except Error:
     fn matches_cpython_marshal_for_optimized_boolean_operands() {
         let source = "if a and f() and False and g():\n    pass\na or \"\" or True\na or () or True\na and \"value\" and False\na or (b or c) or d\n0 if a or [1] or True or [2] else 1\nif (\n    f()\n    is None\n):\n    pass\nif g() is not None:\n    pass\nx\n\ndef terminal_conditional_expression(wait):\n    call() if wait else None\n\nif first or low <= value < high:\n    pass\n\nmultiline = [\n    (\n        \"value\"\n        and condition\n        and result\n    )\n]\n";
         assert_matches_cpython_marshal(source, "bool.py");
+    }
+
+    #[test]
+    fn matches_cpython_3145_boolean_exception_ranges() {
+        let source = "async def choose(value):\n    return value or 'empty'\n\ntry:\n    body()\nexcept FirstError or SecondError as error:\n    recover(error)\n\ntry:\n    body()\nexcept FirstError and SecondError as error:\n    recover(error)\n";
+        assert_matches_cpython_marshal(source, "boolean_exception_ranges.py");
     }
 
     #[test]

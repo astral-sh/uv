@@ -7,7 +7,7 @@ use std::process::{Command, ExitCode};
 use std::time::Instant;
 
 use rayon::prelude::*;
-use uv_python_bytecode::{CompileError, compile};
+use uv_python_bytecode::{CPYTHON_TARGET, CompileError, compile};
 use walkdir::WalkDir;
 
 const ORACLE: &str = r#"
@@ -67,6 +67,7 @@ struct Options {
     python: String,
     roots: Vec<PathBuf>,
     limit: Option<usize>,
+    expected_files: Option<usize>,
     require_all: bool,
     examples: usize,
     dump_mismatches: Option<PathBuf>,
@@ -84,7 +85,26 @@ fn main() -> ExitCode {
         eprintln!("{message}");
         return ExitCode::from(2);
     }
-    let mut paths = discover(&options.roots);
+    let mut paths = match discover(&options.roots) {
+        Ok(paths) => paths,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::from(2);
+        }
+    };
+    if paths.is_empty() {
+        eprintln!("the corpus roots contain no Python files");
+        return ExitCode::from(2);
+    }
+    if let Some(expected) = options.expected_files
+        && paths.len() != expected
+    {
+        eprintln!(
+            "discovered {} Python files, but the frozen corpus requires {expected}",
+            paths.len()
+        );
+        return ExitCode::from(2);
+    }
     if let Some(limit) = options.limit {
         paths.truncate(limit);
     }
@@ -172,19 +192,25 @@ fn main() -> ExitCode {
 }
 
 fn verify_python(python: &str) -> Result<(), String> {
+    let version = CPYTHON_TARGET.version_string();
+    let magic = CPYTHON_TARGET.magic_hex();
     let output = Command::new(python)
         .args([
             "-c",
-            "import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(sys.version_info[:2] != (3, 14))",
+            "import importlib.util, sys; actual = sys.version_info[:3]; magic = importlib.util.MAGIC_NUMBER.hex(); print(f'{sys.implementation.name} {'.'.join(map(str, actual))} magic {magic}'); expected = tuple(map(int, sys.argv[2].split('.'))); raise SystemExit(sys.implementation.name != sys.argv[1] or actual != expected or magic != sys.argv[3])",
+            CPYTHON_TARGET.implementation,
+            version.as_str(),
+            magic.as_str(),
         ])
         .output()
         .map_err(|error| format!("failed to run {python}: {error}"))?;
-    let version = one_line(&output.stdout);
+    let identity = one_line(&output.stdout);
     if output.status.success() {
         Ok(())
     } else {
         Err(format!(
-            "{python} is Python {version}; the compiler and oracle require Python 3.14"
+            "{python} is {identity}; the compiler and oracle require {} {} with magic {}",
+            CPYTHON_TARGET.implementation, version, magic
         ))
     }
 }
@@ -193,6 +219,7 @@ fn parse_options() -> Result<Options, String> {
     let mut python = "python3".to_string();
     let mut roots = Vec::new();
     let mut limit = None;
+    let mut expected_files = None;
     let mut require_all = false;
     let mut examples = 10;
     let mut dump_mismatches = None;
@@ -221,6 +248,15 @@ fn parse_options() -> Result<Options, String> {
                     .parse()
                     .map_err(|_| "--examples requires a number".to_string())?;
             }
+            "--expected-files" => {
+                expected_files = Some(
+                    arguments
+                        .next()
+                        .ok_or_else(|| "--expected-files requires a number".to_string())?
+                        .parse()
+                        .map_err(|_| "--expected-files requires a number".to_string())?,
+                );
+            }
             "--dump-mismatches" => {
                 dump_mismatches =
                     Some(PathBuf::from(arguments.next().ok_or_else(|| {
@@ -230,7 +266,7 @@ fn parse_options() -> Result<Options, String> {
             "--require-all" => require_all = true,
             "--help" | "-h" => {
                 return Err(
-                    "usage: compare_cpython_corpus [--python PATH] [--limit N] [--examples N] [--require-all] [--dump-mismatches DIR] [ROOT ...]"
+                    "usage: compare_cpython_corpus [--python PATH] [--limit N] [--expected-files N] [--examples N] [--require-all] [--dump-mismatches DIR] [ROOT ...]"
                         .to_string(),
                 );
             }
@@ -258,6 +294,7 @@ fn parse_options() -> Result<Options, String> {
         python,
         roots,
         limit,
+        expected_files,
         require_all,
         examples,
         dump_mismatches,
@@ -292,13 +329,13 @@ fn dump_mismatches(
         })
 }
 
-fn discover(roots: &[PathBuf]) -> Vec<PathBuf> {
+fn discover(roots: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut paths = Vec::new();
     for root in roots {
         for entry in WalkDir::new(root).follow_links(false) {
-            let Ok(entry) = entry else {
-                continue;
-            };
+            let entry = entry.map_err(|error| {
+                format!("failed to walk corpus root {}: {error}", root.display())
+            })?;
             if entry.file_type().is_file()
                 && entry
                     .path()
@@ -311,7 +348,7 @@ fn discover(roots: &[PathBuf]) -> Vec<PathBuf> {
     }
     paths.sort();
     paths.dedup();
-    paths
+    Ok(paths)
 }
 
 fn compare(path: &Path, python: &str) -> Outcome {

@@ -3599,7 +3599,7 @@ impl Assembler {
     }
 }
 
-// Generated from CPython 3.14's `pycore_opcode_metadata.h`. Keeping the pop
+// Generated from CPython 3.14.5's `pycore_opcode_metadata.h`. Keeping the pop
 // and push counts separate is required by the borrowed-local dataflow pass.
 fn opcode_num_popped(opcode: u8, argument: u32) -> usize {
     let argument = usize::try_from(argument).unwrap();

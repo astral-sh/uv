@@ -606,7 +606,6 @@ pub(crate) struct Compiler {
     // CPython's normalized `NOT_TAKEN` can reuse a normal-finally CFG slot that still owns the
     // coroutine stop-iteration handler.
     active_normal_finally_bodies: usize,
-    active_exception_type_boolean_exclusions: Vec<Vec<(Label, Label)>>,
     active_finally_end_blocks: usize,
     active_finally_try_bodies: usize,
     active_pass_finally_locations: Vec<SourceLocation>,
@@ -683,7 +682,6 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
-            active_exception_type_boolean_exclusions: Vec::new(),
             active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -823,7 +821,6 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
-            active_exception_type_boolean_exclusions: Vec::new(),
             active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -941,7 +938,6 @@ impl Compiler {
             active_exception_handlers: Vec::new(),
             active_return_finally_contexts: Vec::new(),
             active_normal_finally_bodies: 0,
-            active_exception_type_boolean_exclusions: Vec::new(),
             active_finally_end_blocks: 0,
             active_finally_try_bodies: 0,
             active_pass_finally_locations: Vec::new(),
@@ -2285,10 +2281,6 @@ impl Compiler {
             self.emit(TO_BOOL, 0, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            if self.generator_region_start.is_some() {
-                self.generator_region_exclusions
-                    .push((exclusion_start, exclusion_end));
-            }
             self.emit_jump_forward(jump, short_circuit, -1)?;
             self.emit(NOT_TAKEN, 0, 0)?;
             self.assembler.mark(continue_outer);
@@ -5206,7 +5198,6 @@ impl Compiler {
             final_handler_location = handler_location;
             self.set_depth(base_depth + 2);
             let mut not_taken_exclusion = None;
-            let mut exception_type_boolean_exclusions = Vec::new();
             if let Some(exception_type) = &handler.type_ {
                 let mut references = ReferenceCollector::default();
                 references.visit_expr(exception_type);
@@ -5215,14 +5206,7 @@ impl Compiler {
                     .into_iter()
                     .filter(|name| self.owned_load_locals.insert(name.clone()))
                     .collect();
-                self.active_exception_type_boolean_exclusions
-                    .push(Vec::new());
-                let result = self.compile_expression(exception_type);
-                exception_type_boolean_exclusions = self
-                    .active_exception_type_boolean_exclusions
-                    .pop()
-                    .expect("exception type has a boolean exclusion collector");
-                result?;
+                self.compile_expression(exception_type)?;
                 for name in newly_owned {
                     self.owned_load_locals.remove(&name);
                 }
@@ -5486,7 +5470,6 @@ impl Compiler {
                 );
             }
             let mut dispatch_exclusions = Vec::new();
-            dispatch_exclusions.extend_from_slice(&exception_type_boolean_exclusions);
             if let Some(exclusion) = not_taken_exclusion {
                 dispatch_exclusions.push(exclusion);
             }
@@ -10097,7 +10080,7 @@ impl Compiler {
         self.active_comprehension_region_exclusions.push(Vec::new());
         let previous_reorder_cleanup = std::mem::replace(
             &mut self.reorder_async_comprehension_cleanup_throw,
-            // CPython 3.14.0rc1's flow graph leaves the throw cleanup immediately before
+            // CPython 3.14.5's flow graph leaves the throw cleanup immediately before
             // `END_SEND` for a discarded async comprehension whose target is captured.
             discard_result && !comprehension_cell_names.is_empty(),
         );
@@ -11553,13 +11536,6 @@ impl Compiler {
             self.emit(TO_BOOL, 0, 0)?;
             let exclusion_end = self.assembler.label();
             self.assembler.mark(exclusion_end);
-            if self.generator_region_start.is_some() {
-                self.generator_region_exclusions
-                    .push((exclusion_start, exclusion_end));
-            }
-            if let Some(exclusions) = self.active_exception_type_boolean_exclusions.last_mut() {
-                exclusions.push((exclusion_start, exclusion_end));
-            }
             self.emit_jump_forward(jump, end, -1)?;
             self.emit(NOT_TAKEN, 0, 0)?;
             self.assembler
@@ -16584,7 +16560,10 @@ fn to_u32(value: usize, what: &str) -> Result<u32, CompileError> {
 }
 
 fn unsupported(feature: &str) -> CompileError {
-    CompileError::Unsupported(format!("Python 3.14 {feature} is not implemented yet"))
+    CompileError::Unsupported(format!(
+        "Python {} {feature} is not implemented yet",
+        crate::CPYTHON_TARGET.version_string()
+    ))
 }
 
 fn statement_name(statement: &Stmt) -> &'static str {
