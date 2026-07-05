@@ -505,7 +505,7 @@ fn autoprune() -> Result<()> {
     context
         .pip_sync()
         .arg("requirements.txt")
-        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
         .assert()
         .success();
 
@@ -522,7 +522,7 @@ fn autoprune() -> Result<()> {
     context
         .pip_sync()
         .arg("requirements.txt")
-        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
         .assert()
         .success();
     dangling.assert(predicates::path::exists());
@@ -534,7 +534,7 @@ fn autoprune() -> Result<()> {
     context
         .pip_sync()
         .arg("requirements.txt")
-        .env(EnvVars::UV_CACHE_AUTOPRUNE, "1")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
         .assert()
         .success();
 

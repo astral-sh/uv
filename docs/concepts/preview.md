@@ -70,6 +70,9 @@ The following preview features are available:
 
 - `add-bounds`: Allows configuring the
   [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
+- `cache-autoprune`: Automatically removes unreferenced archives from the
+  [cache](../concepts/cache.md), as in `uv cache prune`, at most once per day and only when no other
+  uv processes are running.
 - `centralized-project-envs`: Stores
   [project virtual environments](./projects/layout.md#centralized-project-environments) in the uv
   cache.

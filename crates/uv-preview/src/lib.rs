@@ -261,6 +261,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    CacheAutoprune = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -305,6 +306,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::CacheAutoprune => "cache-autoprune",
         }
     }
 }
@@ -362,6 +364,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "cache-autoprune" => Self::CacheAutoprune,
             _ => return Err(PreviewFeatureParseError),
         })
     }

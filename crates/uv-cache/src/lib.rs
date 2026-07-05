@@ -13,8 +13,8 @@ use tracing::{debug, trace, warn};
 use uv_cache_info::Timestamp;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, directories};
 use uv_normalize::PackageName;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::ResolutionMetadata;
-use uv_static::{EnvVars, parse_boolish_environment_variable};
 
 pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
@@ -526,24 +526,22 @@ impl Cache {
 
     /// Opportunistically prune unreferenced archives from the cache.
     ///
-    /// Pruning is enabled by setting [`EnvVars::UV_CACHE_AUTOPRUNE`], and runs at most once per
-    /// [`AUTOPRUNE_INTERVAL`]. To guarantee that no other uv process is reading from the cache,
-    /// pruning requires the exclusive lock; if the lock is unavailable, or if the caller already
-    /// holds a lock, the prune is skipped and retried on a subsequent invocation.
+    /// Pruning is enabled by the [`PreviewFeature::CacheAutoprune`] preview feature, and runs at
+    /// most once per [`AUTOPRUNE_INTERVAL`]. To guarantee that no other uv process is reading
+    /// from the cache, pruning requires the exclusive lock; if the lock is unavailable, or if
+    /// the caller already holds a lock, the prune is skipped and retried on a subsequent
+    /// invocation.
     ///
     /// Failures are logged and ignored, since pruning is best-effort.
     fn autoprune(&self) {
+        // The temporary-cache check must precede the preview check, since [`uv_preview`] panics
+        // if the global preview state is not initialized (e.g., in tests using [`Cache::temp`]).
         if self.lock_file.is_some() || self.is_temporary() {
             return;
         }
 
-        match parse_boolish_environment_variable(EnvVars::UV_CACHE_AUTOPRUNE) {
-            Ok(Some(true)) => {}
-            Ok(_) => return,
-            Err(err) => {
-                warn!("{err}");
-                return;
-            }
+        if !uv_preview::is_enabled(PreviewFeature::CacheAutoprune) {
+            return;
         }
 
         // Consult the marker file before taking the lock, to keep the common case cheap.
