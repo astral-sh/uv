@@ -7,6 +7,8 @@
 debug/
 target-alpine/
 target/
+!crates/uv-python-bytecode/src/target/
+!crates/uv-python-bytecode/src/target/**
 
 # Bootstrapped Python versions
 /bin/

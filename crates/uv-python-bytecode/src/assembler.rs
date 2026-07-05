@@ -1,8 +1,8 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
-
-const EXTENDED_ARG: u8 = 69;
+use crate::target::opcodes::*;
+use crate::target::{Opcode, num_popped as opcode_num_popped, num_pushed as opcode_num_pushed};
 
 pub(crate) struct AssembledCode {
     pub(crate) bytecode: Vec<u8>,
@@ -81,22 +81,6 @@ pub(crate) struct Label(u32);
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct InstructionId(usize);
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Opcode {
-    code: u8,
-    caches: u8,
-}
-
-impl Opcode {
-    pub(crate) const fn new(code: u8, caches: u8) -> Self {
-        Self { code, caches }
-    }
-
-    pub(crate) const fn code(self) -> u8 {
-        self.code
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Operand {
@@ -392,7 +376,7 @@ impl Assembler {
 
     pub(crate) fn contains_opcode(&self, opcode: Opcode) -> bool {
         self.items.iter().any(
-            |item| matches!(item, Item::Instruction(instruction) if instruction.opcode.code == opcode.code),
+            |item| matches!(item, Item::Instruction(instruction) if instruction.opcode == opcode),
         )
     }
 
@@ -454,7 +438,7 @@ impl Assembler {
             return false;
         }
         if let Some((previous_index, previous)) = instructions.next()
-            && previous.opcode.code == 27
+            && previous.opcode == NOP
         {
             index = previous_index;
         }
@@ -553,7 +537,7 @@ impl Assembler {
         let Item::Instruction(instruction) = self.items[index] else {
             unreachable!();
         };
-        if instruction.opcode.code != 27 {
+        if instruction.opcode != NOP {
             return None;
         }
         if instruction.location.line >= 0
@@ -619,7 +603,7 @@ impl Assembler {
 
     pub(crate) fn emit_owned_fast_with_depth(&mut self, argument: u32, depth_after: u32) {
         self.emit_operand_with_depth_and_ownership(
-            Opcode::new(84, 0),
+            LOAD_FAST,
             Operand::Value(argument),
             Some(depth_after),
             true,
@@ -651,7 +635,7 @@ impl Assembler {
                 continue;
             };
             if reachable[index]
-                && instruction.opcode.code == load_const.code
+                && instruction.opcode == load_const
                 && let Operand::Value(index) = instruction.operand
             {
                 used.insert(index);
@@ -665,7 +649,7 @@ impl Assembler {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
-            if instruction.opcode.code != load_const.code {
+            if instruction.opcode != load_const {
                 continue;
             }
             let Operand::Value(index) = &mut instruction.operand else {
@@ -679,14 +663,6 @@ impl Assembler {
 
     /// Removes a side-effect-free constant whose value is immediately discarded.
     pub(crate) fn optimize_constant_pops(&mut self) {
-        const NOP: u8 = 27;
-        const POP_TOP: u8 = 31;
-        const LOAD_CONST: u8 = 82;
-        const LOAD_COMMON_CONSTANT: u8 = 81;
-        const LOAD_SMALL_INT: u8 = 94;
-        const JUMP_FORWARD: u8 = 77;
-        const RETURN_VALUE: u8 = 35;
-
         let is_constant_load =
             |opcode| matches!(opcode, LOAD_CONST | LOAD_COMMON_CONSTANT | LOAD_SMALL_INT);
 
@@ -696,12 +672,12 @@ impl Assembler {
             else {
                 continue;
             };
-            if !is_constant_load(load.opcode.code) || pop.opcode.code != POP_TOP {
+            if !is_constant_load(load.opcode) || pop.opcode != POP_TOP {
                 continue;
             }
-            load.opcode = Opcode::new(NOP, 0);
+            load.opcode = NOP;
             load.operand = Operand::Value(0);
-            pop.opcode = Opcode::new(NOP, 0);
+            pop.opcode = NOP;
             pop.operand = Operand::Value(0);
         }
 
@@ -720,7 +696,7 @@ impl Assembler {
             let Operand::Forward(target) = jump.operand else {
                 continue;
             };
-            if !is_constant_load(load.opcode.code) || jump.opcode.code != JUMP_FORWARD {
+            if !is_constant_load(load.opcode) || jump.opcode != JUMP_FORWARD {
                 continue;
             }
             let Some(target_position) = label_positions.get(&target).copied() else {
@@ -740,9 +716,9 @@ impl Assembler {
             let [pop, return_load, return_value] = target.as_slice() else {
                 continue;
             };
-            if pop.opcode.code == POP_TOP
-                && is_constant_load(return_load.opcode.code)
-                && return_value.opcode.code == RETURN_VALUE
+            if pop.opcode == POP_TOP
+                && is_constant_load(return_load.opcode)
+                && return_value.opcode == RETURN_VALUE
             {
                 replacements.push((index, *return_load, *return_value));
             }
@@ -795,10 +771,10 @@ impl Assembler {
         depth_after: Option<u32>,
         explicitly_owned: bool,
     ) {
-        let strict_owned_load = self.strict_owned_loads && opcode.code == 84;
+        let strict_owned_load = self.strict_owned_loads && opcode == LOAD_FAST;
         let force_owned_load = explicitly_owned
             || strict_owned_load
-            || (opcode.code == 84 && !self.load_fast_borrowing_enabled);
+            || (opcode == LOAD_FAST && !self.load_fast_borrowing_enabled);
         let borrow_unreachable_entry =
             std::mem::take(&mut self.next_instruction_borrow_unreachable);
         let mut instruction = Instruction::new(opcode, operand, self.location, depth_after);
@@ -980,7 +956,7 @@ impl Assembler {
                 };
                 let position = positions[instruction_index];
                 let opcode_position = position + u32::from(extended_args[instruction_index]);
-                let jump_base = opcode_position + 1 + u32::from(instruction.opcode.caches);
+                let jump_base = opcode_position + 1 + u32::from(instruction.opcode.caches());
                 let argument = match instruction.operand {
                     Operand::Value(argument) => argument,
                     Operand::Forward(label) => {
@@ -1044,24 +1020,21 @@ impl Assembler {
     /// CPython applies this peephole before superinstruction fusion when two
     /// adjacent stores target the same local on the same traced line.
     fn optimize_redundant_store_fast(&mut self) {
-        const POP_TOP: u8 = 31;
-        const STORE_FAST: u8 = 112;
-
         for index in 0..self.items.len().saturating_sub(1) {
             let [Item::Instruction(first), Item::Instruction(second)] =
                 &mut self.items[index..index + 2]
             else {
                 continue;
             };
-            if first.opcode.code == STORE_FAST
-                && second.opcode.code == STORE_FAST
+            if first.opcode == STORE_FAST
+                && second.opcode == STORE_FAST
                 && matches!(
                     (first.operand, second.operand),
                     (Operand::Value(first), Operand::Value(second)) if first == second
                 )
                 && first.location.line == second.location.line
             {
-                first.opcode = Opcode::new(POP_TOP, 0);
+                first.opcode = POP_TOP;
                 first.operand = Operand::Value(0);
             }
         }
@@ -1108,7 +1081,7 @@ impl Assembler {
                 Item::Instruction(instruction) => {
                     block_has_instruction = true;
                     let ends_block = !matches!(instruction.operand, Operand::Value(_))
-                        || matches!(instruction.opcode.code, 35 | 104 | 105);
+                        || ends_scope(instruction.opcode);
                     if ends_block && index + 1 < self.items.len() {
                         block_starts.push(index + 1);
                         block_has_instruction = false;
@@ -1191,36 +1164,29 @@ impl Assembler {
     }
 
     fn optimize_boolean_conversions(&mut self) {
-        const NOP: u8 = 27;
-        const TO_BOOL: u8 = 39;
-        const UNARY_NOT: u8 = 42;
-        const COMPARE_OP: u8 = 56;
-        const CONTAINS_OP: u8 = 57;
-        const IS_OP: u8 = 74;
-
         for index in 0..self.items.len().saturating_sub(1) {
             let [Item::Instruction(current), Item::Instruction(next)] =
                 &mut self.items[index..index + 2]
             else {
                 continue;
             };
-            match (current.opcode.code, next.opcode.code) {
+            match (current.opcode, next.opcode) {
                 (TO_BOOL, TO_BOOL) => {
-                    current.opcode = Opcode::new(NOP, 0);
+                    current.opcode = NOP;
                     current.operand = Operand::Value(0);
                     continue;
                 }
                 (UNARY_NOT, TO_BOOL) => {
-                    current.opcode = Opcode::new(NOP, 0);
+                    current.opcode = NOP;
                     current.operand = Operand::Value(0);
-                    next.opcode = Opcode::new(UNARY_NOT, 0);
+                    next.opcode = UNARY_NOT;
                     next.operand = Operand::Value(0);
                     continue;
                 }
                 (UNARY_NOT, UNARY_NOT) => {
-                    current.opcode = Opcode::new(NOP, 0);
+                    current.opcode = NOP;
                     current.operand = Operand::Value(0);
-                    next.opcode = Opcode::new(NOP, 0);
+                    next.opcode = NOP;
                     next.operand = Operand::Value(0);
                     continue;
                 }
@@ -1229,7 +1195,7 @@ impl Assembler {
                         continue;
                     };
                     let opcode = current.opcode;
-                    current.opcode = Opcode::new(NOP, 0);
+                    current.opcode = NOP;
                     current.operand = Operand::Value(0);
                     next.opcode = opcode;
                     next.operand = Operand::Value(argument ^ 1);
@@ -1237,22 +1203,22 @@ impl Assembler {
                 }
                 _ => {}
             }
-            if next.opcode.code != TO_BOOL {
+            if next.opcode != TO_BOOL {
                 continue;
             }
             let Operand::Value(argument) = current.operand else {
                 continue;
             };
-            let replacement = match current.opcode.code {
-                COMPARE_OP => Some((Opcode::new(COMPARE_OP, 1), argument | 16)),
-                CONTAINS_OP => Some((Opcode::new(CONTAINS_OP, 1), argument)),
-                IS_OP => Some((Opcode::new(IS_OP, 0), argument)),
+            let replacement = match current.opcode {
+                COMPARE_OP => Some((COMPARE_OP, argument | 16)),
+                CONTAINS_OP => Some((CONTAINS_OP, argument)),
+                IS_OP => Some((IS_OP, argument)),
                 _ => None,
             };
             let Some((opcode, argument)) = replacement else {
                 continue;
             };
-            current.opcode = Opcode::new(NOP, 0);
+            current.opcode = NOP;
             current.operand = Operand::Value(0);
             next.opcode = opcode;
             next.operand = Operand::Value(argument);
@@ -1260,20 +1226,9 @@ impl Assembler {
     }
 
     fn thread_forward_jumps(&mut self) {
-        const JUMP_BACKWARD: u8 = 75;
-        const JUMP_BACKWARD_NO_INTERRUPT: u8 = 76;
-        const JUMP_FORWARD: u8 = 77;
-        const COPY: u8 = 59;
-        const NOP: u8 = 27;
-        const NOT_TAKEN: u8 = 28;
-        const POP_JUMP_IF_FALSE: u8 = 100;
-        const POP_JUMP_IF_TRUE: u8 = 103;
-        const POP_TOP: u8 = 31;
-        const TO_BOOL: u8 = 39;
-
         #[derive(Clone, Copy)]
         struct ConditionalTarget {
-            opcode: u8,
+            opcode: Opcode,
             operand: Operand,
             fallthrough_index: usize,
         }
@@ -1282,10 +1237,8 @@ impl Assembler {
             let Item::Instruction(instruction) = items[index] else {
                 return false;
             };
-            if !matches!(
-                instruction.opcode.code,
-                POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE
-            ) || !matches!(instruction.operand, Operand::Forward(_))
+            if !matches!(instruction.opcode, POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE)
+                || !matches!(instruction.operand, Operand::Forward(_))
             {
                 return false;
             }
@@ -1293,7 +1246,7 @@ impl Assembler {
                 let Item::Instruction(instruction) = item else {
                     return None;
                 };
-                (instruction.opcode.code != NOP).then_some(instruction)
+                (instruction.opcode != NOP).then_some(instruction)
             });
             let Some(to_bool) = previous.next() else {
                 return false;
@@ -1301,8 +1254,8 @@ impl Assembler {
             let Some(copy) = previous.next() else {
                 return false;
             };
-            to_bool.opcode.code == TO_BOOL
-                && copy.opcode.code == COPY
+            to_bool.opcode == TO_BOOL
+                && copy.opcode == COPY
                 && matches!(copy.operand, Operand::Value(1))
         }
 
@@ -1323,7 +1276,7 @@ impl Assembler {
                     let Item::Instruction(instruction) = item else {
                         return None;
                     };
-                    (instruction.opcode.code != NOP).then_some((index + 1 + offset, *instruction))
+                    (instruction.opcode != NOP).then_some((index + 1 + offset, *instruction))
                 })
                 .take(5)
                 .collect::<Vec<_>>();
@@ -1337,20 +1290,20 @@ impl Assembler {
             else {
                 continue;
             };
-            if copy.opcode.code != COPY
+            if copy.opcode != COPY
                 || !matches!(copy.operand, Operand::Value(1))
-                || to_bool.opcode.code != TO_BOOL
-                || !matches!(jump.opcode.code, POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE)
+                || to_bool.opcode != TO_BOOL
+                || !matches!(jump.opcode, POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE)
                 || !matches!(jump.operand, Operand::Forward(_))
-                || not_taken.opcode.code != NOT_TAKEN
-                || pop.opcode.code != POP_TOP
+                || not_taken.opcode != NOT_TAKEN
+                || pop.opcode != POP_TOP
             {
                 continue;
             }
             conditional_targets.insert(
                 *label,
                 ConditionalTarget {
-                    opcode: jump.opcode.code,
+                    opcode: jump.opcode,
                     operand: jump.operand,
                     fallthrough_index: *fallthrough_index,
                 },
@@ -1372,7 +1325,7 @@ impl Assembler {
                     return None;
                 };
                 let target = conditional_targets.get(&target)?;
-                (instruction.opcode.code != target.opcode).then_some(target.fallthrough_index)
+                (instruction.opcode != target.opcode).then_some(target.fallthrough_index)
             })
             .collect::<Vec<_>>();
         fallthrough_indices.sort_unstable();
@@ -1396,10 +1349,7 @@ impl Assembler {
             if !value_preserving_jumps.contains(&index) {
                 continue;
             }
-            if !matches!(
-                instruction.opcode.code,
-                POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE
-            ) {
+            if !matches!(instruction.opcode, POP_JUMP_IF_FALSE | POP_JUMP_IF_TRUE) {
                 continue;
             }
             let Operand::Forward(mut target) = instruction.operand else {
@@ -1409,7 +1359,7 @@ impl Assembler {
                 let Some(next) = conditional_targets.get(&target) else {
                     break;
                 };
-                if instruction.opcode.code == next.opcode {
+                if instruction.opcode == next.opcode {
                     instruction.operand = next.operand;
                     let Operand::Forward(next_target) = next.operand else {
                         break;
@@ -1442,10 +1392,10 @@ impl Assembler {
             // A jump retained as a source-position NOP remains a CFG boundary.
             if instruction.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET)
                 && !instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
-                && matches!(instruction.opcode.code, 75..=77)
+                && is_unconditional_jump(instruction.opcode)
                 && let operand @ (Operand::Forward(_) | Operand::Backward(_)) = instruction.operand
             {
-                jump_targets.insert(*label, (operand, instruction.opcode.code));
+                jump_targets.insert(*label, (operand, instruction.opcode));
             }
         }
 
@@ -1453,7 +1403,7 @@ impl Assembler {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
-            if instruction.opcode.code != JUMP_FORWARD
+            if instruction.opcode != JUMP_FORWARD
                 || instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP)
             {
                 continue;
@@ -1476,9 +1426,9 @@ impl Assembler {
                 }
                 operand = next_operand;
                 if next_opcode == JUMP_BACKWARD {
-                    opcode = Opcode::new(JUMP_BACKWARD, 1);
+                    opcode = JUMP_BACKWARD;
                 } else if next_opcode == JUMP_BACKWARD_NO_INTERRUPT {
-                    opcode = Opcode::new(JUMP_BACKWARD_NO_INTERRUPT, 0);
+                    opcode = JUMP_BACKWARD_NO_INTERRUPT;
                 }
                 target = next;
             }
@@ -1498,7 +1448,7 @@ impl Assembler {
                 index += 1;
                 continue;
             };
-            if instruction.opcode.code != 77 {
+            if instruction.opcode != JUMP_FORWARD {
                 index += 1;
                 continue;
             }
@@ -1564,7 +1514,7 @@ impl Assembler {
                 let Item::Instruction(instruction) = &mut self.items[index] else {
                     unreachable!();
                 };
-                instruction.opcode = Opcode::new(27, 0);
+                instruction.opcode = NOP;
                 instruction.operand = Operand::Value(0);
                 index += 1;
             }
@@ -1584,7 +1534,7 @@ impl Assembler {
             }
             let ends_block = matches!(item, Item::Instruction(instruction) if
                 !matches!(instruction.operand, Operand::Value(_))
-                    || matches!(instruction.opcode.code, 35 | 104 | 105));
+                    || ends_scope(instruction.opcode));
             block.push(item);
             if ends_block {
                 blocks.push(std::mem::take(&mut block));
@@ -1722,7 +1672,7 @@ impl Assembler {
                     Item::Label(label),
                     Item::Instruction(
                         Instruction::synthetic(
-                            Opcode::new(76, 0),
+                            JUMP_BACKWARD_NO_INTERRUPT,
                             Operand::Backward(target),
                             location,
                             None,
@@ -1768,7 +1718,7 @@ impl Assembler {
                     && blocks[*old_index]
                     .iter()
                     .any(|item| {
-                        matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 7)
+                        matches!(item, Item::Instruction(instruction) if instruction.opcode == CLEANUP_THROW)
                     }))
                     .then_some(position)
             })
@@ -1811,7 +1761,7 @@ impl Assembler {
                 let target = blocks[order[position]]
                     .iter()
                     .any(|item| {
-                        matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 68)
+                        matches!(item, Item::Instruction(instruction) if instruction.opcode == END_ASYNC_FOR)
                     })
                     .then(|| block_jump_target(&blocks[order[position + 1]]))
                     .flatten()
@@ -1823,7 +1773,7 @@ impl Assembler {
                 }
                 let exits_scope = blocks[order[end]].iter().rev().find_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(matches!(instruction.opcode.code, 35 | 104 | 105))
+                        Some(ends_scope(instruction.opcode))
                     } else {
                         None
                     }
@@ -1906,13 +1856,16 @@ impl Assembler {
                 };
                 if target_position < item_position {
                     instruction.operand = Operand::Backward(target);
-                    if instruction.opcode.code == 77 {
-                        instruction.opcode = Opcode::new(76, 0);
+                    if instruction.opcode == JUMP_FORWARD {
+                        instruction.opcode = JUMP_BACKWARD_NO_INTERRUPT;
                     }
                 } else {
                     instruction.operand = Operand::Forward(target);
-                    if matches!(instruction.opcode.code, 75 | 76) {
-                        instruction.opcode = Opcode::new(77, 0);
+                    if matches!(
+                        instruction.opcode,
+                        JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT
+                    ) {
+                        instruction.opcode = JUMP_FORWARD;
                     }
                 }
                 item_position += 1;
@@ -1937,7 +1890,7 @@ impl Assembler {
             }
             let ends_block = matches!(item, Item::Instruction(instruction) if
                 !matches!(instruction.operand, Operand::Value(_))
-                    || matches!(instruction.opcode.code, 35 | 104 | 105));
+                    || ends_scope(instruction.opcode));
             block.push(item);
             if ends_block {
                 blocks.push(std::mem::take(&mut block));
@@ -2038,7 +1991,7 @@ impl Assembler {
                     })
                     && block.iter().rev().find_map(|item| {
                         if let Item::Instruction(instruction) = item {
-                            Some(matches!(instruction.opcode.code, 35 | 104 | 105))
+                            Some(ends_scope(instruction.opcode))
                         } else {
                             None
                         }
@@ -2080,7 +2033,7 @@ impl Assembler {
                 .flatten()
                 .map(|item| match item {
                     Item::Instruction(instruction) => {
-                        let fused_push_null = instruction.opcode.code == 92
+                        let fused_push_null = instruction.opcode == LOAD_GLOBAL
                             && matches!(instruction.operand, Operand::Value(argument) if argument & 1 != 0);
                         1 + usize::from(fused_push_null)
                     }
@@ -2095,19 +2048,19 @@ impl Assembler {
                 .flat_map(|block| block.iter().rev())
                 .find_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(instruction.opcode.code)
+                        Some(instruction.opcode)
                     } else {
                         None
                     }
                 });
             let target_is_small_exit = target_pre_fusion_size <= 4
                 && target_terminal_opcode.is_some_and(|opcode| {
-                    matches!(opcode, 35 | 104 | 105)
+                    ends_scope(opcode)
                         // An exception-boundary split before a raise represents CPython's
                         // `SETUP_FINALLY` inside one basic block. Return paths can also contain
                         // optimized-away `POP_BLOCK` instructions that are not recoverable from
                         // the final region labels, so keep their existing block boundary.
-                        && (target_chain_end == target || opcode == 104)
+                        && (target_chain_end == target || opcode == RAISE_VARARGS)
                 });
             let source_allows_small_exit_inlining = blocks[source]
                 .iter()
@@ -2121,7 +2074,7 @@ impl Assembler {
                 })
                 .unwrap_or(false);
             let target_contains_end_send = target_blocks.iter().flatten().any(|item| {
-                matches!(item, Item::Instruction(instruction) if instruction.opcode.code == 10)
+                matches!(item, Item::Instruction(instruction) if instruction.opcode == END_SEND)
             });
             let target_has_no_location = target_blocks.iter().flatten().all(|item| {
                 !matches!(item, Item::Instruction(instruction) if instruction.location.line >= 0)
@@ -2260,7 +2213,7 @@ impl Assembler {
                 copied.insert(
                     position,
                     Item::Instruction(Instruction::synthetic(
-                        Opcode::new(27, 0),
+                        NOP,
                         Operand::Value(0),
                         source_location,
                         None,
@@ -2293,13 +2246,13 @@ impl Assembler {
                         .rev()
                         .filter_map(|(position, item)| {
                             if let Item::Instruction(instruction) = item {
-                                Some((position, instruction.opcode.code))
+                                Some((position, instruction.opcode))
                             } else {
                                 None
                             }
                         })
                         .nth(1)
-                        .filter(|(_, opcode)| *opcode == 27)
+                        .filter(|(_, opcode)| *opcode == NOP)
                         .map(|(position, _)| position);
                     if let Some(position) = trailing_nop_position {
                         exclusion_start = self.label();
@@ -2385,7 +2338,7 @@ impl Assembler {
                 && let Some(Item::Instruction(first)) = blocks[target]
                     .iter()
                     .find(|item| matches!(item, Item::Instruction(_)))
-                && first.opcode.code == 27
+                && first.opcode == NOP
                 && first.has_flag(InstructionFlags::CONVERTED_POP_BLOCK)
                 && first.location.line < 0
                 && !first.has_flag(InstructionFlags::PRESERVE_NO_LOCATION)
@@ -2490,7 +2443,7 @@ impl Assembler {
                         previous = Some(instruction.location);
                     }
                     if !matches!(instruction.operand, Operand::Value(_))
-                        || matches!(instruction.opcode.code, 35 | 104 | 105)
+                        || ends_scope(instruction.opcode)
                     {
                         previous = None;
                         block_has_instruction = false;
@@ -2507,7 +2460,7 @@ impl Assembler {
                 index += 1;
                 continue;
             };
-            if instruction.opcode.code != 27 {
+            if instruction.opcode != NOP {
                 index += 1;
                 continue;
             }
@@ -2524,7 +2477,7 @@ impl Assembler {
                     }
                 })
                 && previous.location.line == instruction.location.line
-                && !matches!(previous.opcode.code, 35 | 75..=77 | 104 | 105)
+                && !(ends_scope(previous.opcode) || is_unconditional_jump(previous.opcode))
             {
                 self.items.remove(index);
                 continue;
@@ -2551,7 +2504,7 @@ impl Assembler {
                 index += 1;
                 continue;
             };
-            if instruction.opcode.code != 117 {
+            if instruction.opcode != SWAP {
                 index += 1;
                 continue;
             }
@@ -2562,7 +2515,7 @@ impl Assembler {
             let pop_count = usize::try_from(depth).unwrap_or(usize::MAX);
             let preceded_by_swap = self.items[..index].iter().rev().find_map(|item| {
                 if let Item::Instruction(instruction) = item {
-                    Some(instruction.opcode.code == 117)
+                    Some(instruction.opcode == SWAP)
                 } else {
                     None
                 }
@@ -2571,7 +2524,7 @@ impl Assembler {
                 .iter()
                 .filter_map(|item| {
                     if let Item::Instruction(instruction) = item {
-                        Some(instruction.opcode.code)
+                        Some(instruction.opcode)
                     } else {
                         None
                     }
@@ -2580,7 +2533,7 @@ impl Assembler {
                 .collect::<Vec<_>>();
             if preceded_by_swap
                 && following.len() == pop_count
-                && following.iter().all(|opcode| *opcode == 31)
+                && following.iter().all(|opcode| *opcode == POP_TOP)
             {
                 self.items.remove(index);
             } else {
@@ -2595,8 +2548,6 @@ impl Assembler {
     /// permutation from the end of the run guarantees that the replacement fits
     /// in the original instruction slots.
     fn optimize_swap_runs(&mut self) {
-        const NOP: u8 = 27;
-        const SWAP: u8 = 117;
         const VISITED: usize = usize::MAX;
 
         let mut block_labels = FxHashSet::default();
@@ -2625,7 +2576,7 @@ impl Assembler {
                 }
                 Item::Instruction(instruction)
                     if !matches!(instruction.operand, Operand::Value(_))
-                        || matches!(instruction.opcode.code, 35 | 104 | 105) =>
+                        || ends_scope(instruction.opcode) =>
                 {
                     Some(index + 1)
                 }
@@ -2650,7 +2601,7 @@ impl Assembler {
                 let Item::Instruction(first) = self.items[instruction_indices[position]] else {
                     unreachable!();
                 };
-                if first.opcode.code != SWAP {
+                if first.opcode != SWAP {
                     position += 1;
                     continue;
                 }
@@ -2665,13 +2616,13 @@ impl Assembler {
                     else {
                         unreachable!();
                     };
-                    if instruction.opcode.code == SWAP {
+                    if instruction.opcode == SWAP {
                         let Operand::Value(argument) = instruction.operand else {
                             unreachable!();
                         };
                         depth = depth.max(usize::try_from(argument).unwrap());
                         multiple_swaps = true;
-                    } else if instruction.opcode.code != NOP {
+                    } else if instruction.opcode != NOP {
                         break;
                     }
                     run_end += 1;
@@ -2686,7 +2637,7 @@ impl Assembler {
                     let Item::Instruction(instruction) = self.items[*instruction_index] else {
                         unreachable!();
                     };
-                    if instruction.opcode.code == SWAP {
+                    if instruction.opcode == SWAP {
                         let Operand::Value(argument) = instruction.operand else {
                             unreachable!();
                         };
@@ -2708,7 +2659,7 @@ impl Assembler {
                             else {
                                 unreachable!();
                             };
-                            instruction.opcode = Opcode::new(SWAP, 0);
+                            instruction.opcode = SWAP;
                             instruction.operand =
                                 Operand::Value(u32::try_from(stack_index + 1).unwrap_or(u32::MAX));
                         }
@@ -2728,7 +2679,7 @@ impl Assembler {
                     else {
                         unreachable!();
                     };
-                    instruction.opcode = Opcode::new(NOP, 0);
+                    instruction.opcode = NOP;
                     instruction.operand = Operand::Value(0);
                 }
                 position = run_end;
@@ -2743,17 +2694,12 @@ impl Assembler {
     /// must run before adjacent local stores are fused. Reverse traversal applies
     /// consecutive swaps from right to left, matching CPython's per-run handoff.
     fn apply_static_swaps(&mut self) {
-        const NOP: u8 = 27;
-        const POP_TOP: u8 = 31;
-        const STORE_FAST: u8 = 112;
-        const SWAP: u8 = 117;
-
         fn swappable(instruction: &Instruction) -> bool {
-            matches!(instruction.opcode.code, POP_TOP | STORE_FAST)
+            matches!(instruction.opcode, POP_TOP | STORE_FAST)
         }
 
         fn stored_local(instruction: &Instruction) -> Option<u32> {
-            (instruction.opcode.code == STORE_FAST).then(|| match instruction.operand {
+            (instruction.opcode == STORE_FAST).then(|| match instruction.operand {
                 Operand::Value(argument) => argument,
                 Operand::Forward(_) | Operand::Backward(_) => unreachable!(),
             })
@@ -2773,7 +2719,7 @@ impl Assembler {
                 if line.is_some_and(|line| instruction.location.line != line) {
                     return None;
                 }
-                if instruction.opcode.code == NOP {
+                if instruction.opcode == NOP {
                     index += 1;
                     continue;
                 }
@@ -2808,7 +2754,7 @@ impl Assembler {
                 }
                 Item::Instruction(instruction)
                     if !matches!(instruction.operand, Operand::Value(_))
-                        || matches!(instruction.opcode.code, 35 | 104 | 105) =>
+                        || ends_scope(instruction.opcode) =>
                 {
                     Some(index + 1)
                 }
@@ -2827,7 +2773,7 @@ impl Assembler {
                 let Item::Instruction(swap) = self.items[index] else {
                     continue;
                 };
-                if swap.opcode.code != SWAP {
+                if swap.opcode != SWAP {
                     continue;
                 }
                 let Operand::Value(depth) = swap.operand else {
@@ -2884,7 +2830,7 @@ impl Assembler {
                 let Item::Instruction(swap) = &mut self.items[index] else {
                     unreachable!();
                 };
-                swap.opcode = Opcode::new(NOP, 0);
+                swap.opcode = NOP;
                 swap.operand = Operand::Value(0);
                 self.items.swap(first, last);
             }
@@ -2898,12 +2844,6 @@ impl Assembler {
     /// flow-graph pass. A set bit means that a local may be uninitialized on
     /// at least one path into the block.
     fn add_checks_for_uninitialized_loads(&mut self, local_count: usize, parameter_count: usize) {
-        const DELETE_FAST: u8 = 63;
-        const LOAD_FAST: u8 = 84;
-        const LOAD_FAST_AND_CLEAR: u8 = 85;
-        const LOAD_FAST_CHECK: u8 = 88;
-        const STORE_FAST: u8 = 112;
-
         if local_count == 0 {
             return;
         }
@@ -2934,9 +2874,7 @@ impl Assembler {
                 continue;
             };
             block.push(index);
-            if !matches!(instruction.operand, Operand::Value(_))
-                || matches!(instruction.opcode.code, 35 | 104 | 105)
-            {
+            if !matches!(instruction.operand, Operand::Value(_)) || ends_scope(instruction.opcode) {
                 blocks.push(std::mem::take(&mut block));
             }
         }
@@ -3044,7 +2982,7 @@ impl Assembler {
                 if local >= local_count {
                     continue;
                 }
-                match instruction.opcode.code {
+                match instruction.opcode {
                     DELETE_FAST | LOAD_FAST_AND_CLEAR => unsafe_locals[local] = true,
                     STORE_FAST => unsafe_locals[local] = false,
                     LOAD_FAST_CHECK => {
@@ -3081,18 +3019,18 @@ impl Assembler {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
-            if instruction.opcode.code == LOAD_FAST_CHECK
+            if instruction.opcode == LOAD_FAST_CHECK
                 && !checked_loads_needing_check.contains(&index)
             {
-                instruction.opcode = Opcode::new(LOAD_FAST, 0);
+                instruction.opcode = LOAD_FAST;
             }
         }
         for index in needs_check {
             let Item::Instruction(instruction) = &mut self.items[index] else {
                 unreachable!();
             };
-            if instruction.opcode.code == LOAD_FAST {
-                instruction.opcode = Opcode::new(LOAD_FAST_CHECK, 0);
+            if instruction.opcode == LOAD_FAST {
+                instruction.opcode = LOAD_FAST_CHECK;
             }
         }
     }
@@ -3102,17 +3040,6 @@ impl Assembler {
     /// Once a checked load succeeds, CPython's definite-assignment scan treats
     /// that local as initialized for subsequent instructions on the same path.
     fn remove_redundant_checked_loads(&mut self) {
-        const DELETE_DEREF: u8 = 62;
-        const DELETE_FAST: u8 = 63;
-        const LOAD_FAST: u8 = 84;
-        const LOAD_FAST_AND_CLEAR: u8 = 85;
-        const LOAD_FAST_CHECK: u8 = 88;
-        const LOAD_FAST_LOAD_FAST: u8 = 89;
-        const STORE_DEREF: u8 = 111;
-        const STORE_FAST: u8 = 112;
-        const STORE_FAST_LOAD_FAST: u8 = 113;
-        const STORE_FAST_STORE_FAST: u8 = 114;
-
         let mut initialized = FxHashSet::default();
         let mut block_has_instruction = false;
         for item in &mut self.items {
@@ -3129,13 +3056,13 @@ impl Assembler {
                 block_has_instruction = false;
                 continue;
             };
-            match instruction.opcode.code {
+            match instruction.opcode {
                 DELETE_DEREF | DELETE_FAST | LOAD_FAST_AND_CLEAR => {
                     initialized.remove(&argument);
                 }
                 LOAD_FAST_CHECK => {
                     if initialized.contains(&argument) {
-                        instruction.opcode = Opcode::new(LOAD_FAST, 0);
+                        instruction.opcode = LOAD_FAST;
                     }
                     initialized.insert(argument);
                 }
@@ -3147,7 +3074,7 @@ impl Assembler {
                 }
                 _ => {}
             }
-            if matches!(instruction.opcode.code, 35 | 104 | 105) {
+            if ends_scope(instruction.opcode) {
                 initialized.clear();
                 block_has_instruction = false;
             }
@@ -3160,15 +3087,6 @@ impl Assembler {
     /// consumed in the same basic block, is not stored into another local, and
     /// remains supported by the original local until it is consumed.
     fn optimize_load_fast(&mut self) {
-        const LOAD_FAST: u8 = 84;
-        const LOAD_FAST_AND_CLEAR: u8 = 85;
-        const LOAD_FAST_BORROW: u8 = 86;
-        const LOAD_FAST_BORROW_LOAD_FAST_BORROW: u8 = 87;
-        const LOAD_FAST_LOAD_FAST: u8 = 89;
-        const STORE_FAST: u8 = 112;
-        const STORE_FAST_LOAD_FAST: u8 = 113;
-        const STORE_FAST_STORE_FAST: u8 = 114;
-
         #[derive(Clone, Copy)]
         struct Reference {
             producer: Option<usize>,
@@ -3208,7 +3126,7 @@ impl Assembler {
             matches!(
                 item,
                 Item::Instruction(instruction)
-                    if matches!(instruction.opcode.code, LOAD_FAST | LOAD_FAST_LOAD_FAST)
+                    if matches!(instruction.opcode, LOAD_FAST | LOAD_FAST_LOAD_FAST)
             )
         }) {
             return;
@@ -3245,8 +3163,8 @@ impl Assembler {
             };
             block.push(index);
             if !matches!(instruction.operand, Operand::Value(_))
-                || matches!(instruction.opcode.code, 35 | 104 | 105)
-                || (instruction.opcode.code == 27
+                || ends_scope(instruction.opcode)
+                || (instruction.opcode == NOP
                     && instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP))
             {
                 blocks.push(std::mem::take(&mut block));
@@ -3309,8 +3227,8 @@ impl Assembler {
             let Item::Instruction(last) = self.items[last_index] else {
                 unreachable!();
             };
-            let folded_jump_has_no_fallthrough = last.opcode.code == 27
-                && last.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
+            let folded_jump_has_no_fallthrough =
+                last.opcode == NOP && last.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
             if !folded_jump_has_no_fallthrough
                 && block_has_fallthrough(&[Item::Instruction(last)])
                 && block_index + 1 < blocks.len()
@@ -3335,14 +3253,14 @@ impl Assembler {
                     unreachable!();
                 };
                 let Operand::Value(argument) = instruction.operand else {
-                    cumulative_effect += opcode_stack_effect(instruction.opcode.code, 0);
+                    cumulative_effect += opcode_stack_effect(instruction.opcode, 0);
                     if let Some(depth_after) = instruction.depth_after {
                         start_depth = Some(i64::from(depth_after) - cumulative_effect);
                         break;
                     }
                     continue;
                 };
-                cumulative_effect += opcode_stack_effect(instruction.opcode.code, argument);
+                cumulative_effect += opcode_stack_effect(instruction.opcode, argument);
                 if let Some(depth_after) = instruction.depth_after {
                     start_depth = Some(i64::from(depth_after) - cumulative_effect);
                     break;
@@ -3365,8 +3283,8 @@ impl Assembler {
                     Operand::Value(argument) => argument,
                     Operand::Forward(_) | Operand::Backward(_) => 0,
                 };
-                match instruction.opcode.code {
-                    63 => kill_local(&mut unsafe_loads, &stack, argument),
+                match instruction.opcode {
+                    DELETE_FAST => kill_local(&mut unsafe_loads, &stack, argument),
                     LOAD_FAST => stack.push(Reference {
                         producer: Some(*index),
                         local: Some(argument),
@@ -3406,7 +3324,7 @@ impl Assembler {
                         let reference = pop_reference(&mut stack);
                         store_local(&mut unsafe_loads, &stack, argument & 15, reference);
                     }
-                    59 => {
+                    COPY => {
                         let reference = stack
                             .len()
                             .checked_sub(usize::try_from(argument).unwrap())
@@ -3418,7 +3336,7 @@ impl Assembler {
                             });
                         stack.push(reference);
                     }
-                    117 => {
+                    SWAP => {
                         if let Some(index) =
                             stack.len().checked_sub(usize::try_from(argument).unwrap())
                         {
@@ -3429,9 +3347,10 @@ impl Assembler {
                         }
                     }
                     // These instructions retain all their existing inputs.
-                    12 | 15 | 18 | 19 | 24..=26 | 43 | 72 => {
-                        let popped = opcode_num_popped(instruction.opcode.code, argument);
-                        let pushed = opcode_num_pushed(instruction.opcode.code, argument);
+                    FORMAT_SIMPLE | GET_ANEXT | GET_LEN | GET_YIELD_FROM_ITER | MATCH_KEYS
+                    | MATCH_MAPPING | MATCH_SEQUENCE | WITH_EXCEPT_START | IMPORT_FROM => {
+                        let popped = opcode_num_popped(instruction.opcode, argument);
+                        let pushed = opcode_num_pushed(instruction.opcode, argument);
                         // CPython's inner loop shadows the instruction index,
                         // attributing these references to the first
                         // instructions in the block.
@@ -3444,32 +3363,33 @@ impl Assembler {
                     }
                     // These consume only their top inputs and retain the
                     // container deeper on the stack.
-                    66 | 67 | 78 | 79 | 98 | 105 | 107 | 109 => {
-                        let popped = opcode_num_popped(instruction.opcode.code, argument);
-                        let pushed = opcode_num_pushed(instruction.opcode.code, argument);
+                    DICT_MERGE | DICT_UPDATE | LIST_APPEND | LIST_EXTEND | MAP_ADD | RERAISE
+                    | SET_ADD | SET_UPDATE => {
+                        let popped = opcode_num_popped(instruction.opcode, argument);
+                        let pushed = opcode_num_pushed(instruction.opcode, argument);
                         for _ in 0..popped.saturating_sub(pushed) {
                             pop_reference(&mut stack);
                         }
                     }
-                    10 | 108 => {
+                    END_SEND | SET_FUNCTION_ATTRIBUTE => {
                         let top = pop_reference(&mut stack);
                         pop_reference(&mut stack);
                         stack.push(top);
                     }
-                    6 => {
+                    CHECK_EXC_MATCH => {
                         pop_reference(&mut stack);
                         stack.push(Reference {
                             producer: None,
                             local: None,
                         });
                     }
-                    70 => stack.push(Reference {
+                    FOR_ITER => stack.push(Reference {
                         producer: None,
                         local: None,
                     }),
-                    80 | 96 => {
+                    LOAD_ATTR | LOAD_SUPER_ATTR => {
                         let receiver = pop_reference(&mut stack);
-                        if instruction.opcode.code == 96 {
+                        if instruction.opcode == LOAD_SUPER_ATTR {
                             pop_reference(&mut stack);
                             pop_reference(&mut stack);
                         }
@@ -3481,7 +3401,7 @@ impl Assembler {
                             stack.push(receiver);
                         }
                     }
-                    32 | 95 => {
+                    PUSH_EXC_INFO | LOAD_SPECIAL => {
                         let top = pop_reference(&mut stack);
                         stack.push(Reference {
                             producer: None,
@@ -3489,7 +3409,7 @@ impl Assembler {
                         });
                         stack.push(top);
                     }
-                    106 => {
+                    SEND => {
                         pop_reference(&mut stack);
                         stack.push(Reference {
                             producer: None,
@@ -3497,10 +3417,10 @@ impl Assembler {
                         });
                     }
                     _ => {
-                        for _ in 0..opcode_num_popped(instruction.opcode.code, argument) {
+                        for _ in 0..opcode_num_popped(instruction.opcode, argument) {
                             pop_reference(&mut stack);
                         }
-                        for _ in 0..opcode_num_pushed(instruction.opcode.code, argument) {
+                        for _ in 0..opcode_num_pushed(instruction.opcode, argument) {
                             stack.push(Reference {
                                 producer: None,
                                 local: None,
@@ -3533,18 +3453,23 @@ impl Assembler {
                     let following = block[position + 1..]
                         .iter()
                         .filter_map(|index| match self.items[*index] {
-                            Item::Instruction(instruction) if instruction.opcode.code != 27 => {
-                                Some(instruction.opcode.code)
+                            Item::Instruction(instruction) if instruction.opcode != NOP => {
+                                Some(instruction.opcode)
                             }
                             _ => None,
                         })
                         .take(2)
                         .collect::<Vec<_>>();
-                    let directly_consumed = following
-                        .first()
-                        .is_some_and(|opcode| matches!(opcode, 35 | 111 | 115))
-                        || matches!(following.as_slice(), [31, next] if *next != 29)
-                        || matches!(following.as_slice(), [81 | 82 | 94, 56]);
+                    let directly_consumed = following.first().is_some_and(|opcode| {
+                        matches!(*opcode, RETURN_VALUE | STORE_DEREF | STORE_GLOBAL)
+                    }) || matches!(following.as_slice(), [POP_TOP, next] if *next != POP_EXCEPT)
+                        || matches!(
+                            following.as_slice(),
+                            [
+                                LOAD_COMMON_CONSTANT | LOAD_CONST | LOAD_SMALL_INT,
+                                COMPARE_OP
+                            ]
+                        );
                     if !directly_consumed {
                         continue;
                     }
@@ -3552,12 +3477,12 @@ impl Assembler {
                 let Item::Instruction(instruction) = &mut self.items[index] else {
                     unreachable!();
                 };
-                match instruction.opcode.code {
+                match instruction.opcode {
                     LOAD_FAST => {
-                        instruction.opcode = Opcode::new(LOAD_FAST_BORROW, 0);
+                        instruction.opcode = LOAD_FAST_BORROW;
                     }
                     LOAD_FAST_LOAD_FAST => {
-                        instruction.opcode = Opcode::new(LOAD_FAST_BORROW_LOAD_FAST_BORROW, 0);
+                        instruction.opcode = LOAD_FAST_BORROW_LOAD_FAST_BORROW;
                     }
                     _ => {}
                 }
@@ -3566,14 +3491,6 @@ impl Assembler {
     }
 
     fn fuse_superinstructions(&mut self) {
-        const LOAD_FAST: u8 = 84;
-        const LOAD_FAST_BORROW: u8 = 86;
-        const LOAD_FAST_BORROW_LOAD_FAST_BORROW: u8 = 87;
-        const LOAD_FAST_LOAD_FAST: u8 = 89;
-        const STORE_FAST: u8 = 112;
-        const STORE_FAST_LOAD_FAST: u8 = 113;
-        const STORE_FAST_STORE_FAST: u8 = 114;
-
         let mut fused = Vec::with_capacity(self.items.len());
         let mut index = 0;
         while index < self.items.len() {
@@ -3612,7 +3529,7 @@ impl Assembler {
                 index += 1;
                 continue;
             }
-            let opcode = match (first.opcode.code, second.opcode.code) {
+            let opcode = match (first.opcode, second.opcode) {
                 (LOAD_FAST_BORROW, LOAD_FAST_BORROW) => LOAD_FAST_BORROW_LOAD_FAST_BORROW,
                 (LOAD_FAST, LOAD_FAST) => LOAD_FAST_LOAD_FAST,
                 (STORE_FAST, LOAD_FAST | LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
@@ -3624,7 +3541,7 @@ impl Assembler {
                 }
             };
             fused.push(Item::Instruction(Instruction::fused(
-                Opcode::new(opcode, 0),
+                opcode,
                 Operand::Value((first_argument << 4) | second_argument),
                 first,
                 second,
@@ -3677,7 +3594,10 @@ impl Assembler {
                         && *extended > 0))
                     .then_some((
                         *position,
-                        *position + u32::from(*extended) + 1 + u32::from(instruction.opcode.caches),
+                        *position
+                            + u32::from(*extended)
+                            + 1
+                            + u32::from(instruction.opcode.caches()),
                     ))
             })
             .collect::<Vec<_>>();
@@ -3720,23 +3640,27 @@ impl Assembler {
                             position
                                 + u32::from(extended_args[instruction_index])
                                 + 1
-                                + u32::from(instruction.opcode.caches),
+                                + u32::from(instruction.opcode.caches()),
                         ));
                     }
-                    if matches!(instruction.opcode.code, 87 | 89 | 113 | 114)
-                        || matches!(
-                            (instruction.opcode.code, instruction.operand),
-                            (92, Operand::Value(argument)) if argument & 1 != 0
-                        )
-                    {
+                    if matches!(
+                        instruction.opcode,
+                        LOAD_FAST_BORROW_LOAD_FAST_BORROW
+                            | LOAD_FAST_LOAD_FAST
+                            | STORE_FAST_LOAD_FAST
+                            | STORE_FAST_STORE_FAST
+                    ) || matches!(
+                        (instruction.opcode, instruction.operand),
+                        (LOAD_GLOBAL, Operand::Value(argument)) if argument & 1 != 0
+                    ) {
                         block_has_stale_exception_owner = true;
                     }
                     instruction_index += 1;
                     block_has_instruction = true;
-                    if instruction.opcode.code == 28
-                        || (!matches!(instruction.opcode.code, 100..=103)
+                    if instruction.opcode == NOT_TAKEN
+                        || (!is_conditional_jump(instruction.opcode)
                             && (!matches!(instruction.operand, Operand::Value(_))
-                                || matches!(instruction.opcode.code, 35 | 104 | 105)))
+                                || ends_scope(instruction.opcode)))
                     {
                         block_has_instruction = false;
                         block_has_stale_exception_owner = false;
@@ -3814,7 +3738,7 @@ impl Assembler {
             };
             let size = u32::from(extended_args[instruction_index])
                 + 1
-                + u32::from(instruction.opcode.caches);
+                + u32::from(instruction.opcode.caches());
             if let Some((location, length)) = locations.last_mut()
                 && *location == instruction.location
             {
@@ -3851,7 +3775,7 @@ impl Assembler {
                     positions.push(position);
                     position += u32::from(extended_args[instruction_index])
                         + 1
-                        + u32::from(instruction.opcode.caches);
+                        + u32::from(instruction.opcode.caches());
                     instruction_index += 1;
                 }
                 Item::Label(label) => {
@@ -3875,12 +3799,12 @@ impl Assembler {
             let extended_arg_count = extended_args[instruction_index];
 
             for index in (1..=extended_arg_count).rev() {
-                output.push(EXTENDED_ARG);
+                output.push(EXTENDED_ARG.code());
                 output.push(((argument >> (u32::from(index) * 8)) & 0xff) as u8);
             }
-            output.push(instruction.opcode.code);
+            output.push(instruction.opcode.code());
             output.push((argument & 0xff) as u8);
-            for _ in 0..instruction.opcode.caches {
+            for _ in 0..instruction.opcode.caches() {
                 output.extend_from_slice(&[0, 0]);
             }
 
@@ -3891,133 +3815,27 @@ impl Assembler {
     }
 }
 
-// Generated from CPython 3.14.5's `pycore_opcode_metadata.h`. Keeping the pop
-// and push counts separate is required by the borrowed-local dataflow pass.
-fn opcode_num_popped(opcode: u8, argument: u32) -> usize {
-    let argument = usize::try_from(argument).unwrap();
-    match opcode {
-        0
-        | 17
-        | 21
-        | 22
-        | 27
-        | 28
-        | 33
-        | 34
-        | 36
-        | 60
-        | 62..=65
-        | 69
-        | 75..=77
-        | 81..=89
-        | 92..=94
-        | 97
-        | 128 => 0,
-        1 | 7 | 37 | 38 | 43 | 96 | 99 => 3,
-        2 | 3 | 5 | 6 | 8 | 10 | 44 | 54 | 56 | 57 | 73 | 74 | 106 | 108 | 110 | 114 => 2,
-        4 => 4,
-        9
-        | 11..=16
-        | 18..=20
-        | 23
-        | 25
-        | 26
-        | 29..=32
-        | 35
-        | 39..=42
-        | 53
-        | 58
-        | 61
-        | 68
-        | 70..=72
-        | 80
-        | 90
-        | 91
-        | 95
-        | 100..=103
-        | 111..=113
-        | 115
-        | 116
-        | 118..=120 => 1,
-        24 => 2,
-        45 => 2 + (argument & 1),
-        46 | 48..=51 => argument,
-        47 => argument * 2,
-        52 => 2 + argument,
-        55 => 3 + argument,
-        59 | 117 => argument,
-        66 => 4 + argument,
-        67 | 78 | 79 | 107 | 109 => 1 + argument,
-        98 => 2 + argument,
-        104 => argument,
-        105 => 1 + argument,
-        _ => unreachable!("missing stack-pop metadata for opcode {opcode}"),
-    }
-}
-
-fn opcode_num_pushed(opcode: u8, argument: u32) -> usize {
-    let argument = usize::try_from(argument).unwrap();
-    match opcode {
-        0
-        | 3
-        | 8
-        | 9
-        | 11
-        | 17
-        | 20
-        | 27..=31
-        | 36..=38
-        | 60..=65
-        | 68
-        | 69
-        | 75..=77
-        | 97
-        | 100..=104
-        | 110..=112
-        | 114..=116
-        | 128 => 0,
-        1
-        | 2
-        | 4
-        | 12..=14
-        | 16
-        | 19
-        | 21..=23
-        | 35
-        | 39..=42
-        | 44..=58
-        | 71
-        | 73
-        | 74
-        | 81..=86
-        | 88
-        | 90
-        | 91
-        | 93
-        | 94
-        | 99
-        | 108
-        | 120 => 1,
-        5..=7 | 10 | 15 | 18 | 25 | 26 | 32 | 70 | 72 | 87 | 89 | 95 | 106 => 2,
-        24 => 3,
-        33 | 34 => 1,
-        43 => 6,
-        59 => argument + 1,
-        66 => argument + 3,
-        67 | 78 | 79 | 98 | 107 | 109 => argument,
-        80 | 92 | 96 => 1 + (argument & 1),
-        105 => argument,
-        113 => 1,
-        117 => argument,
-        118 => 1 + (argument & 0xff) + (argument >> 8),
-        119 => argument,
-        _ => unreachable!("missing stack-push metadata for opcode {opcode}"),
-    }
-}
-
-fn opcode_stack_effect(opcode: u8, argument: u32) -> i64 {
+fn opcode_stack_effect(opcode: Opcode, argument: u32) -> i64 {
     i64::try_from(opcode_num_pushed(opcode, argument)).unwrap()
         - i64::try_from(opcode_num_popped(opcode, argument)).unwrap()
+}
+
+const fn ends_scope(opcode: Opcode) -> bool {
+    matches!(opcode, RETURN_VALUE | RAISE_VARARGS | RERAISE)
+}
+
+const fn is_unconditional_jump(opcode: Opcode) -> bool {
+    matches!(
+        opcode,
+        JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
+    )
+}
+
+const fn is_conditional_jump(opcode: Opcode) -> bool {
+    matches!(
+        opcode,
+        POP_JUMP_IF_FALSE | POP_JUMP_IF_NONE | POP_JUMP_IF_NOT_NONE | POP_JUMP_IF_TRUE
+    )
 }
 
 fn block_has_fallthrough(block: &[Item]) -> bool {
@@ -4030,7 +3848,7 @@ fn block_has_fallthrough(block: &[Item]) -> bool {
     }) else {
         return true;
     };
-    !matches!(instruction.opcode.code, 35 | 75..=77 | 104 | 105)
+    !ends_scope(instruction.opcode) && !is_unconditional_jump(instruction.opcode)
 }
 
 fn cleanup_block_creation_order(block: &[Item]) -> u32 {
@@ -4173,28 +3991,18 @@ fn extended_arg_count(argument: u32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::{
-        Assembler, AssemblerStage, Instruction, InstructionFlags, Item, Opcode, Operand,
-        SourceLocation,
+        Assembler, AssemblerStage, Instruction, InstructionFlags, Item, Operand, SourceLocation,
     };
+    use crate::target::opcodes::*;
 
     #[test]
     fn instruction_constructors_set_audited_defaults() {
-        let regular = Instruction::new(
-            Opcode::new(82, 0),
-            Operand::Value(0),
-            SourceLocation::NONE,
-            None,
-        );
+        let regular = Instruction::new(LOAD_CONST, Operand::Value(0), SourceLocation::NONE, None);
         assert_eq!(regular.flags, InstructionFlags::DEFAULT);
         assert!(regular.has_flag(InstructionFlags::INLINE_SMALL_EXIT));
         assert!(regular.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET));
 
-        let synthetic = Instruction::synthetic(
-            Opcode::new(27, 0),
-            Operand::Value(0),
-            SourceLocation::NONE,
-            None,
-        );
+        let synthetic = Instruction::synthetic(NOP, Operand::Value(0), SourceLocation::NONE, None);
         assert!(!synthetic.has_flag(InstructionFlags::INLINE_SMALL_EXIT));
         assert!(synthetic.has_flag(InstructionFlags::ALLOW_JUMP_THREADING_TARGET));
         assert_eq!(
@@ -4207,7 +4015,7 @@ mod tests {
     #[test]
     fn fusion_uses_each_flags_propagation_policy() {
         let mut first = Instruction::new(
-            Opcode::new(84, 0),
+            LOAD_FAST,
             Operand::Value(1),
             SourceLocation::new(2, 2, 0, 1),
             Some(1),
@@ -4228,7 +4036,7 @@ mod tests {
         first.normalized_exception_owner = Some(false);
 
         let mut second = Instruction::new(
-            Opcode::new(84, 0),
+            LOAD_FAST,
             Operand::Value(2),
             SourceLocation::new(2, 2, 2, 3),
             Some(2),
@@ -4248,7 +4056,7 @@ mod tests {
         second.preserve_direct_inlined_jump_nop = Some(super::Label(2));
         second.normalized_exception_owner = Some(true);
 
-        let fused = Instruction::fused(Opcode::new(89, 0), Operand::Value(0x12), first, second);
+        let fused = Instruction::fused(LOAD_FAST_LOAD_FAST, Operand::Value(0x12), first, second);
 
         for flag in [
             InstructionFlags::FORCE_OWNED_LOAD,
@@ -4278,23 +4086,15 @@ mod tests {
         assert_eq!(fused.preserve_direct_inlined_jump_nop, None);
         assert_eq!(fused.normalized_exception_owner, Some(false));
 
-        let mut first_edge = Instruction::new(
-            Opcode::new(84, 0),
-            Operand::Value(1),
-            SourceLocation::NONE,
-            None,
-        );
+        let mut first_edge =
+            Instruction::new(LOAD_FAST, Operand::Value(1), SourceLocation::NONE, None);
         first_edge.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS);
         first_edge.insert_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY);
-        let mut second_edge = Instruction::new(
-            Opcode::new(84, 0),
-            Operand::Value(2),
-            SourceLocation::NONE,
-            None,
-        );
+        let mut second_edge =
+            Instruction::new(LOAD_FAST, Operand::Value(2), SourceLocation::NONE, None);
         second_edge.insert_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT);
         let fused_edges = Instruction::fused(
-            Opcode::new(89, 0),
+            LOAD_FAST_LOAD_FAST,
             Operand::Value(0x12),
             first_edge,
             second_edge,
@@ -4320,7 +4120,7 @@ mod tests {
         let Some(Item::Instruction(instruction)) = assembler.items.last() else {
             panic!("owned load was not emitted");
         };
-        assert_eq!(instruction.opcode.code, 84);
+        assert_eq!(instruction.opcode, LOAD_FAST);
         assert!(instruction.has_flag(InstructionFlags::FORCE_OWNED_LOAD));
         assert!(!instruction.has_flag(InstructionFlags::STRICT_OWNED_LOAD));
     }
@@ -4329,7 +4129,7 @@ mod tests {
     fn structural_validation_reports_the_pass_and_broken_label() {
         let mut assembler = Assembler::default();
         let target = assembler.label();
-        assembler.emit_operand(Opcode::new(77, 0), Operand::Forward(target));
+        assembler.emit_operand(JUMP_FORWARD, Operand::Forward(target));
 
         let error = assembler
             .validate_structure(AssemblerStage::ThreadForwardJumps)
@@ -4357,7 +4157,7 @@ mod tests {
         let mut assembler = Assembler::default();
         let target = assembler.label();
         assembler.mark(target);
-        assembler.emit_operand(Opcode::new(77, 0), Operand::Forward(target));
+        assembler.emit_operand(JUMP_FORWARD, Operand::Forward(target));
 
         let error = assembler
             .validate_structure(AssemblerStage::OptimizeBooleanConversions)
@@ -4387,8 +4187,8 @@ mod tests {
 
     #[test]
     fn removes_unreachable_jumps() {
-        let jump = Opcode::new(77, 0);
-        let resume = Opcode::new(128, 0);
+        let jump = JUMP_FORWARD;
+        let resume = RESUME;
         let mut assembler = Assembler::default();
         let start = assembler.label();
         let end = assembler.label();
@@ -4399,21 +4199,27 @@ mod tests {
         assembler.emit_backward(jump, start);
         assembler.mark(end);
 
-        assert_eq!(assembler.finish().unwrap(), [128, 0]);
+        assert_eq!(assembler.finish().unwrap(), [RESUME.code(), 0]);
     }
 
     #[test]
     fn emits_extended_arguments() {
         let mut assembler = Assembler::default();
-        assembler.emit(Opcode::new(82, 0), 0x1234);
-        assert_eq!(assembler.finish().unwrap(), [69, 0x12, 82, 0x34]);
+        assembler.emit(LOAD_CONST, 0x1234);
+        assert_eq!(
+            assembler.finish().unwrap(),
+            [EXTENDED_ARG.code(), 0x12, LOAD_CONST.code(), 0x34]
+        );
     }
 
     #[test]
     fn removes_an_overwritten_local_store() {
         let mut assembler = Assembler::default();
-        assembler.emit(Opcode::new(112, 0), 1);
-        assembler.emit(Opcode::new(112, 0), 1);
-        assert_eq!(assembler.finish().unwrap(), [31, 0, 112, 1]);
+        assembler.emit(STORE_FAST, 1);
+        assembler.emit(STORE_FAST, 1);
+        assert_eq!(
+            assembler.finish().unwrap(),
+            [POP_TOP.code(), 0, STORE_FAST.code(), 1]
+        );
     }
 }

@@ -13,143 +13,22 @@ use ruff_text_size::{Ranged, TextSize};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::CompileError;
-use crate::assembler::{AssembledCode, Assembler, InstructionId, Label, Opcode, SourceLocation};
+use crate::assembler::{AssembledCode, Assembler, InstructionId, Label, SourceLocation};
+use crate::target::Opcode;
+use crate::target::code_flags::{
+    CO_ASYNC_GENERATOR, CO_COROUTINE, CO_FUTURE_ANNOTATIONS, CO_FUTURE_BARRY_AS_BDFL, CO_GENERATOR,
+    CO_HAS_DOCSTRING, CO_METHOD, CO_NESTED, CO_NEWLOCALS, CO_OPTIMIZED, CO_VARARGS, CO_VARKEYWORDS,
+};
+use crate::target::local_kinds::{
+    CO_FAST_ARG_KW, CO_FAST_ARG_POS, CO_FAST_ARG_VAR, CO_FAST_CELL, CO_FAST_FREE, CO_FAST_HIDDEN,
+    CO_FAST_LOCAL,
+};
+use crate::target::opcodes::*;
 
-const RESUME: Opcode = Opcode::new(128, 0);
-const BUILD_TEMPLATE: Opcode = Opcode::new(2, 0);
-const BINARY_SLICE: Opcode = Opcode::new(1, 0);
-const CLEANUP_THROW: Opcode = Opcode::new(7, 0);
-const DELETE_SUBSCR: Opcode = Opcode::new(8, 0);
-const END_FOR: Opcode = Opcode::new(9, 0);
-const GET_AITER: Opcode = Opcode::new(14, 0);
-const GET_ANEXT: Opcode = Opcode::new(15, 0);
-const GET_ITER: Opcode = Opcode::new(16, 0);
-const GET_AWAITABLE: Opcode = Opcode::new(71, 0);
-const GET_YIELD_FROM_ITER: Opcode = Opcode::new(19, 0);
-const END_SEND: Opcode = Opcode::new(10, 0);
-const LOAD_BUILD_CLASS: Opcode = Opcode::new(21, 0);
-const LOAD_LOCALS: Opcode = Opcode::new(22, 0);
-const NOP: Opcode = Opcode::new(27, 0);
-const POP_EXCEPT: Opcode = Opcode::new(29, 0);
-const PUSH_EXC_INFO: Opcode = Opcode::new(32, 0);
-const RETURN_GENERATOR: Opcode = Opcode::new(34, 0);
-const WITH_EXCEPT_START: Opcode = Opcode::new(43, 0);
-const LOAD_CONST: Opcode = Opcode::new(82, 0);
-const LOAD_DEREF: Opcode = Opcode::new(83, 0);
-const LOAD_NAME: Opcode = Opcode::new(93, 0);
-const LOAD_SMALL_INT: Opcode = Opcode::new(94, 0);
-const LOAD_SPECIAL: Opcode = Opcode::new(95, 0);
-const LOAD_SUPER_ATTR: Opcode = Opcode::new(96, 1);
-const STORE_NAME: Opcode = Opcode::new(116, 0);
-const DELETE_NAME: Opcode = Opcode::new(65, 0);
-const STORE_SLICE: Opcode = Opcode::new(37, 0);
 // CPython initially emits owned local loads, then strength-reduces safe loads
 // to borrowed references after the control-flow graph has reached its final
 // shape. The assembler mirrors that dataflow pass.
-const LOAD_FAST: Opcode = Opcode::new(84, 0);
-const LOAD_FAST_CHECK: Opcode = Opcode::new(88, 0);
-const LOAD_FAST_AND_CLEAR: Opcode = Opcode::new(85, 0);
-const LOAD_FROM_DICT_OR_DEREF: Opcode = Opcode::new(90, 0);
-const LOAD_FROM_DICT_OR_GLOBALS: Opcode = Opcode::new(91, 0);
-const STORE_FAST: Opcode = Opcode::new(112, 0);
-const DELETE_FAST: Opcode = Opcode::new(63, 0);
-const DELETE_DEREF: Opcode = Opcode::new(62, 0);
-const LOAD_GLOBAL: Opcode = Opcode::new(92, 4);
-const STORE_GLOBAL: Opcode = Opcode::new(115, 0);
-const STORE_DEREF: Opcode = Opcode::new(111, 0);
-const DELETE_GLOBAL: Opcode = Opcode::new(64, 0);
-const LOAD_ATTR: Opcode = Opcode::new(80, 9);
-const STORE_ATTR: Opcode = Opcode::new(110, 4);
-const DELETE_ATTR: Opcode = Opcode::new(61, 0);
-const STORE_SUBSCR: Opcode = Opcode::new(38, 1);
-const SETUP_ANNOTATIONS: Opcode = Opcode::new(36, 0);
-const PUSH_NULL: Opcode = Opcode::new(33, 0);
-const CALL: Opcode = Opcode::new(52, 3);
-const CALL_KW: Opcode = Opcode::new(55, 3);
-const CALL_FUNCTION_EX: Opcode = Opcode::new(4, 0);
-const MAKE_FUNCTION: Opcode = Opcode::new(23, 0);
-const SET_FUNCTION_ATTRIBUTE: Opcode = Opcode::new(108, 0);
-const COPY_FREE_VARS: Opcode = Opcode::new(60, 0);
-const MAKE_CELL: Opcode = Opcode::new(97, 0);
-const POP_TOP: Opcode = Opcode::new(31, 0);
-const POP_ITER: Opcode = Opcode::new(30, 0);
-const NOT_TAKEN: Opcode = Opcode::new(28, 0);
-const RETURN_VALUE: Opcode = Opcode::new(35, 0);
-const COPY: Opcode = Opcode::new(59, 0);
-const SWAP: Opcode = Opcode::new(117, 0);
-const TO_BOOL: Opcode = Opcode::new(39, 3);
-const UNARY_INVERT: Opcode = Opcode::new(40, 0);
-const UNARY_NEGATIVE: Opcode = Opcode::new(41, 0);
-const UNARY_NOT: Opcode = Opcode::new(42, 0);
-const CALL_INTRINSIC_1: Opcode = Opcode::new(53, 0);
-const CALL_INTRINSIC_2: Opcode = Opcode::new(54, 0);
-const BINARY_OP: Opcode = Opcode::new(44, 5);
-const BUILD_INTERPOLATION: Opcode = Opcode::new(45, 0);
-const COMPARE_OP: Opcode = Opcode::new(56, 1);
-const CONTAINS_OP: Opcode = Opcode::new(57, 1);
-const IS_OP: Opcode = Opcode::new(74, 0);
-const BUILD_LIST: Opcode = Opcode::new(46, 0);
-const BUILD_MAP: Opcode = Opcode::new(47, 0);
-const BUILD_SET: Opcode = Opcode::new(48, 0);
-const BUILD_SLICE: Opcode = Opcode::new(49, 0);
-const BUILD_STRING: Opcode = Opcode::new(50, 0);
-const BUILD_TUPLE: Opcode = Opcode::new(51, 0);
-const CONVERT_VALUE: Opcode = Opcode::new(58, 0);
-const FORMAT_SIMPLE: Opcode = Opcode::new(12, 0);
-const FORMAT_WITH_SPEC: Opcode = Opcode::new(13, 0);
-const GET_LEN: Opcode = Opcode::new(18, 0);
-const MATCH_KEYS: Opcode = Opcode::new(24, 0);
-const MATCH_MAPPING: Opcode = Opcode::new(25, 0);
-const MATCH_SEQUENCE: Opcode = Opcode::new(26, 0);
-const LIST_APPEND: Opcode = Opcode::new(78, 0);
-const LIST_EXTEND: Opcode = Opcode::new(79, 0);
-const DICT_MERGE: Opcode = Opcode::new(66, 0);
-const DICT_UPDATE: Opcode = Opcode::new(67, 0);
-const END_ASYNC_FOR: Opcode = Opcode::new(68, 0);
-const SET_ADD: Opcode = Opcode::new(107, 0);
-const SET_UPDATE: Opcode = Opcode::new(109, 0);
-const MAP_ADD: Opcode = Opcode::new(98, 0);
-const MATCH_CLASS: Opcode = Opcode::new(99, 0);
-const IMPORT_FROM: Opcode = Opcode::new(72, 0);
-const IMPORT_NAME: Opcode = Opcode::new(73, 0);
-const LOAD_COMMON_CONSTANT: Opcode = Opcode::new(81, 0);
-const RAISE_VARARGS: Opcode = Opcode::new(104, 0);
-const RERAISE: Opcode = Opcode::new(105, 0);
-const SEND: Opcode = Opcode::new(106, 1);
-const YIELD_VALUE: Opcode = Opcode::new(120, 0);
-const CHECK_EXC_MATCH: Opcode = Opcode::new(6, 0);
-const CHECK_EG_MATCH: Opcode = Opcode::new(5, 0);
-const UNPACK_EX: Opcode = Opcode::new(118, 0);
-const UNPACK_SEQUENCE: Opcode = Opcode::new(119, 1);
-const FOR_ITER: Opcode = Opcode::new(70, 1);
-const POP_JUMP_IF_FALSE: Opcode = Opcode::new(100, 1);
-const POP_JUMP_IF_NONE: Opcode = Opcode::new(101, 1);
-const POP_JUMP_IF_NOT_NONE: Opcode = Opcode::new(102, 1);
-const POP_JUMP_IF_TRUE: Opcode = Opcode::new(103, 1);
-const JUMP_FORWARD: Opcode = Opcode::new(77, 0);
-const JUMP_BACKWARD: Opcode = Opcode::new(75, 1);
-const JUMP_BACKWARD_NO_INTERRUPT: Opcode = Opcode::new(76, 0);
-
-const CO_OPTIMIZED: u32 = 0x0001;
-const CO_NEWLOCALS: u32 = 0x0002;
-const CO_VARARGS: u32 = 0x0004;
-const CO_VARKEYWORDS: u32 = 0x0008;
-const CO_NESTED: u32 = 0x0010;
-const CO_GENERATOR: u32 = 0x0020;
-const CO_COROUTINE: u32 = 0x0080;
-const CO_ASYNC_GENERATOR: u32 = 0x0200;
-const CO_HAS_DOCSTRING: u32 = 0x0400_0000;
-const CO_METHOD: u32 = 0x0800_0000;
-const CO_FUTURE_BARRY_AS_BDFL: u32 = 0x0040_0000;
-const CO_FUTURE_ANNOTATIONS: u32 = 0x0100_0000;
-const CO_FUTURE_MASK: u32 = CO_FUTURE_BARRY_AS_BDFL | CO_FUTURE_ANNOTATIONS;
-const CO_FAST_LOCAL: u8 = 0x20;
-const CO_FAST_HIDDEN: u8 = 0x10;
-const CO_FAST_CELL: u8 = 0x40;
-const CO_FAST_FREE: u8 = 0x80;
-const CO_FAST_ARG_POS: u8 = 0x02;
-const CO_FAST_ARG_KW: u8 = 0x04;
-const CO_FAST_ARG_VAR: u8 = 0x08;
+const SUPPORTED_FUTURE_FLAGS: u32 = CO_FUTURE_BARRY_AS_BDFL | CO_FUTURE_ANNOTATIONS;
 const SHADOWED_SUPER_SENTINEL: &str = "\0shadowed super";
 
 #[derive(Clone, Debug)]
@@ -3917,7 +3796,10 @@ impl Compiler {
         let pops = context.on_top + context.stores.len();
         self.ensure_match_fail_pop(context, pops);
         self.emit_jump_forward(opcode, context.fail_pop[pops], effect)?;
-        if matches!(opcode.code(), 100..=103) {
+        if matches!(
+            opcode,
+            POP_JUMP_IF_FALSE | POP_JUMP_IF_NONE | POP_JUMP_IF_NOT_NONE | POP_JUMP_IF_TRUE
+        ) {
             self.emit(NOT_TAKEN, 0, 0)?;
         }
         Ok(())
@@ -4714,7 +4596,7 @@ impl Compiler {
                     .set_location(self.source_location(assignment.range));
                 self.emit(BINARY_OP, binary_operator(assignment.op, true), -1)?;
                 self.assembler.set_location(attribute_location);
-                self.emit(Opcode::new(117, 0), 2, 0)?;
+                self.emit(SWAP, 2, 0)?;
                 self.emit(STORE_ATTR, index, -2)?;
             }
             Expr::Subscript(target) => {
@@ -6906,7 +6788,7 @@ impl Compiler {
             let index = self.name_index(part)?;
             self.emit(IMPORT_FROM, index, 1)?;
             if position + 1 < remaining.len() {
-                self.emit(Opcode::new(117, 0), 2, 0)?;
+                self.emit(SWAP, 2, 0)?;
                 self.emit(POP_TOP, 0, -1)?;
             }
         }
@@ -7030,7 +6912,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_MASK);
+        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -7172,7 +7054,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_MASK);
+        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -7352,7 +7234,7 @@ impl Compiler {
                 }
         } else {
             0
-        }) | (self.flags & CO_FUTURE_MASK);
+        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
         if definition.is_async && suite_contains_yield(&definition.body) {
             parameter_flags |= CO_ASYNC_GENERATOR;
         } else if definition.is_async {
@@ -7589,7 +7471,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        } | (self.flags & CO_FUTURE_MASK);
+        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
         let mut wrapper = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -7738,7 +7620,7 @@ impl Compiler {
             class_bindings.seen,
             needs_class_closure,
             needs_classdict,
-            self.flags & CO_FUTURE_MASK,
+            self.flags & SUPPORTED_FUTURE_FLAGS,
         );
         child.class_scope_is_nested = class_scope_is_nested;
         child
@@ -8054,7 +7936,7 @@ impl Compiler {
             1,
             1,
             0,
-            (if nested { CO_NESTED } else { 0 }) | (self.flags & CO_FUTURE_MASK),
+            (if nested { CO_NESTED } else { 0 }) | (self.flags & SUPPORTED_FUTURE_FLAGS),
         )?;
         child.private_name.clone_from(&self.private_name);
         child
@@ -8177,7 +8059,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        }) | (self.flags & CO_FUTURE_MASK);
+        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -9904,7 +9786,7 @@ impl Compiler {
             CO_NESTED
         } else {
             0
-        }) | (self.flags & CO_FUTURE_MASK);
+        }) | (self.flags & SUPPORTED_FUTURE_FLAGS);
         if expression_contains_yield(&lambda.body) {
             parameter_flags |= CO_GENERATOR;
         }
@@ -10252,7 +10134,7 @@ impl Compiler {
             CO_METHOD
         } else {
             0
-        } | (self.flags & CO_FUTURE_MASK);
+        } | (self.flags & SUPPORTED_FUTURE_FLAGS);
         let mut child = Self::function(
             &self.filename,
             Arc::clone(&self.source),
@@ -11541,7 +11423,7 @@ impl Compiler {
             .take(expression.ops.len() - 1)
         {
             self.compile_expression(comparator)?;
-            self.emit(Opcode::new(117, 0), 2, 0)?;
+            self.emit(SWAP, 2, 0)?;
             self.emit(COPY, 2, 1)?;
             let (opcode, argument) = comparison_operator(*operator);
             self.emit(opcode, argument, -1)?;
@@ -11559,7 +11441,7 @@ impl Compiler {
 
         self.assembler.mark(cleanup);
         self.set_depth(base_depth + 2);
-        self.emit(Opcode::new(117, 0), 2, 0)?;
+        self.emit(SWAP, 2, 0)?;
         self.emit(POP_TOP, 0, -1)?;
         self.assembler.mark(end);
         self.set_depth(base_depth + 1);
@@ -12993,8 +12875,10 @@ impl Compiler {
         label: Label,
         effect: i32,
     ) -> Result<(), CompileError> {
-        if matches!(opcode.code(), 75..=77)
-            && let Some(location) = self.take_trailing_nop_location()
+        if matches!(
+            opcode,
+            JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
+        ) && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }
@@ -13010,8 +12894,10 @@ impl Compiler {
         label: Label,
         effect: i32,
     ) -> Result<(), CompileError> {
-        if matches!(opcode.code(), 75..=77)
-            && let Some(location) = self.take_trailing_nop_location()
+        if matches!(
+            opcode,
+            JUMP_BACKWARD | JUMP_BACKWARD_NO_INTERRUPT | JUMP_FORWARD
+        ) && let Some(location) = self.take_trailing_nop_location()
         {
             self.assembler.set_location(location);
         }

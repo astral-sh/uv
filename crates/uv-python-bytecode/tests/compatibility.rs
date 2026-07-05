@@ -8,6 +8,15 @@ mod tests {
     use uv_python_bytecode::{CPYTHON_TARGET, compile, compile_to_pyc};
 
     #[test]
+    fn exposes_the_pinned_cpython_source_identity() {
+        assert_eq!(CPYTHON_TARGET.tag, "v3.14.5");
+        assert_eq!(
+            CPYTHON_TARGET.commit,
+            "5607950ef232dad16d75c0cf53101d9649d89115"
+        );
+    }
+
+    #[test]
     fn emits_a_python_3145_pyc_header() {
         let pyc = compile_to_pyc("answer = 42\n", "answer.py", 123).unwrap();
         assert_eq!(&pyc[..4], &CPYTHON_TARGET.magic_number);

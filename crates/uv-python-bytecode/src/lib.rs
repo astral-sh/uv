@@ -7,6 +7,7 @@
 mod assembler;
 mod compiler;
 mod marshal;
+mod target;
 
 use std::error::Error;
 use std::fmt;
@@ -22,6 +23,10 @@ pub struct CpythonTarget {
     pub version: (u8, u8, u8),
     /// The value of `importlib.util.MAGIC_NUMBER`.
     pub magic_number: [u8; 4],
+    /// The upstream CPython release tag.
+    pub tag: &'static str,
+    /// The upstream CPython source commit.
+    pub commit: &'static str,
 }
 
 impl CpythonTarget {
@@ -46,9 +51,11 @@ impl CpythonTarget {
 
 /// The sole CPython target currently implemented by this crate.
 pub const CPYTHON_TARGET: CpythonTarget = CpythonTarget {
-    implementation: "cpython",
-    version: (3, 14, 5),
-    magic_number: [0x2b, 0x0e, 0x0d, 0x0a],
+    implementation: target::TARGET_IMPLEMENTATION,
+    version: target::TARGET_VERSION,
+    magic_number: target::TARGET_MAGIC_NUMBER,
+    tag: target::TARGET_TAG,
+    commit: target::TARGET_COMMIT,
 };
 
 /// A compiled CPython 3.14.5 module code object.
