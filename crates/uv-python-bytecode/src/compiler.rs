@@ -347,6 +347,25 @@ struct FunctionPlan {
     type_parameter_names: FxHashSet<NameId>,
 }
 
+// These facts share the same current-scope traversal boundary. Named function and class bodies
+// belong to their own `ScopeArena` nodes; only their headers contribute facts to the parent.
+#[derive(Debug, Default)]
+struct ScopeBodyFacts {
+    globals: HashSet<String>,
+    nonlocals: HashSet<String>,
+    references: HashSet<String>,
+    explicit_dunder_class_reference: bool,
+    nested_lambda_requirements: BTreeSet<String>,
+    nested_generator_requirements: BTreeSet<String>,
+    nested_annotation_scope_requirements: BTreeSet<String>,
+    generator_named_targets: HashSet<String>,
+    inlined_comprehension_cellvars: HashSet<String>,
+    has_function_definition: bool,
+    has_generic_definition: bool,
+    has_type_alias: bool,
+    has_simple_annotations: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 struct LoweringFunctionPlan {
     locals: Vec<String>,
@@ -420,18 +439,40 @@ impl FunctionPlan {
         names: &mut NameInterner,
         definition: &StmtFunctionDef,
         future_annotations: bool,
+        facts: ScopeBodyFacts,
         nested_function_requirements: &FxHashSet<NameId>,
         nested_function_annotation_references: &FxHashSet<NameId>,
         class_requirements: &FxHashSet<NameId>,
     ) -> Self {
-        let mut bindings = LocalCollector::default();
-        bindings.collect_globals(&definition.body);
+        let ScopeBodyFacts {
+            globals,
+            nonlocals,
+            mut references,
+            explicit_dunder_class_reference,
+            nested_lambda_requirements: lambda_requirements,
+            nested_generator_requirements: generator_requirements,
+            nested_annotation_scope_requirements: annotation_scope_requirements,
+            generator_named_targets,
+            inlined_comprehension_cellvars,
+            ..
+        } = facts;
+
+        // This preliminary pass cannot be folded into the real locals pass: named-expression and
+        // match-subject handling need to know every binding in the scope before visiting source
+        // expressions in order. Global and nonlocal declarations come from the shared facts pass
+        // because their effect applies to the entire scope regardless of source position.
+        let mut bindings = LocalCollector {
+            globals: globals.clone(),
+            nonlocals: nonlocals.clone(),
+            ..LocalCollector::default()
+        };
         bindings.collect_suite(&definition.body);
         let mut locals = LocalCollector {
             known_bindings: bindings.names.into_iter().collect(),
+            globals,
+            nonlocals,
             ..LocalCollector::default()
         };
-        locals.collect_globals(&definition.body);
         for parameter in definition
             .parameters
             .posonlyargs
@@ -448,14 +489,6 @@ impl FunctionPlan {
             locals.insert(parameter.name.as_str());
         }
         locals.collect_suite(&definition.body);
-
-        let mut reference_collector = ReferenceCollector {
-            skip_annotations: true,
-            ..ReferenceCollector::default()
-        };
-        for statement in &definition.body {
-            reference_collector.visit_stmt(statement);
-        }
 
         let mut annotation_collector = ReferenceCollector::default();
         if !future_annotations {
@@ -489,20 +522,14 @@ impl FunctionPlan {
             }
         }
 
-        if locals.annotation_only.contains("__class__")
-            && !reference_collector.explicit_dunder_class_reference
-        {
-            reference_collector.references.remove("__class__");
+        if locals.annotation_only.contains("__class__") && !explicit_dunder_class_reference {
+            references.remove("__class__");
         }
         let local_names: HashSet<_> = locals.names.iter().cloned().collect();
-        let lambda_requirements = nested_lambda_required_names_in_suite(&definition.body);
-        let generator_requirements = nested_generator_required_names_in_suite(&definition.body);
-        let annotation_scope_requirements =
-            nested_annotation_scope_required_names_in_suite(&definition.body);
         locals.names.retain(|name| {
             !locals.annotation_only.contains(name)
-                || reference_collector.references.contains(name)
-                    && (name != "__class__" || reference_collector.explicit_dunder_class_reference)
+                || references.contains(name)
+                    && (name != "__class__" || explicit_dunder_class_reference)
                 || names
                     .get(name)
                     .is_some_and(|name| class_requirements.contains(&name))
@@ -513,21 +540,15 @@ impl FunctionPlan {
                     .get(name)
                     .is_some_and(|name| nested_function_requirements.contains(&name))
         });
-        reference_collector.references.extend(
+        references.extend(
             class_requirements
                 .iter()
                 .map(|name| names.resolve(*name).to_string()),
         );
-        reference_collector
-            .references
-            .extend(lambda_requirements.iter().cloned());
-        reference_collector
-            .references
-            .extend(generator_requirements.iter().cloned());
-        reference_collector
-            .references
-            .extend(annotation_scope_requirements.iter().cloned());
-        let mut cellvars = generator_named_targets_in_suite(&definition.body)
+        references.extend(lambda_requirements.iter().cloned());
+        references.extend(generator_requirements.iter().cloned());
+        references.extend(annotation_scope_requirements.iter().cloned());
+        let mut cellvars = generator_named_targets
             .into_iter()
             .filter(|name| local_names.contains(name))
             .collect::<HashSet<_>>();
@@ -553,11 +574,8 @@ impl FunctionPlan {
                 .into_iter()
                 .filter(|name| local_names.contains(name)),
         );
-        let inlined_comprehension_cellvars =
-            inlined_comprehension_cell_names_in_suite(&definition.body);
         let retained_local_names: HashSet<_> = locals.names.iter().map(String::as_str).collect();
-        let required: BTreeSet<_> = reference_collector
-            .references
+        let required: BTreeSet<_> = references
             .iter()
             .chain(&locals.nonlocals)
             .filter(|name| {
@@ -656,26 +674,34 @@ impl ClassPlan {
         names: &mut NameInterner,
         definition: &StmtClassDef,
         future_annotations: bool,
+        facts: ScopeBodyFacts,
         method_requirements: &FxHashSet<NameId>,
         method_annotation_references: &FxHashSet<NameId>,
         nested_class_requirements: &FxHashSet<NameId>,
         child_needs_class_closure: bool,
     ) -> Self {
-        let mut locals = LocalCollector::default();
-        locals.collect_globals(&definition.body);
+        let ScopeBodyFacts {
+            globals,
+            nonlocals,
+            references,
+            explicit_dunder_class_reference,
+            nested_lambda_requirements,
+            nested_annotation_scope_requirements: annotation_scope_requirements,
+            has_function_definition,
+            has_generic_definition,
+            has_type_alias,
+            has_simple_annotations,
+            ..
+        } = facts;
+        let mut locals = LocalCollector {
+            globals,
+            nonlocals,
+            ..LocalCollector::default()
+        };
         locals.collect_suite(&definition.body);
 
-        let mut references = ReferenceCollector {
-            skip_annotations: future_annotations,
-            ..ReferenceCollector::default()
-        };
-        for statement in &definition.body {
-            references.visit_stmt(statement);
-        }
-        let mut body_explicitly_references_dunder_class =
-            references.explicit_dunder_class_reference;
+        let mut body_explicitly_references_dunder_class = explicit_dunder_class_reference;
         let mut required = references
-            .references
             .into_iter()
             .filter(|name| {
                 locals.nonlocals.contains(name)
@@ -683,8 +709,6 @@ impl ClassPlan {
             })
             .collect::<BTreeSet<_>>();
         required.extend(locals.nonlocals.iter().cloned());
-        let annotation_scope_requirements =
-            nested_annotation_scope_required_names_in_suite(&definition.body);
         body_explicitly_references_dunder_class |=
             annotation_scope_requirements.contains("__class__");
         required.extend(
@@ -720,13 +744,11 @@ impl ClassPlan {
         required.remove("__classdict__");
         required.remove("__conditional_annotations__");
 
-        let needs_class_closure = child_needs_class_closure
-            || nested_lambda_required_names_in_suite(&definition.body).contains("__class__");
-        let needs_classdict = contains_type_alias(&definition.body)
-            || contains_generic_definition(&definition.body)
-            || !future_annotations
-                && (contains_function_definition(&definition.body)
-                    || has_simple_annotations(&definition.body));
+        let needs_class_closure =
+            child_needs_class_closure || nested_lambda_requirements.contains("__class__");
+        let needs_classdict = has_type_alias
+            || has_generic_definition
+            || !future_annotations && (has_function_definition || has_simple_annotations);
         Self {
             globals: names.intern_set(locals.globals),
             nonlocals: names.intern_set(locals.nonlocals),
@@ -916,6 +938,7 @@ impl ScopeArena {
         definition: &StmtFunctionDef,
         future_annotations: bool,
     ) {
+        let facts = ScopeBodyFacts::for_function(&definition.body);
         let id = self.add_scope(
             parent,
             ScopeOrigin::function(definition),
@@ -929,6 +952,7 @@ impl ScopeArena {
             &mut self.names,
             definition,
             future_annotations,
+            facts,
             &nested_function_requirements,
             &nested_function_annotation_references,
             &class_requirements,
@@ -942,6 +966,7 @@ impl ScopeArena {
         definition: &StmtClassDef,
         future_annotations: bool,
     ) {
+        let facts = ScopeBodyFacts::for_class(&definition.body, future_annotations);
         let id = self.add_scope(
             parent,
             ScopeOrigin::class(definition),
@@ -963,6 +988,7 @@ impl ScopeArena {
             &mut self.names,
             definition,
             future_annotations,
+            facts,
             &method_requirements,
             &method_annotation_references,
             &nested_class_requirements,
@@ -14242,52 +14268,6 @@ impl LocalCollector {
         }
     }
 
-    fn collect_globals(&mut self, body: &[Stmt]) {
-        for statement in body {
-            match statement {
-                Stmt::Global(statement) => {
-                    self.globals
-                        .extend(statement.names.iter().map(|name| name.as_str().to_string()));
-                }
-                Stmt::Nonlocal(statement) => {
-                    self.nonlocals
-                        .extend(statement.names.iter().map(|name| name.as_str().to_string()));
-                }
-                Stmt::If(statement) => {
-                    self.collect_globals(&statement.body);
-                    for clause in &statement.elif_else_clauses {
-                        self.collect_globals(&clause.body);
-                    }
-                }
-                Stmt::For(statement) => {
-                    self.collect_globals(&statement.body);
-                    self.collect_globals(&statement.orelse);
-                }
-                Stmt::While(statement) => {
-                    self.collect_globals(&statement.body);
-                    self.collect_globals(&statement.orelse);
-                }
-                Stmt::Try(statement) => {
-                    self.collect_globals(&statement.body);
-                    for handler in &statement.handlers {
-                        if let Some(handler) = handler.as_except_handler() {
-                            self.collect_globals(&handler.body);
-                        }
-                    }
-                    self.collect_globals(&statement.orelse);
-                    self.collect_globals(&statement.finalbody);
-                }
-                Stmt::With(statement) => self.collect_globals(&statement.body),
-                Stmt::Match(statement) => {
-                    for case in &statement.cases {
-                        self.collect_globals(&case.body);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
     fn collect_suite(&mut self, body: &[Stmt]) {
         for statement in body {
             match statement {
@@ -14587,6 +14567,212 @@ impl<'ast> Visitor<'ast> for NamedExpressionCollector<'_> {
     }
 }
 
+impl ScopeBodyFacts {
+    fn for_function(body: &[Stmt]) -> Self {
+        ScopeBodyFactsCollector::collect(body, true, true)
+    }
+
+    fn for_class(body: &[Stmt], future_annotations: bool) -> Self {
+        ScopeBodyFactsCollector::collect(body, future_annotations, false)
+    }
+}
+
+struct ScopeBodyFactsCollector {
+    facts: ScopeBodyFacts,
+    skip_annotations: bool,
+    collect_function_scope_facts: bool,
+    generator_depth: usize,
+}
+
+impl ScopeBodyFactsCollector {
+    fn collect(
+        body: &[Stmt],
+        skip_annotations: bool,
+        collect_function_scope_facts: bool,
+    ) -> ScopeBodyFacts {
+        let mut collector = Self {
+            facts: ScopeBodyFacts::default(),
+            skip_annotations,
+            collect_function_scope_facts,
+            generator_depth: 0,
+        };
+        for statement in body {
+            collector.visit_stmt(statement);
+        }
+        collector.facts
+    }
+
+    fn collect_function_header(&mut self, definition: &StmtFunctionDef) {
+        self.facts.has_function_definition = true;
+        let Some(type_params) = definition.type_params.as_deref() else {
+            return;
+        };
+        self.facts.has_generic_definition = true;
+        let type_names: BTreeSet<_> = type_params
+            .iter()
+            .map(|parameter| parameter.name().as_str().to_string())
+            .collect();
+        self.facts.nested_annotation_scope_requirements.extend(
+            type_parameter_required_names(type_params)
+                .difference(&type_names)
+                .cloned(),
+        );
+    }
+
+    fn collect_class_header(&mut self, definition: &StmtClassDef) {
+        let Some(type_params) = definition.type_params.as_deref() else {
+            return;
+        };
+        self.facts.has_generic_definition = true;
+        let type_names: BTreeSet<_> = type_params
+            .iter()
+            .map(|parameter| parameter.name().as_str().to_string())
+            .collect();
+        let mut required = type_parameter_required_names(type_params);
+        if let Some(arguments) = definition.arguments.as_deref() {
+            for argument in &arguments.args {
+                required.extend(expression_required_names(argument));
+            }
+            for keyword in &arguments.keywords {
+                required.extend(expression_required_names(&keyword.value));
+            }
+        }
+        self.facts
+            .nested_annotation_scope_requirements
+            .extend(required.difference(&type_names).cloned());
+    }
+
+    fn collect_type_alias(&mut self, statement: &ruff_python_ast::StmtTypeAlias) {
+        self.facts.has_type_alias = true;
+        let mut required = expression_required_names(&statement.value);
+        if let Some(type_params) = statement.type_params.as_deref() {
+            let type_names: BTreeSet<_> = type_params
+                .iter()
+                .map(|parameter| parameter.name().as_str().to_string())
+                .collect();
+            required.extend(type_parameter_required_names(type_params));
+            self.facts
+                .nested_annotation_scope_requirements
+                .extend(required.difference(&type_names).cloned());
+        } else {
+            self.facts
+                .nested_annotation_scope_requirements
+                .extend(required);
+        }
+    }
+
+    fn insert_reference(&mut self, name: &str) {
+        self.facts.references.insert(name.to_string());
+        if name == "super" {
+            self.facts.references.insert("__class__".to_string());
+        } else if name == "__class__" {
+            self.facts.explicit_dunder_class_reference = true;
+        }
+    }
+}
+
+impl<'ast> Visitor<'ast> for ScopeBodyFactsCollector {
+    fn visit_stmt(&mut self, statement: &'ast Stmt) {
+        match statement {
+            Stmt::FunctionDef(definition) => {
+                // The child body is represented by a separate `ScopeArena` node and plan.
+                self.collect_function_header(definition);
+                return;
+            }
+            Stmt::ClassDef(definition) => {
+                // As above, only the class header is evaluated in the current scope.
+                self.collect_class_header(definition);
+                return;
+            }
+            Stmt::TypeAlias(statement) => self.collect_type_alias(statement),
+            Stmt::AnnAssign(annotation) => {
+                self.facts.has_simple_annotations |= annotation.simple;
+                if self.skip_annotations {
+                    self.visit_expr(&annotation.target);
+                    if let Some(value) = &annotation.value {
+                        self.visit_expr(value);
+                    }
+                    return;
+                }
+            }
+            Stmt::Global(statement) => self
+                .facts
+                .globals
+                .extend(statement.names.iter().map(|name| name.as_str().to_string())),
+            Stmt::Nonlocal(statement) => self
+                .facts
+                .nonlocals
+                .extend(statement.names.iter().map(|name| name.as_str().to_string())),
+            _ => {}
+        }
+        walk_stmt(self, statement);
+    }
+
+    fn visit_expr(&mut self, expression: &'ast Expr) {
+        if let Expr::Lambda(lambda) = expression {
+            self.facts
+                .nested_lambda_requirements
+                .extend(analyze_lambda_scope(lambda).required);
+            return;
+        }
+        if let Expr::Name(name) = expression
+            && name.ctx == ExprContext::Load
+        {
+            self.insert_reference(name.id.as_str());
+        }
+
+        let is_generator = matches!(expression, Expr::Generator(_));
+        if self.collect_function_scope_facts && self.generator_depth == 0 {
+            match expression {
+                Expr::Generator(generator) => {
+                    self.facts
+                        .nested_generator_requirements
+                        .extend(generator_required_names(generator));
+                    self.facts
+                        .generator_named_targets
+                        .extend(generator_named_targets(generator));
+                }
+                Expr::ListComp(comprehension) => {
+                    self.facts
+                        .inlined_comprehension_cellvars
+                        .extend(comprehension_cell_names(
+                            &comprehension.generators,
+                            None,
+                            &comprehension.elt,
+                        ));
+                }
+                Expr::SetComp(comprehension) => {
+                    self.facts
+                        .inlined_comprehension_cellvars
+                        .extend(comprehension_cell_names(
+                            &comprehension.generators,
+                            None,
+                            &comprehension.elt,
+                        ));
+                }
+                Expr::DictComp(comprehension) => {
+                    self.facts
+                        .inlined_comprehension_cellvars
+                        .extend(comprehension_cell_names(
+                            &comprehension.generators,
+                            comprehension.key.as_deref(),
+                            &comprehension.value,
+                        ));
+                }
+                _ => {}
+            }
+        }
+
+        if is_generator {
+            self.generator_depth += 1;
+            walk_expr(self, expression);
+            self.generator_depth -= 1;
+        } else {
+            walk_expr(self, expression);
+        }
+    }
+}
+
 #[derive(Default)]
 struct ReferenceCollector {
     references: HashSet<String>,
@@ -14789,254 +14975,6 @@ fn type_parameter_required_names(type_params: &ruff_python_ast::TypeParams) -> B
         }
     }
     required
-}
-
-fn nested_annotation_scope_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
-    let mut required = BTreeSet::new();
-    for statement in body {
-        match statement {
-            Stmt::FunctionDef(definition) => {
-                if let Some(type_params) = definition.type_params.as_deref() {
-                    let type_names: BTreeSet<_> = type_params
-                        .iter()
-                        .map(|parameter| parameter.name().as_str().to_string())
-                        .collect();
-                    required.extend(
-                        type_parameter_required_names(type_params)
-                            .difference(&type_names)
-                            .cloned(),
-                    );
-                }
-            }
-            Stmt::ClassDef(definition) => {
-                if let Some(type_params) = definition.type_params.as_deref() {
-                    let type_names: BTreeSet<_> = type_params
-                        .iter()
-                        .map(|parameter| parameter.name().as_str().to_string())
-                        .collect();
-                    let mut class_requirements = type_parameter_required_names(type_params);
-                    if let Some(arguments) = definition.arguments.as_deref() {
-                        for argument in &arguments.args {
-                            class_requirements.extend(expression_required_names(argument));
-                        }
-                        for keyword in &arguments.keywords {
-                            class_requirements.extend(expression_required_names(&keyword.value));
-                        }
-                    }
-                    required.extend(class_requirements.difference(&type_names).cloned());
-                }
-            }
-            Stmt::TypeAlias(statement) => {
-                let mut alias_requirements = expression_required_names(&statement.value);
-                if let Some(type_params) = statement.type_params.as_deref() {
-                    let type_names: BTreeSet<_> = type_params
-                        .iter()
-                        .map(|parameter| parameter.name().as_str().to_string())
-                        .collect();
-                    alias_requirements.extend(type_parameter_required_names(type_params));
-                    required.extend(alias_requirements.difference(&type_names).cloned());
-                } else {
-                    required.extend(alias_requirements);
-                }
-            }
-            Stmt::If(statement) => {
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.body,
-                ));
-                for clause in &statement.elif_else_clauses {
-                    required.extend(nested_annotation_scope_required_names_in_suite(
-                        &clause.body,
-                    ));
-                }
-            }
-            Stmt::For(statement) => {
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.body,
-                ));
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.orelse,
-                ));
-            }
-            Stmt::While(statement) => {
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.body,
-                ));
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.orelse,
-                ));
-            }
-            Stmt::Try(statement) => {
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.body,
-                ));
-                for handler in &statement.handlers {
-                    if let Some(handler) = handler.as_except_handler() {
-                        required.extend(nested_annotation_scope_required_names_in_suite(
-                            &handler.body,
-                        ));
-                    }
-                }
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.orelse,
-                ));
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.finalbody,
-                ));
-            }
-            Stmt::With(statement) => {
-                required.extend(nested_annotation_scope_required_names_in_suite(
-                    &statement.body,
-                ));
-            }
-            Stmt::Match(statement) => {
-                for case in &statement.cases {
-                    required.extend(nested_annotation_scope_required_names_in_suite(&case.body));
-                }
-            }
-            _ => {}
-        }
-    }
-    required
-}
-
-fn nested_lambda_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
-    #[derive(Default)]
-    struct Collector {
-        required: BTreeSet<String>,
-    }
-
-    impl<'ast> Visitor<'ast> for Collector {
-        fn visit_stmt(&mut self, statement: &'ast Stmt) {
-            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
-                return;
-            }
-            walk_stmt(self, statement);
-        }
-
-        fn visit_expr(&mut self, expression: &'ast Expr) {
-            if let Expr::Lambda(lambda) = expression {
-                self.required.extend(analyze_lambda_scope(lambda).required);
-                return;
-            }
-            walk_expr(self, expression);
-        }
-    }
-
-    let mut collector = Collector::default();
-    for statement in body {
-        collector.visit_stmt(statement);
-    }
-    collector.required
-}
-
-fn contains_function_definition(body: &[Stmt]) -> bool {
-    body.iter().any(|statement| match statement {
-        Stmt::FunctionDef(_) => true,
-        Stmt::If(statement) => {
-            contains_function_definition(&statement.body)
-                || statement
-                    .elif_else_clauses
-                    .iter()
-                    .any(|clause| contains_function_definition(&clause.body))
-        }
-        Stmt::For(statement) => {
-            contains_function_definition(&statement.body)
-                || contains_function_definition(&statement.orelse)
-        }
-        Stmt::While(statement) => {
-            contains_function_definition(&statement.body)
-                || contains_function_definition(&statement.orelse)
-        }
-        Stmt::Try(statement) => {
-            contains_function_definition(&statement.body)
-                || statement
-                    .handlers
-                    .iter()
-                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
-                    .any(|handler| contains_function_definition(&handler.body))
-                || contains_function_definition(&statement.orelse)
-                || contains_function_definition(&statement.finalbody)
-        }
-        Stmt::With(statement) => contains_function_definition(&statement.body),
-        Stmt::Match(statement) => statement
-            .cases
-            .iter()
-            .any(|case| contains_function_definition(&case.body)),
-        _ => false,
-    })
-}
-
-fn contains_generic_definition(body: &[Stmt]) -> bool {
-    body.iter().any(|statement| match statement {
-        Stmt::FunctionDef(definition) => definition.type_params.is_some(),
-        Stmt::ClassDef(definition) => definition.type_params.is_some(),
-        Stmt::If(statement) => {
-            contains_generic_definition(&statement.body)
-                || statement
-                    .elif_else_clauses
-                    .iter()
-                    .any(|clause| contains_generic_definition(&clause.body))
-        }
-        Stmt::For(statement) => {
-            contains_generic_definition(&statement.body)
-                || contains_generic_definition(&statement.orelse)
-        }
-        Stmt::While(statement) => {
-            contains_generic_definition(&statement.body)
-                || contains_generic_definition(&statement.orelse)
-        }
-        Stmt::Try(statement) => {
-            contains_generic_definition(&statement.body)
-                || statement
-                    .handlers
-                    .iter()
-                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
-                    .any(|handler| contains_generic_definition(&handler.body))
-                || contains_generic_definition(&statement.orelse)
-                || contains_generic_definition(&statement.finalbody)
-        }
-        Stmt::With(statement) => contains_generic_definition(&statement.body),
-        Stmt::Match(statement) => statement
-            .cases
-            .iter()
-            .any(|case| contains_generic_definition(&case.body)),
-        _ => false,
-    })
-}
-
-fn contains_type_alias(body: &[Stmt]) -> bool {
-    body.iter().any(|statement| match statement {
-        Stmt::TypeAlias(_) => true,
-        Stmt::If(statement) => {
-            contains_type_alias(&statement.body)
-                || statement
-                    .elif_else_clauses
-                    .iter()
-                    .any(|clause| contains_type_alias(&clause.body))
-        }
-        Stmt::For(statement) => {
-            contains_type_alias(&statement.body) || contains_type_alias(&statement.orelse)
-        }
-        Stmt::While(statement) => {
-            contains_type_alias(&statement.body) || contains_type_alias(&statement.orelse)
-        }
-        Stmt::Try(statement) => {
-            contains_type_alias(&statement.body)
-                || statement
-                    .handlers
-                    .iter()
-                    .filter_map(ruff_python_ast::ExceptHandler::as_except_handler)
-                    .any(|handler| contains_type_alias(&handler.body))
-                || contains_type_alias(&statement.orelse)
-                || contains_type_alias(&statement.finalbody)
-        }
-        Stmt::With(statement) => contains_type_alias(&statement.body),
-        Stmt::Match(statement) => statement
-            .cases
-            .iter()
-            .any(|case| contains_type_alias(&case.body)),
-        _ => false,
-    })
 }
 
 fn class_static_attributes(body: &[Stmt]) -> Vec<String> {
@@ -15332,72 +15270,6 @@ fn generator_cellvars(generator: &ruff_python_ast::ExprGenerator) -> HashSet<Str
         .into_iter()
         .filter(|name| local_names.contains(name))
         .collect()
-}
-
-fn nested_generator_required_names_in_suite(body: &[Stmt]) -> BTreeSet<String> {
-    #[derive(Default)]
-    struct Collector {
-        required: BTreeSet<String>,
-    }
-
-    impl<'ast> Visitor<'ast> for Collector {
-        fn visit_stmt(&mut self, statement: &'ast Stmt) {
-            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
-                return;
-            }
-            walk_stmt(self, statement);
-        }
-
-        fn visit_expr(&mut self, expression: &'ast Expr) {
-            if let Expr::Generator(generator) = expression {
-                self.required.extend(generator_required_names(generator));
-                return;
-            }
-            if matches!(expression, Expr::Lambda(_)) {
-                return;
-            }
-            walk_expr(self, expression);
-        }
-    }
-
-    let mut collector = Collector::default();
-    for statement in body {
-        collector.visit_stmt(statement);
-    }
-    collector.required
-}
-
-fn generator_named_targets_in_suite(body: &[Stmt]) -> HashSet<String> {
-    #[derive(Default)]
-    struct Collector {
-        names: HashSet<String>,
-    }
-
-    impl<'ast> Visitor<'ast> for Collector {
-        fn visit_stmt(&mut self, statement: &'ast Stmt) {
-            if matches!(statement, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
-                return;
-            }
-            walk_stmt(self, statement);
-        }
-
-        fn visit_expr(&mut self, expression: &'ast Expr) {
-            if let Expr::Generator(generator) = expression {
-                self.names.extend(generator_named_targets(generator));
-                return;
-            }
-            if matches!(expression, Expr::Lambda(_)) {
-                return;
-            }
-            walk_expr(self, expression);
-        }
-    }
-
-    let mut collector = Collector::default();
-    for statement in body {
-        collector.visit_stmt(statement);
-    }
-    collector.names
 }
 
 fn explicit_surrogate_string(value: &str, source: &str) -> Option<Vec<u8>> {
@@ -17659,9 +17531,12 @@ fn clean_doc(docstring: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use ruff_python_ast::Stmt;
     use ruff_python_parser::parse_module;
 
-    use super::{Compiler, Constant, FunctionPlan, NameId, NameInterner, clean_doc};
+    use super::{
+        Compiler, Constant, FunctionPlan, NameId, NameInterner, ScopeBodyFacts, clean_doc,
+    };
 
     #[test]
     fn interns_adversarial_identifier_families_densely() {
@@ -17746,6 +17621,70 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn scope_body_facts_preserve_named_scope_and_annotation_boundaries() {
+        let source = r"def outer():
+    global module_name
+    nonlocal captured
+    item: annotation = value
+    closure = lambda: captured
+    generated = ((captured := element) for element in values)
+    inlined = [lambda: element for element in values]
+
+    def child[U: child_bound]():
+        return child_body
+
+    class Child[T: class_bound](base):
+        body = class_body
+
+    type Alias[V: alias_bound] = tuple[V, alias_value]
+";
+        let parsed = parse_module(source).unwrap();
+        let Stmt::FunctionDef(definition) = &parsed.suite()[0] else {
+            panic!("expected a function definition");
+        };
+        let facts = ScopeBodyFacts::for_function(&definition.body);
+
+        assert!(facts.globals.contains("module_name"));
+        assert!(facts.nonlocals.contains("captured"));
+        assert!(facts.references.contains("value"));
+        assert!(!facts.references.contains("annotation"));
+        assert!(!facts.references.contains("child_body"));
+        assert!(!facts.references.contains("class_body"));
+        assert!(facts.nested_lambda_requirements.contains("captured"));
+        assert!(facts.nested_generator_requirements.contains("captured"));
+        assert!(facts.generator_named_targets.contains("captured"));
+        assert!(facts.inlined_comprehension_cellvars.contains("element"));
+        for name in [
+            "child_bound",
+            "class_bound",
+            "base",
+            "alias_bound",
+            "alias_value",
+        ] {
+            assert!(
+                facts.nested_annotation_scope_requirements.contains(name),
+                "missing annotation-scope requirement {name}"
+            );
+        }
+        assert!(facts.has_function_definition);
+        assert!(facts.has_generic_definition);
+        assert!(facts.has_type_alias);
+        assert!(facts.has_simple_annotations);
+
+        let source = "class Container:\n    item: annotation = value\n";
+        let parsed = parse_module(source).unwrap();
+        let Stmt::ClassDef(definition) = &parsed.suite()[0] else {
+            panic!("expected a class definition");
+        };
+        let deferred = ScopeBodyFacts::for_class(&definition.body, true);
+        assert!(deferred.references.contains("value"));
+        assert!(!deferred.references.contains("annotation"));
+        let eager = ScopeBodyFacts::for_class(&definition.body, false);
+        assert!(eager.references.contains("value"));
+        assert!(eager.references.contains("annotation"));
     }
 
     #[test]
