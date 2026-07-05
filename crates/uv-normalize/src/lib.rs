@@ -274,9 +274,7 @@ mod tests {
         ];
         for input in inputs {
             assert_eq!(
-                validate_and_normalize_ref(input.to_string())
-                    .unwrap()
-                    .as_ref(),
+                PackageName::from_owned(input.to_string()).unwrap().as_ref(),
                 "friendly-bard"
             );
         }
@@ -297,7 +295,7 @@ mod tests {
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
             assert!(is_normalized(input).is_err());
-            assert!(validate_and_normalize_ref(input.to_string()).is_err());
+            assert!(PackageName::from_owned(input.to_string()).is_err());
         }
     }
 }
