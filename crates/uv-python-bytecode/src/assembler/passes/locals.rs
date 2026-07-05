@@ -13,6 +13,7 @@ use super::super::{
     block_jump_target, ends_scope, opcode_num_popped, opcode_num_pushed, opcode_stack_effect,
 };
 use crate::assembler::Assembler;
+use crate::assembler::block_graph::ItemPosition;
 
 impl Assembler {
     /// Converts potentially uninitialized local loads to checked loads.
@@ -29,77 +30,50 @@ impl Assembler {
             return;
         }
 
-        let mut block_labels = FxHashSet::default();
-        for item in &self.items {
-            if let Item::Instruction(Instruction {
-                operand: Operand::Forward(label) | Operand::Backward(label),
-                ..
-            }) = item
-            {
-                block_labels.insert(*label);
-            }
-        }
-        for region in &self.exception_regions {
-            block_labels.insert(region.target);
-        }
-
-        let mut blocks = Vec::<Vec<usize>>::new();
-        let mut block = Vec::new();
-        for (index, item) in self.items.iter().enumerate() {
-            if matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
-                && !block.is_empty()
-            {
-                blocks.push(std::mem::take(&mut block));
-            }
-            let Item::Instruction(instruction) = item else {
-                continue;
-            };
-            block.push(index);
-            if !matches!(instruction.operand, Operand::Value(_)) || ends_scope(instruction.opcode) {
-                blocks.push(std::mem::take(&mut block));
-            }
-        }
-        if !block.is_empty() {
-            blocks.push(block);
-        }
-        if blocks.is_empty() {
+        let graph = self
+            .graph
+            .as_ref()
+            .expect("assembler pass requires the block graph");
+        let order = graph.order().to_vec();
+        if order.is_empty() {
             return;
         }
-
-        let mut item_blocks = vec![None; self.items.len()];
-        for (block_index, block) in blocks.iter().enumerate() {
-            for index in block {
-                item_blocks[*index] = Some(block_index);
-            }
-        }
-        let mut label_blocks = FxHashMap::default();
-        let mut label_positions = FxHashMap::default();
-        let mut next_block = None;
-        for (index, item) in self.items.iter().enumerate().rev() {
-            match item {
-                Item::Instruction(_) => next_block = item_blocks[index],
-                Item::Label(label) => {
-                    label_positions.insert(*label, index);
-                    if block_labels.contains(label)
-                        && let Some(block) = next_block
-                    {
-                        label_blocks.insert(*label, block);
-                    }
-                }
-            }
-        }
+        let block_indices = order
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, block)| (block, index))
+            .collect::<FxHashMap<_, _>>();
+        let positions = graph.item_positions();
+        let linear_indices = positions
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, position)| (position, index))
+            .collect::<FxHashMap<_, _>>();
+        let label_positions = positions
+            .iter()
+            .enumerate()
+            .filter_map(|(index, position)| match graph.item(*position) {
+                Item::Label(label) => Some((*label, index)),
+                Item::Instruction(_) => None,
+            })
+            .collect::<FxHashMap<_, _>>();
 
         let mut exception_successors = FxHashMap::default();
-        for (index, item) in self.items.iter().enumerate() {
-            if !matches!(item, Item::Instruction(_)) {
+        for position in positions.iter().copied() {
+            if !matches!(graph.item(position), Item::Instruction(_)) {
                 continue;
             }
+            let index = linear_indices[&position];
             let mut innermost = None::<(usize, usize, usize)>;
             for region in &self.exception_regions {
-                let (Some(&start), Some(&end), Some(&target)) = (
+                let (Some(&start), Some(&end), Some(target)) = (
                     label_positions.get(&region.start),
                     label_positions.get(&region.end),
-                    label_blocks.get(&region.target),
+                    graph
+                        .label_block(region.target)
+                        .and_then(|block| block_indices.get(&block).copied()),
                 ) else {
                     continue;
                 };
@@ -113,11 +87,11 @@ impl Assembler {
                 }
             }
             if let Some((_, _, target)) = innermost {
-                exception_successors.insert(index, target);
+                exception_successors.insert(position, target);
             }
         }
 
-        let mut unsafe_at_entry = vec![vec![false; local_count]; blocks.len()];
+        let mut unsafe_at_entry = vec![vec![false; local_count]; order.len()];
         for unsafe_local in unsafe_at_entry[0]
             .iter_mut()
             .take(local_count)
@@ -127,8 +101,8 @@ impl Assembler {
         }
         let mut needs_check = FxHashSet::default();
         let mut checked_loads_needing_check = FxHashSet::default();
-        let mut pending = (0..blocks.len()).collect::<Vec<_>>();
-        let mut queued = vec![true; blocks.len()];
+        let mut pending = (0..order.len()).collect::<Vec<_>>();
+        let mut queued = vec![true; order.len()];
 
         while let Some(block_index) = pending.pop() {
             queued[block_index] = false;
@@ -151,13 +125,14 @@ impl Assembler {
                 }
             };
 
-            for index in &blocks[block_index] {
-                if let Some(target) = exception_successors.get(index).copied() {
+            let block = order[block_index];
+            for position in graph.block_item_positions(block) {
+                let Item::Instruction(instruction) = graph.item(position) else {
+                    continue;
+                };
+                if let Some(target) = exception_successors.get(&position).copied() {
                     propagate(target, &unsafe_locals);
                 }
-                let Item::Instruction(instruction) = self.items[*index] else {
-                    unreachable!();
-                };
                 let Operand::Value(argument) = instruction.operand else {
                     continue;
                 };
@@ -172,13 +147,13 @@ impl Assembler {
                     STORE_FAST => unsafe_locals[local] = false,
                     LOAD_FAST_CHECK => {
                         if unsafe_locals[local] {
-                            checked_loads_needing_check.insert(*index);
+                            checked_loads_needing_check.insert(position);
                         }
                         unsafe_locals[local] = false;
                     }
                     LOAD_FAST => {
                         if unsafe_locals[local] {
-                            needs_check.insert(*index);
+                            needs_check.insert(position);
                         }
                         unsafe_locals[local] = false;
                     }
@@ -186,32 +161,34 @@ impl Assembler {
                 }
             }
 
-            let block_items = blocks[block_index]
-                .iter()
-                .map(|index| self.items[*index])
-                .collect::<Vec<_>>();
-            if block_has_fallthrough(&block_items) && block_index + 1 < blocks.len() {
+            if block_has_fallthrough(graph[block].items()) && block_index + 1 < order.len() {
                 propagate(block_index + 1, &unsafe_locals);
             }
-            if let Some(target) = block_jump_target(&block_items)
-                && let Some(target) = label_blocks.get(&target).copied()
+            if let Some(target) = block_jump_target(graph[block].items())
+                && let Some(target) = graph
+                    .label_block(target)
+                    .and_then(|block| block_indices.get(&block).copied())
             {
                 propagate(target, &unsafe_locals);
             }
         }
 
-        for (index, item) in self.items.iter_mut().enumerate() {
-            let Item::Instruction(instruction) = item else {
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        for position in positions {
+            let Item::Instruction(instruction) = graph.item_mut(position) else {
                 continue;
             };
             if instruction.opcode == LOAD_FAST_CHECK
-                && !checked_loads_needing_check.contains(&index)
+                && !checked_loads_needing_check.contains(&position)
             {
                 instruction.opcode = LOAD_FAST;
             }
         }
-        for index in needs_check {
-            let Item::Instruction(instruction) = &mut self.items[index] else {
+        for position in needs_check {
+            let Item::Instruction(instruction) = graph.item_mut(position) else {
                 unreachable!();
             };
             if instruction.opcode == LOAD_FAST {
@@ -225,43 +202,41 @@ impl Assembler {
     /// Once a checked load succeeds, CPython's definite-assignment scan treats
     /// that local as initialized for subsequent instructions on the same path.
     pub(in crate::assembler) fn remove_redundant_checked_loads(&mut self) {
-        let mut initialized = FxHashSet::default();
-        let mut block_has_instruction = false;
-        for item in &mut self.items {
-            let Item::Instruction(instruction) = item else {
-                if block_has_instruction {
-                    initialized.clear();
-                    block_has_instruction = false;
-                }
-                continue;
-            };
-            block_has_instruction = true;
-            let Operand::Value(argument) = instruction.operand else {
-                initialized.clear();
-                block_has_instruction = false;
-                continue;
-            };
-            match instruction.opcode {
-                DELETE_DEREF | DELETE_FAST | LOAD_FAST_AND_CLEAR => {
-                    initialized.remove(&argument);
-                }
-                LOAD_FAST_CHECK => {
-                    if initialized.contains(&argument) {
-                        instruction.opcode = LOAD_FAST;
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        let order = graph.order().to_vec();
+        for block in order {
+            let mut initialized = FxHashSet::default();
+            for item in graph[block].items_mut() {
+                let Item::Instruction(instruction) = item else {
+                    continue;
+                };
+                let Operand::Value(argument) = instruction.operand else {
+                    break;
+                };
+                match instruction.opcode {
+                    DELETE_DEREF | DELETE_FAST | LOAD_FAST_AND_CLEAR => {
+                        initialized.remove(&argument);
                     }
-                    initialized.insert(argument);
+                    LOAD_FAST_CHECK => {
+                        if initialized.contains(&argument) {
+                            instruction.opcode = LOAD_FAST;
+                        }
+                        initialized.insert(argument);
+                    }
+                    LOAD_FAST | STORE_DEREF | STORE_FAST => {
+                        initialized.insert(argument);
+                    }
+                    LOAD_FAST_LOAD_FAST | STORE_FAST_LOAD_FAST | STORE_FAST_STORE_FAST => {
+                        initialized.extend([argument >> 4, argument & 15]);
+                    }
+                    _ => {}
                 }
-                LOAD_FAST | STORE_DEREF | STORE_FAST => {
-                    initialized.insert(argument);
+                if ends_scope(instruction.opcode) {
+                    break;
                 }
-                LOAD_FAST_LOAD_FAST | STORE_FAST_LOAD_FAST | STORE_FAST_STORE_FAST => {
-                    initialized.extend([argument >> 4, argument & 15]);
-                }
-                _ => {}
-            }
-            if ends_scope(instruction.opcode) {
-                initialized.clear();
-                block_has_instruction = false;
             }
         }
     }
@@ -274,7 +249,7 @@ impl Assembler {
     pub(in crate::assembler) fn optimize_load_fast(&mut self) {
         #[derive(Clone, Copy)]
         struct Reference {
-            producer: Option<usize>,
+            producer: Option<ItemPosition>,
             local: Option<u32>,
         }
 
@@ -285,7 +260,7 @@ impl Assembler {
             })
         }
 
-        fn kill_local(unsafe_loads: &mut FxHashSet<usize>, stack: &[Reference], local: u32) {
+        fn kill_local(unsafe_loads: &mut FxHashSet<ItemPosition>, stack: &[Reference], local: u32) {
             for reference in stack {
                 if reference.local == Some(local)
                     && let Some(producer) = reference.producer
@@ -296,7 +271,7 @@ impl Assembler {
         }
 
         fn store_local(
-            unsafe_loads: &mut FxHashSet<usize>,
+            unsafe_loads: &mut FxHashSet<ItemPosition>,
             stack: &[Reference],
             local: u32,
             reference: Reference,
@@ -307,7 +282,11 @@ impl Assembler {
             }
         }
 
-        if !self.items.iter().any(|item| {
+        let graph = self
+            .graph
+            .as_ref()
+            .expect("assembler pass requires the block graph");
+        if !graph.iter_items().any(|item| {
             matches!(
                 item,
                 Item::Instruction(instruction)
@@ -318,7 +297,7 @@ impl Assembler {
         }
 
         let mut block_labels = FxHashSet::default();
-        for item in &self.items {
+        for item in graph.iter_items() {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
                 ..
@@ -333,108 +312,80 @@ impl Assembler {
             block_labels.insert(region.target);
         }
         block_labels.extend(self.borrow_unreachable_blocks.iter().copied());
+        block_labels.extend(self.preserved_block_boundaries.iter().copied());
 
-        let mut blocks = Vec::<Vec<usize>>::new();
-        let mut block = Vec::new();
-        for (index, item) in self.items.iter().enumerate() {
-            if (matches!(item, Item::Label(label) if block_labels.contains(label) || self.preserved_block_boundaries.contains(label))
-                || matches!(item, Item::Instruction(instruction) if instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY)))
-                && !block.is_empty()
-            {
-                blocks.push(std::mem::take(&mut block));
-            }
-            let Item::Instruction(instruction) = item else {
-                continue;
-            };
-            block.push(index);
-            if !matches!(instruction.operand, Operand::Value(_))
-                || ends_scope(instruction.opcode)
-                || (instruction.opcode == NOP
-                    && instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP))
-            {
-                blocks.push(std::mem::take(&mut block));
-            }
-        }
-        if !block.is_empty() {
-            blocks.push(block);
-        }
-
-        let mut item_blocks = vec![None; self.items.len()];
-        for (block_index, block) in blocks.iter().enumerate() {
-            for index in block {
-                item_blocks[*index] = Some(block_index);
-            }
-        }
-        let mut label_blocks = FxHashMap::default();
-        let mut next_block = None;
-        for (index, item) in self.items.iter().enumerate().rev() {
-            match item {
-                Item::Instruction(_) => next_block = item_blocks[index],
-                Item::Label(label) if block_labels.contains(label) => {
-                    if let Some(block) = next_block {
-                        label_blocks.insert(*label, block);
-                    }
-                }
-                Item::Label(_) => {}
-            }
-        }
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        graph.repartition(
+            &block_labels,
+            |instruction| instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY),
+            |instruction| {
+                !matches!(instruction.operand, Operand::Value(_))
+                    || ends_scope(instruction.opcode)
+                    || (instruction.opcode == NOP
+                        && instruction.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP))
+            },
+        );
+        let blocks = graph.order().to_vec();
         let mut borrow_unreachable_blocks = self
             .borrow_unreachable_blocks
             .iter()
-            .filter_map(|label| label_blocks.get(label).copied())
+            .filter_map(|label| graph.label_block(*label))
             .collect::<FxHashSet<_>>();
-        borrow_unreachable_blocks.extend(self.items.iter().enumerate().filter_map(
-            |(index, item)| match item {
-                Item::Instruction(instruction)
-                    if instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY) =>
-                {
-                    item_blocks[index]
-                }
-                Item::Instruction(_) | Item::Label(_) => None,
-            },
-        ));
-        let mut reachable = vec![false; blocks.len()];
-        let mut pending = (!blocks.is_empty())
-            .then_some(0)
-            .into_iter()
-            .collect::<Vec<_>>();
-        while let Some(block_index) = pending.pop() {
-            if borrow_unreachable_blocks.contains(&block_index) {
+        borrow_unreachable_blocks.extend(blocks.iter().copied().filter(|block| {
+            graph[*block].items().iter().any(|item| {
+                matches!(item, Item::Instruction(instruction) if
+                    instruction.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY))
+            })
+        }));
+        let block_positions = blocks
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(position, block)| (block, position))
+            .collect::<FxHashMap<_, _>>();
+        let mut reachable = FxHashSet::default();
+        let mut pending = blocks.first().copied().into_iter().collect::<Vec<_>>();
+        while let Some(block) = pending.pop() {
+            if borrow_unreachable_blocks.contains(&block) {
                 continue;
             }
-            if std::mem::replace(&mut reachable[block_index], true) {
+            if !reachable.insert(block) {
                 continue;
             }
-            let block = &blocks[block_index];
-            let Some(last_index) = block.last().copied() else {
+            let Some(last) = graph[block].last_instruction() else {
                 continue;
-            };
-            let Item::Instruction(last) = self.items[last_index] else {
-                unreachable!();
             };
             let folded_jump_has_no_fallthrough =
                 last.opcode == NOP && last.has_flag(InstructionFlags::PRESERVE_INLINED_JUMP_NOP);
             if !folded_jump_has_no_fallthrough
-                && block_has_fallthrough(&[Item::Instruction(last)])
-                && block_index + 1 < blocks.len()
+                && block_has_fallthrough(&[Item::Instruction(*last)])
+                && let Some(next) = blocks.get(block_positions[&block] + 1)
             {
-                pending.push(block_index + 1);
+                pending.push(*next);
             }
             if let Operand::Forward(label) | Operand::Backward(label) = last.operand
-                && let Some(target) = label_blocks.get(&label)
+                && let Some(target) = graph.label_block(label)
             {
-                pending.push(*target);
+                pending.push(target);
             }
         }
 
-        for (block_index, block) in blocks.into_iter().enumerate() {
-            if !reachable[block_index] {
+        for block in blocks {
+            if !reachable.contains(&block) {
                 continue;
             }
+            let instruction_positions = graph
+                .block_item_positions(block)
+                .into_iter()
+                .filter(|position| matches!(graph.item(*position), Item::Instruction(_)))
+                .collect::<Vec<_>>();
             let mut cumulative_effect = 0_i64;
             let mut start_depth = None;
-            for index in &block {
-                let Item::Instruction(instruction) = self.items[*index] else {
+            for position in &instruction_positions {
+                let Item::Instruction(instruction) = *graph.item(*position) else {
                     unreachable!();
                 };
                 let Operand::Value(argument) = instruction.operand else {
@@ -460,8 +411,8 @@ impl Assembler {
             ];
             let mut unsafe_loads = FxHashSet::default();
 
-            for index in &block {
-                let Item::Instruction(instruction) = self.items[*index] else {
+            for position in &instruction_positions {
+                let Item::Instruction(instruction) = *graph.item(*position) else {
                     unreachable!();
                 };
                 let argument = match instruction.operand {
@@ -471,23 +422,23 @@ impl Assembler {
                 match instruction.opcode {
                     DELETE_FAST => kill_local(&mut unsafe_loads, &stack, argument),
                     LOAD_FAST => stack.push(Reference {
-                        producer: Some(*index),
+                        producer: Some(*position),
                         local: Some(argument),
                     }),
                     LOAD_FAST_AND_CLEAR => {
                         kill_local(&mut unsafe_loads, &stack, argument);
                         stack.push(Reference {
-                            producer: Some(*index),
+                            producer: Some(*position),
                             local: Some(argument),
                         });
                     }
                     LOAD_FAST_LOAD_FAST => {
                         stack.push(Reference {
-                            producer: Some(*index),
+                            producer: Some(*position),
                             local: Some(argument >> 4),
                         });
                         stack.push(Reference {
-                            producer: Some(*index),
+                            producer: Some(*position),
                             local: Some(argument & 15),
                         });
                     }
@@ -499,7 +450,7 @@ impl Assembler {
                         let reference = pop_reference(&mut stack);
                         store_local(&mut unsafe_loads, &stack, argument >> 4, reference);
                         stack.push(Reference {
-                            producer: Some(*index),
+                            producer: Some(*position),
                             local: Some(argument & 15),
                         });
                     }
@@ -539,7 +490,11 @@ impl Assembler {
                         // CPython's inner loop shadows the instruction index,
                         // attributing these references to the first
                         // instructions in the block.
-                        for producer in block.iter().copied().take(pushed.saturating_sub(popped)) {
+                        for producer in instruction_positions
+                            .iter()
+                            .copied()
+                            .take(pushed.saturating_sub(popped))
+                        {
                             stack.push(Reference {
                                 producer: Some(producer),
                                 local: None,
@@ -620,11 +575,11 @@ impl Assembler {
                     unsafe_loads.insert(producer);
                 }
             }
-            for (position, index) in block.iter().copied().enumerate() {
-                if unsafe_loads.contains(&index) {
+            for (index, position) in instruction_positions.iter().copied().enumerate() {
+                if unsafe_loads.contains(&position) {
                     continue;
                 }
-                let (force_owned_load, strict_owned_load) = match self.items[index] {
+                let (force_owned_load, strict_owned_load) = match *graph.item(position) {
                     Item::Instruction(instruction) => (
                         instruction.has_flag(InstructionFlags::FORCE_OWNED_LOAD),
                         instruction.has_flag(InstructionFlags::STRICT_OWNED_LOAD),
@@ -635,9 +590,9 @@ impl Assembler {
                     continue;
                 }
                 if force_owned_load {
-                    let following = block[position + 1..]
+                    let following = instruction_positions[index + 1..]
                         .iter()
-                        .filter_map(|index| match self.items[*index] {
+                        .filter_map(|position| match *graph.item(*position) {
                             Item::Instruction(instruction) if instruction.opcode != NOP => {
                                 Some(instruction.opcode)
                             }
@@ -659,7 +614,7 @@ impl Assembler {
                         continue;
                     }
                 }
-                let Item::Instruction(instruction) = &mut self.items[index] else {
+                let Item::Instruction(instruction) = graph.item_mut(position) else {
                     unreachable!();
                 };
                 match instruction.opcode {
@@ -676,63 +631,71 @@ impl Assembler {
     }
 
     pub(in crate::assembler) fn fuse_superinstructions(&mut self) {
-        let mut fused = Vec::with_capacity(self.items.len());
-        let mut index = 0;
-        while index < self.items.len() {
-            let Some(Item::Instruction(first)) = self.items.get(index).copied() else {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            };
-            let Some(Item::Instruction(second)) = self.items.get(index + 1).copied() else {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            };
-            if first.has_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT)
-                || second.has_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS)
-                || second.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY)
-            {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            }
-            let (Operand::Value(first_argument), Operand::Value(second_argument)) =
-                (first.operand, second.operand)
-            else {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            };
-            if first_argument >= 16 || second_argument >= 16 {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            }
-            if first.location.line != second.location.line {
-                fused.push(self.items[index]);
-                index += 1;
-                continue;
-            }
-            let opcode = match (first.opcode, second.opcode) {
-                (LOAD_FAST_BORROW, LOAD_FAST_BORROW) => LOAD_FAST_BORROW_LOAD_FAST_BORROW,
-                (LOAD_FAST, LOAD_FAST) => LOAD_FAST_LOAD_FAST,
-                (STORE_FAST, LOAD_FAST | LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
-                (STORE_FAST, STORE_FAST) => STORE_FAST_STORE_FAST,
-                _ => {
-                    fused.push(self.items[index]);
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        let order = graph.order().to_vec();
+        for block in order {
+            let items = std::mem::take(graph[block].items_mut());
+            let mut fused = Vec::with_capacity(items.len());
+            let mut index = 0;
+            while index < items.len() {
+                let Some(Item::Instruction(first)) = items.get(index).copied() else {
+                    fused.push(items[index]);
+                    index += 1;
+                    continue;
+                };
+                let Some(Item::Instruction(second)) = items.get(index + 1).copied() else {
+                    fused.push(items[index]);
+                    index += 1;
+                    continue;
+                };
+                if first.has_flag(InstructionFlags::PREVENT_FUSION_WITH_NEXT)
+                    || second.has_flag(InstructionFlags::PREVENT_FUSION_WITH_PREVIOUS)
+                    || second.has_flag(InstructionFlags::BORROW_UNREACHABLE_ENTRY)
+                {
+                    fused.push(items[index]);
                     index += 1;
                     continue;
                 }
-            };
-            fused.push(Item::Instruction(Instruction::fused(
-                opcode,
-                Operand::Value((first_argument << 4) | second_argument),
-                first,
-                second,
-            )));
-            index += 2;
+                let (Operand::Value(first_argument), Operand::Value(second_argument)) =
+                    (first.operand, second.operand)
+                else {
+                    fused.push(items[index]);
+                    index += 1;
+                    continue;
+                };
+                if first_argument >= 16 || second_argument >= 16 {
+                    fused.push(items[index]);
+                    index += 1;
+                    continue;
+                }
+                if first.location.line != second.location.line {
+                    fused.push(items[index]);
+                    index += 1;
+                    continue;
+                }
+                let opcode = match (first.opcode, second.opcode) {
+                    (LOAD_FAST_BORROW, LOAD_FAST_BORROW) => LOAD_FAST_BORROW_LOAD_FAST_BORROW,
+                    (LOAD_FAST, LOAD_FAST) => LOAD_FAST_LOAD_FAST,
+                    (STORE_FAST, LOAD_FAST | LOAD_FAST_BORROW) => STORE_FAST_LOAD_FAST,
+                    (STORE_FAST, STORE_FAST) => STORE_FAST_STORE_FAST,
+                    _ => {
+                        fused.push(items[index]);
+                        index += 1;
+                        continue;
+                    }
+                };
+                fused.push(Item::Instruction(Instruction::fused(
+                    opcode,
+                    Operand::Value((first_argument << 4) | second_argument),
+                    first,
+                    second,
+                )));
+                index += 2;
+            }
+            *graph[block].items_mut() = fused;
         }
-        self.items = fused;
     }
 }

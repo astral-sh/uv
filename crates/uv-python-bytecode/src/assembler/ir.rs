@@ -1,5 +1,6 @@
 use rustc_hash::FxHashSet;
 
+use super::block_graph::BlockGraph;
 use crate::target::Opcode;
 
 pub(crate) struct AssembledCode {
@@ -273,6 +274,8 @@ pub(super) enum Item {
 #[derive(Debug)]
 pub(crate) struct Assembler {
     pub(super) items: Vec<Item>,
+    /// The block IR exists only while the assembler pass pipeline is running.
+    pub(super) graph: Option<BlockGraph>,
     pub(super) next_label: u32,
     pub(super) location: SourceLocation,
     pub(super) exception_regions: Vec<ExceptionRegion>,
@@ -322,6 +325,7 @@ impl Default for Assembler {
     fn default() -> Self {
         Self {
             items: Vec::new(),
+            graph: None,
             next_label: 0,
             location: SourceLocation::NONE,
             exception_regions: Vec::new(),

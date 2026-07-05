@@ -2,12 +2,25 @@ use rustc_hash::FxHashSet;
 
 use super::super::{Instruction, Item, NOP, Operand, POP_TOP, STORE_FAST, SWAP, ends_scope};
 use crate::assembler::Assembler;
+use crate::assembler::block_graph::{BlockGraph, ItemPosition};
 
 impl Assembler {
     pub(in crate::assembler) fn remove_redundant_swaps_before_pops(&mut self) {
         let mut index = 0;
-        while index < self.items.len() {
-            let Item::Instruction(instruction) = self.items[index] else {
+        loop {
+            let graph = self
+                .graph
+                .as_ref()
+                .expect("assembler pass requires the block graph");
+            let positions = graph.item_positions();
+            if index >= positions.len() {
+                break;
+            }
+            let items = positions
+                .iter()
+                .map(|position| *graph.item(*position))
+                .collect::<Vec<_>>();
+            let Item::Instruction(instruction) = items[index] else {
                 index += 1;
                 continue;
             };
@@ -20,14 +33,14 @@ impl Assembler {
                 continue;
             };
             let pop_count = usize::try_from(depth).unwrap_or(usize::MAX);
-            let preceded_by_swap = self.items[..index].iter().rev().find_map(|item| {
+            let preceded_by_swap = items[..index].iter().rev().find_map(|item| {
                 if let Item::Instruction(instruction) = item {
                     Some(instruction.opcode == SWAP)
                 } else {
                     None
                 }
             }) == Some(true);
-            let following = self.items[index + 1..]
+            let following = items[index + 1..]
                 .iter()
                 .filter_map(|item| {
                     if let Item::Instruction(instruction) = item {
@@ -42,7 +55,10 @@ impl Assembler {
                 && following.len() == pop_count
                 && following.iter().all(|opcode| *opcode == POP_TOP)
             {
-                self.items.remove(index);
+                self.graph
+                    .as_mut()
+                    .expect("assembler pass requires the block graph")
+                    .remove_item(positions[index]);
             } else {
                 index += 1;
             }
@@ -57,8 +73,12 @@ impl Assembler {
     pub(in crate::assembler) fn optimize_swap_runs(&mut self) {
         const VISITED: usize = usize::MAX;
 
+        let graph = self
+            .graph
+            .as_ref()
+            .expect("assembler pass requires the block graph");
         let mut block_labels = FxHashSet::default();
-        for item in &self.items {
+        for item in graph.iter_items() {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
                 ..
@@ -70,42 +90,22 @@ impl Assembler {
         for region in &self.exception_regions {
             block_labels.extend([region.start, region.end, region.target]);
         }
-        let mut block_ends = self
-            .items
-            .iter()
-            .enumerate()
-            .filter_map(|(index, item)| match item {
-                Item::Label(label)
-                    if block_labels.contains(label)
-                        || self.preserved_block_boundaries.contains(label) =>
-                {
-                    Some(index)
-                }
-                Item::Instruction(instruction)
-                    if !matches!(instruction.operand, Operand::Value(_))
-                        || ends_scope(instruction.opcode) =>
-                {
-                    Some(index + 1)
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        block_ends.push(self.items.len());
-        block_ends.sort_unstable();
-        block_ends.dedup();
-
-        let mut block_start = 0;
-        for block_end in block_ends {
-            let instruction_indices = self.items[block_start..block_end]
-                .iter()
-                .enumerate()
-                .filter_map(|(offset, item)| {
-                    matches!(item, Item::Instruction(_)).then_some(block_start + offset)
-                })
+        block_labels.extend(self.preserved_block_boundaries.iter().copied());
+        let blocks = graph.partition_positions(&block_labels, |instruction| {
+            !matches!(instruction.operand, Operand::Value(_)) || ends_scope(instruction.opcode)
+        });
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        for block in blocks {
+            let instruction_positions = block
+                .into_iter()
+                .filter(|position| matches!(graph.item(*position), Item::Instruction(_)))
                 .collect::<Vec<_>>();
             let mut position = 0;
-            while position < instruction_indices.len() {
-                let Item::Instruction(first) = self.items[instruction_indices[position]] else {
+            while position < instruction_positions.len() {
+                let Item::Instruction(first) = *graph.item(instruction_positions[position]) else {
                     unreachable!();
                 };
                 if first.opcode != SWAP {
@@ -118,8 +118,9 @@ impl Assembler {
                 let mut depth = usize::try_from(first_depth).unwrap();
                 let mut run_end = position + 1;
                 let mut multiple_swaps = false;
-                while run_end < instruction_indices.len() {
-                    let Item::Instruction(instruction) = self.items[instruction_indices[run_end]]
+                while run_end < instruction_positions.len() {
+                    let Item::Instruction(instruction) =
+                        *graph.item(instruction_positions[run_end])
                     else {
                         unreachable!();
                     };
@@ -140,8 +141,8 @@ impl Assembler {
                 }
 
                 let mut stack = (0..depth).collect::<Vec<_>>();
-                for instruction_index in &instruction_indices[position..run_end] {
-                    let Item::Instruction(instruction) = self.items[*instruction_index] else {
+                for instruction_position in &instruction_positions[position..run_end] {
+                    let Item::Instruction(instruction) = *graph.item(*instruction_position) else {
                         unreachable!();
                     };
                     if instruction.opcode == SWAP {
@@ -162,7 +163,7 @@ impl Assembler {
                         if stack_index != 0 {
                             current -= 1;
                             let Item::Instruction(instruction) =
-                                &mut self.items[instruction_indices[current]]
+                                graph.item_mut(instruction_positions[current])
                             else {
                                 unreachable!();
                             };
@@ -182,7 +183,7 @@ impl Assembler {
                 while current > position {
                     current -= 1;
                     let Item::Instruction(instruction) =
-                        &mut self.items[instruction_indices[current]]
+                        graph.item_mut(instruction_positions[current])
                     else {
                         unreachable!();
                     };
@@ -191,7 +192,6 @@ impl Assembler {
                 }
                 position = run_end;
             }
-            block_start = block_end;
         }
     }
 
@@ -213,13 +213,14 @@ impl Assembler {
         }
 
         fn next_swappable(
-            items: &[Item],
+            graph: &BlockGraph,
+            positions: &[ItemPosition],
             mut index: usize,
             end: usize,
             line: Option<i32>,
         ) -> Option<usize> {
             while index < end {
-                let Item::Instruction(instruction) = items[index] else {
+                let Item::Instruction(instruction) = *graph.item(positions[index]) else {
                     index += 1;
                     continue;
                 };
@@ -235,8 +236,12 @@ impl Assembler {
             None
         }
 
+        let graph = self
+            .graph
+            .as_ref()
+            .expect("assembler pass requires the block graph");
         let mut block_labels = FxHashSet::default();
-        for item in &self.items {
+        for item in graph.iter_items() {
             if let Item::Instruction(Instruction {
                 operand: Operand::Forward(label) | Operand::Backward(label),
                 ..
@@ -248,36 +253,19 @@ impl Assembler {
         for region in &self.exception_regions {
             block_labels.extend([region.start, region.end, region.target]);
         }
-        let mut block_ends = self
-            .items
-            .iter()
-            .enumerate()
-            .filter_map(|(index, item)| match item {
-                Item::Label(label)
-                    if block_labels.contains(label)
-                        || self.preserved_block_boundaries.contains(label) =>
-                {
-                    Some(index)
-                }
-                Item::Instruction(instruction)
-                    if !matches!(instruction.operand, Operand::Value(_))
-                        || ends_scope(instruction.opcode) =>
-                {
-                    Some(index + 1)
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        block_ends.push(self.items.len());
-        block_ends.sort_unstable();
-        block_ends.dedup();
-
-        let mut block_start = 0;
-        for block_end in block_ends {
-            let mut index = block_end;
-            while index > block_start {
+        block_labels.extend(self.preserved_block_boundaries.iter().copied());
+        let blocks = graph.partition_positions(&block_labels, |instruction| {
+            !matches!(instruction.operand, Operand::Value(_)) || ends_scope(instruction.opcode)
+        });
+        let graph = self
+            .graph
+            .as_mut()
+            .expect("assembler pass requires the block graph");
+        for positions in blocks {
+            let mut index = positions.len();
+            while index > 0 {
                 index -= 1;
-                let Item::Instruction(swap) = self.items[index] else {
+                let Item::Instruction(swap) = *graph.item(positions[index]) else {
                     continue;
                 };
                 if swap.opcode != SWAP {
@@ -286,10 +274,12 @@ impl Assembler {
                 let Operand::Value(depth) = swap.operand else {
                     unreachable!();
                 };
-                let Some(first) = next_swappable(&self.items, index + 1, block_end, None) else {
+                let Some(first) =
+                    next_swappable(graph, &positions, index + 1, positions.len(), None)
+                else {
                     continue;
                 };
-                let Item::Instruction(first_instruction) = self.items[first] else {
+                let Item::Instruction(first_instruction) = *graph.item(positions[first]) else {
                     unreachable!();
                 };
                 let line = (first_instruction.location.line >= 0)
@@ -297,7 +287,9 @@ impl Assembler {
                 let mut last = first;
                 let mut valid = true;
                 for _ in 1..depth {
-                    let Some(next) = next_swappable(&self.items, last + 1, block_end, line) else {
+                    let Some(next) =
+                        next_swappable(graph, &positions, last + 1, positions.len(), line)
+                    else {
                         valid = false;
                         break;
                     };
@@ -306,10 +298,10 @@ impl Assembler {
                 if !valid {
                     continue;
                 }
-                let Item::Instruction(first_instruction) = self.items[first] else {
+                let Item::Instruction(first_instruction) = *graph.item(positions[first]) else {
                     unreachable!();
                 };
-                let Item::Instruction(last_instruction) = self.items[last] else {
+                let Item::Instruction(last_instruction) = *graph.item(positions[last]) else {
                     unreachable!();
                 };
                 let first_store = stored_local(&first_instruction);
@@ -321,8 +313,8 @@ impl Assembler {
                 }
                 if first_store.is_some() || last_store.is_some() {
                     if first_store == last_store
-                        || self.items[first + 1..last].iter().any(|item| {
-                            let Item::Instruction(instruction) = item else {
+                        || positions[first + 1..last].iter().any(|position| {
+                            let Item::Instruction(instruction) = graph.item(*position) else {
                                 return false;
                             };
                             stored_local(instruction).is_some_and(|local| {
@@ -334,14 +326,16 @@ impl Assembler {
                     }
                 }
 
-                let Item::Instruction(swap) = &mut self.items[index] else {
+                let Item::Instruction(swap) = graph.item_mut(positions[index]) else {
                     unreachable!();
                 };
                 swap.opcode = NOP;
                 swap.operand = Operand::Value(0);
-                self.items.swap(first, last);
+                let first_item = *graph.item(positions[first]);
+                let last_item = *graph.item(positions[last]);
+                *graph.item_mut(positions[first]) = last_item;
+                *graph.item_mut(positions[last]) = first_item;
             }
-            block_start = block_end;
         }
     }
 }

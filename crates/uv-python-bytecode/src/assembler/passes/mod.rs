@@ -1,8 +1,10 @@
 use rustc_hash::FxHashMap;
 
+use super::block_graph::BlockGraph;
 use super::{AssembledCode, Assembler, AssemblerStage, Item, Label, Operand, extended_arg_count};
 use crate::CompileError;
 
+mod blocks;
 mod control_flow;
 mod locals;
 mod swaps;
@@ -20,8 +22,15 @@ impl Assembler {
             ))
         };
 
+        let items = if let Some(graph) = &self.graph {
+            graph.validate().map_err(&invariant_error)?;
+            graph.iter_items().copied().collect::<Vec<_>>()
+        } else {
+            self.items.clone()
+        };
+
         let mut label_positions = FxHashMap::default();
-        for (index, item) in self.items.iter().enumerate() {
+        for (index, item) in items.iter().enumerate() {
             let Item::Label(label) = item else {
                 continue;
             };
@@ -33,7 +42,7 @@ impl Assembler {
             }
         }
 
-        for (index, item) in self.items.iter().enumerate() {
+        for (index, item) in items.iter().enumerate() {
             let Item::Instruction(instruction) = item else {
                 continue;
             };
@@ -89,7 +98,7 @@ impl Assembler {
 
         if stage.requires_full_reachability() {
             let reachable = self.reachable_items();
-            if let Some(index) = self.items.iter().enumerate().find_map(|(index, item)| {
+            if let Some(index) = items.iter().enumerate().find_map(|(index, item)| {
                 matches!(item, Item::Instruction(_))
                     .then_some(index)
                     .filter(|index| !reachable[*index])
@@ -115,6 +124,11 @@ impl Assembler {
         local_count: usize,
         parameter_count: usize,
     ) -> Result<AssembledCode, CompileError> {
+        debug_assert!(self.graph.is_none());
+        self.graph = Some(BlockGraph::from_items(
+            std::mem::take(&mut self.items),
+            &rustc_hash::FxHashSet::default(),
+        ));
         let mut removed_max_depth = self.remove_unreachable_instructions();
         #[cfg(any(test, debug_assertions))]
         self.validate_structure(AssemblerStage::RemoveUnreachableInitial)?;
@@ -171,6 +185,11 @@ impl Assembler {
         self.optimize_load_fast();
         #[cfg(any(test, debug_assertions))]
         self.validate_structure(AssemblerStage::OptimizeLoadFast)?;
+        self.items = self
+            .graph
+            .take()
+            .expect("assembler pass pipeline has a block graph")
+            .into_items();
         let instruction_count = self.instruction_count();
         let mut extended_args = vec![0_u8; instruction_count];
         let mut resolved_arguments = vec![0_u32; instruction_count];

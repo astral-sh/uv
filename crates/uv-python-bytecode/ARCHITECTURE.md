@@ -97,8 +97,20 @@ layer.
 
 ### Assembler
 
-The assembler stores a linear sequence of labels and symbolic instructions plus exception-region
-descriptions. An instruction carries its opcode, value or label operand, source location, optional
+During lowering, the assembler collects a linear sequence of labels and symbolic instructions plus
+exception-region descriptions. `Assembler::finish_code` converts that builder stream once into a
+`BlockGraph`: an append-only arena of blocks, a separate emission-order vector, and a shared
+label-to-block index. `BasicBlockId` therefore remains stable when passes reorder blocks or append
+duplicated and synthetic blocks. Pass-local `ItemPosition` cursors may shift when a pass inserts or
+removes an item and must not escape that pass.
+
+The graph remains the owning representation through all control-flow and dataflow passes. Passes
+whose CPython block boundary rules are narrower than the structural graph use ordered position
+views without moving graph-owned items. Exit duplication allocates stable IDs for copied blocks,
+and cold-block collection changes only the emission order. The graph is flattened only after the
+last block-aware pass, immediately before jump-width convergence and final layout.
+
+An instruction carries its opcode, value or label operand, source location, optional
 post-instruction stack depth, and provenance flags used by later passes.
 
 `Assembler::finish_code` runs the following order. This is a compatibility contract, not a menu of
@@ -135,9 +147,9 @@ Several dependencies are explicit in the implementation:
 - source locations and exception ownership are observable output, even when an opcode becomes a
     `NOP` or is removed.
 
-Final layout repeatedly computes label positions and jump arguments while accounting for inline
-caches and `EXTENDED_ARG`. It stops when every instruction's width is stable, with an eight-pass
-convergence limit. Only then can line and exception tables be encoded.
+Final layout repeatedly computes label positions and jump arguments over the flattened final order
+while accounting for inline caches and `EXTENDED_ARG`. It stops when every instruction's width is
+stable, with an eight-pass convergence limit. Only then can line and exception tables be encoded.
 
 In tests and debug builds, stage validation checks:
 
