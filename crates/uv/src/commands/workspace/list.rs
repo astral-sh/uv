@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
-use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path, read_utf_8_file_if_starts_with};
+use uv_fs::{CWD, Simplified, ValidatedReader, is_virtualenv_base, normalize_path};
 use uv_preview::{Preview, PreviewFeature};
 use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
@@ -169,7 +169,10 @@ fn read_script_candidate(path: &Path) -> io::Result<Option<Vec<u8>>> {
         return fs_err::read(path).map(Some);
     }
 
-    read_utf_8_file_if_starts_with(path, "#!")
+    ValidatedReader::new(fs_err::File::open(path)?)
+        .require_prefix("#!")
+        .require_utf8()
+        .read()
 }
 
 /// Return whether a path could contain a Python script.
