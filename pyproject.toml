@@ -81,6 +81,7 @@ version_files = [
   "docs/concepts/build-backend.md",
   "docs/concepts/projects/init.md",
   "docs/concepts/projects/workspaces.md",
+  "docs/guides/projects.md",
   { target = "docs/reference/environment.md", replace = "next release" },
 ]
 
