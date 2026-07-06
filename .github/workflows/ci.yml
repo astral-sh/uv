@@ -188,7 +188,7 @@ jobs:
     name: "check workflow release"
     needs: plan
     if: ${{ github.event_name == 'pull_request' && needs.plan.outputs.workflow-changed == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: read
     steps:
