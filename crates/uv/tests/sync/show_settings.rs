@@ -2263,10 +2263,10 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
-      |
-    7 | conflicts = [[]]
-      |             ^^^^
-    Each set of conflicts must have at least two entries, but found none
+          |
+        7 | conflicts = [[]]
+          |             ^^^^
+        Each set of conflicts must have at least two entries, but found none
     "
     );
 
@@ -2292,10 +2292,10 @@ fn invalid_conflicts() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 13
-      |
-    7 | conflicts = [
-      |             ^
-    Each set of conflicts must have at least two entries, but found only one
+          |
+        7 | conflicts = [
+          |             ^
+        Each set of conflicts must have at least two entries, but found only one
     "
     );
 
@@ -2525,10 +2525,10 @@ fn resolve_config_file() -> anyhow::Result<()> {
     warning: The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.
     error: Failed to parse: `[CACHE_DIR]/pyproject.toml`
       Caused by: TOML parse error at line 9, column 3
-      |
-    9 | ""
-      |   ^
-    key with no value, expected `=`
+          |
+        9 | ""
+          |   ^
+        key with no value, expected `=`
     "#
     );
 
@@ -3586,10 +3586,10 @@ fn preview_features_uv_toml() -> anyhow::Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 20
-      |
-    1 | preview-features = 123
-      |                    ^^^
-    invalid type: integer `123`, expected a boolean or a list of preview feature names
+          |
+        1 | preview-features = 123
+          |                    ^^^
+        invalid type: integer `123`, expected a boolean or a list of preview feature names
     ");
 
     Ok(())

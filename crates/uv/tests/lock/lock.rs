@@ -23858,10 +23858,10 @@ fn lock_duplicate_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 9
-      |
-    7 |         [tool.uv.sources]
-      |         ^^^^^^^^^^^^^^^^^
-    duplicate sources for package `python-multipart`
+          |
+        7 |         [tool.uv.sources]
+          |         ^^^^^^^^^^^^^^^^^
+        duplicate sources for package `python-multipart`
     ");
 
     Ok(())
@@ -26734,8 +26734,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     error: Project `project` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+        invalid!
+               ^
     "#);
 
     Ok(())
