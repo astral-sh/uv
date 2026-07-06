@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
-use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path};
+use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path, read_utf_8_file_if_starts_with};
 use uv_preview::{Preview, PreviewFeature};
 use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
@@ -169,46 +169,7 @@ fn read_script_candidate(path: &Path) -> io::Result<Option<Vec<u8>>> {
         return fs_err::read(path).map(Some);
     }
 
-    let mut file = fs_err::File::open(path)?;
-    read_extensionless_script(&mut file)
-}
-
-/// Read an extensionless script, if it starts with a shebang and is valid UTF-8 text.
-fn read_extensionless_script(mut reader: impl Read) -> io::Result<Option<Vec<u8>>> {
-    const READ_BUFFER_SIZE: usize = 8 * 1024;
-
-    let mut prefix = [0; 2];
-    match reader.read_exact(&mut prefix) {
-        Ok(()) if &prefix == b"#!" => {}
-        Ok(()) => return Ok(None),
-        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
-        Err(err) => return Err(err),
-    }
-
-    let mut contents = prefix.to_vec();
-    let mut valid_utf8_len = contents.len();
-    let mut buffer = [0u8; READ_BUFFER_SIZE];
-    loop {
-        let count = match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => count,
-            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-            Err(err) => return Err(err),
-        };
-
-        let chunk = &buffer[..count];
-        if chunk.contains(&0) {
-            return Ok(None);
-        }
-        contents.extend_from_slice(chunk);
-        match std::str::from_utf8(&contents[valid_utf8_len..]) {
-            Ok(_) => valid_utf8_len = contents.len(),
-            Err(err) if err.error_len().is_some() => return Ok(None),
-            Err(err) => valid_utf8_len += err.valid_up_to(),
-        }
-    }
-
-    Ok((valid_utf8_len == contents.len()).then_some(contents))
+    read_utf_8_file_if_starts_with(path, "#!")
 }
 
 /// Return whether a path could contain a Python script.
@@ -222,45 +183,4 @@ fn is_python_script_path(path: &Path) -> bool {
     path.extension().is_none_or(|extension| {
         extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::{self, Cursor, Read};
-
-    use super::read_extensionless_script;
-
-    struct ErrorReader;
-
-    impl Read for ErrorReader {
-        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::other("read past binary marker"))
-        }
-    }
-
-    #[test]
-    fn extensionless_script_stops_at_non_shebang() -> io::Result<()> {
-        let reader = Cursor::new(b"# ").chain(ErrorReader);
-        assert!(read_extensionless_script(reader)?.is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn extensionless_script_stops_at_binary_content() -> io::Result<()> {
-        for marker in [0, 0xff] {
-            let reader = Cursor::new([b'#', b'!', marker]).chain(ErrorReader);
-            assert!(read_extensionless_script(reader)?.is_none());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn extensionless_script_handles_split_utf8() -> io::Result<()> {
-        let reader = Cursor::new(b"#!\xc3").chain(Cursor::new(b"\xa9"));
-        assert_eq!(
-            read_extensionless_script(reader)?,
-            Some(b"#!\xc3\xa9".to_vec())
-        );
-        Ok(())
-    }
 }
