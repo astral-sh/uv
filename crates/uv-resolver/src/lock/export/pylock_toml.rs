@@ -1021,7 +1021,10 @@ impl<'lock> PylockToml {
             };
             doc.insert("attestation-identities", value(attestation_identities));
         }
-        if !self.packages.is_empty() {
+        if self.packages.is_empty() {
+            // `packages` is a required key in PEP 751, even when empty.
+            doc.insert("packages", value(Array::new()));
+        } else {
             let mut packages = ArrayOfTables::new();
             for dist in &self.packages {
                 packages.push(dist.to_toml()?);
