@@ -4007,6 +4007,64 @@ fn transitive_prerelease_authorization_backtracks() {
     context.assert_installed("d", "1.0.0");
 }
 
+/// A transitive pre-release authorization can upgrade a package that also appears as a plain root requirement.
+///
+/// ```text
+/// transitive-prerelease-authorization-with-root-dependency
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   ├── requires b
+/// │   │   ├── satisfied by b-2.0.0
+/// │   │   └── satisfied by b-3.0.0b1
+/// │   └── requires c
+/// │       └── satisfied by c-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<4
+/// │           ├── satisfied by b-2.0.0
+/// │           └── satisfied by b-3.0.0b1
+/// ├── b
+/// │   ├── b-2.0.0
+/// │   └── b-3.0.0b1
+/// └── c
+///     └── c-1.0.0
+///         └── requires b>=3.0.0a1
+///             └── satisfied by b-3.0.0b1
+/// ```
+#[test]
+fn transitive_prerelease_authorization_with_root_dependency() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-authorization-with-root-dependency.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + a==1.0.0
+     + b==3.0.0b1
+     + c==1.0.0
+    ");
+
+    // `c==1.0.0` authorizes the pre-release range `b>=3.0.0a1`, so the plain root `b` requirement and `a`'s `b<4` bound resolve to `b==3.0.0b1`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "3.0.0b1");
+    context.assert_installed("c", "1.0.0");
+}
+
 /// An active transitive dependency with a pre-release specifier authorizes newer matching pre-releases.
 ///
 /// ```text
