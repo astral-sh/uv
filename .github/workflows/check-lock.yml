@@ -25,10 +25,5 @@ jobs:
           set -e -o pipefail
           uv workspace list --scripts |
           while IFS= read -r script; do
-            if ! [[ -f ${script}.lock ]]; then
-              printf 'Missing lockfile for %s; run `uv lock --script %q`\n' \
-                  "$script" "$script" >&2
-              exit 1
-            fi
             uv lock --script "$script" --check
           done
