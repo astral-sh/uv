@@ -5,12 +5,18 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use std::collections::BTreeMap;
 #[cfg(feature = "test-git")]
 use std::path::Path;
 use std::process::Stdio;
+use std::str::FromStr;
 #[cfg(feature = "test-git")]
 use uv_fs::Simplified;
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
+use uv_test::packse::scenario::{Package, PackageMetadata, Scenario};
 #[cfg(feature = "test-git")]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
 use uv_test::{apply_filters, copy_dir_ignore, uv_snapshot};
@@ -4006,15 +4012,30 @@ fn pep_751_no_packages() -> Result<()> {
     Ok(())
 }
 
-/// The torch index doesn't provide hashes, but pylock.toml requires at least one hash per
-/// package file, so uv downloads the files and computes the hashes.
+/// Indexes such as HTML-only indexes don't always provide hashes, but pylock.toml requires at
+/// least one hash per package file, so uv downloads the files and computes the hashes.
 #[test]
 fn pep_751_missing_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("filelock")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("3.13.1")?,
+                PackageMetadata {
+                    sdist: false,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario_without_hashes(&scenario);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r#"
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -4022,11 +4043,12 @@ fn pep_751_missing_hashes() -> Result<()> {
         dependencies = ["filelock"]
 
         [[tool.uv.index]]
-        name = "pytorch"
-        url = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
+        name = "no-hashes"
+        url = "{index_url}"
         default = true
         "#,
-    )?;
+        index_url = server.index_url(),
+    })?;
 
     context.lock().assert().success();
 
@@ -4043,8 +4065,8 @@ fn pep_751_missing_hashes() -> Result<()> {
     [[packages]]
     name = "filelock"
     version = "3.13.1"
-    index = "https://astral-sh.github.io/pytorch-mirror/whl/cpu"
-    wheels = [{ url = "https://download.pytorch.org/whl/filelock-3.13.1-py3-none-any.whl", upload-time = 2025-01-29T22:50:56Z, hashes = { sha256 = "57dbda9b35157b05fb3e58ee91448612eb674172fab98ee235ccb0b5bee19a1c" } }]
+    index = "http://[LOCALHOST]/simple/"
+    wheels = [{ url = "http://[LOCALHOST]/files/filelock-3.13.1-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "54bc458b17ddc0a8dbf6d9f163f8fe7c7f9a92c558657c7146a950374e8c611c" } }]
 
     ----- stderr -----
     Resolved 2 packages in [TIME]

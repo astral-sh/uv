@@ -17817,12 +17817,41 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     Ok(())
 }
 
-/// The HTML-only torch index doesn't provide hashes for all files, but pylock.toml requires at
+/// Indexes such as HTML-only indexes don't always provide hashes, but pylock.toml requires at
 /// least one hash per package file, so uv downloads the files and computes the hashes.
 #[test]
-#[cfg(not(target_env = "musl"))] // No musllinux wheels in the torch index
 fn pep_751_compile_missing_hashes() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
+    let context = uv_test::test_context!("3.12");
+
+    let mut scenario = Scenario::empty();
+    scenario.packages.insert(
+        PackageName::from_str("jinja2")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("3.1.2")?,
+                PackageMetadata {
+                    requires: vec![Requirement::from_str("markupsafe>=2.0")?],
+                    sdist: false,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    scenario.packages.insert(
+        PackageName::from_str("markupsafe")?,
+        Package {
+            versions: BTreeMap::from([(
+                Version::from_str("2.1.5")?,
+                PackageMetadata {
+                    sdist: true,
+                    wheel: true,
+                    ..PackageMetadata::default()
+                },
+            )]),
+        },
+    );
+    let server = PackseServer::from_scenario_without_hashes(&scenario);
 
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("jinja2<=3.1.2")?;
@@ -17830,7 +17859,7 @@ fn pep_751_compile_missing_hashes() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("requirements.in")
         .arg("--index-url")
-        .arg("https://astral-sh.github.io/pytorch-mirror/whl/cpu")
+        .arg(server.index_url())
         .arg("-o")
         .arg("pylock.toml"), @r#"
     success: true
@@ -17845,13 +17874,13 @@ fn pep_751_compile_missing_hashes() -> Result<()> {
     [[packages]]
     name = "jinja2"
     version = "3.1.2"
-    wheels = [{ url = "https://download.pytorch.org/whl/Jinja2-3.1.2-py3-none-any.whl", upload-time = 2025-01-29T22:50:57Z, hashes = { sha256 = "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61" } }]
+    wheels = [{ url = "http://[LOCALHOST]/files/jinja2-3.1.2-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "dd8dcbad5bb3caabfa085eec51b34df72f3d6e67e807dc705c31a76a3c0aaba1" } }]
 
     [[packages]]
     name = "markupsafe"
     version = "2.1.5"
-    sdist = { url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5.tar.gz", upload-time = 2025-01-29T22:50:57Z, hashes = { sha256 = "d283d37a890ba4c1ae73ffadf8046435c76e7bc2247bbb63c00bd1a709c6544b" } }
-    wheels = [{ url = "https://download.pytorch.org/whl/MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2025-01-29T22:50:57Z, hashes = { sha256 = "f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5" } }]
+    sdist = { url = "http://[LOCALHOST]/files/markupsafe-2.1.5.tar.gz", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "3e18231f72653eb1ec7836a09820eb803d2e9d4a2d64045519eb8ad99143540d" } }
+    wheels = [{ url = "http://[LOCALHOST]/files/markupsafe-2.1.5-py3-none-any.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "4076f6c7f39353c0c32478125cc09a018c0d87adf08b7a988d231031e468c9d4" } }]
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
