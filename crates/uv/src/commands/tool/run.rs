@@ -4,7 +4,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anstream::eprint;
 use anyhow::{Context, bail};
 use console::Term;
 use itertools::Itertools;
@@ -55,7 +54,9 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
+use crate::commands::{
+    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files,
+};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -301,10 +302,8 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
-            eprint!("{err:?}");
-            return Ok(ExitStatus::Failure);
+            let err = anyhow::Error::new(err).context("Failed to resolve `--with` requirement");
+            return Err(UvError::user(err).into());
         }
         Err(err) => return Err(err.into()),
     };
