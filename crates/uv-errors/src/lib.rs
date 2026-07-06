@@ -226,7 +226,7 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
 
     let main_msg = err.to_string();
     let main_padding = " ".repeat(level.len() + 2);
-    let wrapped_main = wrap_text(&main_msg, width, &main_padding, &main_padding);
+    let wrapped_main = wrap_text(&main_msg, width, &main_padding, &main_padding, "");
     writeln!(
         &mut stream,
         "{}{} {}",
@@ -240,8 +240,9 @@ pub fn write_error_chain_with_options<C: DynColor + Copy, W: fmt::Write>(
         let padding = "  ";
         let cause = "Caused by";
         let child_padding = " ".repeat(padding.len() + cause.len() + 2);
+        let authored_line_padding = "    ";
 
-        let wrapped = wrap_text(&msg, width, "", &child_padding);
+        let wrapped = wrap_text(&msg, width, "", &child_padding, authored_line_padding);
 
         let mut lines = wrapped.lines();
         if let Some(first) = lines.next() {
@@ -582,9 +583,9 @@ mod tests {
         assert_snapshot!(rendered, @r"
         error: Failed to download Python 3.12
           Caused by: Failed to fetch https://example.com/upload/python3.13.tar.zst
-        Server says: This endpoint only support POST requests.
+            Server says: This endpoint only support POST requests.
 
-        For downloads, please refer to https://example.com/download/python3.13.tar.zst
+            For downloads, please refer to https://example.com/download/python3.13.tar.zst
           Caused by: Caused By: HTTP Error 400
         ");
     }
