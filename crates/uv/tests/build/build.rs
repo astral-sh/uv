@@ -1405,12 +1405,12 @@ fn build_sha() -> Result<()> {
       Caused by: Failed to download `hatchling==1.22.4`
       Caused by: Hash mismatch for `hatchling==1.22.4`
 
-    Expected:
-      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-      sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Expected:
+          sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-    Computed:
-      sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Computed:
+          sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
@@ -1437,12 +1437,12 @@ fn build_sha() -> Result<()> {
       Caused by: Failed to download `hatchling==1.22.4`
       Caused by: Hash mismatch for `hatchling==1.22.4`
 
-    Expected:
-      sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
-      sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Expected:
+          sha256:a248cb506794bececcddeddb1678bc722f9cfcacf02f98f7c0af6b9ed893caf2
+          sha256:e16da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
 
-    Computed:
-      sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
+        Computed:
+          sha256:f56da5bfc396af7b29daa3164851dd04991c994083f56cb054b5003675caecdc
     ");
 
     project
