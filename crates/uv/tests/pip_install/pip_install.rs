@@ -14520,7 +14520,8 @@ fn reject_invalid_archive_member_names() {
     Resolved 1 package in [TIME]
       × Failed to download `cbwheeldiff2==0.0.1`
       ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
-      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+      ├─▶ Invalid zip file structure
+      ╰─▶ filename contained an embedded NUL byte
     "
     );
 }
@@ -14578,7 +14579,7 @@ fn reject_invalid_central_directory_offset() {
       × Failed to download `attrs @ https://pub-c6f28d316acd406eae43501e51ad30fa.r2.dev/zip1/attrs-25.3.0-py3-none-any.whl`
       ├─▶ Failed to extract archive: attrs-25.3.0-py3-none-any.whl
       ├─▶ Invalid zip file structure
-      ╰─▶ the end of central directory offset (0xf0d9) did not match the actual offset (0xf9ac)
+      ╰─▶ the central directory size (0x8d3) did not match the observed byte span (0x911)
     "
     );
 }
