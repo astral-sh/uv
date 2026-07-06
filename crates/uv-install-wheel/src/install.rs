@@ -27,6 +27,7 @@ pub fn installed_dist_info_path(
     Ok(site_packages.join(format!("{dist_info_prefix}.dist-info")))
 }
 
+/// Return the wheel's `.dist-info` prefix and target `site-packages` directory.
 fn wheel_destination<'layout>(
     layout: &'layout Layout,
     wheel: &Path,
