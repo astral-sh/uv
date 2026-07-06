@@ -218,7 +218,7 @@ dependencies = [
 [[package]]
 name = "astral-pubgrub"
 version = "0.5.0"
-source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-ranges#19e9f7798176c8ff98ce33f3ab78c7a2404f20e7"
+source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-ranges#37cbc77af798e93fd76a06032552f71e6d6e1b9f"
 dependencies = [
  "astral-version-ranges",
  "indexmap",
@@ -292,7 +292,7 @@ dependencies = [
 [[package]]
 name = "astral-version-ranges"
 version = "0.2.0"
-source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-ranges#19e9f7798176c8ff98ce33f3ab78c7a2404f20e7"
+source = "git+https://github.com/astral-sh/pubgrub?branch=konsti%2Fsimplify-ranges#37cbc77af798e93fd76a06032552f71e6d6e1b9f"
 dependencies = [
  "smallvec",
 ]
