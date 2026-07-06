@@ -204,26 +204,17 @@ impl<'a> FlatIndexClient<'a> {
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
             .build()
-            .map_err(|err| {
-                ErrorKind::from_reqwest(
-                    url.clone(),
-                    err,
-                    self.client.uncached().suggest_system_certs(),
-                )
-            })?;
+            .map_err(|err| self.client.uncached().reqwest_error_kind(url.clone(), err))?;
         let parse_simple_response = |response: Response| {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
                 let url = DisplaySafeUrl::from_url(response.url().clone());
 
-                let text = response.text().await.map_err(|err| {
-                    ErrorKind::from_reqwest(
-                        url.clone(),
-                        err,
-                        self.client.uncached().suggest_system_certs(),
-                    )
-                })?;
+                let text = response
+                    .text()
+                    .await
+                    .map_err(|err| self.client.uncached().reqwest_error_kind(url.clone(), err))?;
                 let SimpleDetailHTML {
                     project_status: _,
                     base,

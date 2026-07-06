@@ -43,22 +43,11 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// Caller-provided hints to render after the error output.
     hints: Vec<String>,
-    /// Whether system certificates are being used.
-    system_certs: bool,
     /// The context to display to the user upon resolution failure.
     context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
-    /// Create an [`OperationDiagnostic`] with the given system certificates setting.
-    #[must_use]
-    pub(crate) fn with_system_certs(system_certs: bool) -> Self {
-        Self {
-            system_certs,
-            ..Default::default()
-        }
-    }
-
     /// Add a hint to display to the user upon resolution failure.
     #[must_use]
     pub(crate) fn with_hint(mut self, hint: String) -> Self {
@@ -124,12 +113,6 @@ impl OperationDiagnostic {
                 } else {
                     Some(pip::operations::Error::Requirements(err))
                 }
-            }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
-                if !self.system_certs && err.is_ssl() =>
-            {
-                system_certs_hint(err);
-                None
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
@@ -240,43 +223,6 @@ fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>
     anstream::eprint!("{hints}");
 }
 
-/// Render a TLS error with a hint to enable native TLS.
-// https://github.com/rust-lang/rust/issues/147648
-#[allow(unused_assignments)]
-fn system_certs_hint(err: uv_client::Error) {
-    #[derive(Debug, miette::Diagnostic)]
-    #[diagnostic()]
-    struct Error {
-        /// The underlying error.
-        err: uv_client::Error,
-
-        /// The help message to display.
-        #[help]
-        help: String,
-    }
-
-    impl std::fmt::Display for Error {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.err)
-        }
-    }
-
-    impl std::error::Error for Error {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.err.source()
-        }
-    }
-
-    let report = miette::Report::new(Error {
-        err,
-        help: format!(
-            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
-            "--system-certs".green()
-        ),
-    });
-    anstream::eprint!("{report:?}");
-}
-
 /// Walk an error chain and collect hint strings from all known error types.
 ///
 /// This is the central "hint for error" function. It walks the full error chain
@@ -309,6 +255,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         collect_hint::<uv_workspace::pyproject::SourceError>(cause, &mut hints);
         collect_hint::<uv_distribution::LoweringError>(cause, &mut hints);
         collect_hint::<uv_virtualenv::Error>(cause, &mut hints);
+        collect_hint::<uv_client::Error>(cause, &mut hints);
         #[cfg(not(feature = "self-update"))]
         collect_hint::<crate::ExternallyInstalledError>(cause, &mut hints);
     }

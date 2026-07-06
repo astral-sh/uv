@@ -2,7 +2,7 @@ use std::env;
 use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
 use std::sync::Arc;
-use std::time::{Duration, SystemTimeError};
+use std::time::{Duration, Instant, SystemTimeError};
 
 use anyhow::anyhow;
 use http::header::{
@@ -40,7 +40,9 @@ use uv_warnings::warn_user_once;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::{Certificates, read_identity};
-use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
+use crate::{
+    Connectivity, Error as ClientError, ErrorKind, RetriableError, RetryState, UvRetryableStrategy,
+};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -253,11 +255,6 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn system_certs(&self) -> bool {
-        self.system_certs
-    }
-
-    #[must_use]
     pub fn with_system_certs(mut self, system_certs: bool) -> Self {
         self.system_certs = system_certs;
         self
@@ -402,8 +399,8 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client) = match &self.custom_client {
-            Some(client) => (client.clone(), client.clone()),
+        let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
+            Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
             None => {
                 self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?
             }
@@ -433,7 +430,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: self.read_timeout,
             connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
-            suggest_system_certs: !self.system_certs,
+            certificate_source,
         })
     }
 
@@ -463,7 +460,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: existing.read_timeout,
             connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
-            suggest_system_certs: existing.suggest_system_certs,
+            certificate_source: existing.certificate_source,
         }
     }
 
@@ -471,7 +468,7 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         read_timeout: Duration,
         connect_timeout: Duration,
-    ) -> Result<(Client, Client), ClientBuildError> {
+    ) -> Result<(Client, Client, CertificateSource), ClientBuildError> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -483,6 +480,13 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
         let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
+        let certificate_source = if custom_certs.is_some() {
+            CertificateSource::Custom
+        } else if self.system_certs {
+            CertificateSource::System
+        } else {
+            CertificateSource::WebPki
+        };
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -504,7 +508,7 @@ impl<'a> BaseClientBuilder<'a> {
             self.redirect_policy,
         )?;
 
-        Ok((raw_client, raw_dangerous_client))
+        Ok((raw_client, raw_dangerous_client, certificate_source))
     }
 
     fn create_client(
@@ -696,8 +700,21 @@ pub struct BaseClient {
     no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
-    /// Whether TLS failures may be resolved by enabling system certificate roots.
-    suggest_system_certs: bool,
+    /// The certificate roots used by the underlying HTTP client.
+    certificate_source: CertificateSource,
+}
+
+/// The certificate roots used by a [`BaseClient`].
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum CertificateSource {
+    /// The system certificate roots.
+    System,
+    /// The bundled `WebPKI` certificate roots.
+    WebPki,
+    /// Custom roots loaded from `SSL_CERT_FILE` or `SSL_CERT_DIR`.
+    Custom,
+    /// An externally constructed client whose certificate roots are unknown.
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -757,8 +774,21 @@ impl BaseClient {
         &self.credentials_cache
     }
 
-    pub(crate) fn suggest_system_certs(&self) -> bool {
-        self.suggest_system_certs
+    pub(crate) fn reqwest_error_kind(
+        &self,
+        url: DisplaySafeUrl,
+        error: reqwest::Error,
+    ) -> ErrorKind {
+        ErrorKind::from_reqwest(url, error, self.certificate_source)
+    }
+
+    pub(crate) fn reqwest_middleware_error(
+        &self,
+        url: DisplaySafeUrl,
+        error: reqwest_middleware::Error,
+        start: Instant,
+    ) -> ClientError {
+        ClientError::from_reqwest_middleware(url, error, start, self.certificate_source)
     }
 
     /// The reqwest client without middleware.

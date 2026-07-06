@@ -13,7 +13,7 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_client::RegistryClientBuilder;
 use uv_distribution_types::IndexUrl;
-use uv_errors::Hint;
+use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
@@ -132,6 +132,7 @@ impl TestCertificate {
 struct TestClient {
     overrides: Vec<(&'static str, String)>,
     system_certs: bool,
+    custom_client: bool,
 }
 
 /// Create a [`TestClient`] with no environment overrides.
@@ -139,6 +140,7 @@ fn client() -> TestClient {
     TestClient {
         overrides: Vec::new(),
         system_certs: false,
+        custom_client: false,
     }
 }
 
@@ -146,6 +148,12 @@ impl TestClient {
     /// Enable or disable system certificate loading.
     fn system_certs(mut self, enabled: bool) -> Self {
         self.system_certs = enabled;
+        self
+    }
+
+    /// Use an externally constructed HTTP client.
+    fn custom_client(mut self) -> Self {
+        self.custom_client = true;
         self
     }
 
@@ -209,6 +217,7 @@ impl TestClient {
     ) {
         let vars = self.ssl_vars();
         let system_certs = self.system_certs;
+        let custom_client = self.custom_client;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
             let cache = Cache::temp().unwrap().init().await.unwrap();
@@ -218,20 +227,30 @@ impl TestClient {
                     .no_retry_delay(true)
                     .with_system_certs(system_certs),
                 cache,
-            )
-            .build()
-            .unwrap();
+            );
+            let client = if custom_client {
+                client.with_reqwest_client(reqwest::Client::new())
+            } else {
+                client
+            };
+            let client = client.build().unwrap();
             let index = IndexUrl::from_str(&format!("https://{addr}/simple")).unwrap();
             let error = client
                 .fetch_simple_index(&index)
                 .await
                 .expect_err("self-signed certificate should fail");
+            let mut rendered = String::new();
+            write_error_chain_with_options(
+                &error,
+                error.hints(),
+                ErrorOptions::default().with_stream(&mut rendered),
+            )
+            .unwrap();
             assert_eq!(
-                error.suggests_system_certs(),
+                rendered.contains("Consider enabling use of system TLS certificates"),
                 expected_hint,
-                "unexpected system certificate hint for {error:?}"
+                "unexpected system certificate hint in {rendered:?} for {error:?}"
             );
-            assert_eq!(!error.hints().is_empty(), expected_hint);
             let _ = server_task.await;
         })
         .await;
@@ -440,13 +459,22 @@ async fn test_no_custom_certs_rejects_self_signed() -> Result<()> {
 }
 
 #[tokio::test]
-async fn test_tls_failure_suggests_system_certs_only_when_disabled() -> Result<()> {
+async fn test_tls_failure_suggests_system_certs_only_for_webpki_roots() -> Result<()> {
     let cert = TestCertificate::new()?;
+    let custom_cert = TestCertificate::new()?;
     client()
         .expect_index_fetch_system_certs_hint(&cert, true)
         .await;
     client()
         .system_certs(true)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
+    client()
+        .ssl_cert_file(&custom_cert.trust_path)
+        .expect_index_fetch_system_certs_hint(&cert, false)
+        .await;
+    client()
+        .custom_client()
         .expect_index_fetch_system_certs_hint(&cert, false)
         .await;
     Ok(())

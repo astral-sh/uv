@@ -248,7 +248,7 @@ impl RegistryClient {
     }
 
     fn reqwest_error_kind(&self, url: DisplaySafeUrl, error: reqwest::Error) -> ErrorKind {
-        ErrorKind::from_reqwest(url, error, self.client.uncached().suggest_system_certs())
+        self.client.uncached().reqwest_error_kind(url, error)
     }
 
     /// Return the [`BaseClient`] used by this client.

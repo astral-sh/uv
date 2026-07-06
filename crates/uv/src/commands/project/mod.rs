@@ -408,6 +408,7 @@ impl uv_errors::Hint for ProjectError {
             Self::Lock(err) => err.hints(),
             Self::Python(err) => err.hints(),
             Self::Operation(err) => err.hints(),
+            Self::Client(err) => uv_errors::Hint::hints(err),
             _ => uv_errors::Hints::none(),
         }
     }
