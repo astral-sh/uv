@@ -3,6 +3,45 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.27
+
+Released on 2026-07-06.
+
+### Enhancements
+
+- Continue on ignored errors when fetching wheel metadata ([#12255](https://github.com/astral-sh/uv/pull/12255))
+- Use caching for `--python-downloads-json-url` ([#16749](https://github.com/astral-sh/uv/pull/16749))
+
+### Performance
+
+- Avoid full site-packages scans for direct reinstalls ([#20119](https://github.com/astral-sh/uv/pull/20119))
+- Avoid redundant pyproject parsing ([#20076](https://github.com/astral-sh/uv/pull/20076))
+- Cache default dependency markers when reading locks ([#20125](https://github.com/astral-sh/uv/pull/20125))
+- Enable SIMD-accelerated TOML parsing ([#20079](https://github.com/astral-sh/uv/pull/20079))
+- Intern `requires-python` specifiers in Simple API parsing ([#20104](https://github.com/astral-sh/uv/pull/20104))
+- Read cache entries into exact-sized buffers ([#20120](https://github.com/astral-sh/uv/pull/20120))
+- Reduce VersionSpecifiers parsing allocations ([#20105](https://github.com/astral-sh/uv/pull/20105))
+- Reduce site-packages scan allocation overhead ([#20087](https://github.com/astral-sh/uv/pull/20087))
+- Reuse package names when parsing wheel filenames ([#20110](https://github.com/astral-sh/uv/pull/20110))
+- Sort Simple API files after grouping ([#20112](https://github.com/astral-sh/uv/pull/20112))
+
+### Bug fixes
+
+- Always emit `packages` table for pylock.toml ([#20145](https://github.com/astral-sh/uv/pull/20145))
+- Avoid blank line for empty `uv pip tree` ([#20062](https://github.com/astral-sh/uv/pull/20062))
+- Encode hashes in file paths ([#19807](https://github.com/astral-sh/uv/pull/19807))
+- Error on a registry uv.lock package without a version instead of panicking ([#19855](https://github.com/astral-sh/uv/pull/19855))
+- Preserve conditional extra markers in exports ([#20148](https://github.com/astral-sh/uv/pull/20148))
+- Sync index format when `uv add --index` updates an existing index URL ([#19818](https://github.com/astral-sh/uv/pull/19818))
+
+### Other changes
+
+- Discover extensionless shebang scripts in `uv workspace list --scripts` ([#20099](https://github.com/astral-sh/uv/pull/20099))
+- Expand ecosystem lock coverage ([#20068](https://github.com/astral-sh/uv/pull/20068))
+- Re-add `pub` APIs used in Pixi ([#20074](https://github.com/astral-sh/uv/pull/20074))
+- Skip the ambiguous authority check for file transport VCS URLs ([#20086](https://github.com/astral-sh/uv/pull/20086))
+- Update Rust toolchain to 1.96.1 ([#20103](https://github.com/astral-sh/uv/pull/20103))
+
 ## 0.11.26
 
 Released on 2026-06-30.
