@@ -321,20 +321,17 @@ lower bounds.
 
 ## Pre-release handling
 
-By default, uv prefers stable versions for requirements that do not name a pre-release. If every
-stable candidate that satisfies the active constraints is rejected during resolution, uv falls back
-to a pre-release without restarting. An applicable direct or transitive requirement, constraint, or
-override that names a pre-release instead authorizes matching pre-releases to participate in normal
-version order. This makes those pre-releases eligible; it does not guarantee that one will be
+By default, uv prefers stable versions over pre-releases, falling back to pre-releases only if every
+stable candidate that satisfies the active constraints is rejected during resolution. An applicable
+direct or transitive requirement, constraint, or override that includes a pre-release identifier
+(e.g., `flask>=2.0.0rc1`) instead authorizes matching pre-releases to participate in normal version
+selection. This makes those pre-releases eligible, but does not guarantee that a pre-release will be
 selected.
 
-Requirements for the same distribution that appear together in the project or in the metadata for a
-selected package version are considered together. Their declaration order does not affect
-pre-release authorization, including requirements for extras and marker variants. Across
-requirements discovered at different points in resolution, however, package
-[priority](../pip/compatibility.md#package-priority) can affect which valid candidate is selected. A
-compatible stable version selected before a later pre-release requirement may remain selected, while
-discovering the authorizing requirement first can select a newer pre-release.
+Requirements discovered at different points in resolution can affect which valid candidate is
+selected according to uv's ordinary [package priorities](../pip/compatibility.md#package-priority).
+If uv selects a compatible stable version before discovering a later requirement that authorizes
+pre-releases, it may retain that stable version even when a newer pre-release becomes eligible.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.

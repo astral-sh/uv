@@ -40,24 +40,22 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
-By default, uv prefers stable versions for requirements that do not name a pre-release. If every
-stable candidate that satisfies the active constraints is rejected during resolution, uv falls back
-to a pre-release without restarting. An applicable direct or transitive requirement, constraint, or
-override that names a pre-release instead authorizes matching pre-releases to participate in normal
-version order. This makes those pre-releases eligible; it does not guarantee that one will be
+By default, uv prefers stable versions over pre-releases, falling back to pre-releases only if every
+stable candidate that satisfies the active constraints is rejected during resolution. An applicable
+direct or transitive requirement, constraint, or override that includes a pre-release identifier
+(e.g., `flask>=2.0.0rc1`) instead authorizes matching pre-releases to participate in normal version
+selection. This makes those pre-releases eligible, but does not guarantee that a pre-release will be
 selected.
 
-Requirements for the same distribution that appear together in the project or in the metadata for a
-selected package version are considered together. Their declaration order does not affect
-pre-release authorization, including requirements for extras and marker variants.
-
 Requirements discovered at different points in resolution can affect which valid candidate is
-selected according to uv's ordinary [package priorities](#package-priority). For example, with
-`c==1.0` and `c==2.0a1` available, `c>=1` can retain `c==1.0` if it is resolved before a separately
-discovered `a -> c>=0.5a1` edge. If the authorizing edge is active before `c` is selected,
-`c==2.0a1` is eligible in normal version order. A later requirement that excludes the selected
-stable version still forces reconsideration. In every case, the selected version satisfies all
-active requirements.
+selected according to uv's ordinary [package priorities](#package-priority). For example, suppose
+only `c==1.0` and `c==2.0a1` are available. Together, `c>=1` and `a -> c>=0.5a1` allow both versions
+and authorize the pre-release, making `c==2.0a1` the newest eligible version under the default
+resolution strategy. However, if uv selects `c==1.0` for `c>=1` before discovering the authorizing
+edge from `a`, it may retain that older stable version. If the authorizing edge is active before `c`
+is selected, `c==2.0a1` participates in normal version order and is preferred as the newest eligible
+version. A later requirement that excludes `c==1.0` forces uv to reconsider it. In every case, the
+selected version satisfies all active requirements.
 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
@@ -68,12 +66,9 @@ candidates first, or `--prerelease disallow` to exclude them entirely.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.pages.dev/limitations/prerelease_versions) to model
-because candidate availability must remain stable while PubGrub learns incompatibilities. uv keeps
-pre-releases in the candidate universe and models explicit authorization as a virtual solver package
-that enables pre-releases and pins the real package to the same version. This lets PubGrub
-reconsider an earlier stable decision without restarting, while rejecting the parent that introduced
-the requirement removes its authorization during backtracking without invalidating learned
-incompatibilities.
+because dependency requirements are discovered incrementally during resolution. uv tracks
+pre-release authorization with the dependencies that introduced it, so the authorization is removed
+if resolution backtracks away from those dependencies.
 
 ## Packages that exist on multiple indexes
 
