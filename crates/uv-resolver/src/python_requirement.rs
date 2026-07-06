@@ -75,7 +75,7 @@ impl PythonRequirement {
     /// This has the same "source" as
     /// [`PythonRequirement::from_requires_python`], but is useful for
     /// constructing a `PythonRequirement` without an [`Interpreter`].
-    pub fn from_marker_environment(
+    pub(crate) fn from_marker_environment(
         marker_env: &MarkerEnvironment,
         requires_python: RequiresPython,
     ) -> Self {

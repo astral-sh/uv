@@ -212,7 +212,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
     Resolver<Provider, InstalledPackages>
 {
     /// Initialize a new resolver using a user provided backend.
-    pub fn new_custom_io(
+    fn new_custom_io(
         manifest: Manifest,
         options: Options,
         hasher: &HashStrategy,

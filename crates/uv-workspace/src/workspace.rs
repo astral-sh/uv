@@ -124,7 +124,7 @@ impl WorkspaceCache {
     ///
     /// Contract: There are no parallel workspace operations, this is the only thread operating on
     /// workspaces.
-    pub fn invalidate_workspace(&self, workspace: &Workspace) {
+    fn invalidate_workspace(&self, workspace: &Workspace) {
         if let Some(Ok(workspace)) = self.workspaces.remove(workspace.install_path()) {
             for member in workspace.packages.values() {
                 self.workspaces.remove(&member.root);

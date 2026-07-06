@@ -30,7 +30,7 @@ pub struct PackageOverride<T> {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PackageOverrideTarget {
-    pub name: PackageName,
+    name: PackageName,
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -38,7 +38,7 @@ pub struct PackageOverrideTarget {
             description = "PEP 440-style package version, e.g., `1.2.3`"
         )
     )]
-    pub version: Option<Version>,
+    version: Option<Version>,
 }
 
 /// An override, either global or scoped to a specific package version.

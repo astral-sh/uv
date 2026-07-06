@@ -359,7 +359,7 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub struct PyProjectToml {
+pub(crate) struct PyProjectToml {
     /// Project metadata
     project: Project,
     /// uv-specific configuration

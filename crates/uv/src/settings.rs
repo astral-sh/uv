@@ -2094,7 +2094,7 @@ impl UpgradeSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct MetadataSettings {
     #[expect(dead_code)]
-    pub(crate) script: Option<PathBuf>,
+    script: Option<PathBuf>,
     pub(crate) lock_check: LockCheck,
     pub(crate) frozen: Option<FrozenSource>,
     pub(crate) dry_run: DryRun,
@@ -2982,7 +2982,7 @@ impl FormatSettings {
 pub(crate) struct CheckSettings {
     pub(crate) ty_path: Option<PathBuf>,
     #[expect(dead_code)]
-    pub(crate) script: Option<PathBuf>,
+    script: Option<PathBuf>,
     pub(crate) extras: ExtrasSpecification,
     pub(crate) groups: DependencyGroups,
     pub(crate) lock_check: LockCheck,

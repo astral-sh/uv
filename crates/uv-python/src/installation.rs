@@ -50,7 +50,7 @@ impl PythonInstallation {
 
     /// Return a new installation with the given [`PythonSource`].
     #[must_use]
-    pub(crate) fn with_source(self, source: PythonSource) -> Self {
+    fn with_source(self, source: PythonSource) -> Self {
         Self { source, ..self }
     }
 

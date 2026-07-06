@@ -9,7 +9,7 @@ use tracing::trace;
 
 pub use crate::arch::{Arch, ArchVariant};
 pub use crate::host::{LinuxOsRelease, OsRelease, OsType};
-pub use crate::libc::{Libc, LibcDetectionError, LibcVersion};
+pub use crate::libc::{Libc, LibcDetectionError};
 pub use crate::os::Os;
 
 mod arch;

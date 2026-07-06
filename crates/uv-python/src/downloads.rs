@@ -1511,7 +1511,8 @@ impl ManagedPythonDownload {
         Ok(())
     }
 
-    pub fn python_version(&self) -> PythonVersion {
+    #[cfg(test)]
+    fn python_version(&self) -> PythonVersion {
         self.key.version()
     }
 

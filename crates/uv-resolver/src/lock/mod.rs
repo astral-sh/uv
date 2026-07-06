@@ -806,7 +806,7 @@ impl Lock {
 
     /// Intersect a requirement marker with the forks that contain a package, then simplify it
     /// under the lockfile's Python requirement.
-    pub(crate) fn root_requirement_marker(
+    fn root_requirement_marker(
         &self,
         requirement: &Requirement,
         package: &Package,

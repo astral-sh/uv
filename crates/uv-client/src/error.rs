@@ -29,8 +29,12 @@ use uv_redacted::DisplaySafeUrl;
 pub struct ProblemDetails {
     /// A URI reference that identifies the problem type.
     /// When dereferenced, it SHOULD provide human-readable documentation for the problem type.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "deserialized for RFC 9457 completeness")
+    )]
     #[serde(rename = "type", default = "default_problem_type")]
-    pub problem_type: String,
+    problem_type: String,
 
     /// A short, human-readable summary of the problem type.
     title: Option<String>,
@@ -42,7 +46,11 @@ pub struct ProblemDetails {
     detail: Option<String>,
 
     /// A URI reference that identifies the specific occurrence of the problem.
-    pub instance: Option<String>,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "deserialized for RFC 9457 completeness")
+    )]
+    instance: Option<String>,
 }
 
 /// Default problem type URI as per RFC 9457

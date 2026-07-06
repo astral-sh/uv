@@ -186,7 +186,8 @@ impl<'a, C, W> ErrorOptions<'a, C, W> {
     /// Override the terminal width used for wrapping.
     ///
     /// This is primarily useful for testing.
-    pub fn with_width_override(mut self, width_override: usize) -> Self {
+    #[cfg(test)]
+    fn with_width_override(mut self, width_override: usize) -> Self {
         self.width_override = Some(width_override);
         self
     }

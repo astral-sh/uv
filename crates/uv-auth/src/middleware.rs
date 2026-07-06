@@ -279,7 +279,8 @@ impl AuthMiddleware {
 
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
-    pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
+    #[cfg(test)]
+    fn with_cache(mut self, cache: CredentialsCache) -> Self {
         self.cache = Arc::new(cache);
         self
     }

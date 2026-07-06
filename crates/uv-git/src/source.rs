@@ -17,7 +17,7 @@ use crate::credentials::GIT_STORE;
 use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
-pub struct GitSource {
+pub(crate) struct GitSource {
     /// The Git reference from the manifest file.
     git: GitUrl,
     /// Whether to disable SSL verification.
