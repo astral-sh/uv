@@ -159,6 +159,18 @@ impl VersionMap {
         }
     }
 
+    /// Return an iterator over the versions with at least one file within the exclude-newer
+    /// cutoffs, i.e., the versions that resolution could select.
+    ///
+    /// A superset of the selectable versions: Files that are unavailable for other reasons
+    /// (yanked, hashes, `requires-python`, `--no-binary`/`--no-build`) are not checked.
+    pub(crate) fn included_versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
+        match &self.inner {
+            VersionMapInner::Eager(eager) => either::Either::Left(eager.map.keys()),
+            VersionMapInner::Lazy(lazy) => either::Either::Right(lazy.included_versions()),
+        }
+    }
+
     /// Return the index URL where this package came from.
     pub(crate) fn index(&self) -> Option<&IndexUrl> {
         match &self.inner {
@@ -501,6 +513,48 @@ impl VersionMapLazy {
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
         self.get_lazy(&self.map.get(version)?.dist)
+    }
+
+    /// Returns an iterator over the versions with at least one file within the exclude-newer
+    /// cutoffs, without materializing the distributions.
+    fn included_versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
+        self.map.entries.iter().filter_map(move |entry| {
+            let included = match (&entry.dist.flat, &entry.dist.simple) {
+                // Flat index files have no upload times and bypass the cutoffs.
+                (Some(_), _) => true,
+                (None, Some(simple)) => self.any_file_included(simple),
+                (None, None) => false,
+            };
+            included.then_some(&entry.version)
+        })
+    }
+
+    /// Whether at least one file for this version is within the exclude-newer cutoffs,
+    /// mirroring the per-file exclusion in `get_simple` on the archived metadata.
+    fn any_file_included(&self, simple: &SimplePrioritizedDist) -> bool {
+        if self.included_version_cutoff.is_none() && self.available_version_cutoff.is_none() {
+            return true;
+        }
+        let Some(datum) = self.simple_metadata.datum(simple.datum_index) else {
+            return false;
+        };
+        let files = &datum.files;
+        files
+            .wheels
+            .iter()
+            .map(|wheel| &wheel.file)
+            .chain(files.source_dists.iter().map(|sdist| &sdist.file))
+            .any(|file| {
+                let upload_time = file.upload_time_utc_ms.as_ref().map(|t| t.to_native());
+                let excluded = if let Some(cutoff) = &self.included_version_cutoff {
+                    upload_time.is_none_or(|t| t >= cutoff.as_millisecond())
+                } else if let Some(cutoff) = &self.available_version_cutoff {
+                    upload_time.is_some_and(|t| t >= cutoff.as_millisecond())
+                } else {
+                    false
+                };
+                !excluded
+            })
     }
 
     /// Given a reference to a possibly-initialized distribution that is in

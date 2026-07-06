@@ -9905,8 +9905,7 @@ fn add_shadowed_name() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only dagster-webserver<=1.6.13 is available and dagster-webserver==1.6.11 depends on your project, we can conclude that dagster-webserver==1.6.11 depends on your project.
-          And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
+      ╰─▶ Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
           And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.

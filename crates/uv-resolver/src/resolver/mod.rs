@@ -1111,8 +1111,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
     /// All versions that resolution could select for the package: all indexes, including
     /// versions that are yanked or otherwise unavailable, plus installed versions that may be
-    /// missing from the indexes. A superset of the selectable versions is sound for
-    /// simplification, it only keeps some unneeded segments.
+    /// missing from the indexes. Versions past the exclude-newer cutoff are omitted, so that
+    /// widening doesn't depend on versions published after the cutoff. A superset of the
+    /// selectable versions is sound for simplification, it only keeps some unneeded segments.
     ///
     /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
     /// package is not a registry package.
@@ -1142,7 +1143,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             };
             let mut versions: Vec<Version> = version_maps
                 .iter()
-                .flat_map(|version_map| version_map.versions().cloned())
+                .flat_map(|version_map| version_map.included_versions().cloned())
                 .chain(
                     installed_packages
                         .get_packages(name)
@@ -3259,7 +3260,11 @@ impl ForkState {
             known_versions,
             &pubgrub.package_store[*next],
         );
-        let versions = if let Some(known_versions) = known_version {
+        // A decided version is always selectable and thus in the list, but an empty list would
+        // unsoundly widen to the full range.
+        let versions = if let Some(known_versions) =
+            known_version.filter(|versions| !versions.is_empty())
+        {
             versions.widen_versions(known_versions)
         } else {
             versions
