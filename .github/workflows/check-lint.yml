@@ -50,11 +50,12 @@ jobs:
           TY_CONFIG_FILE: /dev/null
           UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
         run: |
-          scripts="$(uv workspace list --scripts)"
+          set -e -o pipefail
+          uv workspace list --scripts |
           while IFS= read -r script; do
-            echo "Checking ${script}"
-            uv check --script "${script}" --locked
-          done <<< "${scripts}"
+            printf 'Checking %s\n' "$script" >&2
+            uv check --script "$script" --locked
+          done
 
   shellcheck:
     timeout-minutes: 10
