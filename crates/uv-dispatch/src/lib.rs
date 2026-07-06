@@ -358,7 +358,7 @@ impl BuildContext for BuildDispatch<'_> {
                     // This requirement-specific context replaces the generic top-level
                     // no-solution heading for a nested build resolution.
                     uv_resolver::ResolveError::NoSolution { cause, .. } => {
-                        anyhow::Error::new(cause)
+                        anyhow::Error::new(*cause)
                     }
                     error => anyhow::Error::new(error),
                 })
