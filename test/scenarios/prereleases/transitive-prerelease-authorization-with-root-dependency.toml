@@ -1,0 +1,24 @@
+name = "transitive-prerelease-authorization-with-root-dependency"
+description = "A transitive pre-release authorization can upgrade a package that also appears as a plain root requirement."
+
+[root]
+requires = ["a", "b", "c"]
+
+[expected]
+satisfiable = true
+explanation = "`c==1.0.0` authorizes the pre-release range `b>=3.0.0a1`, so the plain root `b` requirement and `a`'s `b<4` bound resolve to `b==3.0.0b1`."
+
+[expected.packages]
+a = "1.0.0"
+b = "3.0.0b1"
+c = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["b<4"]
+
+[packages.b.versions."2.0.0"]
+
+[packages.b.versions."3.0.0b1"]
+
+[packages.c.versions."1.0.0"]
+requires = ["b>=3.0.0a1"]
