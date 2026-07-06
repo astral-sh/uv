@@ -14520,8 +14520,7 @@ fn reject_invalid_archive_member_names() {
     Resolved 1 package in [TIME]
       × Failed to download `cbwheeldiff2==0.0.1`
       ├─▶ Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
-      ├─▶ Invalid zip file structure
-      ╰─▶ filename contained an embedded NUL byte
+      ╰─▶ Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
     "
     );
 }
