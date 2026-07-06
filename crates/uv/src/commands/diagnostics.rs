@@ -79,9 +79,18 @@ impl OperationDiagnostic {
     ///
     /// Returns `Some` if the error was not handled.
     pub(crate) fn report(self, err: pip::operations::Error) -> Option<pip::operations::Error> {
+        let err = match (self.context, err) {
+            (Some(context), pip::operations::Error::Resolve(err)) => {
+                pip::operations::Error::Resolve(err.with_resolution_context(context))
+            }
+            (_, err) => err,
+        };
         let result = match err {
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(err)) => {
-                no_solution(&err, self.context);
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution {
+                header,
+                cause,
+            }) => {
+                no_solution(header, &cause);
                 None
             }
             pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
@@ -228,12 +237,7 @@ fn dependencies_error(
 }
 
 /// Render a [`uv_resolver::NoSolutionError`].
-fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
-    let header = if let Some(context) = context {
-        err.header().with_context(context)
-    } else {
-        err.header()
-    };
+fn no_solution(header: uv_resolver::NoSolutionHeader, err: &uv_resolver::NoSolutionError) {
     let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");
     let hints = err.hints();

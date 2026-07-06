@@ -809,9 +809,10 @@ fn standard_library_hint(
     edits: &[DependencyEdit],
     python_minor: u8,
 ) -> Option<String> {
-    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-        no_solution_error,
-    )) = operation_error
+    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution {
+        cause: no_solution_error,
+        ..
+    }) = operation_error
     else {
         return None;
     };
