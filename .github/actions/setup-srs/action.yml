@@ -36,10 +36,10 @@ runs:
           ~/.cargo/registry/cache
           ~/.cargo/git/db
           ~/.cargo/srs-artifact-cache-v2
-        key: srs-artifacts-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-${{ github.sha }}
+        key: srs-artifacts-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-${{ github.sha }}
         restore-keys: |
-          srs-artifacts-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-
-          srs-artifacts-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-
+          srs-artifacts-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-
+          srs-artifacts-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-
 
     - name: "Restore Cargo target cache"
       if: ${{ inputs.target-path != '' }}
@@ -47,10 +47,10 @@ runs:
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ inputs.target-path }}
-        key: srs-target-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-${{ github.sha }}
+        key: srs-target-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-${{ github.sha }}
         restore-keys: |
-          srs-target-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-
-          srs-target-v2-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-
+          srs-target-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', '**/rust-toolchain.toml', '.cargo/**') }}-
+          srs-target-v2-llvm-2026.06.25-${{ runner.os }}-${{ runner.arch }}-${{ inputs.artifact-cache-scope }}-${{ github.job }}-
 
     - name: "Install srs"
       shell: bash

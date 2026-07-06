@@ -12,6 +12,7 @@ case "$(uname -s)-$(uname -m)" in
     Linux-x86_64)
         target="x86_64-unknown-linux-gnu"
         checksum="b5b04c14fea814166d060742795417a7ab7f9ac87408de4d93d0b202694b48b2"
+        rustflags="-Zcodegen-backend=llvm"
         ;;
     *)
         echo "srs ${version} does not support $(uname -s)-$(uname -m)" >&2
@@ -53,4 +54,7 @@ cargo +"$toolchain" clippy -V
     echo "CARGO_INCREMENTAL=0"
     echo "RUSTUP_TOOLCHAIN=${toolchain}"
     echo "SRS_CARGO_ARTIFACT_CACHE_MAX_SIZE=4GiB"
+    if [[ -n "${rustflags:-}" ]]; then
+        echo "RUSTFLAGS=${rustflags}"
+    fi
 } >> "$GITHUB_ENV"
