@@ -13,6 +13,7 @@ use tracing::{debug, instrument, trace};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::RequiresPython;
+use uv_errors::Hints;
 use uv_fs::Simplified;
 use uv_fs::which::is_executable;
 use uv_pep440::{
@@ -1552,7 +1553,8 @@ pub(crate) async fn find_best_python_installation(
                 let error = anyhow::Error::from(error).context(format!(
                     "A managed Python download is available for {request}, but an error occurred when attempting to download it."
                 ));
-                write_warning_chain(error.as_ref()).expect("writing to stderr should not fail");
+                write_warning_chain(error.as_ref(), Hints::none())
+                    .expect("writing to stderr should not fail");
                 previous_fetch_failed = true;
             }
         }
