@@ -69,7 +69,6 @@ uv-preview = { version = "0.0.56", path = "crates/uv-preview" }
 uv-publish = { version = "0.0.56", path = "crates/uv-publish" }
 uv-pypi-types = { version = "0.0.56", path = "crates/uv-pypi-types" }
 uv-python = { version = "0.0.56", path = "crates/uv-python" }
-uv-python-bytecode = { version = "0.0.56", path = "crates/uv-python-bytecode" }
 uv-redacted = { version = "0.0.56", path = "crates/uv-redacted" }
 uv-requirements = { version = "0.0.56", path = "crates/uv-requirements" }
 uv-requirements-txt = { version = "0.0.56", path = "crates/uv-requirements-txt" }
@@ -187,6 +186,7 @@ papaya = { version = "0.2.4" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
+penguin = { git = "https://github.com/charliermarsh/penguin", rev = "537d13953429f2da5baee468d28f14ba0e50920f" }
 petgraph = { version = "0.8.0" }
 proc-macro2 = { version = "1.0.86" }
 procfs = { version = "0.18.0", default-features = false, features = ["flate2"] }

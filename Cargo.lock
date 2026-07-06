@@ -404,36 +404,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "attribute-derive"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05832cdddc8f2650cc2cc187cc2e952b8c133a48eb055f35211f61ee81502d77"
-dependencies = [
- "attribute-derive-macro",
- "derive-where",
- "manyhow",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "attribute-derive-macro"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a7cdbbd4bd005c5d3e2e9c885e6fa575db4f4a3572335b974d8db853b6beb61"
-dependencies = [
- "collection_literals",
- "interpolator",
- "manyhow",
- "proc-macro-utils",
- "proc-macro2",
- "quote",
- "quote-use",
- "syn",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,15 +701,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
-name = "castaway"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dec551ab6e7578819132c713a93c022a05d60159dc86e7a7050223577484c55a"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -960,12 +921,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "collection_literals"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2550f75b8cfac212855f6b1885455df8eaee8fe8e246b647d69146142e016084"
-
-[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -995,20 +950,6 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
-]
-
-[[package]]
-name = "compact_str"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dfdd1c2274d9aa354115b09dc9a901d6c5576818cdf70d14cae2bdb47df00ab"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "rustversion",
- "ryu",
- "static_assertions",
 ]
 
 [[package]]
@@ -1097,16 +1038,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
 dependencies = [
  "libm",
-]
-
-[[package]]
-name = "cpu-time"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e393a7668fe1fad3075085b86c781883000b4ede868f43627b34a87c8b7ded"
-dependencies = [
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -1316,17 +1247,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 dependencies = [
  "powerfmt",
-]
-
-[[package]]
-name = "derive-where"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d08b3a0bcc0d079199cd476b2cae8435016ec11d1c0986c6901c5ac223041534"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1836,40 +1756,6 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
-]
-
-[[package]]
-name = "get-size-derive2"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1da24fbda09ec01bca7cfa1797c0e520e75123bccb01dcdf9041f8aa65183bc2"
-dependencies = [
- "attribute-derive",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "get-size2"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "823645bc6404ae2915707777061a47d3a031a9ee0bff51b34ec973df3d8d2990"
-dependencies = [
- "compact_str",
- "get-size-derive2",
- "hashbrown 0.17.1",
- "ordermap",
- "smallvec",
- "thin-vec",
-]
-
-[[package]]
-name = "getopts"
-version = "0.2.24"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
-dependencies = [
- "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -2416,12 +2302,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "interpolator"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71dd52191aae121e8611f1e8dc3e324dd0dd1dee1e6dd91d10ee07a3cfb4d9d8"
-
-[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2444,18 +2324,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "is-macro"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d57a3e447e24c22647738e4607f1df1e0ec6f72e16182c4cd199f647cdfb0e4"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -2761,29 +2629,6 @@ dependencies = [
  "charset",
  "data-encoding",
  "quoted_printable",
-]
-
-[[package]]
-name = "manyhow"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587"
-dependencies = [
- "manyhow-macros",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "manyhow-macros"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495"
-dependencies = [
- "proc-macro-utils",
- "proc-macro2",
- "quote",
 ]
 
 [[package]]
@@ -3207,15 +3052,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ordermap"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7476a5b122ff1fce7208e7ee9dccd0a516e835f5b8b19b8f3c98a34cf757c1"
-dependencies = [
- "indexmap",
-]
-
-[[package]]
 name = "os_str_bytes"
 version = "6.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3369,44 +3205,6 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "serde",
-]
-
-[[package]]
-name = "phf"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
-dependencies = [
- "phf_shared",
-]
-
-[[package]]
-name = "phf_codegen"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
-dependencies = [
- "phf_generator",
- "phf_shared",
-]
-
-[[package]]
-name = "phf_generator"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
-dependencies = [
- "phf_shared",
- "rand 0.8.6",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-dependencies = [
- "siphasher",
 ]
 
 [[package]]
@@ -3629,17 +3427,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-utils"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eeaf08a13de400bc215877b5bdc088f241b12eb42f0a548d3390dc1c56bb7071"
-dependencies = [
- "proc-macro2",
- "quote",
- "smallvec",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3789,28 +3576,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quote-use"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9619db1197b497a36178cfc736dc96b271fe918875fbf1344c436a7e93d0321e"
-dependencies = [
- "quote",
- "quote-use-macros",
-]
-
-[[package]]
-name = "quote-use-macros"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82ebfb7faafadc06a7ab141a6f67bcfb24cb8beb158c6fe933f2f035afa99f35"
-dependencies = [
- "proc-macro-utils",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "quoted_printable"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3837,7 +3602,6 @@ version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
 dependencies = [
- "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
 ]
@@ -4328,98 +4092,6 @@ dependencies = [
  "spki",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "ruff_python_ast"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "aho-corasick",
- "arrayvec",
- "bitflags",
- "compact_str",
- "get-size2",
- "is-macro",
- "memchr",
- "ruff_python_trivia",
- "ruff_source_file",
- "ruff_text_size",
- "rustc-hash",
- "thin-vec",
- "thiserror",
-]
-
-[[package]]
-name = "ruff_python_codegen"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "ruff_python_ast",
- "ruff_python_literal",
- "ruff_python_parser",
- "ruff_source_file",
- "ruff_text_size",
-]
-
-[[package]]
-name = "ruff_python_literal"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "bitflags",
- "icu_properties",
- "itertools 0.14.0",
- "ruff_python_ast",
-]
-
-[[package]]
-name = "ruff_python_parser"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "bitflags",
- "bstr",
- "compact_str",
- "get-size2",
- "memchr",
- "ruff_python_ast",
- "ruff_python_trivia",
- "ruff_text_size",
- "rustc-hash",
- "static_assertions",
- "thin-vec",
- "unicode-ident",
- "unicode-normalization",
- "unicode_names2",
-]
-
-[[package]]
-name = "ruff_python_trivia"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "itertools 0.14.0",
- "ruff_source_file",
- "ruff_text_size",
- "unicode-ident",
-]
-
-[[package]]
-name = "ruff_source_file"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "memchr",
- "ruff_text_size",
-]
-
-[[package]]
-name = "ruff_text_size"
-version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff?rev=e4a063a136ae0e3d6801bd0dad47d09a0f419530#e4a063a136ae0e3d6801bd0dad47d09a0f419530"
-dependencies = [
- "get-size2",
 ]
 
 [[package]]
@@ -5066,12 +4738,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
 name = "statrs"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5346,12 +5012,6 @@ dependencies = [
  "unicode-linebreak",
  "unicode-width 0.2.2",
 ]
-
-[[package]]
-name = "thin-vec"
-version = "0.2.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0f7e269b48f0a7dd0146680fa24b50cc67fc0373f086a5b2f99bd084639b482"
 
 [[package]]
 name = "thiserror"
@@ -5872,15 +5532,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
 
 [[package]]
-name = "unicode-normalization"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
-dependencies = [
- "tinyvec",
-]
-
-[[package]]
 name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5915,28 +5566,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "unicode_names2"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1673eca9782c84de5f81b82e4109dcfb3611c8ba0d52930ec4a9478f547b2dd"
-dependencies = [
- "phf",
- "unicode_names2_generator",
-]
-
-[[package]]
-name = "unicode_names2_generator"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91e5b84611016120197efd7dc93ef76774f4e084cd73c9fb3ea4a86c570c56e"
-dependencies = [
- "getopts",
- "log",
- "phf_codegen",
- "rand 0.8.6",
-]
 
 [[package]]
 name = "unit-prefix"
@@ -7373,23 +7002,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uv-python-bytecode"
-version = "0.0.56"
-dependencies = [
- "cpu-time",
- "fs-err",
- "rayon",
- "ruff_python_ast",
- "ruff_python_codegen",
- "ruff_python_parser",
- "ruff_source_file",
- "ruff_text_size",
- "rustc-hash",
- "tempfile",
- "walkdir",
-]
-
-[[package]]
 name = "uv-redacted"
 version = "0.0.56"
 dependencies = [
@@ -8137,22 +7749,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
-name = "winapi"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
-dependencies = [
- "winapi-i686-pc-windows-gnu",
- "winapi-x86_64-pc-windows-gnu",
-]
-
-[[package]]
-name = "winapi-i686-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8160,12 +7756,6 @@ checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
  "windows-sys 0.52.0",
 ]
-
-[[package]]
-name = "winapi-x86_64-pc-windows-gnu"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows"
