@@ -11,11 +11,13 @@ use tracing::{debug, warn};
 
 pub use crate::locked_file::*;
 pub use crate::path::*;
+pub use crate::read::read_utf_8_file_if_starts_with;
 
 pub mod cachedir;
 pub mod link;
 mod locked_file;
 mod path;
+mod read;
 pub mod which;
 
 /// Attempt to check if the two paths refer to the same file.

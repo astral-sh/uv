@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
 use owo_colors::OwoColorize;
 use uv_cache::Cache;
-use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path};
+use uv_fs::{CWD, Simplified, is_virtualenv_base, normalize_path, read_utf_8_file_if_starts_with};
 use uv_preview::{Preview, PreviewFeature};
 use uv_scripts::Pep723Metadata;
 use uv_warnings::warn_user;
@@ -134,12 +135,15 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
             continue;
         }
 
-        let contents = fs_err::read(entry.path()).with_context(|| {
+        let Some(contents) = read_script_candidate(entry.path()).with_context(|| {
             format!(
                 "Failed to read candidate PEP 723 script: {}",
                 entry.path().simplified_display()
             )
-        })?;
+        })?
+        else {
+            continue;
+        };
         if Pep723Metadata::parse(&contents)
             .with_context(|| {
                 format!(
@@ -157,16 +161,26 @@ fn find_scripts(workspace_root: &Path, cache: &Cache) -> Result<Vec<PathBuf>> {
     Ok(scripts)
 }
 
-/// Return whether a path uses a conventional Python script filename.
+/// Read a candidate script.
+///
+/// Extensionless candidates are only read past their prefix when they begin with a shebang.
+fn read_script_candidate(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    if path.extension().is_some() {
+        return fs_err::read(path).map(Some);
+    }
+
+    read_utf_8_file_if_starts_with(path, "#!")
+}
+
+/// Return whether a path could contain a Python script.
 ///
 /// PEP 723 does not require a specific filename, and uv can run explicitly requested scripts with
 /// arbitrary extensions or no extension. For discovery, restrict the search to Python extensions
-/// to avoid treating metadata examples embedded in documentation as scripts. This could be expanded
-/// if arbitrary script filenames can be distinguished without introducing false positives.
+/// and extensionless files to avoid treating metadata examples embedded in documentation as scripts.
+/// Extensionless candidates are further restricted to shebang scripts and checked for binary
+/// content as they are read.
 fn is_python_script_path(path: &Path) -> bool {
-    path.extension().is_some_and(|extension| {
-        extension.to_str().is_some_and(|extension| {
-            extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
-        })
+    path.extension().is_none_or(|extension| {
+        extension.eq_ignore_ascii_case("py") || extension.eq_ignore_ascii_case("pyw")
     })
 }
