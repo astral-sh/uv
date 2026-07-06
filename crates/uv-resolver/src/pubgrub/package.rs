@@ -214,7 +214,7 @@ impl PubGrubPackage {
     ///
     /// Pre-release proxies delegate availability to their wrapped registry package. Other proxy
     /// packages retain their existing handling through the base package selected by PubGrub.
-    pub(crate) fn name_for_availability(&self) -> Option<&PackageName> {
+    pub(crate) fn diagnostic_name(&self) -> Option<&PackageName> {
         match &**self {
             PubGrubPackageInner::Package { name, .. } => Some(name),
             PubGrubPackageInner::Prerelease { package } => package.name_no_root(),

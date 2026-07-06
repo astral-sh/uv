@@ -567,7 +567,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .expect("a package was chosen but we don't have a term");
 
                         // Check if the decision was due to the package being unavailable.
-                        if let Some(name) = next_package.name_for_availability()
+                        if let Some(name) = next_package.diagnostic_name()
                             && let Some(reason) = self.unavailable_packages.pin().get(name)
                         {
                             state
@@ -2783,7 +2783,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
-            if let Some(name) = package.name_for_availability()
+            if let Some(name) = package.diagnostic_name()
                 && let Some(reason) = self.unavailable_packages.pin().get(name)
             {
                 unavailable_packages.insert(name.clone(), reason.clone());
@@ -2793,7 +2793,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut incomplete_packages = FxHashMap::default();
         let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
-            if let Some(name) = package.name_for_availability()
+            if let Some(name) = package.diagnostic_name()
                 && let Some(versions) = incomplete_packages_cache.get(name)
             {
                 for (version, reason) in &versions.pin() {
@@ -3036,8 +3036,11 @@ pub(crate) struct ForkState {
     ///
     /// Tracked on the fork state to avoid counting each identical version between forks as new try.
     prefetcher: BatchPrefetcher,
-    /// Pre-release proxy packages discovered for each package name.
-    prerelease_proxies: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
+    /// Reverse index of pre-release proxy package IDs discovered for each package name.
+    ///
+    /// Entries are not removed on backtracking. This map only avoids scanning PubGrub's package
+    /// graph; whether a proxy is active is always derived from the current partial solution.
+    prerelease_by_name: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
 }
 
 impl ForkState {
@@ -3063,19 +3066,19 @@ impl ForkState {
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
-            prerelease_proxies: FxHashMap::default(),
+            prerelease_by_name: FxHashMap::default(),
         }
     }
 
     /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
     fn has_active_prerelease_proxy(&self, package: &PubGrubPackage) -> bool {
-        if self.prerelease_proxies.is_empty() {
+        if self.prerelease_by_name.is_empty() {
             return false;
         }
         let Some(name) = package.name_no_root() else {
             return false;
         };
-        self.prerelease_proxies
+        self.prerelease_by_name
             .get(name)
             .into_iter()
             .flatten()
@@ -3210,9 +3213,9 @@ impl ForkState {
                     continue;
                 };
                 let proxy = self.pubgrub.package_store.alloc(package.clone());
-                let proxies = self.prerelease_proxies.entry(name.clone()).or_default();
-                if !proxies.contains(&proxy) {
-                    proxies.push(proxy);
+                let proxy_ids = self.prerelease_by_name.entry(name.clone()).or_default();
+                if !proxy_ids.contains(&proxy) {
+                    proxy_ids.push(proxy);
                 }
             }
 

@@ -239,9 +239,6 @@ impl PubGrubDependency {
                 }
             };
             if explicit_prerelease {
-                // Route explicit pre-release requirements through a proxy package. The proxy uses
-                // pre-release-aware candidate ordering and pins this wrapped package to its
-                // selected version, making authorization part of PubGrub's dependency graph.
                 Self {
                     package: PubGrubPackage::prerelease(dependency.package),
                     ..dependency
