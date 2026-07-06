@@ -574,9 +574,10 @@ fn autoprune() -> Result<()> {
     Ok(())
 }
 
-/// A long-lived `uv run` process releases the main cache lock while its child runs, so cache
-/// maintenance can proceed; the cached environment the child runs from is protected by an
-/// in-use lock and survives both `uv cache prune` and automatic pruning.
+/// With the `cache-autoprune` preview feature enabled, a long-lived `uv run` process releases
+/// the main cache lock while its child runs, so cache maintenance can proceed; the cached
+/// environment the child runs from is protected by an in-use lock and survives both
+/// `uv cache prune` and automatic pruning.
 #[test]
 #[cfg(unix)]
 fn prune_skips_in_use_environment() -> Result<()> {
@@ -590,6 +591,7 @@ fn prune_skips_in_use_environment() -> Result<()> {
     // test can sequence around it without sleeps.
     let mut child = context
         .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
         .arg("--no-project")
         .arg("--with")
         .arg("iniconfig")
@@ -644,6 +646,7 @@ fn clean_waits_for_in_use_environment() -> Result<()> {
 
     let mut child = context
         .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
         .arg("--no-project")
         .arg("--with")
         .arg("iniconfig")

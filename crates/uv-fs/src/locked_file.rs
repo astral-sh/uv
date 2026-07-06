@@ -217,6 +217,26 @@ impl LockedFile {
         self.unlock_or_log();
     }
 
+    /// Returns `true` if the locked file is still the file at its original path.
+    ///
+    /// A lock file can be unlinked (and recreated) by another process between this file being
+    /// opened and the lock being acquired; in that case, the lock is held on an orphaned file
+    /// and does not guard the path. Callers that create-then-lock should verify and retry.
+    pub fn verify_path(&self) -> bool {
+        let Ok(held) = self
+            .file
+            .file()
+            .try_clone()
+            .and_then(same_file::Handle::from_file)
+        else {
+            return false;
+        };
+        let Ok(current) = same_file::Handle::from_path(self.file.path()) else {
+            return false;
+        };
+        held == current
+    }
+
     /// Inner implementation for [`LockedFile::acquire`].
     async fn lock_file(
         file: fs_err::File,

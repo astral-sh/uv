@@ -71,7 +71,12 @@ The following preview features are available:
 - `add-bounds`: Allows configuring the
   [default bounds for `uv add`](../reference/settings.md#add-bounds) invocations.
 - `cache-autoprune`: Automatically removes unreferenced archives from the
-  [cache](../concepts/cache.md) as the cache grows, without interrupting running uv processes.
+  [cache](../concepts/cache.md) as the cache grows. Long-lived commands (e.g., servers started with
+  `uv run`) release the cache lock while running, so pruning can proceed during long sessions; the
+  cache entries such commands run from are individually protected and retained. When sharing a cache
+  with older uv versions, note that their `uv cache prune` and `uv cache clean` do not respect these
+  protections. Virtual environments outside the cache that were populated with `--link-mode=symlink`
+  are not protected while a command runs from them.
 - `centralized-project-envs`: Stores
   [project virtual environments](./projects/layout.md#centralized-project-environments) in the uv
   cache.

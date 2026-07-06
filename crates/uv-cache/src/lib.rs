@@ -313,28 +313,46 @@ impl Cache {
     /// (which requires the exclusive main lock) cannot run between the decision to use an
     /// entry and the claim. Claims are best-effort: paths outside the cache are ignored, and
     /// failures are logged and ignored.
-    pub fn claim_in_use<'a>(&self, paths: impl IntoIterator<Item = &'a Path>) -> Vec<LockedFile> {
+    fn claim_in_use<'a>(&self, paths: impl IntoIterator<Item = &'a Path>) -> Vec<LockedFile> {
+        /// The number of times to retry a claim whose lock file was unlinked mid-acquisition.
+        const MAX_ATTEMPTS: usize = 4;
+
         let mut claims = Vec::new();
         for path in paths {
             let Some(lock_path) = self.in_use_lock_path(path) else {
                 continue;
             };
             if let Some(parent) = lock_path.parent() {
-                if let Err(err) = fs_err::create_dir_all(parent) {
+                if let Err(err) = create_in_use_lock_dir(parent, &self.root) {
                     warn!("Failed to create in-use lock directory: {err}");
                     continue;
                 }
             }
-            if let Some(lock) = LockedFile::acquire_no_wait(
-                &lock_path,
-                LockedFileMode::Shared,
-                lock_path.simplified_display(),
-            ) {
-                claims.push(lock);
-            } else {
-                // The lock is held exclusively by a removal operation (e.g., a concurrent
-                // `uv cache prune --force`); the entry may be removed out from under us, as it
-                // would have been before in-use locks existed.
+            let mut attempts = 0;
+            let claimed = loop {
+                let Some(lock) = LockedFile::acquire_no_wait(
+                    &lock_path,
+                    LockedFileMode::Shared,
+                    lock_path.simplified_display(),
+                ) else {
+                    // The lock is held exclusively by a removal operation (e.g., a concurrent
+                    // `uv cache prune --force`); the entry may be removed out from under us,
+                    // as it would have been before in-use locks existed.
+                    break false;
+                };
+                // A concurrent forced removal (which doesn't hold the main lock) may have
+                // unlinked the lock file between our create and our flock, in which case the
+                // lock guards an orphaned file rather than the path; retry on a fresh file.
+                if lock.verify_path() {
+                    claims.push(lock);
+                    break true;
+                }
+                attempts += 1;
+                if attempts >= MAX_ATTEMPTS {
+                    break false;
+                }
+            };
+            if !claimed {
                 warn!(
                     "Failed to mark cache entry as in use: `{}`",
                     lock_path.simplified_display()
@@ -344,15 +362,36 @@ impl Cache {
         claims
     }
 
-    /// Release the main cache lock, if held.
+    /// Claim the cache entries a child process runs from as in use, then release the main
+    /// cache lock so that cache maintenance (e.g., `uv cache prune`, automatic pruning) can
+    /// proceed while the child runs.
     ///
-    /// Long-lived commands release the lock before waiting on a child process, so that cache
-    /// maintenance (e.g., automatic pruning) can proceed while the child runs; the entries the
-    /// child depends on are protected by [`Cache::claim_in_use`] instead.
-    pub fn release_lock(&self) {
+    /// The ordering is essential: claims must be taken while the main lock is still held, so
+    /// that a removal operation (which requires the exclusive main lock) can never observe an
+    /// entry as both unclaimed and unlocked.
+    ///
+    /// Gated behind the [`PreviewFeature::CacheAutoprune`] preview feature: prior uv versions
+    /// hold the shared lock for the process lifetime, and their `uv cache prune`/`clean` do
+    /// not consult in-use locks (and delete the lock directory itself), so releasing the lock
+    /// by default would let an older uv sharing the cache remove entries a running child
+    /// depends on. When the feature is disabled, this is a no-op and the main lock is held
+    /// until exit, as before.
+    ///
+    /// The returned guards must be held for the lifetime of the child process.
+    pub fn claim_in_use_and_release_lock<'a>(
+        &self,
+        paths: impl IntoIterator<Item = &'a Path>,
+    ) -> Vec<LockedFile> {
+        // Treat an uninitialized preview state as disabled; this is an optimization, so
+        // panicking in library consumers that never initialize the state is not warranted.
+        if !uv_preview::try_is_enabled(PreviewFeature::CacheAutoprune).unwrap_or(false) {
+            return Vec::new();
+        }
+        let claims = self.claim_in_use(paths);
         if let Some(lock_file) = &self.lock_file {
             lock_file.release();
         }
+        claims
     }
 
     /// Return the path to the in-use lock file for the top-level cache entry containing `path`.
@@ -380,21 +419,25 @@ impl Cache {
     /// Lock files whose cache entry no longer exists are removed; a lock file is never removed
     /// while its entry exists, so that a concurrent claimer (which creates the lock file before
     /// locking it) can't be left holding a lock on a deleted file.
-    fn in_use_entries(&self, bucket: CacheBucket) -> FxHashSet<String> {
+    ///
+    /// Fails closed: an unreadable lock directory is an error (which aborts the removal
+    /// operation), not an empty set, since the set guards live processes' entries.
+    fn in_use_entries(&self, bucket: CacheBucket) -> Result<FxHashSet<String>, io::Error> {
+        self.in_use_entries_named(bucket.to_str())
+    }
+
+    /// As [`Cache::in_use_entries`], for a bucket directory name (e.g., `environments-v2`),
+    /// which may belong to an outdated bucket version in use by another uv version.
+    fn in_use_entries_named(&self, bucket: &str) -> Result<FxHashSet<String>, io::Error> {
         let mut in_use = FxHashSet::default();
-        let lock_dir = self.root.join(IN_USE_LOCKS_DIR).join(bucket.to_str());
+        let lock_dir = self.root.join(IN_USE_LOCKS_DIR).join(bucket);
         let entries = match fs_err::read_dir(&lock_dir) {
             Ok(entries) => entries,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return in_use,
-            Err(err) => {
-                warn!("Failed to read in-use lock directory: {err}");
-                return in_use;
-            }
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(in_use),
+            Err(err) => return Err(err),
         };
         for entry in entries {
-            let Ok(entry) = entry else {
-                continue;
-            };
+            let entry = entry?;
             let Some(file_name) = entry.file_name().to_str().map(ToString::to_string) else {
                 continue;
             };
@@ -406,7 +449,7 @@ impl Cache {
                 // No process holds a claim; if the cache entry itself is gone, the lock file
                 // is stale and can be removed.
                 Some(lock) => {
-                    if !self.bucket(bucket).join(&file_name).exists() {
+                    if !self.root.join(bucket).join(&file_name).exists() {
                         if let Err(err) = fs_err::remove_file(entry.path()) {
                             debug!("Failed to remove stale in-use lock file: {err}");
                         }
@@ -418,38 +461,63 @@ impl Cache {
                 }
             }
         }
-        in_use
+        Ok(in_use)
     }
 
-    /// Wait for all in-use cache entries to be released.
+    /// Release the main cache lock, if held.
     ///
-    /// Used by operations that remove the entire cache (e.g., `uv cache clean`), which
-    /// previously waited on the main cache lock for running processes to finish; since
-    /// long-lived commands now release the main lock while waiting on a child process, the
-    /// in-use locks must be awaited as well.
+    /// Used by `uv cache clean` to avoid holding the exclusive lock while waiting for in-use
+    /// entries to be released: a child process holding an in-use lock may itself invoke uv,
+    /// which would block on the main lock, deadlocking the wait.
+    pub fn release_lock(&self) {
+        if let Some(lock_file) = &self.lock_file {
+            lock_file.release();
+        }
+    }
+
+    /// Return the path of a held in-use lock file, if any.
     ///
-    /// The caller must hold the exclusive main cache lock, so that no new claims can appear
-    /// while waiting.
-    pub async fn wait_for_in_use(&self) -> Result<(), LockedFileError> {
+    /// Used by operations that remove the entire cache (e.g., `uv cache clean`), which must
+    /// wait for long-lived commands that released the main lock while a child process runs.
+    /// The caller should hold the exclusive main cache lock, so that no new claims can appear
+    /// concurrently.
+    pub fn find_held_in_use_lock(&self) -> Result<Option<PathBuf>, io::Error> {
         let locks_root = self.root.join(IN_USE_LOCKS_DIR);
         let buckets = match fs_err::read_dir(&locks_root) {
             Ok(buckets) => buckets,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err.into()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err),
         };
         for bucket in buckets {
             let bucket = bucket?;
-            for entry in fs_err::read_dir(bucket.path())? {
+            let entries = match fs_err::read_dir(bucket.path()) {
+                Ok(entries) => entries,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+                Err(err) => return Err(err),
+            };
+            for entry in entries {
                 let entry = entry?;
-                let lock = LockedFile::acquire(
+                if LockedFile::acquire_no_wait(
                     entry.path(),
                     LockedFileMode::Exclusive,
                     entry.path().simplified_display(),
                 )
-                .await?;
-                drop(lock);
+                .is_none()
+                {
+                    return Ok(Some(entry.path()));
+                }
             }
         }
+        Ok(None)
+    }
+
+    /// Wait for the in-use lock at the given path to be released.
+    ///
+    /// The caller must not hold the main cache lock (see [`Cache::release_lock`]).
+    pub async fn wait_for_in_use_lock(path: &Path) -> Result<(), LockedFileError> {
+        let lock =
+            LockedFile::acquire(path, LockedFileMode::Exclusive, path.simplified_display()).await?;
+        drop(lock);
         Ok(())
     }
 
@@ -699,19 +767,22 @@ impl Cache {
     ///
     /// Failures are logged and ignored, since pruning is best-effort.
     fn autoprune(&self) {
-        // The temporary-cache check must precede the preview check, since [`uv_preview`] panics
-        // if the global preview state is not initialized (e.g., in tests using [`Cache::temp`]).
         if self.lock_file.is_some() || self.is_temporary() {
             return;
         }
 
-        if !uv_preview::is_enabled(PreviewFeature::CacheAutoprune) {
+        // Treat an uninitialized preview state (e.g., library consumers that never call
+        // `uv_preview::set`) as disabled, since pruning is best-effort.
+        if !uv_preview::try_is_enabled(PreviewFeature::CacheAutoprune).unwrap_or(false) {
             return;
         }
 
-        // Consult the marker file before taking the lock, to keep the common case cheap: one
-        // `readdir` of the archive bucket and one read of the marker file.
+        // Check the time floor before counting the archive bucket, so that the common case
+        // (a recent run) costs a single `stat` of the marker file.
         let marker = self.root.join(AUTOPRUNE_MARKER);
+        if !autoprune_floor_elapsed(&marker) {
+            return;
+        }
         let archive_count = match count_dir_entries(&self.bucket(CacheBucket::Archive)) {
             Ok(count) => count,
             Err(err) => {
@@ -780,7 +851,7 @@ impl Cache {
     ///
     /// The caller must hold the exclusive cache lock.
     fn prune_unreferenced_archives(&self) -> Result<Removal, io::Error> {
-        let in_use = self.in_use_entries(CacheBucket::Archive);
+        let in_use = self.in_use_entries(CacheBucket::Archive)?;
         let references = self.find_archive_references_for_autoprune(&in_use)?;
         self.remove_unreferenced_archives(&references, &in_use)
     }
@@ -865,33 +936,11 @@ impl Cache {
             environment_archives.insert(archive_root.join(entry));
         }
 
-        for archive in environment_archives {
-            if !archive.is_dir() {
-                continue;
-            }
-            for entry in walkdir::WalkDir::new(&archive) {
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(err) => {
-                        debug!("Failed to walk cached environment: {err}");
-                        continue;
-                    }
-                };
-                if !entry.path_is_symlink() {
-                    continue;
-                }
-                let Ok(inner) = fs_err::canonicalize(entry.path()) else {
-                    continue;
-                };
-                let Some(inner) = archive_entry(&archive_root, &inner) else {
-                    continue;
-                };
-                references
-                    .entry(inner)
-                    .or_default()
-                    .push(entry.path().to_path_buf());
-            }
-        }
+        collect_environment_archive_references(
+            &archive_root,
+            environment_archives,
+            &mut references,
+        );
 
         Ok(references)
     }
@@ -1018,7 +1067,7 @@ impl Cache {
 
         // Remove any archives that are no longer referenced, unless they are in use by a
         // running process.
-        let in_use = self.in_use_entries(CacheBucket::Archive);
+        let in_use = self.in_use_entries(CacheBucket::Archive)?;
         for (target, references) in references {
             if target.starts_with(&archive_root) && references.iter().all(|path| !path.exists()) {
                 if target
@@ -1058,11 +1107,27 @@ impl Cache {
             }
 
             if metadata.is_dir() {
-                // If the directory is not a cache bucket, remove it.
+                // If the directory is not a cache bucket, remove it — unless a running
+                // process holds an in-use lock on one of its entries (e.g., another uv
+                // version, with a different bucket version, running a child from it).
                 if CacheBucket::iter().all(|bucket| entry.file_name() != bucket.to_str()) {
+                    if let Some(file_name) = entry.file_name().to_str()
+                        && !self.in_use_entries_named(file_name)?.is_empty()
+                    {
+                        debug!(
+                            "Retaining dangling cache bucket with in-use entries: {}",
+                            entry.path().display()
+                        );
+                        continue;
+                    }
                     let path = entry.path();
                     debug!("Removing dangling cache bucket: {}", path.display());
                     summary += rm_rf(path)?;
+                    // Remove the bucket's in-use lock directory, if any; its lock files are
+                    // no longer reachable once the bucket is gone.
+                    if let Some(file_name) = entry.file_name().to_str() {
+                        rm_rf(self.root.join(IN_USE_LOCKS_DIR).join(file_name))?;
+                    }
                 }
             } else {
                 // If the file is not a marker file, remove it.
@@ -1075,7 +1140,7 @@ impl Cache {
         // Second, remove all cached environments, except those that are in use by a running
         // process. Centralized project environments can be referenced by `.venv` links, but
         // are recreated when next needed.
-        let in_use_environments = self.in_use_entries(CacheBucket::Environments);
+        let in_use_environments = self.in_use_entries(CacheBucket::Environments)?;
         match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {
@@ -1159,9 +1224,20 @@ impl Cache {
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked),
         // except those that are in use by a running process (e.g., a cached environment that a
-        // `uv run`-launched process is running from).
-        let references = self.find_archive_references()?;
-        let in_use = self.in_use_entries(CacheBucket::Archive);
+        // `uv run`-launched process is running from). In-use environment archives are walked
+        // for internal symlinks (e.g., under `--link-mode=symlink`), so the wheel archives a
+        // running child's environment depends on are retained as well.
+        let mut references = self.find_archive_references()?;
+        let in_use = self.in_use_entries(CacheBucket::Archive)?;
+        if !in_use.is_empty()
+            && let Ok(archive_root) = fs_err::canonicalize(self.bucket(CacheBucket::Archive))
+        {
+            let in_use_archives = in_use
+                .iter()
+                .map(|entry| archive_root.join(entry))
+                .collect();
+            collect_environment_archive_references(&archive_root, in_use_archives, &mut references);
+        }
         summary += self.remove_unreferenced_archives(&references, &in_use)?;
 
         Ok(summary)
@@ -1363,20 +1439,8 @@ fn autoprune_due(marker: &Path, archive_count: u64) -> bool {
         return true;
     };
 
-    // Enforce the time floor, if the marker's modification time is readable.
-    if let Ok(metadata) = fs_err::metadata(marker)
-        && let Ok(modified) = metadata.modified()
-    {
-        let elapsed_floor = match SystemTime::now().duration_since(modified) {
-            Ok(elapsed) => elapsed >= AUTOPRUNE_MIN_INTERVAL,
-            // The marker is from the future (e.g., clock skew). Tolerate skew of up to one
-            // interval, but treat anything larger as elapsed, so that a wildly-future marker
-            // (e.g., written while the clock was fast) can't disable pruning indefinitely.
-            Err(err) => err.duration() >= AUTOPRUNE_MIN_INTERVAL,
-        };
-        if !elapsed_floor {
-            return false;
-        }
+    if !autoprune_floor_elapsed(marker) {
+        return false;
     }
 
     // If the archive bucket shrank (e.g., a manual `uv cache prune` or `clean`), the recorded
@@ -1386,6 +1450,24 @@ fn autoprune_due(marker: &Path, archive_count: u64) -> bool {
     }
 
     archive_count - recorded_count >= AUTOPRUNE_GROWTH_THRESHOLD
+}
+
+/// Returns `true` if at least [`AUTOPRUNE_MIN_INTERVAL`] has elapsed since the marker file was
+/// last written, or if the marker is missing or unreadable.
+fn autoprune_floor_elapsed(marker: &Path) -> bool {
+    let Ok(metadata) = fs_err::metadata(marker) else {
+        return true;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return true;
+    };
+    match SystemTime::now().duration_since(modified) {
+        Ok(elapsed) => elapsed >= AUTOPRUNE_MIN_INTERVAL,
+        // The marker is from the future (e.g., clock skew). Tolerate skew of up to one
+        // interval, but treat anything larger as elapsed, so that a wildly-future marker
+        // (e.g., written while the clock was fast) can't disable pruning indefinitely.
+        Err(err) => err.duration() >= AUTOPRUNE_MIN_INTERVAL,
+    }
 }
 
 /// Returns the number of entries in the given directory, or zero if it doesn't exist.
@@ -1411,6 +1493,80 @@ fn is_bucket_version(file_name: &str, family: &str) -> bool {
         .strip_prefix(family)
         .and_then(|suffix| suffix.strip_prefix("-v"))
         .is_some_and(|version| !version.is_empty() && version.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Create the in-use lock directory for `lock_dir` (a path under `<root>/locks/`).
+///
+/// On Unix, the created directories are made world-writable (like the lock files themselves,
+/// see [`LockedFile`]), so that removal operations run by other users of a shared cache can
+/// read and clean them.
+fn create_in_use_lock_dir(lock_dir: &Path, root: &Path) -> io::Result<()> {
+    if lock_dir.is_dir() {
+        return Ok(());
+    }
+    fs_err::create_dir_all(lock_dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Both `<root>/locks` and `<root>/locks/<bucket>` may have just been created with the
+        // process umask applied; relax them. Failures are non-fatal (another user may own the
+        // directories already).
+        let mut dir = Some(lock_dir);
+        while let Some(current) = dir {
+            if let Err(err) =
+                fs_err::set_permissions(current, std::fs::Permissions::from_mode(0o777))
+            {
+                debug!("Failed to set permissions on in-use lock directory: {err}");
+            }
+            dir = current.parent().filter(|parent| *parent != root);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = root;
+    }
+    Ok(())
+}
+
+/// Collect references arising from symlinks within the given environment archives (e.g., an
+/// environment's site-packages symlinks into wheel archives under `--link-mode=symlink`),
+/// normalized to top-level archive entries.
+///
+/// Wheel archives contain no further archive references, so a single level of indirection
+/// suffices.
+fn collect_environment_archive_references(
+    archive_root: &Path,
+    environment_archives: FxHashSet<PathBuf>,
+    references: &mut FxHashMap<PathBuf, Vec<PathBuf>>,
+) {
+    for archive in environment_archives {
+        if !archive.is_dir() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(&archive) {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    debug!("Failed to walk cached environment: {err}");
+                    continue;
+                }
+            };
+            if !entry.path_is_symlink() {
+                continue;
+            }
+            let Ok(inner) = fs_err::canonicalize(entry.path()) else {
+                continue;
+            };
+            let Some(inner) = archive_entry(archive_root, &inner) else {
+                continue;
+            };
+            references
+                .entry(inner)
+                .or_default()
+                .push(entry.path().to_path_buf());
+        }
+    }
 }
 
 /// Returns the top-level entry in the archive bucket that contains `target`, if any.
@@ -2326,6 +2482,70 @@ mod tests {
         assert!(!other_archive.exists());
     }
 
+    /// `uv cache prune` must retain the wheel archives referenced by an in-use environment
+    /// archive's internal symlinks (e.g., under `--link-mode=symlink`), even when nothing else
+    /// references them.
+    #[test]
+    #[cfg(unix)]
+    fn prune_retains_in_use_archive_internal_references() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let archives = cache_root.path().join(CacheBucket::Archive.to_str());
+        let environment = archives.join("running-environment");
+        let wheel = archives.join("wheel");
+
+        // An environment archive with an internal symlink to a wheel archive; neither is
+        // referenced from any bucket (e.g., after a `--refresh` in another process).
+        fs_err::create_dir_all(&environment).unwrap();
+        fs_err::create_dir_all(&wheel).unwrap();
+        fs_err::write(wheel.join("payload.txt"), "payload").unwrap();
+        let site_packages = environment.join("lib").join("site-packages");
+        fs_err::create_dir_all(&site_packages).unwrap();
+        fs_err::os::unix::fs::symlink(wheel.join("payload.txt"), site_packages.join("module.py"))
+            .unwrap();
+
+        let cache = Cache::from_path(cache_root.path());
+        let claims = cache.claim_in_use(std::iter::once(environment.as_path()));
+        assert_eq!(claims.len(), 1);
+
+        cache.prune(false).unwrap();
+
+        assert!(environment.exists());
+        assert!(wheel.join("payload.txt").is_file());
+    }
+
+    /// `uv cache prune` must retain an outdated (non-current) bucket directory while a running
+    /// process holds an in-use lock on one of its entries (e.g., another uv version with a
+    /// different bucket version), and remove it once released.
+    #[test]
+    fn prune_retains_outdated_bucket_with_in_use_entries() {
+        use super::{Cache, IN_USE_LOCKS_DIR, LockedFile, LockedFileMode};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let outdated = cache_root.path().join("environments-v9999");
+        fs_err::create_dir_all(outdated.join("digest")).unwrap();
+
+        // Simulate another uv version's claim on an entry in the outdated bucket.
+        let lock_dir = cache_root
+            .path()
+            .join(IN_USE_LOCKS_DIR)
+            .join("environments-v9999");
+        fs_err::create_dir_all(&lock_dir).unwrap();
+        let claim =
+            LockedFile::acquire_no_wait(lock_dir.join("digest"), LockedFileMode::Shared, "test")
+                .unwrap();
+
+        let cache = Cache::from_path(cache_root.path());
+        cache.prune(false).unwrap();
+        assert!(outdated.exists());
+
+        drop(claim);
+        cache.prune(false).unwrap();
+        assert!(!outdated.exists());
+        assert!(!lock_dir.exists());
+    }
+
     /// Claims for paths outside the cache are ignored, and stale lock files (whose cache entry
     /// no longer exists) are cleaned up by removal operations.
     #[test]
@@ -2372,12 +2592,22 @@ mod tests {
         assert!(lock_file.exists());
 
         // While the entry exists, the lock file is retained.
-        assert!(cache.in_use_entries(CacheBucket::Archive).is_empty());
+        assert!(
+            cache
+                .in_use_entries(CacheBucket::Archive)
+                .unwrap()
+                .is_empty()
+        );
         assert!(lock_file.exists());
 
         // Once the entry is gone, the lock file is removed.
         fs_err::remove_dir_all(&archive).unwrap();
-        assert!(cache.in_use_entries(CacheBucket::Archive).is_empty());
+        assert!(
+            cache
+                .in_use_entries(CacheBucket::Archive)
+                .unwrap()
+                .is_empty()
+        );
         assert!(!lock_file.exists());
     }
 

@@ -371,9 +371,8 @@ pub(crate) async fn run(
 
     // Mark the cache entries the child process runs from as in use, then release the main
     // cache lock so that cache maintenance (e.g., `uv cache prune`, automatic pruning) can
-    // proceed while the child runs. The in-use claims must be taken before releasing the lock.
-    let _claims = cache.claim_in_use(std::iter::once(environment.root()));
-    cache.release_lock();
+    // proceed while the child runs.
+    let _claims = cache.claim_in_use_and_release_lock(std::iter::once(environment.root()));
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
