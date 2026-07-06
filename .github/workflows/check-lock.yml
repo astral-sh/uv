@@ -19,7 +19,11 @@ jobs:
       - name: "Check project lockfile"
         run: uv lock --check
       - name: "Check script lockfiles"
+        env:
+          UV_PREVIEW_FEATURES: workspace-list-scripts
         run: |
-          while IFS= read -r lockfile; do
-            uv lock --script "${lockfile%.lock}" --check
-          done < <(git ls-files '*.py.lock')
+          set -e -o pipefail
+          uv workspace list --scripts |
+          while IFS= read -r script; do
+            uv lock --script "$script" --check
+          done
