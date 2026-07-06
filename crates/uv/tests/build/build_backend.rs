@@ -1764,6 +1764,51 @@ fn tool_uv_build_backend_wrong_build_backend() -> Result<()> {
     Ok(())
 }
 
+/// Don't warn about uv build backend setting when an in-tree build backend, it might be wrapping
+/// `uv_build`.
+///
+/// See <https://github.com/astral-sh/uv/issues/20128>.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn tool_uv_build_backend_in_tree_backend() -> Result<()> {
+    // We need to use a real `uv_build` package.
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-05-27T00:00:00Z");
+
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+
+        [tool.uv.build-backend]
+        source-include = ["backend/**"]
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("src/project/__init__.py").touch()?;
+    project
+        .child("backend/__init__.py")
+        .write_str("from uv_build import *\n")?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs").arg(project.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built project/dist/project-0.1.0.tar.gz
+    Successfully built project/dist/project-0.1.0-py3-none-any.whl
+    ");
+
+    Ok(())
+}
+
 /// Show a warning when the project uses deprecated `License ::` classifiers.
 #[test]
 fn warn_on_license_classifier() -> Result<()> {
