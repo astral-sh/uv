@@ -2623,7 +2623,7 @@ mod tests {
         // A missing marker is due, regardless of growth.
         assert!(autoprune_due(&marker, 0));
 
-        // A marker with unparseable contents (e.g., from a previous format) is due.
+        // A marker with unparsable contents (e.g., from a previous format) is due.
         fs_err::write(&marker, "not a number").unwrap();
         assert!(autoprune_due(&marker, 0));
 
