@@ -16,5 +16,5 @@ fn parse_version_specifiers(c: &mut Criterion<WallTime>) {
     }
 }
 
-criterion_group!(simulation, parse_version_specifiers);
-criterion_main!(simulation);
+criterion_group!(uv_pep440, parse_version_specifiers);
+criterion_main!(uv_pep440);

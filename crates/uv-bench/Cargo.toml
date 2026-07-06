@@ -29,8 +29,8 @@ path = "benches/workspace_discovery.rs"
 harness = false
 
 [[bench]]
-name = "simulation"
-path = "benches/simulation.rs"
+name = "uv_pep440"
+path = "benches/uv_pep440.rs"
 harness = false
 
 [dev-dependencies]
