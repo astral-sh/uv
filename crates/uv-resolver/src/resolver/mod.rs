@@ -1109,13 +1109,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(())
     }
 
-    /// Given a candidate package, choose the next version in range to try.
-    ///
-    /// Returns `None` when there are no versions in the given range, rejecting the current partial
-    /// solution.
-    // TODO(konsti): re-enable tracing. This trace is crucial to understanding the
-    // tracing-durations-export diagrams, but it took ~5% resolver thread runtime for apache-airflow
-    // when I last measured.
     /// All versions that resolution could select for the package: all indexes, including
     /// versions that are yanked or otherwise unavailable, plus installed versions that may be
     /// missing from the indexes. A superset of the selectable versions is sound for
@@ -1164,6 +1157,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Some(&known_versions[name][..])
     }
 
+    /// Given a candidate package, choose the next version in range to try.
+    ///
+    /// Returns `None` when there are no versions in the given range, rejecting the current partial
+    /// solution.
+    // TODO(konsti): re-enable tracing. This trace is crucial to understanding the
+    // tracing-durations-export diagrams, but it took ~5% resolver thread runtime for apache-airflow
+    // when I last measured.
+    #[cfg_attr(feature = "tracing-durations-export", instrument(skip_all, fields(%package)))]
     fn choose_version(
         &self,
         package: &PubGrubPackage,
