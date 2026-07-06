@@ -759,18 +759,24 @@ fn python_source_files_for_installs<'a>(
             Ok(dist_info) => dist_info,
             Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
         };
-        let Some(record_root) = dist_info.parent().map(Path::to_path_buf) else {
+        let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
             return Box::new(std::iter::once(Err(anyhow!(
                 "Invalid installed distribution path: `{}`",
                 dist_info.user_display()
             ))));
         };
         let record_path = dist_info.join("RECORD");
-        let record_file = match fs_err::File::open(&record_path)
-            .with_context(|| format!("Failed to read `{}`", record_path.user_display()))
-        {
+        let record_file = match fs_err::File::open(&record_path) {
             Ok(record_file) => record_file,
-            Err(err) => return Box::new(std::iter::once(Err(err))),
+            // Another process may have removed the installed distribution.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Box::new(std::iter::empty());
+            }
+            Err(err) => {
+                return Box::new(std::iter::once(Err(err).with_context(|| {
+                    format!("Failed to read `{}`", record_path.user_display())
+                })));
+            }
         };
         let site_packages = site_packages.clone();
 
