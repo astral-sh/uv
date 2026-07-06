@@ -197,7 +197,7 @@ example-app/
     Prior to v0.6.0, uv created a file named `hello.py` instead of `main.py`.
 
 The `pyproject.toml` includes basic metadata. It does not include a build system, it is not a
-[package](./config.md#project-packaging) and will not be installed into the environment:
+[package](./config.md#project-packaging), and will not be installed into the environment:
 
 ```toml title="pyproject.toml"
 [project]
