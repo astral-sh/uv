@@ -3280,8 +3280,6 @@ pub struct InitArgs {
 
     /// Create a project for a library.
     ///
-    /// This is the default behavior if `--app` is not requested.
-    ///
     /// A library is a project that is intended to be built and distributed as a Python package.
     #[arg(long, alias = "library", conflicts_with_all=["app", "script"])]
     pub r#lib: bool,
