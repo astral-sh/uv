@@ -32,6 +32,7 @@ jobs:
       test-macos: ${{ steps.plan.outputs.test_macos }}
       build-docker: ${{ steps.plan.outputs.build_docker }}
       push-docker: ${{ steps.plan.outputs.push_docker }}
+      workflow-changed: ${{ steps.plan.outputs.workflow_changed }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -78,7 +79,7 @@ jobs:
             [[ "$file" == "Cargo.toml" || "$file" == "Cargo.lock" || "$file" =~ ^crates/.*/Cargo\.toml$ ]] && rust_deps_changed=1
             [[ "$file" == "rust-toolchain.toml" || "$file" == "crates/uv-build/rust-toolchain.toml" || "$file" =~ ^\.cargo/ ]] && rust_config_changed=1
             [[ "$file" == "pyproject.toml" || "$file" =~ ^crates/.*/pyproject\.toml$ ]] && python_config_changed=1
-            [[ "$file" =~ ^\.github/workflows/.*\.yml$ ]] && workflow_changed=1
+            [[ "$file" =~ ^\.github/workflows/.*\.ya?ml$ ]] && workflow_changed=1
             [[ "$file" == ".github/workflows/build-release-binaries.yml" || "$file" == ".github/workflows/release.yml" ]] && release_workflow_changed=1
             [[ "$file" == "scripts/check_uv_wheel_contents.py" || "$file" == "scripts/patch-dist-manifest-checksums.py" || "$file" == "scripts/repair-sdist-cargo-lock.py" ]] && release_build_changed=1
             [[ "$file" == ".github/workflows/ci.yml" ]] && ci_workflow_changed=1
@@ -144,6 +145,7 @@ jobs:
             out test_macos              "$test_macos"
             out build_docker            "$build_docker"
             out push_docker             "$push_docker"
+            out workflow_changed        "$workflow_changed"
           } >> "$GITHUB_OUTPUT"
 
   check-fmt:
@@ -179,6 +181,33 @@ jobs:
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: ./.github/workflows/check-release.yml
+
+  # GITHUB_TOKEN cannot create a release at a historical commit if a newer commit changes a
+  # workflow file, so prevent workflow changes from merging while a release is in progress.
+  check-workflow-release:
+    name: "check workflow release"
+    needs: plan
+    if: ${{ github.event_name == 'pull_request' && needs.plan.outputs.workflow-changed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
+        with:
+          version: "0.11.26"
+
+      - name: "Check release is complete"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(uv version --short)
+          if ! gh release view "$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error title=Release in progress::Workflow files cannot be changed while uv $version is being released. Wait for the GitHub release to be published or roll back the version bump."
+            exit 1
+          fi
 
   check-lock:
     needs: plan
@@ -417,6 +446,7 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-workflow-release
       - check-generated-files
       - test
       - build-dev-binaries
