@@ -1068,10 +1068,10 @@ build-backend = "poetry.core.masonry.api"
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 13, column 1
-       |
-    13 | [project.dependencies]
-       | ^^^^^^^^^^^^^^^^^^^^^^
-    invalid type: map, expected a sequence
+           |
+        13 | [project.dependencies]
+           | ^^^^^^^^^^^^^^^^^^^^^^
+        invalid type: map, expected a sequence
     "
     );
 
@@ -1276,10 +1276,10 @@ dependencies = [
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 6, column 8
-      |
-    6 | name = "!project"
-      |        ^^^^^^^^^^
-    Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+          |
+        6 | name = "!project"
+          |        ^^^^^^^^^^
+        Not a valid package or extra name: "!project". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "#
     );
 
@@ -4657,12 +4657,12 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 7
-       |
-    10 |       "werkzeug=2.3.0"
-       |       ^^^^^^^^^^^^^^^^
-    no such comparison operator "=", must be one of ~= == != <= >= < > ===
-    werkzeug=2.3.0
-            ^^^^^^
+           |
+        10 |       "werkzeug=2.3.0"
+           |       ^^^^^^^^^^^^^^^^
+        no such comparison operator "=", must be one of ~= == != <= >= < > ===
+        werkzeug=2.3.0
+                ^^^^^^
     "#
     );
 
@@ -5022,8 +5022,8 @@ fn error_missing_unnamed_env_var() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Expected package name starting with an alphanumeric character, found `$`
-    ${URL}
-    ^
+        ${URL}
+        ^
     "
     );
 
@@ -7899,8 +7899,8 @@ fn unsupported_scheme() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Unsupported URL prefix `bzr` in URL: `bzr+https://example.com/anyio` (Bazaar is not supported)
-    anyio @ bzr+https://example.com/anyio
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        anyio @ bzr+https://example.com/anyio
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -14331,8 +14331,8 @@ fn invalid_tool_uv_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse metadata from built wheel
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        urllib3 @ https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.tar.baz
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -14871,8 +14871,8 @@ fn invalid_extra() -> Result<()> {
     ----- stderr -----
     error: Couldn't parse requirement in `requirements.in` at position 0
       Caused by: Expected an alphanumeric character starting the extra name, found `_`
-    .[_anyio]
-      ^
+        .[_anyio]
+          ^
     ");
 
     // Sync the `anyio` extra. We should reject it.

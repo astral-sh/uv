@@ -165,10 +165,10 @@ fn invalid_pyproject_toml_syntax() -> Result<()> {
     error: Failed to parse: `pyproject.toml`
       Caused by: Invalid `pyproject.toml`
       Caused by: TOML parse error at line 1, column 5
-      |
-    1 | 123 - 456
-      |     ^
-    key with no value, expected `=`
+          |
+        1 | 123 - 456
+          |     ^
+        key with no value, expected `=`
     "
     );
 
@@ -191,10 +191,10 @@ fn invalid_pyproject_toml_project_schema() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-      |
-    1 | [project]
-      | ^^^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+          |
+        1 | [project]
+          | ^^^^^^^^^
+        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     "
     );
 
@@ -2615,8 +2615,8 @@ fn install_git_unescaped_ref() {
     ----- stderr -----
     error: Failed to parse: `example @ git+https://example.com/repository@pkg@1.2.3`
       Caused by: Ambiguous Git URL `https://example.com/repository@pkg@1.2.3`: the path contains multiple `@` characters. If the Git revision contains `@`, percent-encode it as `%40`
-    example @ git+https://example.com/repository@pkg@1.2.3
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        example @ git+https://example.com/repository@pkg@1.2.3
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -9683,8 +9683,8 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     error: Failed to inspect Python interpreter from first executable in the search path at `[BIN]/python3`
       Caused by: Querying Python at `[BIN]/python3` failed with exit status exit status: 1
 
-    [stderr]
-    error: intentionally broken python executable
+        [stderr]
+        error: intentionally broken python executable
     "
     );
 
@@ -10088,8 +10088,8 @@ fn invalid_extension() {
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -10108,8 +10108,8 @@ fn no_extension() {
     ----- stderr -----
     error: Failed to parse: `ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`
       Caused by: Expected direct URL (`https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6`) to end in a supported file extension: `.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`
-    ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -10564,8 +10564,8 @@ fn missing_git_prefix() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test`
       Caused by: Direct URL (`https://github.com/astral-sh/workspace-in-root-test`) references a Git repository, but is missing the `git+` prefix (e.g., `git+https://github.com/astral-sh/workspace-in-root-test`)
-    workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
-                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        workspace-in-root-test @ https://github.com/astral-sh/workspace-in-root-test
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "
     );
 
@@ -12181,8 +12181,8 @@ fn unsupported_git_scheme() {
     ----- stderr -----
     error: Failed to parse: `git+fantasy://foo`
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://foo` (expected one of `https:`, `ssh:`, or `file:`)
-    git+fantasy://foo
-    ^^^^^^^^^^^^^^^^^
+        git+fantasy://foo
+        ^^^^^^^^^^^^^^^^^
     "
     );
 }
@@ -13558,10 +13558,10 @@ fn pep_751_lock_version() -> Result<()> {
     ----- stderr -----
     error: Not a valid `pylock.toml` file: pylock.toml
       Caused by: TOML parse error at line 2, column 24
-      |
-    2 |         lock-version = "2.0"
-      |                        ^^^^^
-    unsupported lock version (`2.0`, but only major version 1 is supported)
+          |
+        2 |         lock-version = "2.0"
+          |                        ^^^^^
+        unsupported lock version (`2.0`, but only major version 1 is supported)
     "#
     );
 
