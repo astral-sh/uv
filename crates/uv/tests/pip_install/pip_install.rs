@@ -309,6 +309,74 @@ fn compile_bytecode_with_symlink_link_mode() {
     );
 }
 
+/// Compile bytecode when installing into a relative `--target` or `--prefix` path.
+#[test]
+fn compile_bytecode_for_relative_install_root() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--target")
+        .arg("target")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    assert!(
+        context
+            .temp_dir
+            .join("target")
+            .join("sniffio")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--prefix")
+        .arg("prefix")
+        .arg("--compile-bytecode"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/[PYTHON]
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 5 files in [TIME]
+     + sniffio==1.3.1
+    "
+    );
+
+    let compiled = WalkDir::new(context.temp_dir.join("prefix"))
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "pyc")
+        })
+        .count();
+    assert_eq!(compiled, 5);
+}
+
 #[test]
 fn missing_pyproject_toml() {
     let context = uv_test::test_context!("3.12");
