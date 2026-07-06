@@ -12,6 +12,10 @@ Released on 2026-07-06.
 - Continue on ignored errors when fetching wheel metadata ([#12255](https://github.com/astral-sh/uv/pull/12255))
 - Use caching for `--python-downloads-json-url` ([#16749](https://github.com/astral-sh/uv/pull/16749))
 
+### Preview features
+
+- Discover extensionless shebang scripts in `uv workspace list --scripts` ([#20099](https://github.com/astral-sh/uv/pull/20099))
+
 ### Performance
 
 - Avoid full site-packages scans for direct reinstalls ([#20119](https://github.com/astral-sh/uv/pull/20119))
@@ -32,14 +36,12 @@ Released on 2026-07-06.
 - Encode hashes in file paths ([#19807](https://github.com/astral-sh/uv/pull/19807))
 - Error on a registry uv.lock package without a version instead of panicking ([#19855](https://github.com/astral-sh/uv/pull/19855))
 - Preserve conditional extra markers in exports ([#20148](https://github.com/astral-sh/uv/pull/20148))
+- Skip the ambiguous authority check for file transport VCS URLs ([#20086](https://github.com/astral-sh/uv/pull/20086))
 - Sync index format when `uv add --index` updates an existing index URL ([#19818](https://github.com/astral-sh/uv/pull/19818))
 
 ### Other changes
 
-- Discover extensionless shebang scripts in `uv workspace list --scripts` ([#20099](https://github.com/astral-sh/uv/pull/20099))
-- Expand ecosystem lock coverage ([#20068](https://github.com/astral-sh/uv/pull/20068))
 - Re-add `pub` APIs used in Pixi ([#20074](https://github.com/astral-sh/uv/pull/20074))
-- Skip the ambiguous authority check for file transport VCS URLs ([#20086](https://github.com/astral-sh/uv/pull/20086))
 - Update Rust toolchain to 1.96.1 ([#20103](https://github.com/astral-sh/uv/pull/20103))
 
 ## 0.11.26
@@ -857,5 +859,4 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
 
