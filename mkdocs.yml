@@ -274,6 +274,7 @@ nav:
           - Python support: reference/policies/python.md
           - Rust support: reference/policies/rust.md
           - License: reference/policies/license.md
+      - Standards: reference/standards.md
 validation:
   omitted_files: warn
   absolute_links: warn
