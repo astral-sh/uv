@@ -28,6 +28,11 @@ name = "workspace_discovery"
 path = "benches/workspace_discovery.rs"
 harness = false
 
+[[bench]]
+name = "simulation"
+path = "benches/simulation.rs"
+harness = false
+
 [dev-dependencies]
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
