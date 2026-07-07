@@ -30,6 +30,9 @@ pub struct TreeDisplay<'env> {
     latest: &'env PackageMap<Version>,
     /// Maximum display depth of the dependency tree.
     depth: usize,
+    /// The set of workspace member package IDs (used to compute depth offsets for scripts
+    /// and dependency-group workspaces which lack a member node in the tree).
+    members: BTreeSet<&'env PackageId>,
     /// Whether to de-duplicate the displayed dependencies.
     no_dedupe: bool,
     /// Whether the graph edges have been reversed (i.e., `--invert` mode).
@@ -464,6 +467,7 @@ impl<'env> TreeDisplay<'env> {
             roots,
             latest,
             depth,
+            members,
             no_dedupe,
             invert,
             lock,
@@ -473,14 +477,18 @@ impl<'env> TreeDisplay<'env> {
     }
 
     /// Perform a depth-first traversal of the given package and its dependencies.
+    ///
+    /// `depth_offset` adjusts the effective depth for nodes that are rendered without an
+    /// intermediate workspace member (e.g., scripts and dependency-group-only workspaces).
     fn visit(
         &'env self,
         cursor: Cursor,
         visited: &mut FxHashMap<VisitedNode<'env>, Vec<&'env PackageId>>,
         path: &mut Vec<VisitedNode<'env>>,
+        depth_offset: usize,
     ) -> Vec<String> {
         // Short-circuit if the current path is longer than the provided depth.
-        if path.len() > self.depth {
+        if path.len() + depth_offset > self.depth {
             return Vec::new();
         }
 
@@ -620,7 +628,7 @@ impl<'env> TreeDisplay<'env> {
 
         // Keep track of the dependency path to avoid cycles.
         // Only mark as visited if we're going to expand children (not at depth limit).
-        if path.len() < self.depth {
+        if path.len() + depth_offset < self.depth {
             visited.insert(
                 visited_node.clone(),
                 dependencies
@@ -659,7 +667,7 @@ impl<'env> TreeDisplay<'env> {
             } else {
                 ("├── ", "│   ")
             };
-            for (visited_index, visited_line) in self.visit(*dep, visited, path).iter().enumerate()
+            for (visited_index, visited_line) in self.visit(*dep, visited, path, depth_offset).iter().enumerate()
             {
                 let prefix = if visited_index == 0 {
                     prefix_top
@@ -688,10 +696,19 @@ impl<'env> TreeDisplay<'env> {
                     for edge in self.graph.edges_directed(*node, Direction::Outgoing) {
                         let node = edge.target();
                         path.clear();
+                        // Determine the depth offset: workspace members are at the expected
+                        // root level; scripts and dependency-group-only workspaces render
+                        // direct deps without an intermediate member node, so they need an
+                        // extra offset to match the expected depth semantics.
+                        let depth_offset = match self.graph[node] {
+                            Node::Package(id) if self.members.contains(id) => 0,
+                            _ => 1,
+                        };
                         lines.extend(self.visit(
                             Cursor::new(node, edge.id(), self.conflict_marker),
                             &mut visited,
                             &mut path,
+                            depth_offset,
                         ));
                     }
                 }
@@ -701,6 +718,7 @@ impl<'env> TreeDisplay<'env> {
                         Cursor::root(*node, self.conflict_marker),
                         &mut visited,
                         &mut path,
+                        0,
                     ));
                 }
             }
