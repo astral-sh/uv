@@ -18,6 +18,9 @@ pub struct Range<T> {
 }
 
 impl<T> Range<T> {
+    /// Return the canonical set used for identity and set relationships.
+    ///
+    /// Ranges that do not need canonicalization reuse their raw representation.
     fn logical_versions(&self) -> &Ranges<T> {
         self.canonical_versions
             .as_deref()
@@ -48,6 +51,7 @@ impl<T> Deref for Range<T> {
 }
 
 impl Range<Version> {
+    /// Construct a [`Range`], omitting a redundant canonical representation.
     fn from_parts(
         raw_versions: Ranges<Version>,
         canonical_versions: Option<Ranges<Version>>,
@@ -61,6 +65,7 @@ impl Range<Version> {
         }
     }
 
+    /// Construct a [`Range`] whose raw representation is already canonical.
     fn from_canonical_versions(versions: Ranges<Version>) -> Self {
         Self {
             raw_versions: versions,
@@ -118,6 +123,10 @@ impl Range<Version> {
         self.binary_op(other, Ranges::union)
     }
 
+    /// Apply a set operation to both representations while preserving their equivalence.
+    ///
+    /// The raw result retains sentinel bounds for iteration and diagnostics, while the logical
+    /// result keeps subsequent PubGrub operations congruent with canonical equality.
     fn binary_op(
         &self,
         other: &Self,
