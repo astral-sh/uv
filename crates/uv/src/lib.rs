@@ -530,17 +530,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     }
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
-    let printer = if globals.quiet == 1 {
-        Printer::Quiet
-    } else if globals.quiet > 1 {
-        Printer::Silent
-    } else if globals.verbose > 0 {
-        Printer::Verbose
-    } else if globals.no_progress {
-        Printer::NoProgress
-    } else {
-        Printer::Default
-    };
+    let printer = Printer::new(globals.quiet, globals.verbose, globals.no_progress);
 
     // Configure the `warn!` macros, which control user-facing warnings in the CLI.
     if globals.quiet > 0 {
@@ -3025,6 +3015,14 @@ where
         }
     };
 
+    // Configure a printer for failures that escape command execution. The resolved `no_progress`
+    // setting can differ due to environment variables, but it does not affect important stderr.
+    let printer = Printer::new(
+        cli.top_level.global_args.quiet,
+        cli.top_level.global_args.verbose,
+        cli.top_level.global_args.no_progress,
+    );
+
     // See `min_stack_size` doc comment about `main2`
     let min_stack_size = min_stack_size();
     let main2 = move || {
@@ -3061,13 +3059,13 @@ where
             match error {
                 UvError::User(err) => {
                     trace!("Error trace: {err:?}");
-                    anstream::eprintln!("{}", err.to_string().bold());
+                    writeln!(printer.stderr_important(), "{}", err.to_string().bold())
+                        .expect("writing to stderr should not fail");
                     ExitStatus::Failure.into()
                 }
                 UvError::Unexpected(err) => {
                     trace!("Error trace: {err:?}");
-                    let hints = commands::diagnostics::hints_for_error(&err);
-                    uv_errors::write_error_chain(err.as_ref(), hints)
+                    commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Error.into()
                 }
