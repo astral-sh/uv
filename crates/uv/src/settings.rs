@@ -1482,21 +1482,6 @@ impl PythonInstallSettings {
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> Self {
-        let filesystem_install_mirrors = filesystem
-            .map(|fs| fs.install_mirrors.clone())
-            .unwrap_or_default();
-
-        let install_mirrors = args
-            .install_mirrors()
-            .combine(environment.install_mirrors)
-            .combine(filesystem_install_mirrors);
-
-        let PythonInstallMirrors {
-            python_install_mirror,
-            pypy_install_mirror,
-            python_downloads_json_url,
-        } = install_mirrors;
-
         let PythonInstallArgs {
             install_dir,
             targets,
@@ -1507,12 +1492,30 @@ impl PythonInstallSettings {
             no_registry,
             force,
             upgrade,
-            mirror: _,
-            pypy_mirror: _,
-            python_downloads_json_url: _,
+            mirror,
+            pypy_mirror,
+            python_downloads_json_url,
             default,
             compile_bytecode,
         } = args;
+
+        let filesystem_install_mirrors = filesystem
+            .map(|fs| fs.into_options().install_mirrors)
+            .unwrap_or_default();
+
+        let install_mirrors = PythonInstallMirrors {
+            python_install_mirror: mirror,
+            pypy_install_mirror: pypy_mirror,
+            python_downloads_json_url,
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
+
+        let PythonInstallMirrors {
+            python_install_mirror,
+            pypy_install_mirror,
+            python_downloads_json_url,
+        } = install_mirrors;
 
         Self {
             install_dir,
@@ -1573,14 +1576,27 @@ impl PythonUpgradeSettings {
         filesystem: Option<FilesystemOptions>,
         environment: EnvironmentOptions,
     ) -> Self {
+        let PythonUpgradeArgs {
+            install_dir,
+            targets,
+            mirror,
+            pypy_mirror,
+            reinstall,
+            python_downloads_json_url,
+            compile_bytecode,
+        } = args;
+
         let filesystem_install_mirrors = filesystem
-            .map(|fs| fs.install_mirrors.clone())
+            .map(|fs| fs.into_options().install_mirrors)
             .unwrap_or_default();
 
-        let install_mirrors = args
-            .install_mirrors()
-            .combine(environment.install_mirrors)
-            .combine(filesystem_install_mirrors);
+        let install_mirrors = PythonInstallMirrors {
+            python_install_mirror: mirror,
+            pypy_install_mirror: pypy_mirror,
+            python_downloads_json_url,
+        }
+        .combine(environment.install_mirrors)
+        .combine(filesystem_install_mirrors);
 
         let PythonInstallMirrors {
             python_install_mirror,
@@ -1598,16 +1614,6 @@ impl PythonUpgradeSettings {
                 None
             },
         );
-
-        let PythonUpgradeArgs {
-            install_dir,
-            targets,
-            mirror: _,
-            pypy_mirror: _,
-            reinstall,
-            python_downloads_json_url: _,
-            compile_bytecode,
-        } = args;
 
         Self {
             install_dir,
