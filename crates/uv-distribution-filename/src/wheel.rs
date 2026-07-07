@@ -106,7 +106,7 @@ impl WheelFilename {
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
-        compatible_tags.compatibility(self.python_tags(), self.abi_tags(), self.platform_tags())
+        self.tags.compatibility(compatible_tags)
     }
 
     /// The wheel filename without the extension.

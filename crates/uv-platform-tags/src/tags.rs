@@ -83,6 +83,15 @@ impl TagCompatibility {
     }
 }
 
+fn is_freethreaded_compatible_abi(abi: AbiTag) -> bool {
+    match abi {
+        AbiTag::None => true,
+        AbiTag::Abi3T => true,
+        AbiTag::CPython { variant, .. } => variant.contains(CPythonAbiVariants::Freethreading),
+        _ => false,
+    }
+}
+
 /// A set of compatible tags for a given Python version and platform.
 ///
 /// Its principle function is to determine whether the tags for a particular
@@ -363,14 +372,10 @@ impl Tags {
         // Only `none` (pure Python), `abi3t`, and free-threaded CPython ABIs
         // (e.g., `cp313t`) are compatible.
         if self.is_freethreaded {
-            let has_compatible_abi = wheel_abi_tags.iter().any(|abi| match abi {
-                AbiTag::None => true,
-                AbiTag::Abi3T => true,
-                AbiTag::CPython { variant, .. } => {
-                    variant.contains(CPythonAbiVariants::Freethreading)
-                }
-                _ => false,
-            });
+            let has_compatible_abi = wheel_abi_tags
+                .iter()
+                .copied()
+                .any(is_freethreaded_compatible_abi);
             if !has_compatible_abi {
                 return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
             }
@@ -403,6 +408,30 @@ impl Tags {
             }
         }
         max_compatibility
+    }
+
+    /// Returns the [`TagCompatibility`] of a single wheel tag.
+    pub fn compatibility_tag(
+        &self,
+        wheel_python_tag: &LanguageTag,
+        wheel_abi_tag: &AbiTag,
+        wheel_platform_tag: &PlatformTag,
+    ) -> TagCompatibility {
+        if self.is_freethreaded && !is_freethreaded_compatible_abi(*wheel_abi_tag) {
+            return TagCompatibility::Incompatible(IncompatibleTag::FreethreadedAbi);
+        }
+
+        let Some(abis) = self.map.get(wheel_python_tag) else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Python);
+        };
+        let Some(platforms) = abis.get(wheel_abi_tag) else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Abi);
+        };
+        let Some(priority) = platforms.get(wheel_platform_tag).copied() else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Platform);
+        };
+
+        TagCompatibility::Compatible(priority)
     }
 
     /// Return the highest-priority Python tag for the [`Tags`].
@@ -2999,5 +3028,41 @@ mod tests {
         assert!(debug_compatibility.is_compatible());
         assert!(non_debug_compatibility.is_compatible());
         assert!(debug_compatibility > non_debug_compatibility);
+    }
+
+    #[test]
+    fn test_compatibility_tag() {
+        let python_tag = LanguageTag::from_str("cp314").unwrap();
+        let abi_tag = AbiTag::from_str("cp314").unwrap();
+        let platform_tag = PlatformTag::from_str("manylinux_2_28_x86_64").unwrap();
+
+        for gil_disabled in [false, true] {
+            let tags = Tags::from_env(
+                &Platform::new(
+                    Os::Manylinux {
+                        major: 2,
+                        minor: 28,
+                    },
+                    Arch::X86_64,
+                ),
+                (3, 14),
+                "cpython",
+                (3, 14),
+                TagsOptions {
+                    gil_disabled,
+                    ..TagsOptions::default()
+                },
+            )
+            .unwrap();
+
+            assert_eq!(
+                tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
+                tags.compatibility(
+                    std::slice::from_ref(&python_tag),
+                    std::slice::from_ref(&abi_tag),
+                    std::slice::from_ref(&platform_tag),
+                )
+            );
+        }
     }
 }

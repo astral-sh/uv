@@ -57,6 +57,10 @@ impl ExpandedTags {
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
+        if let [tag] = self.0.as_slice() {
+            return tag.compatibility(compatible_tags);
+        }
+
         compatible_tags.compatibility(
             self.python_tags().copied().collect::<Vec<_>>().as_slice(),
             self.abi_tags().copied().collect::<Vec<_>>().as_slice(),
