@@ -1579,54 +1579,30 @@ fn non_empty_dir_exists() -> Result<()> {
         .arg("--clear")
         .arg("--python")
         .arg("3.12"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .venv
-    warning: The `--clear` option will remove the existing directory at `.venv` even though it is not a virtual environment. This will become an error in a future release. Use `--force` to suppress this warning, or `--preview-features venv-safe-clear` to error on this now.
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
-
-    Ok(())
-}
-
-#[test]
-fn non_empty_dir_exists_clear_preview() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let marker = context.temp_dir.child("file");
-    marker.touch()?;
-
-    uv_snapshot!(context.filters(), context.venv()
-        .arg(".")
-        .arg("--clear")
-        .arg("--preview-features")
-        .arg("venv-safe-clear")
-        .arg("--python")
-        .arg("3.12"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: .
+    Creating virtual environment at: .venv
     error: Failed to create virtual environment
       Caused by: uv will not clear a directory that is not a virtual environment
 
     hint: Use the `--force` flag to remove the existing directory anyway
-    ");
+    "
+    );
 
-    marker.assert(predicates::path::is_file());
+    context
+        .venv
+        .child("file")
+        .assert(predicates::path::is_file());
 
     Ok(())
 }
 
 #[test]
-fn non_empty_dir_exists_clear_preview_force() -> Result<()> {
+fn non_empty_dir_exists_clear_force() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.12"]);
     let directory = context.temp_dir.child("not-a-virtualenv");
     directory.create_dir_all()?;
@@ -1636,8 +1612,6 @@ fn non_empty_dir_exists_clear_preview_force() -> Result<()> {
         .arg(directory.as_os_str())
         .arg("--clear")
         .arg("--force")
-        .arg("--preview-features")
-        .arg("venv-safe-clear")
         .arg("--python")
         .arg("3.12"), @"
     success: true

@@ -1371,10 +1371,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.no_clear,
                 if args.force {
                     uv_virtualenv::ClearNonVirtualenv::Allow
-                } else if globals.preview.is_enabled(PreviewFeature::VenvSafeClear) {
-                    uv_virtualenv::ClearNonVirtualenv::Error
                 } else {
-                    uv_virtualenv::ClearNonVirtualenv::Warn
+                    uv_virtualenv::ClearNonVirtualenv::Error
                 },
             );
 
