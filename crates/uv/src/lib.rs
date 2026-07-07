@@ -50,7 +50,9 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{
+    ExitStatus, ParsedRunCommand, RunCommand, ScriptPath, ToolRunCommand, UvError,
+};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -3052,13 +3054,24 @@ where
     match result {
         Ok(code) => code.into(),
         Err(err) => {
-            trace!("Error trace: {err:?}");
-
-            let hints = commands::diagnostics::hints_for_error(&err);
-            uv_errors::write_error_chain(err.as_ref(), hints)
-                .expect("writing to stderr should not fail");
-
-            ExitStatus::Error.into()
+            let error = match err.downcast::<UvError>() {
+                Ok(error) => error,
+                Err(err) => UvError::unexpected(err),
+            };
+            match error {
+                UvError::User(err) => {
+                    trace!("Error trace: {err:?}");
+                    anstream::eprintln!("{}", err.to_string().bold());
+                    ExitStatus::Failure.into()
+                }
+                UvError::Unexpected(err) => {
+                    trace!("Error trace: {err:?}");
+                    let hints = commands::diagnostics::hints_for_error(&err);
+                    uv_errors::write_error_chain(err.as_ref(), hints)
+                        .expect("writing to stderr should not fail");
+                    ExitStatus::Error.into()
+                }
+            }
         }
     }
 }

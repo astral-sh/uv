@@ -100,19 +100,44 @@ mod tool;
 mod venv;
 mod workspace;
 
+/// The process status for a command that completed without a final error to render.
 #[derive(Copy, Clone)]
 pub enum ExitStatus {
     /// The command succeeded.
     Success,
 
-    /// The command failed due to an error in the user input.
+    /// The command reported a failure caused by user input.
     Failure,
 
-    /// The command failed with an unexpected error.
+    /// The command reported an unexpected failure.
     Error,
 
     /// The command's exit status is propagated from an external command.
     External(u8),
+}
+
+/// A command error propagated to the entrypoint for exit-status selection.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum UvError {
+    /// An error caused by invalid or unsatisfiable user input.
+    #[error(transparent)]
+    User(anyhow::Error),
+
+    /// An unexpected internal or environmental error.
+    #[error(transparent)]
+    Unexpected(anyhow::Error),
+}
+
+impl UvError {
+    /// Create a user-facing error.
+    fn user(error: impl Into<anyhow::Error>) -> Self {
+        Self::User(error.into())
+    }
+
+    /// Create an unexpected error.
+    pub(crate) fn unexpected(error: anyhow::Error) -> Self {
+        Self::Unexpected(error)
+    }
 }
 
 /// Read dotenv files into an overlay for a spawned process.
