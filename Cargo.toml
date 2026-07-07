@@ -278,7 +278,6 @@ tokio = { version = "1.40.0", features = [
 tokio-stream = { version = "0.1.16" }
 tokio-util = { version = "0.7.12", features = ["compat", "io"] }
 toml = { version = "1.1.0", features = ["fast_hash"] }
-toml_datetime = { version = "1.1.0" }
 toml_edit = { version = "0.25.8", features = ["serde"] }
 toml_parser = { version = "1.1.0", features = ["simd"] }
 toml_writer = { version = "1.1.0" }

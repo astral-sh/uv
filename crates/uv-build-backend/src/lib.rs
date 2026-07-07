@@ -788,17 +788,18 @@ mod tests {
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
+            @"1d9ce1ce63195fbee07314c0b595ba9e063670da8d10c252c351b21e94e3f508"
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"
         built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/pyproject.toml (generated)
+        built_by_uv-0.1.0/pyproject.toml.orig (pyproject.toml)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
         built_by_uv-0.1.0/README.md (README.md)
         built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
         built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
         built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
         built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
@@ -819,6 +820,7 @@ mod tests {
         built_by_uv-0.1.0/header
         built_by_uv-0.1.0/header/built_by_uv.h
         built_by_uv-0.1.0/pyproject.toml
+        built_by_uv-0.1.0/pyproject.toml.orig
         built_by_uv-0.1.0/scripts
         built_by_uv-0.1.0/scripts/whoami.sh
         built_by_uv-0.1.0/src
@@ -1060,6 +1062,7 @@ mod tests {
         two_step_build-1.0.0/
         two_step_build-1.0.0/PKG-INFO
         two_step_build-1.0.0/pyproject.toml
+        two_step_build-1.0.0/pyproject.toml.orig
         two_step_build-1.0.0/two_step_build
         two_step_build-1.0.0/two_step_build/__init__.py
         ");
@@ -1462,6 +1465,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/simple_namespace
         simple_namespace_part-1.0.0/src/simple_namespace/part
@@ -1724,6 +1728,7 @@ mod tests {
         simple_namespace_part-1.0.0/
         simple_namespace_part-1.0.0/PKG-INFO
         simple_namespace_part-1.0.0/pyproject.toml
+        simple_namespace_part-1.0.0/pyproject.toml.orig
         simple_namespace_part-1.0.0/src
         simple_namespace_part-1.0.0/src/foo
         simple_namespace_part-1.0.0/src/foo/__init__.py
@@ -1839,6 +1844,7 @@ mod tests {
         duplicate-1.0.0/
         duplicate-1.0.0/PKG-INFO
         duplicate-1.0.0/pyproject.toml
+        duplicate-1.0.0/pyproject.toml.orig
         duplicate-1.0.0/src
         duplicate-1.0.0/src/bar
         duplicate-1.0.0/src/bar/baz
@@ -1906,8 +1912,7 @@ mod tests {
     /// not accidentally skipped by the root-level TOML rewriting logic.
     #[test]
     fn nested_pyproject_toml_preserved() {
-        let _preview =
-            uv_preview::test::with_features(&[PreviewFeature::TomlBackwardsCompatibility]);
+        let _preview = uv_preview::test::with_features(&[]);
         let tmp_dir = TempDir::new().unwrap();
 
         fs_err::write(
@@ -1966,8 +1971,7 @@ mod tests {
     /// compatibility with older tools. The original file is preserved as pyproject.toml.orig.
     #[test]
     fn toml_1_1_backward_compatibility() {
-        let _preview =
-            uv_preview::test::with_features(&[PreviewFeature::TomlBackwardsCompatibility]);
+        let _preview = uv_preview::test::with_features(&[]);
         let src = TempDir::new().unwrap();
 
         // A `pyproject.toml` with a TOML 1.1 feature, trailing commas in inline tables.
@@ -2054,8 +2058,7 @@ mod tests {
         "#);
     }
 
-    /// Test that TOML 1.1 features in pyproject.toml trigger auto-detection and rewrite to TOML
-    /// 1.0, even without explicitly enabling `PreviewFeature::TomlBackwardsCompatibility`.
+    /// Test that TOML 1.1 features in pyproject.toml are rewritten by default.
     #[test]
     fn toml_1_1_backward_compatibility_auto_detection() {
         let _preview = uv_preview::test::with_features(&[]);
