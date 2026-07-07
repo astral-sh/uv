@@ -85,16 +85,15 @@ impl VersionId {
             }
             ParsedUrl::GitDirectory(git) => Self::Git {
                 url: git.url,
-                subdirectory: git.subdirectory.map(|path| path.into_path_buf()),
+                subdirectory: git.subdirectory.map(Path::into_path_buf),
             },
             ParsedUrl::GitPath(git) => Self::Git {
                 url: git.url,
                 subdirectory: Some(git.install_path),
             },
-            ParsedUrl::Archive(archive) => Self::from_archive(
-                archive.url,
-                archive.subdirectory.map(|path| path.into_path_buf()),
-            ),
+            ParsedUrl::Archive(archive) => {
+                Self::from_archive(archive.url, archive.subdirectory.map(Path::into_path_buf))
+            }
         }
     }
 

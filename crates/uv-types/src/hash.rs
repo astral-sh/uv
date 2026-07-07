@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -380,7 +381,7 @@ impl HashStrategy {
                 ..
             } => Some(VersionId::from_archive(
                 location.clone(),
-                subdirectory.clone().map(|path| path.into_path_buf()),
+                subdirectory.clone().map(Path::into_path_buf),
             )),
             RequirementSource::GitDirectory {
                 git, subdirectory, ..
