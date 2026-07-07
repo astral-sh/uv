@@ -218,7 +218,7 @@ dependencies = [
 [[package]]
 name = "astral-pubgrub"
 version = "0.5.0"
-source = "git+https://github.com/astral-sh/pubgrub?rev=9b13736d65e710e13df59913ea69ea2e5af8008b#9b13736d65e710e13df59913ea69ea2e5af8008b"
+source = "git+https://github.com/astral-sh/pubgrub?rev=b16db90de1a5e523b428767c52eb3d0a736cc3c8#b16db90de1a5e523b428767c52eb3d0a736cc3c8"
 dependencies = [
  "astral-version-ranges",
  "indexmap",
@@ -292,7 +292,7 @@ dependencies = [
 [[package]]
 name = "astral-version-ranges"
 version = "0.2.0"
-source = "git+https://github.com/astral-sh/pubgrub?rev=9b13736d65e710e13df59913ea69ea2e5af8008b#9b13736d65e710e13df59913ea69ea2e5af8008b"
+source = "git+https://github.com/astral-sh/pubgrub?rev=b16db90de1a5e523b428767c52eb3d0a736cc3c8#b16db90de1a5e523b428767c52eb3d0a736cc3c8"
 dependencies = [
  "smallvec",
 ]
