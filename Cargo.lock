@@ -321,7 +321,7 @@ dependencies = [
 [[package]]
 name = "astral_async_zip"
 version = "0.0.20"
-source = "git+https://github.com/zaniebot/rs-async-zip?rev=f7cd97c9739cc7eb5ee1584f0e726a51239a449e#f7cd97c9739cc7eb5ee1584f0e726a51239a449e"
+source = "git+https://github.com/zaniebot/rs-async-zip?rev=68e5cf81b1d25936c01c9f9436ea9e2823a975a0#68e5cf81b1d25936c01c9f9436ea9e2823a975a0"
 dependencies = [
  "async-compression",
  "crc32fast",
