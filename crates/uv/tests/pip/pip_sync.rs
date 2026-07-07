@@ -5029,15 +5029,16 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+        Expected:
+          sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-          Computed:
-            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+        Computed:
+          sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "
     );
 
@@ -5238,15 +5239,16 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download and build `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
-            sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
+        Expected:
+          sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+          sha256:a3cf07a05aac526131a2e8b6e4375ee6c6eaac8add05b88035e960ac6cd999ee
 
-          Computed:
-            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+        Computed:
+          sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
     "
     );
 
