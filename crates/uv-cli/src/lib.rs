@@ -6397,10 +6397,10 @@ pub struct ToolUpgradeArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will compile the installed Python files required by the command. `uv pip
-    /// install` limits compilation to packages installed by the current operation, while project
-    /// and environment sync commands process the entire site-packages directory. Like pip,
-    /// compilation errors are ignored.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7469,10 +7469,10 @@ pub struct InstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will compile the installed Python files required by the command. `uv pip
-    /// install` limits compilation to packages installed by the current operation, while project
-    /// and environment sync commands process the entire site-packages directory. Like pip,
-    /// compilation errors are ignored.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7967,10 +7967,10 @@ pub struct ResolverInstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will compile the installed Python files required by the command. `uv pip
-    /// install` limits compilation to packages installed by the current operation, while project
-    /// and environment sync commands process the entire site-packages directory. Like pip,
-    /// compilation errors are ignored.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
