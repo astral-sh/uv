@@ -15,7 +15,7 @@ reason = "developer binary shipped from this workspace"
 # Keep public APIs that are consumed by downstream Rust integrations.
 
 [[override]]
-lint = "hawk::dead_public"
+lint = "hawk::unnecessary_public"
 crate = "uv_client"
 item = "base_client::BaseClientBuilder::<'a>::custom_client"
 kind = "inherent_method"
@@ -37,14 +37,6 @@ item = "base_client::BaseClientBuilder::<'a>::proxy"
 kind = "inherent_method"
 level = "expect"
 reason = "retained for downstream uv-client consumers"
-
-[[override]]
-lint = "hawk::dead_public"
-crate = "uv_client"
-item = "registry_client::RegistryClientBuilder::<'a>::with_reqwest_client"
-kind = "inherent_method"
-level = "expect"
-reason = "used by downstream integrations to provide their own HTTP client"
 
 [[override]]
 lint = "hawk::dead_public"
@@ -117,6 +109,14 @@ item = "installer::Installer::<'a>::with_installer_name"
 kind = "inherent_method"
 level = "expect"
 reason = "used by Pixi to distinguish packages installed through its uv integration"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv"
+item = "run"
+kind = "function"
+level = "expect"
+reason = "used as a benchmark entrypoint"
 
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
