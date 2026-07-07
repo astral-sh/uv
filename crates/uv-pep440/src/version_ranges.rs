@@ -58,6 +58,14 @@ pub fn canonicalize_version_ranges(ranges: &Ranges<Version>) -> Option<Ranges<Ve
     )
 }
 
+/// Return whether a singleton range needs canonicalization over the PEP 440 version universe.
+///
+/// A singleton containing the minimum valid PEP 440 version needs an unbounded lower edge, while
+/// a singleton containing an internal boundary sentinel needs to use that sentinel's successor.
+pub fn version_singleton_needs_canonicalization(version: &Version) -> bool {
+    version <= &*PEP440_MIN_VERSION || sentinel_successor(version).is_some()
+}
+
 fn lower_bound_needs_canonicalization(bound: Bound<&Version>) -> bool {
     match bound {
         Bound::Included(version) => {
@@ -712,6 +720,38 @@ mod tests {
         let range = Ranges::singleton(version("1.0"));
 
         assert!(canonicalize_version_ranges(&range).is_none());
+    }
+
+    #[test]
+    fn identifies_singletons_that_need_canonicalization() {
+        let version = |value: &str| value.parse::<Version>().expect("valid version");
+        let cases = [
+            (version("0.dev0"), true),
+            (version("0a0.dev0"), false),
+            (version("1.0.dev0"), false),
+            (version("1.0a1"), false),
+            (version("1.0"), false),
+            (version("1.0.post1"), false),
+            (version("1.0+local"), false),
+            (version("1.0").with_local(LocalVersion::Max), true),
+            (version("1.0").with_min(Some(0)), true),
+            (version("1.0a1").with_max(Some(0)), true),
+            (version("1.0").with_max(Some(0)), false),
+        ];
+
+        for (version, expected) in cases {
+            let singleton = Ranges::singleton(version.clone());
+            assert_eq!(
+                version_singleton_needs_canonicalization(&version),
+                expected,
+                "{version}"
+            );
+            assert_eq!(
+                canonicalize_version_ranges(&singleton).is_some(),
+                expected,
+                "{version}"
+            );
+        }
     }
 
     /// Test that `<V.postN` excludes pre-releases of the base version but includes
