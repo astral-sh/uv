@@ -47,9 +47,9 @@ impl WheelTag {
                 &small.platform_tag,
             ),
             Self::Large { large } => compatible_tags.compatibility(
-                large.python_tag.as_slice(),
-                large.abi_tag.as_slice(),
-                large.platform_tag.as_slice(),
+                large.python_tag.iter(),
+                large.abi_tag.iter(),
+                large.platform_tag.iter(),
             ),
         }
     }

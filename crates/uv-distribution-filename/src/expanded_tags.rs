@@ -46,12 +46,12 @@ impl ExpandedTags {
     }
 
     /// Return the ABI tags in this expanded tag set.
-    pub fn abi_tags(&self) -> impl Iterator<Item = &AbiTag> {
+    pub fn abi_tags(&self) -> impl Iterator<Item = &AbiTag> + Clone {
         self.0.iter().flat_map(WheelTag::abi_tags)
     }
 
     /// Return the platform tags in this expanded tag set.
-    pub fn platform_tags(&self) -> impl Iterator<Item = &PlatformTag> {
+    pub fn platform_tags(&self) -> impl Iterator<Item = &PlatformTag> + Clone {
         self.0.iter().flat_map(WheelTag::platform_tags)
     }
 
@@ -61,11 +61,7 @@ impl ExpandedTags {
             return tag.compatibility(compatible_tags);
         }
 
-        compatible_tags.compatibility(
-            self.python_tags().copied().collect::<Vec<_>>().as_slice(),
-            self.abi_tags().copied().collect::<Vec<_>>().as_slice(),
-            self.platform_tags().cloned().collect::<Vec<_>>().as_slice(),
-        )
+        compatible_tags.compatibility(self.python_tags(), self.abi_tags(), self.platform_tags())
     }
 }
 
