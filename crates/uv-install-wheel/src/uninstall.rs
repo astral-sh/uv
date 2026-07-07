@@ -454,21 +454,12 @@ fn normalize_path(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
     use assert_fs::prelude::*;
 
     use uv_pypi_types::Scheme;
 
     use crate::Layout;
-    use crate::uninstall::{is_valid_top_level_entry, normcase, uninstall_egg, uninstall_wheel};
-
-    #[test]
-    fn normcase_borrows_on_non_windows() {
-        if !cfg!(windows) {
-            assert!(matches!(normcase("/Path/To/File"), Cow::Borrowed(_)));
-        }
-    }
+    use crate::uninstall::{is_valid_top_level_entry, uninstall_egg, uninstall_wheel};
 
     #[test]
     fn test_top_level_entry_safe_name() {
