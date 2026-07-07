@@ -7,8 +7,19 @@
 
 Released on 2026-07-07.
 
+### Security
+
+This release updates our ZIP library, [astral-async-zip](https://github.com/astral-sh/rs-async-zip), to v0.0.20, which includes 15 changes that harden our ZIP handling against [parser differentials](https://www.brainonfire.net/blog/2022/04/11/what-is-parser-mismatch/). uv may reject ZIP archives with malformed or ambiguous content that were previously accepted.
+
+See the [upstream commits](https://github.com/astral-sh/rs-async-zip/compare/v0.0.18...v0.0.20) for a full list of changes.
+
+### Python
+
+- Upgrade GraalPy to 25.1.3 ([#20069](https://github.com/astral-sh/uv/pull/20069))
+
 ### Enhancements
 
+- Improve trace logs for unexpected error chains ([#20220](https://github.com/astral-sh/uv/pull/20220))
 - Move lockfile update guidance to a hint ([#20219](https://github.com/astral-sh/uv/pull/20219))
 - Preserve indentation for multiline error causes ([#20156](https://github.com/astral-sh/uv/pull/20156))
 - Render user errors with their cause chains ([#20217](https://github.com/astral-sh/uv/pull/20217))
@@ -40,21 +51,14 @@ Released on 2026-07-07.
 - Create metadata version errors lazily ([#20205](https://github.com/astral-sh/uv/pull/20205))
 - Only compile bytecode for installed distributions in `uv pip install` ([#19914](https://github.com/astral-sh/uv/pull/19914))
 - Optimize expanded tag compatibility checks ([#20171](https://github.com/astral-sh/uv/pull/20171))
-- Optimize version parsing for common `\d.\d.\d` cases ([#20118](https://github.com/astral-sh/uv/pull/20118))
-- Remove Cow representation tests for shell escaping ([#20213](https://github.com/astral-sh/uv/pull/20213))
+- Optimize parsing of single-digit three-part versions ([#20118](https://github.com/astral-sh/uv/pull/20118))
 
 ### Bug fixes
 
+- Avoid overflow when computing HTTP cache age ([#20178](https://github.com/astral-sh/uv/pull/20178))
+- Respect `--upgrade` when `upgrade-package` is configured ([#19955](https://github.com/astral-sh/uv/pull/19955))
+- Support `uv tree` in dependency-group-only projects ([#20167](https://github.com/astral-sh/uv/pull/20167))
 - Treat cache entries as stale at exact expiration ([#20183](https://github.com/astral-sh/uv/pull/20183))
-
-### Other changes
-
-- Fix CLI upgrade precedence with configured packages ([#19955](https://github.com/astral-sh/uv/pull/19955))
-- Improve trace logs for debugging the error chain ([#20220](https://github.com/astral-sh/uv/pull/20220))
-- Sync latest Python releases ([#20069](https://github.com/astral-sh/uv/pull/20069))
-- Upgrade astral-async-zip to 0.0.20 ([#20149](https://github.com/astral-sh/uv/pull/20149))
-- Use saturating arithmetic for HTTP cache age computation ([#20178](https://github.com/astral-sh/uv/pull/20178))
-- fix(uv): uv tree fails on dependency-group-only pyproject.tomls (#19975) ([#20167](https://github.com/astral-sh/uv/pull/20167))
 
 ## 0.11.27
 
@@ -912,5 +916,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
-
