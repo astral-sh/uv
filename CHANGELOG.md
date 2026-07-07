@@ -3,6 +3,59 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.28
+
+Released on 2026-07-07.
+
+### Enhancements
+
+- Move lockfile update guidance to a hint ([#20219](https://github.com/astral-sh/uv/pull/20219))
+- Preserve indentation for multiline error causes ([#20156](https://github.com/astral-sh/uv/pull/20156))
+- Render user errors with their cause chains ([#20217](https://github.com/astral-sh/uv/pull/20217))
+- Route final command errors through the printer to respect `-q` and `-qq` ([#20163](https://github.com/astral-sh/uv/pull/20163))
+- Use standard rendering for `uv build` errors ([#20159](https://github.com/astral-sh/uv/pull/20159))
+- Use standard rendering for tool requirement errors ([#20160](https://github.com/astral-sh/uv/pull/20160))
+
+### Performance
+
+- Avoid allocating URL-safe Git revisions ([#20194](https://github.com/astral-sh/uv/pull/20194))
+- Avoid allocating canonical Python request strings ([#20193](https://github.com/astral-sh/uv/pull/20193))
+- Avoid allocating custom Astral mirror URLs ([#20204](https://github.com/astral-sh/uv/pull/20204))
+- Avoid allocating expanded compatibility tags ([#20190](https://github.com/astral-sh/uv/pull/20190))
+- Avoid allocating shell strings that need no escaping ([#20196](https://github.com/astral-sh/uv/pull/20196))
+- Avoid allocating static ABI descriptions ([#20201](https://github.com/astral-sh/uv/pull/20201))
+- Avoid allocating static Windows executable names ([#20200](https://github.com/astral-sh/uv/pull/20200))
+- Avoid allocating static dependency table names ([#20199](https://github.com/astral-sh/uv/pull/20199))
+- Avoid allocating static platform triple components ([#20195](https://github.com/astral-sh/uv/pull/20195))
+- Avoid allocating static resolver report labels ([#20198](https://github.com/astral-sh/uv/pull/20198))
+- Avoid allocating static unavailable-version messages ([#20197](https://github.com/astral-sh/uv/pull/20197))
+- Avoid allocating unchanged Python download architectures ([#20202](https://github.com/astral-sh/uv/pull/20202))
+- Avoid allocating unchanged paths during case normalization ([#20203](https://github.com/astral-sh/uv/pull/20203))
+- Avoid allocations when expanding group conflicts ([#20211](https://github.com/astral-sh/uv/pull/20211))
+- Avoid allocations when formatting requirements ([#20206](https://github.com/astral-sh/uv/pull/20206))
+- Avoid cloning credential lookup services ([#20210](https://github.com/astral-sh/uv/pull/20210))
+- Avoid cloning dry-run distributions ([#20209](https://github.com/astral-sh/uv/pull/20209))
+- Avoid cloning owned dependency metadata ([#20212](https://github.com/astral-sh/uv/pull/20212))
+- Avoid redundant direct URL clones ([#20207](https://github.com/astral-sh/uv/pull/20207))
+- Create metadata version errors lazily ([#20205](https://github.com/astral-sh/uv/pull/20205))
+- Only compile bytecode for installed distributions in `uv pip install` ([#19914](https://github.com/astral-sh/uv/pull/19914))
+- Optimize expanded tag compatibility checks ([#20171](https://github.com/astral-sh/uv/pull/20171))
+- Optimize version parsing for common `\d.\d.\d` cases ([#20118](https://github.com/astral-sh/uv/pull/20118))
+- Remove Cow representation tests for shell escaping ([#20213](https://github.com/astral-sh/uv/pull/20213))
+
+### Bug fixes
+
+- Treat cache entries as stale at exact expiration ([#20183](https://github.com/astral-sh/uv/pull/20183))
+
+### Other changes
+
+- Fix CLI upgrade precedence with configured packages ([#19955](https://github.com/astral-sh/uv/pull/19955))
+- Improve trace logs for debugging the error chain ([#20220](https://github.com/astral-sh/uv/pull/20220))
+- Sync latest Python releases ([#20069](https://github.com/astral-sh/uv/pull/20069))
+- Upgrade astral-async-zip to 0.0.20 ([#20149](https://github.com/astral-sh/uv/pull/20149))
+- Use saturating arithmetic for HTTP cache age computation ([#20178](https://github.com/astral-sh/uv/pull/20178))
+- fix(uv): uv tree fails on dependency-group-only pyproject.tomls (#19975) ([#20167](https://github.com/astral-sh/uv/pull/20167))
+
 ## 0.11.27
 
 Released on 2026-07-06.
@@ -859,4 +912,5 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
+
 
