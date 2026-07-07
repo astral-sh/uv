@@ -33,7 +33,7 @@ use crate::commands::project::{
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -295,9 +295,7 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
             Err(err) => return Err(err.into()),
         };
@@ -352,9 +350,7 @@ pub(crate) async fn check(
         {
             Ok(_) => {}
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
             Err(err) => return Err(err.into()),
         }
@@ -484,9 +480,7 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
             Err(err) => return Err(err.into()),
         };
@@ -556,9 +550,7 @@ pub(crate) async fn check(
                 {
                     Ok(environment) => environment,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -598,9 +590,7 @@ pub(crate) async fn check(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             }

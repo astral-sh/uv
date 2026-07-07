@@ -253,7 +253,7 @@ impl Error {
     }
 
     /// Returns `true` if this TLS error could be resolved by using system certificate roots.
-    fn suggests_system_certs(&self) -> bool {
+    pub fn suggests_system_certs(&self) -> bool {
         matches!(
             &*self.kind,
             ErrorKind::WrappedReqwestError(_, err) if err.suggests_system_certs()

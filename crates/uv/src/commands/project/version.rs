@@ -39,7 +39,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState,
     WorkspacePython, default_dependency_groups,
 };
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -543,9 +543,7 @@ async fn print_frozen_version(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -690,9 +688,7 @@ async fn lock_and_sync(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -750,9 +746,7 @@ async fn lock_and_sync(
     {
         Ok(_) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
         Err(err) => return Err(err.into()),
     }

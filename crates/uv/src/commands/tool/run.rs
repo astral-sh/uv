@@ -79,6 +79,52 @@ impl Display for ToolRunCommand {
     }
 }
 
+/// Context for invocation mistakes that are specific to `uv tool run` and `uvx`.
+#[derive(Debug)]
+enum ToolRunUsageContext {
+    UvxRun {
+        arguments: String,
+    },
+    Verbose {
+        verbose_flag: String,
+        target: String,
+        invocation_source: ToolRunCommand,
+    },
+}
+
+/// A tool resolution failure with context for correcting a likely invocation mistake.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to run tool")]
+pub(crate) struct ToolRunUsageError {
+    #[source]
+    cause: anyhow::Error,
+    context: ToolRunUsageContext,
+}
+
+impl uv_errors::Hint for ToolRunUsageError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        uv_errors::Hints::from(match &self.context {
+            ToolRunUsageContext::UvxRun { arguments } => format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {arguments}").green(),
+                "run".cyan(),
+                format!("uvx {arguments}").green()
+            ),
+            ToolRunUsageContext::Verbose {
+                verbose_flag,
+                target,
+                invocation_source,
+            } => format!(
+                "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
+                verbose_flag.cyan(),
+                target.cyan(),
+                invocation_source.to_string().cyan(),
+                format!("{invocation_source} {verbose_flag} {target}").green()
+            ),
+        })
+    }
+}
+
 /// Check if the given arguments contain a verbose flag (e.g., `--verbose`, `-v`, `-vv`, etc.)
 fn find_verbose_flag(args: &[std::ffi::OsString]) -> Option<&str> {
     args.iter().find_map(|arg| {
@@ -272,38 +318,66 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::default()
-                    .with_hint(format!(
-                        "`{}` invokes the `{}` package. Did you mean `{}`?",
-                        format!("uvx run {rest}").green(),
-                        "run".cyan(),
-                        format!("uvx {rest}").green()
-                    ))
-                    .with_context("tool")
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                let user_error =
+                    err.is_user_failure() || matches!(&err, operations::Error::Requirements(..));
+                let err = match err {
+                    operations::Error::Resolve(err) => anyhow::Error::new(
+                        operations::Error::Resolve(err.with_resolution_context("tool")),
+                    ),
+                    operations::Error::Requirements(err @ uv_requirements::Error::Dist(..)) => {
+                        anyhow::Error::new(operations::Error::Requirements(err))
+                    }
+                    operations::Error::Requirements(err) => {
+                        diagnostics::requirements_error("tool", err)
+                    }
+                    err => anyhow::Error::new(err),
+                };
+                return Err(if user_error {
+                    UvError::user(ToolRunUsageError {
+                        cause: err,
+                        context: ToolRunUsageContext::UvxRun { arguments: rest },
+                    })
+                    .into()
+                } else {
+                    UvError::unexpected(err).into()
+                });
             }
 
-            let diagnostic = diagnostics::OperationDiagnostic::default();
-            let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
-                diagnostic.with_hint(format!(
-                    "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
-                    verbose_flag.cyan(),
-                    target.cyan(),
-                    invocation_source.to_string().cyan(),
-                    format!("{invocation_source} {verbose_flag} {target}").green()
+            if let Some(verbose_flag) = find_verbose_flag(args) {
+                let user_error = err.is_user_failure();
+                let err = anyhow::Error::new(err);
+                return Err(if user_error {
+                    UvError::user(ToolRunUsageError {
+                        cause: err,
+                        context: ToolRunUsageContext::Verbose {
+                            verbose_flag: verbose_flag.to_string(),
+                            target: target.to_string(),
+                            invocation_source,
+                        },
+                    })
+                    .into()
+                } else {
+                    UvError::unexpected(err).into()
+                });
+            }
+
+            return Err(match err {
+                operations::Error::Resolve(err) => UvError::from(operations::Error::Resolve(
+                    err.with_resolution_context("tool"),
                 ))
-            } else {
-                diagnostic.with_context("tool")
-            };
-            return diagnostic
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                .into(),
+                operations::Error::Requirements(err @ uv_requirements::Error::Dist(..)) => {
+                    UvError::from(operations::Error::Requirements(err)).into()
+                }
+                operations::Error::Requirements(err) => {
+                    UvError::user(diagnostics::requirements_error("tool", err)).into()
+                }
+                err => UvError::from(err).into(),
+            });
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = anyhow::Error::new(err).context("Failed to resolve `--with` requirement");
-            return Err(UvError::user(err).into());
+            return Err(UvError::user(diagnostics::requirements_error("`--with`", err)).into());
         }
         Err(err) => return Err(err.into()),
     };

@@ -59,9 +59,34 @@ use crate::commands::project::{
     init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
+use crate::commands::{ExitStatus, ScriptPath, UvError, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
+
+/// A failed dependency addition, with `uv add`-specific recovery context.
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to add dependencies")]
+pub(crate) struct AddDependencyError {
+    #[source]
+    cause: crate::commands::pip::operations::Error,
+    standard_library_package: Option<PackageName>,
+}
+
+impl uv_errors::Hint for AddDependencyError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        let mut hints = uv_errors::Hints::none();
+        if let Some(package) = &self.standard_library_package {
+            hints.push(format!(
+                "The module `{package}` is included in the Python standard library and usually should not be added as a dependency"
+            ));
+        }
+        hints.push(format!(
+            "If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing",
+            "--frozen".green()
+        ));
+        hints
+    }
+}
 
 /// Add one or more packages to the project requirements.
 #[expect(clippy::fn_params_excessive_bools)]
@@ -784,17 +809,17 @@ pub(crate) async fn add(
             }
             match err {
                 ProjectError::Operation(err) => {
-                    let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
-                    let diagnostic = diagnostics::OperationDiagnostic::default();
-                    let diagnostic = if let Some(hint) = standard_library_hint {
-                        diagnostic.with_hint(hint)
+                    let standard_library_package =
+                        standard_library_package(&err, &edits, python_minor);
+                    if err.is_user_failure() {
+                        Err(UvError::user(AddDependencyError {
+                            cause: err,
+                            standard_library_package,
+                        })
+                        .into())
                     } else {
-                        diagnostic
-                    };
-                    diagnostic
-                        .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        Err(UvError::from(err).into())
+                    }
                 }
                 err => Err(err.into()),
             }
@@ -802,14 +827,15 @@ pub(crate) async fn add(
     }
 }
 
-fn standard_library_hint(
+fn standard_library_package(
     operation_error: &crate::commands::pip::operations::Error,
     edits: &[DependencyEdit],
     python_minor: u8,
-) -> Option<String> {
-    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(
-        no_solution_error,
-    )) = operation_error
+) -> Option<PackageName> {
+    let crate::commands::pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution {
+        cause: no_solution_error,
+        ..
+    }) = operation_error
     else {
         return None;
     };
@@ -824,10 +850,7 @@ fn standard_library_hint(
                 .packages()
                 .any(|package| package == &edit.requirement.name)
         {
-            Some(format!(
-                "The module `{}` is included in the Python standard library and usually should not be added as a dependency",
-                edit.requirement.name
-            ))
+            Some(edit.requirement.name.clone())
         } else {
             None
         }

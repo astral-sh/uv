@@ -33,7 +33,7 @@ use crate::commands::project::{
     ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, WorkspacePython,
     default_dependency_groups, detect_conflicts,
 };
-use crate::commands::{ExitStatus, OutputWriter, diagnostics};
+use crate::commands::{ExitStatus, OutputWriter, UvError};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -235,9 +235,7 @@ pub(crate) async fn export(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };

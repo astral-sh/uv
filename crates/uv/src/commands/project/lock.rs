@@ -50,7 +50,7 @@ use crate::commands::project::{
     WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
@@ -269,9 +269,7 @@ pub(crate) async fn lock(
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
         Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+        Err(ProjectError::Operation(err)) => Err(UvError::from(err).into()),
         Err(err) => Err(err.into()),
     }
 }
