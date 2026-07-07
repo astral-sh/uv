@@ -2203,19 +2203,18 @@ impl PythonRequest {
     /// Serialize the request to a canonical representation.
     ///
     /// [`Self::parse`] should always return the same request when given the output of this method.
-    pub fn to_canonical_string(&self) -> String {
+    pub fn to_canonical_string(&self) -> Cow<'_, str> {
         match self {
-            Self::Any => "any".to_string(),
-            Self::Default => "default".to_string(),
-            Self::Version(version) => version.to_string(),
-            Self::Directory(path) => path.display().to_string(),
-            Self::File(path) => path.display().to_string(),
-            Self::ExecutableName(name) => name.clone(),
-            Self::Implementation(implementation) => implementation.to_string(),
+            Self::Any => Cow::Borrowed("any"),
+            Self::Default => Cow::Borrowed("default"),
+            Self::Version(version) => Cow::Owned(version.to_string()),
+            Self::Directory(path) | Self::File(path) => path.to_string_lossy(),
+            Self::ExecutableName(name) => Cow::Borrowed(name),
+            Self::Implementation(implementation) => Cow::Borrowed(implementation.long_name()),
             Self::ImplementationVersion(implementation, version) => {
-                format!("{implementation}@{version}")
+                Cow::Owned(format!("{implementation}@{version}"))
             }
-            Self::Key(request) => request.to_string(),
+            Self::Key(request) => Cow::Owned(request.to_string()),
         }
     }
 
@@ -3721,7 +3720,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, path::PathBuf, str::FromStr};
+    use std::{borrow::Cow, cell::Cell, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
@@ -4041,6 +4040,15 @@ mod tests {
 
     #[test]
     fn interpreter_request_to_canonical_string() {
+        assert!(matches!(
+            PythonRequest::Default.to_canonical_string(),
+            Cow::Borrowed("default")
+        ));
+        assert!(matches!(
+            PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),
+            Cow::Owned(_)
+        ));
+
         assert_eq!(PythonRequest::Default.to_canonical_string(), "default");
         assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
         assert_eq!(
