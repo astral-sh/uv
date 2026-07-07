@@ -358,22 +358,26 @@ impl Tags {
         false
     }
 
-    /// Returns the [`TagCompatibility`] of the given tags.
+    /// Returns the [`TagCompatibility`] of the given tag iterators.
     ///
     /// If compatible, includes the score of the most-compatible platform tag.
     /// If incompatible, includes the tag part which was a closest match.
-    pub fn compatibility(
+    ///
+    /// The ABI and platform iterators are cloned to restart the Cartesian product.
+    pub fn compatibility<'a>(
         &self,
-        wheel_python_tags: &[LanguageTag],
-        wheel_abi_tags: &[AbiTag],
-        wheel_platform_tags: &[PlatformTag],
+        wheel_python_tags: impl Iterator<Item = &'a LanguageTag>,
+        wheel_abi_tags: impl Iterator<Item = &'a AbiTag> + Clone,
+        wheel_platform_tags: impl Iterator<Item = &'a PlatformTag> + Clone,
     ) -> TagCompatibility {
+        let wheel_abi_tags = move || wheel_abi_tags.clone();
+        let wheel_platform_tags = move || wheel_platform_tags.clone();
+
         // On free-threaded Python, check if any wheel ABI tag is compatible.
         // Only `none` (pure Python), `abi3t`, and free-threaded CPython ABIs
         // (e.g., `cp313t`) are compatible.
         if self.is_freethreaded {
-            let has_compatible_abi = wheel_abi_tags
-                .iter()
+            let has_compatible_abi = wheel_abi_tags()
                 .copied()
                 .any(is_freethreaded_compatible_abi);
             if !has_compatible_abi {
@@ -389,13 +393,13 @@ impl Tags {
                     max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Python));
                 continue;
             };
-            for wheel_abi in wheel_abi_tags {
+            for wheel_abi in wheel_abi_tags() {
                 let Some(platforms) = abis.get(wheel_abi) else {
                     max_compatibility =
                         max_compatibility.max(TagCompatibility::Incompatible(IncompatibleTag::Abi));
                     continue;
                 };
-                for wheel_platform in wheel_platform_tags {
+                for wheel_platform in wheel_platform_tags() {
                     let priority = platforms.get(wheel_platform).copied();
                     if let Some(priority) = priority {
                         max_compatibility =
@@ -3005,14 +3009,14 @@ mod tests {
             .unwrap();
 
             let debug_compatibility = tags.compatibility(
-                &[LanguageTag::from_str("cp314").unwrap()],
-                &[AbiTag::from_str("cp314d").unwrap()],
-                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+                [LanguageTag::from_str("cp314").unwrap()].iter(),
+                [AbiTag::from_str("cp314d").unwrap()].iter(),
+                [PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()].iter(),
             );
             let non_debug_compatibility = tags.compatibility(
-                &[LanguageTag::from_str("cp314").unwrap()],
-                &[AbiTag::from_str("cp314").unwrap()],
-                &[PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()],
+                [LanguageTag::from_str("cp314").unwrap()].iter(),
+                [AbiTag::from_str("cp314").unwrap()].iter(),
+                [PlatformTag::from_str("manylinux_2_28_x86_64").unwrap()].iter(),
             );
             (debug_compatibility, non_debug_compatibility)
         }
@@ -3058,9 +3062,9 @@ mod tests {
             assert_eq!(
                 tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
                 tags.compatibility(
-                    std::slice::from_ref(&python_tag),
-                    std::slice::from_ref(&abi_tag),
-                    std::slice::from_ref(&platform_tag),
+                    std::iter::once(&python_tag),
+                    std::iter::once(&abi_tag),
+                    std::iter::once(&platform_tag),
                 )
             );
         }
