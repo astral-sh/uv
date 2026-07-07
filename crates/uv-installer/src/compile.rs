@@ -135,11 +135,11 @@ fn spawn_workers(
     worker_handles
 }
 
+/// Wait for all workers to exit so worker failures are not hidden by channel send errors.
 async fn wait_for_workers(
     worker_handles: Vec<WorkerHandle>,
     send_error: Option<SendError<PathBuf>>,
 ) -> Result<(), CompileError> {
-    // Make sure all workers exit regularly, avoid hiding errors.
     for result in futures::future::join_all(worker_handles).await {
         match result {
             // A worker thread panicked or exited without reporting its result.

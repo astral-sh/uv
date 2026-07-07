@@ -841,7 +841,9 @@ fn get_relocatable_executable(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record_iter(record: impl Read) -> impl Iterator<Item = Result<RecordEntry, Error>> {
+pub fn read_record_into_iter(
+    record: impl Read,
+) -> impl Iterator<Item = Result<RecordEntry, Error>> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
@@ -858,7 +860,7 @@ pub fn read_record_iter(record: impl Read) -> impl Iterator<Item = Result<Record
 }
 
 pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
-    read_record_iter(record).collect()
+    read_record_into_iter(record).collect()
 }
 
 pub(crate) fn write_record(
