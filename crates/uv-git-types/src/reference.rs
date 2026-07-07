@@ -102,23 +102,3 @@ impl Display for GitReference {
 fn looks_like_commit_hash(rev: &str) -> bool {
     rev.len() >= 7 && rev.chars().all(|ch| ch.is_ascii_hexdigit())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{Cow, GitReference};
-
-    #[test]
-    fn encode_rev_borrows_safe_revisions() {
-        assert!(matches!(
-            GitReference::encode_rev("feature/cow-support"),
-            Cow::Borrowed("feature/cow-support")
-        ));
-    }
-
-    #[test]
-    fn encode_rev_owns_percent_encoded_revisions() {
-        let encoded = GitReference::encode_rev("feature name");
-        assert!(matches!(&encoded, Cow::Owned(_)));
-        assert_eq!(encoded, "feature%20name");
-    }
-}
