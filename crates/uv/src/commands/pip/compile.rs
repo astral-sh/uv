@@ -603,7 +603,7 @@ pub(crate) async fn pip_compile(
         Ok((resolution, _)) => resolution,
         Err(err) => {
             return diagnostics::OperationDiagnostic::default()
-                .report(err)
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };

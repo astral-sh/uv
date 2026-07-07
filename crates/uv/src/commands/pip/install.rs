@@ -597,7 +597,7 @@ pub(crate) async fn pip_install(
             Ok((graph, hasher)) => (Resolution::from(graph), hasher),
             Err(err) => {
                 return diagnostics::OperationDiagnostic::default()
-                    .report(err)
+                    .report(err, printer)?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
@@ -676,7 +676,7 @@ pub(crate) async fn pip_install(
         Ok(..) => {}
         Err(err) => {
             return diagnostics::OperationDiagnostic::default()
-                .report(err)
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }

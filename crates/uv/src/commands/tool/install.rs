@@ -729,7 +729,7 @@ pub(crate) async fn install(
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::default()
-                            .report(err)
+                            .report(err, printer)?
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -860,7 +860,7 @@ pub(crate) async fn install(
                 Ok(update) => update,
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::default()
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -951,7 +951,7 @@ pub(crate) async fn install(
                         .ok()
                         .flatten() else {
                             return diagnostics::OperationDiagnostic::default()
-                                .report(err)
+                                .report(err, printer)?
                                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                         };
 
@@ -985,7 +985,7 @@ pub(crate) async fn install(
                             Ok(resolution) => (resolution, interpreter),
                             Err(ProjectError::Operation(err)) => {
                                 return diagnostics::OperationDiagnostic::default()
-                                    .report(err)
+                                    .report(err, printer)?
                                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                             }
                             Err(err) => return Err(err.into()),
@@ -1047,7 +1047,7 @@ pub(crate) async fn install(
             Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::default()
-                    .report(err)
+                    .report(err, printer)?
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
