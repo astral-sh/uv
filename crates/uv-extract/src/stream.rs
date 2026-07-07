@@ -64,9 +64,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    Ok(Box::pin(unzip_inner(reader, target, false))
-        .await?
-        .files)
+    Ok(Box::pin(unzip_inner(reader, target, false)).await?.files)
 }
 
 /// Unpack a `.zip` archive into the target directory while computing a digest of the extracted

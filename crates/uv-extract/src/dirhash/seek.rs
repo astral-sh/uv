@@ -6,9 +6,9 @@ use std::sync::{Mutex, OnceLock, mpsc};
 
 use crate::vendor::CloneableSeekableReader;
 use crate::{Error, insecure_no_validate, validate_archive_member_name};
-use async_zip::{Compression, StoredZipEntry};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
+use async_zip::{Compression, StoredZipEntry};
 use futures::executor::block_on;
 use futures::io::{AllowStdIo, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWriteExt};
 use rayon::prelude::*;
@@ -247,7 +247,7 @@ where
         file_number,
         enclosed_name,
         &path,
-        &compression,
+        compression,
         skip_validation,
         hash_contents,
     )
@@ -314,7 +314,7 @@ fn extract_file_entry<R>(
     file_number: usize,
     enclosed_name: SanitizedArchivePath,
     path: &Path,
-    compression: &Compression,
+    compression: Compression,
     skip_validation: bool,
     hash_contents: bool,
 ) -> Result<ExtractedEntry, Error>
@@ -380,14 +380,14 @@ fn copy_entry_with_digest<R>(
     entry: &StoredZipEntry,
     file_number: usize,
     writer: std::io::BufWriter<fs_err::File>,
-    compression: &Compression,
+    compression: Compression,
     size: u64,
 ) -> Result<(u64, u32, blake3::Hash), Error>
 where
     R: std::io::BufRead + std::io::Seek + Clone + Send + Sync + Unpin,
     AllowStdIo<R>: Clone,
 {
-    let use_stored_hash_fast_path = matches!(compression, &Compression::Stored)
+    let use_stored_hash_fast_path = matches!(compression, Compression::Stored)
         && size >= STORED_HASH_FAST_PATH_THRESHOLD
         && entry.compressed_size() == size;
 
