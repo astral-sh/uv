@@ -148,9 +148,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
         };
 
         match pyproject_toml.requires_python() {
-            Ok(Some(requires_python)) => {
-                Ok(Some(RequiresPython::from_specifiers(&requires_python)))
-            }
+            Ok(Some(requires_python)) => Ok(Some(RequiresPython::from_specifiers(requires_python))),
             Ok(None) | Err(uv_pypi_types::MetadataError::FieldNotFound("project")) => Ok(None),
             Err(uv_pypi_types::MetadataError::DynamicField("requires-python")) => {
                 debug!("Ignoring dynamic `requires-python` in source tree");

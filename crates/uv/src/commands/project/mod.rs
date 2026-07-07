@@ -1553,7 +1553,7 @@ impl ScriptPython {
             .metadata()
             .requires_python
             .as_ref()
-            .map(RequiresPython::from_specifiers);
+            .map(|specifiers| RequiresPython::from_specifiers(specifiers.clone()));
 
         let workspace_requires_python = workspace
             .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
