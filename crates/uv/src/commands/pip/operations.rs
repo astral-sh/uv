@@ -28,10 +28,12 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
-use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_installer::{
+    DependencyGraphRoot, InstallationStrategy, Plan, Planner, Preparer, SitePackages,
+};
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
@@ -399,7 +401,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     Ok((resolution, hasher))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum Modifications {
     /// Use `pip install` semantics, whereby existing installations are left as-is, unless they are
     /// marked for re-installation or upgrade.
@@ -412,6 +414,24 @@ pub(crate) enum Modifications {
     /// Ensures that the resulting environment is an exact match for the requirements, but may
     /// result in more changes than necessary.
     Exact,
+    /// Remove only packages that disappeared from the managed dependency graph.
+    ///
+    /// Packages that are still required by an unmanaged installed package are retained.
+    Prune {
+        roots: Vec<RemovalRoot>,
+        candidates: BTreeSet<PackageName>,
+        retained: BTreeSet<PackageName>,
+    },
+}
+
+/// A direct dependency removed from the project.
+#[derive(Debug, Clone)]
+pub(crate) struct RemovalRoot {
+    pub(crate) name: PackageName,
+    pub(crate) extras: Box<[ExtraName]>,
+    pub(crate) marker: MarkerTree,
+    /// The project extra under which the direct requirement marker is evaluated, if any.
+    pub(crate) marker_extras: Box<[ExtraName]>,
 }
 
 /// A distribution which was or would be modified
@@ -691,6 +711,68 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
+    let modifications = match modifications {
+        Modifications::Prune {
+            roots,
+            mut candidates,
+            retained,
+        } => {
+            let markers = venv.interpreter().to_resolver_marker_environment();
+            let removed_graph = site_packages.dependency_graph(
+                roots
+                    .iter()
+                    .filter(|root| root.marker.evaluate(&markers, &root.marker_extras))
+                    .map(|root| DependencyGraphRoot {
+                        name: root.name.clone(),
+                        extras: root.extras.clone(),
+                    }),
+                &markers,
+            );
+            candidates.extend(removed_graph.packages().iter().cloned());
+            if !removed_graph.incomplete().is_empty() {
+                warn_user!(
+                    "Unable to read complete dependency metadata for {}; pruning based on available metadata",
+                    removed_graph.incomplete().iter().join(", ")
+                );
+            }
+
+            let managed = candidates
+                .iter()
+                .chain(&retained)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let external_graph = site_packages.dependency_graph(
+                site_packages
+                    .iter()
+                    .filter(|distribution| !managed.contains(distribution.name()))
+                    .map(|distribution| DependencyGraphRoot {
+                        name: distribution.name().clone(),
+                        extras: Box::default(),
+                    }),
+                &markers,
+            );
+
+            if external_graph.incomplete().is_empty() {
+                candidates.retain(|candidate| {
+                    !retained.contains(candidate) && !external_graph.packages().contains(candidate)
+                });
+            } else {
+                warn_user!(
+                    "Retaining all removal candidates because dependency metadata is incomplete for {}",
+                    external_graph.incomplete().iter().join(", ")
+                );
+                candidates.clear();
+            }
+
+            Modifications::Prune {
+                roots,
+                candidates,
+                retained,
+            }
+        }
+        modifications => modifications,
+    };
+
     let plan = InstallationPlan::build(
         resolution,
         site_packages,
@@ -755,6 +837,7 @@ impl InstallationPlan {
         preview: Preview,
     ) -> Result<Changelog, Error> {
         let (plan, start) = self.into_parts();
+        let plan = apply_modifications(plan, &modifications);
 
         if dry_run.enabled() {
             return report_dry_run(
@@ -774,12 +857,6 @@ impl InstallationPlan {
             reinstalls,
             extraneous,
         } = plan;
-
-        // If we're in `install` mode, ignore any extraneous distributions.
-        let extraneous = match modifications {
-            Modifications::Sufficient => vec![],
-            Modifications::Exact => extraneous,
-        };
 
         // Nothing to do.
         if remote.is_empty()
@@ -993,6 +1070,18 @@ mod tests {
             None
         );
     }
+}
+
+/// Apply the requested environment-modification policy to an installation plan.
+fn apply_modifications(mut plan: Plan, modifications: &Modifications) -> Plan {
+    match modifications {
+        Modifications::Sufficient => plan.extraneous.clear(),
+        Modifications::Exact => {}
+        Modifications::Prune { candidates, .. } => plan
+            .extraneous
+            .retain(|distribution| candidates.contains(distribution.name())),
+    }
+    plan
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1256,7 +1345,6 @@ fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
     plan: Plan,
-    modifications: Modifications,
     start: std::time::Instant,
     logger: &dyn InstallLogger,
     printer: Printer,
@@ -1267,12 +1355,6 @@ fn report_dry_run(
         reinstalls,
         extraneous,
     } = plan;
-
-    // If we're in `install` mode, ignore any extraneous distributions.
-    let extraneous = match modifications {
-        Modifications::Sufficient => vec![],
-        Modifications::Exact => extraneous,
-    };
 
     // Nothing to do.
     if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() && extraneous.is_empty() {
