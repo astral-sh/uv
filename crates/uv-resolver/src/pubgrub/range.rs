@@ -116,19 +116,25 @@ impl Range<Version> {
     ///
     /// A constraint like `==1.0` includes local versions such as `1.0+local`, so its encoded range
     /// is not a singleton even though it should be prioritized like a pinned requirement.
+    #[inline]
     pub(crate) fn is_singleton_constraint(&self) -> bool {
         self.encoded_versions.as_singleton().is_some() || self.is_local_version_sentinel()
     }
 
     /// Return `true` if this range represents one or more exact public-version constraints.
+    #[inline]
     fn is_local_version_sentinel(&self) -> bool {
         self.encoded_versions.iter().all(|(lower, upper)| {
             let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
             };
-            lower.local().is_empty()
-                && upper.local() == LocalVersionSlice::Max
-                && *lower == upper.clone().without_local()
+            if !lower.local().is_empty() {
+                return false;
+            }
+            if upper.local() != LocalVersionSlice::Max {
+                return false;
+            }
+            *lower == upper.clone().without_local()
         })
     }
 
