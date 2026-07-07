@@ -1,5 +1,5 @@
 use std::env;
-use std::fmt::Write;
+use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
 use std::sync::Arc;
 use std::time::{Duration, SystemTimeError};
@@ -10,8 +10,10 @@ use http::header::{
     PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
 };
 use http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
-use reqwest::{Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Request, Response, multipart};
-use reqwest_middleware::ClientWithMiddleware;
+use reqwest::{
+    Certificate, Client, ClientBuilder, IntoUrl, NoProxy, Proxy, Request, Response, multipart,
+};
+use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{Jitter, RetryTransientMiddleware};
 use thiserror::Error;
@@ -101,6 +103,8 @@ pub struct BaseClientBuilder<'a> {
     indexes: Indexes,
     read_timeout: Duration,
     connect_timeout: Duration,
+    extra_middleware: Option<ExtraMiddleware>,
+    proxies: Vec<Proxy>,
     http_proxy: Option<ProxyUrl>,
     https_proxy: Option<ProxyUrl>,
     no_proxy: Option<Vec<String>>,
@@ -109,6 +113,8 @@ pub struct BaseClientBuilder<'a> {
     ///
     /// A policy allowing propagation is insecure and should only be available for test code.
     cross_origin_credential_policy: CrossOriginCredentialsPolicy,
+    /// Optional custom reqwest client to use instead of creating a new one.
+    custom_client: Option<Client>,
     /// uv subcommand in which this client is being used
     subcommand: Option<Vec<String>>,
     /// Optional name for this client, used in debug logging.
@@ -140,6 +146,18 @@ impl RedirectPolicy {
     }
 }
 
+/// A list of user-defined middlewares to be applied to the client.
+#[derive(Clone)]
+pub struct ExtraMiddleware(pub Vec<Arc<dyn Middleware>>);
+
+impl Debug for ExtraMiddleware {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExtraMiddleware")
+            .field("0", &format!("{} middlewares", self.0.len()))
+            .finish()
+    }
+}
+
 impl Default for BaseClientBuilder<'_> {
     fn default() -> Self {
         Self {
@@ -156,11 +174,14 @@ impl Default for BaseClientBuilder<'_> {
             indexes: Indexes::new(),
             read_timeout: DEFAULT_READ_TIMEOUT,
             connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            extra_middleware: None,
+            proxies: vec![],
             http_proxy: None,
             https_proxy: None,
             no_proxy: None,
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
+            custom_client: None,
             subcommand: None,
             client_name: None,
             no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
@@ -188,6 +209,17 @@ impl<'a> BaseClientBuilder<'a> {
             connect_timeout,
             ..Self::default()
         }
+    }
+
+    /// Use a custom reqwest client instead of creating a new one.
+    ///
+    /// This allows you to provide your own reqwest client with custom configuration.
+    /// Note that some configuration options from this builder will still be applied
+    /// to the client via middleware.
+    #[must_use]
+    pub fn custom_client(mut self, client: Client) -> Self {
+        self.custom_client = Some(client);
+        self
     }
 
     #[must_use]
@@ -259,6 +291,18 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
         self.connect_timeout = connect_timeout;
+        self
+    }
+
+    #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.extra_middleware = Some(middleware);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.proxies.push(proxy);
         self
     }
 
@@ -504,18 +548,23 @@ impl<'a> BaseClientBuilder<'a> {
         };
 
         // Configure mTLS.
-        let mut client_builder =
-            if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
-                match read_identity(&ssl_client_cert) {
-                    Ok(identity) => client_builder.identity(identity),
-                    Err(err) => {
-                        warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
-                        client_builder
-                    }
+        let client_builder = if let Some(ssl_client_cert) = env::var_os(EnvVars::SSL_CLIENT_CERT) {
+            match read_identity(&ssl_client_cert) {
+                Ok(identity) => client_builder.identity(identity),
+                Err(err) => {
+                    warn_user_once!("Ignoring invalid `SSL_CLIENT_CERT`: {err}");
+                    client_builder
                 }
-            } else {
-                client_builder
-            };
+            }
+        } else {
+            client_builder
+        };
+
+        // apply proxies
+        let mut client_builder = client_builder;
+        for p in &self.proxies {
+            client_builder = client_builder.proxy(p.clone());
+        }
 
         let no_proxy = self
             .no_proxy
@@ -554,6 +603,13 @@ impl<'a> BaseClientBuilder<'a> {
                         client = client.with(retry_strategy);
                     }
 
+                    // When supplied, add the extra middleware.
+                    if let Some(extra_middleware) = &self.extra_middleware {
+                        for middleware in &extra_middleware.0 {
+                            client = client.with_arc(middleware.clone());
+                        }
+                    }
+
                     client.build()
                 };
 
@@ -567,6 +623,13 @@ impl<'a> BaseClientBuilder<'a> {
                         UvRetryableStrategy,
                     );
                     client = client.with(retry_strategy);
+                }
+
+                // When supplied, add the extra middleware.
+                if let Some(extra_middleware) = &self.extra_middleware {
+                    for middleware in &extra_middleware.0 {
+                        client = client.with_arc(middleware.clone());
+                    }
                 }
 
                 // Initialize the authentication middleware to set headers.

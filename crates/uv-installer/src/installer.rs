@@ -65,9 +65,8 @@ impl<'a> Installer<'a> {
     }
 
     /// Set the `installer_name` to something other than `"uv"`.
-    #[cfg(test)]
     #[must_use]
-    fn with_installer_name(self, installer_name: Option<String>) -> Self {
+    pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
         Self {
             name: installer_name,
             ..self

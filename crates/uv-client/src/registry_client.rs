@@ -8,7 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::{HeaderMap, StatusCode};
 use itertools::Either;
-use reqwest::Response;
+use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{Instrument, debug, info_span, instrument, trace, warn};
@@ -37,7 +37,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ClientBuildError, RedirectPolicy};
+use crate::base_client::{BaseClientBuilder, ClientBuildError, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleDetailHTML;
@@ -66,6 +66,12 @@ impl<'a> RegistryClientBuilder<'a> {
             cache,
             base_client_builder: base_client_builder.redirect(RedirectPolicy::RetriggerMiddleware),
         }
+    }
+
+    #[must_use]
+    pub fn with_reqwest_client(mut self, client: reqwest::Client) -> Self {
+        self.base_client_builder = self.base_client_builder.custom_client(client);
+        self
     }
 
     #[must_use]
@@ -99,6 +105,12 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
+        self.base_client_builder = self.base_client_builder.extra_middleware(middleware);
+        self
+    }
+
+    #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.base_client_builder = self.base_client_builder.markers(markers);
         self
@@ -107,6 +119,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.base_client_builder = self.base_client_builder.platform(platform);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.base_client_builder = self.base_client_builder.proxy(proxy);
         self
     }
 

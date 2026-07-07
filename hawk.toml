@@ -12,6 +12,112 @@ package = "uv-dev"
 bin = "uv-dev"
 reason = "developer binary shipped from this workspace"
 
+# Keep public APIs that are consumed by downstream Rust integrations.
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::custom_client"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to provide its own HTTP client"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::extra_middleware"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to attach downstream HTTP middleware"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::proxy"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-client consumers"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "registry_client::RegistryClientBuilder::<'a>::with_reqwest_client"
+kind = "inherent_method"
+level = "expect"
+reason = "used by downstream integrations to provide their own HTTP client"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "registry_client::RegistryClientBuilder::<'a>::extra_middleware"
+kind = "inherent_method"
+level = "expect"
+reason = "used by downstream integrations to attach HTTP middleware"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "registry_client::RegistryClientBuilder::<'a>::proxy"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-client consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_distribution"
+item = "index::registry_wheel_index::RegistryWheelIndex::<'a>::get"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to inspect cached registry wheels"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "python_requirement::PythonRequirement::from_marker_environment"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct resolver inputs"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "resolver::Resolver::<Provider, InstalledPackages>::new_custom_io"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a resolver with custom providers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "resolver::provider::DefaultResolverProvider::<'a, Context>::new"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a custom resolver provider"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "yanks::AllowedYanks::from_manifest"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to build resolver policy from a manifest"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_dispatch"
+item = "BuildDispatch::<'a>::with_build_extra_env_vars"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to pass its activated environment into source builds"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_installer"
+item = "installer::Installer::<'a>::with_installer_name"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to distinguish packages installed through its uv integration"
+
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
 [[override]]
