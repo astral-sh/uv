@@ -3059,7 +3059,7 @@ where
             match error {
                 UvError::User(err) => {
                     trace!("Error trace: {err:?}");
-                    writeln!(printer.stderr_important(), "{}", err.to_string().bold())
+                    commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Failure.into()
                 }
