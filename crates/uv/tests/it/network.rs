@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use assert_fs::fixture::{ChildPath, FileWriteStr, PathChild};
 use bytes::Bytes;
 use http::StatusCode;
+use http::header::USER_AGENT;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
@@ -12,7 +13,7 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use serde_json::json;
 use tokio_stream::wrappers::ReceiverStream;
-use wiremock::matchers::{any, method};
+use wiremock::matchers::{any, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use uv_static::EnvVars;
@@ -120,6 +121,47 @@ async fn mock_simple_api(server: &MockServer) {
         )
         .mount(server)
         .await;
+}
+
+/// Check that index requests include the version reported by the real `rustc` executable.
+#[tokio::test]
+async fn index_user_agent_includes_rustc_version() -> anyhow::Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/linehaul-user-agent-test/"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut command = context.pip_install();
+    command
+        .arg("linehaul-user-agent-test")
+        .arg("--default-index")
+        .arg(server.uri());
+
+    let output = command.output()?;
+    anyhow::ensure!(
+        !output.status.success(),
+        "installing an unavailable package unexpectedly succeeded"
+    );
+
+    let requests = server.received_requests().await.unwrap();
+    let request = requests.first().unwrap();
+    let user_agent = request.headers.get(USER_AGENT).unwrap().to_str().unwrap();
+
+    let (_, linehaul) = user_agent.split_once(' ').unwrap();
+    let linehaul: serde_json::Value = serde_json::from_str(linehaul).unwrap();
+    let rustc_version = linehaul["rustc_version"].as_str().unwrap();
+
+    // NOTE: Intentionally not performing an exact match so that we don't have
+    // to churn this on every MSRV bump.
+    let version_pattern = regex::Regex::new(r"\d+\.\d+\.\d+").unwrap();
+    assert!(version_pattern.is_match(rustc_version));
+
+    Ok(())
 }
 
 fn connection_reset(_request: &wiremock::Request) -> io::Error {

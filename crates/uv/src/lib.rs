@@ -32,7 +32,7 @@ use uv_cli::{
     PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, RustcVersion};
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -125,6 +125,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if let Some(directory) = directory.as_ref() {
         std::env::set_current_dir(directory)?;
     }
+
+    // Spawn our `rustc --version` worker.
+    let rustc_version = RustcVersion::spawn();
 
     // Parse the external command, if necessary.
     let parsed_run_command = if let Commands::Project(command) = &*cli.command
@@ -342,6 +345,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 &cli.top_level.global_args,
                 filesystem.as_ref(),
                 &environment,
+                &rustc_version,
             )
             .await?;
         (script, Some(run_command))
@@ -627,6 +631,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .rustc_version(rustc_version)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());
