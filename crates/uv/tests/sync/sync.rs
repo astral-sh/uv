@@ -848,7 +848,7 @@ fn sync_json_check_outdated_environment() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     "#);
 
     Ok(())
@@ -1330,7 +1330,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The environment is outdated; run `uv sync` to update the environment
+    error: The environment is outdated; run `uv sync` to update the environment
     ");
 
     // Sync the environment.
@@ -1878,16 +1878,18 @@ fn sync_build_isolation_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -1966,16 +1968,18 @@ fn sync_build_isolation_package_order() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -2142,16 +2146,18 @@ fn sync_build_isolation_extra() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-      × Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `hatchling.build.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: The build backend returned an error
+      Caused by: Call to `hatchling.build.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-          ModuleNotFoundError: No module named 'hatchling'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+        ModuleNotFoundError: No module named 'hatchling'
 
     hint: `source-distribution` was included because `project[compile]` (v0.1.0) depends on `source-distribution`
+
     hint: This error likely indicates that `source-distribution` depends on `hatchling`, but doesn't declare it as a build dependency. If `source-distribution` is a first-party package, consider adding `hatchling` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -2284,15 +2290,16 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+        [stderr]
+        Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2524,13 +2531,12 @@ fn sync_extra_build_dependencies_setuptools_legacy() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+        [stderr]
+        Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -2630,15 +2636,16 @@ fn sync_extra_build_dependencies_setuptools() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+        [stderr]
+        Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2820,15 +2827,16 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+        [stderr]
+        Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2972,15 +2980,16 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Found system anyio instead of local anyio
-
+        [stderr]
+        Found system anyio instead of local anyio
 
     hint: `child` was included because `project` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -3037,18 +3046,20 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-            File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-              import anyio
-          ModuleNotFoundError: No module named 'anyio'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+          File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
+            import anyio
+        ModuleNotFoundError: No module named 'anyio'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -6539,13 +6550,13 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+        [stderr]
+        Missing `anyio` module
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -10649,30 +10660,31 @@ fn sync_derivation_chain() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -10713,30 +10725,31 @@ fn sync_derivation_chain_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project[wsgi]` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -10779,30 +10792,31 @@ fn sync_derivation_chain_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `project:wsgi` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#);
 
@@ -11370,18 +11384,19 @@ fn sync_git_path_archive_missing_lfs() -> Result<()> {
             .sync()
             .arg("--frozen")
             .env(EnvVars::UV_INTERNAL__TEST_LFS_DISABLED, "1"),
-        @r###"
+        @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
-      ├─▶ The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
-      ╰─▶ Git LFS extension not found. Ensure that Git LFS is installed and available.
+    error: Failed to prepare distributions
+      Caused by: Failed to download `iniconfig @ git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true`
+      Caused by: The wheel `git+https://github.com/astral-sh/archive-in-git-test@bb7ce6abf9f90544767701de5b7b0c7802dc642b#path=archives/iniconfig-2.0.0-py3-none-any.whl&lfs=true` is missing Git LFS artifacts.
+      Caused by: Git LFS extension not found. Ensure that Git LFS is installed and available.
 
     hint: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###
+    "
     );
 
     Ok(())
@@ -11414,8 +11429,9 @@ fn mismatched_name_self_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `foo @ file://[TEMP_DIR]/`
-      ╰─▶ Package metadata name `project` does not match given name `foo`
+    error: Failed to prepare distributions
+      Caused by: Failed to build `foo @ file://[TEMP_DIR]/`
+      Caused by: Package metadata name `project` does not match given name `foo`
 
     hint: `foo` was included because `project` (v0.1.0) depends on `foo`
     ");
@@ -11468,8 +11484,8 @@ fn mismatched_name_cached_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Package metadata name `iniconfig` does not match given name `foo`
+    error: Failed to download and build `foo @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Package metadata name `iniconfig` does not match given name `foo`
     ");
 
     Ok(())
@@ -12026,14 +12042,15 @@ fn url_hash_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+    error: Failed to prepare distributions
+      Caused by: Failed to download and build `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
 
     hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
@@ -12100,14 +12117,15 @@ fn path_hash_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-      × Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+    error: Failed to prepare distributions
+      Caused by: Failed to build `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
+      Caused by: Hash mismatch for `iniconfig @ file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz`
 
-          Expected:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
+        Expected:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b4
 
-          Computed:
-            sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
+        Computed:
+          sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3
 
     hint: `iniconfig` was included because `project` (v0.1.0) depends on `iniconfig`
     ");
@@ -12868,10 +12886,11 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
 
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -12903,9 +12922,9 @@ fn unsupported_git_scheme() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-      × Failed to build `foo @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `foo`
-      ╰─▶ Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
+    error: Failed to build `foo @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `foo`
+      Caused by: Unsupported Git URL scheme `c:` in `c:/home/ferris/projects/foo` (expected one of `https:`, `ssh:`, or `file:`)
     ");
     Ok(())
 }
@@ -15212,15 +15231,16 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+        [stderr]
+        Expected `anyio` version 3.0 but got 4.3.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -15444,13 +15464,13 @@ fn sync_extra_build_variables() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `parent @ file://[TEMP_DIR]/`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_editable` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+        [stderr]
+        Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -15544,8 +15564,8 @@ fn reject_unmatched_runtime() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `source-distribution==0.0.3`
-      ╰─▶ Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
+    error: Failed to download and build `source-distribution==0.0.3`
+      Caused by: Extra build requirement `iniconfig` was declared with `match-runtime = true`, but `source-distribution` does not declare static metadata, making runtime-matching impossible
 
     hint: `source-distribution` (v0.0.3) was included because `foo` (v0.1.0) depends on `source-distribution`
     ");

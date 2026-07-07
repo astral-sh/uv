@@ -445,8 +445,8 @@ fn upgrade_reports_no_solution_without_mutation() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of idna==9999 and your project depends on idna==9999, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     assert_project_unchanged(&context, pyproject_toml)

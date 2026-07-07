@@ -1052,8 +1052,8 @@ fn install_no_index() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -1101,8 +1101,8 @@ fn install_no_index_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because iniconfig was not found in the provided package locations and you require iniconfig==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -1433,8 +1433,8 @@ fn mismatched_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
       Caused by: The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
@@ -2096,8 +2096,8 @@ fn duplicate_package_overlap() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require markupsafe==2.1.3 and markupsafe==2.1.2, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2771,8 +2771,8 @@ fn incompatible_wheel() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `foo` was invalid
       Caused by: Failed to read from zip file
@@ -2924,8 +2924,8 @@ fn find_links_offline_no_match() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because numpy was not found in the cache and you require numpy, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -3049,8 +3049,8 @@ fn offline() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -3140,8 +3140,8 @@ fn incompatible_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require anyio==3.7.0 and anyio==3.6.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3237,8 +3237,8 @@ fn repeat_requirement_incompatible() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require anyio<4.0.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -3535,9 +3535,9 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3575,9 +3575,9 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3750,14 +3750,15 @@ fn require_hashes_wheel_no_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download and build `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Computed:
+          sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
     "
     );
 
@@ -3842,14 +3843,15 @@ fn require_hashes_source_only_binary() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Expected:
+          sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3874,14 +3876,15 @@ fn require_hashes_wrong_digest() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -3906,15 +3909,16 @@ fn require_hashes_wrong_algorithm() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha512:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "
     );
 
@@ -3977,14 +3981,14 @@ fn require_hashes_source_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-          Expected:
-            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Expected:
+          sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-          Computed:
-            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+        Computed:
+          sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "
     );
 
@@ -4008,14 +4012,14 @@ fn require_hashes_source_url_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
-      ╰─▶ Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+    error: Failed to download and build `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
+      Caused by: Hash mismatch for `source-distribution @ https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz`
 
-          Expected:
-            sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
+        Expected:
+          sha256:a7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
 
-          Computed:
-            sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
+        Computed:
+          sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106
     "
     );
 
@@ -4079,14 +4083,15 @@ fn require_hashes_wheel_url() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-          Expected:
-            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -4133,14 +4138,15 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-          Expected:
-            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -4165,8 +4171,8 @@ fn require_hashes_git() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
-      ╰─▶ Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+    error: Failed to download and build `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
+      Caused by: Hash-checking is not supported for Git repositories: `anyio @ git+https://github.com/agronholm/anyio@4a23745badf5bf5ef7928f1e346e9986bd696d82`
     "
     );
 
@@ -4195,8 +4201,8 @@ fn require_hashes_source_tree() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
-      ╰─▶ Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
+    error: Failed to build `black @ file://[WORKSPACE]/test/packages/black_editable`
+      Caused by: Hash-checking is not supported for local directories: `black @ file://[WORKSPACE]/test/packages/black_editable`
     "
     );
 
@@ -4241,14 +4247,15 @@ fn require_hashes_re_download() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio==4.0.0`
-      ╰─▶ Hash mismatch for `anyio==4.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio==4.0.0`
+      Caused by: Hash mismatch for `anyio==4.0.0`
 
-          Expected:
-            sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:afdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
     "
     );
 
@@ -4332,14 +4339,15 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+    error: Failed to prepare distributions
+      Caused by: Failed to read `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-1000.0.0-py3-none-any.whl`
 
-          Expected:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
+        Computed:
+          sha256:a34996d4bd5abb2336e14ff0a2d22b92cfd0f0ed344e6883041ce01953276a13
     "
     );
 
@@ -4400,14 +4408,14 @@ fn require_hashes_source_path_mismatch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
-      ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+    error: Failed to build `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
+      Caused by: Hash mismatch for `tqdm @ file://[WORKSPACE]/test/links/tqdm-999.0.0.tar.gz`
 
-          Expected:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+        Expected:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
 
-          Computed:
-            sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
+        Computed:
+          sha256:89fa05cffa7f457658373b85de302d24d0c205ceda2819a8739e324b75e9430b
     "
     );
 
@@ -4584,16 +4592,17 @@ fn require_hashes_repeated_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `anyio @ https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl`
 
-          Expected:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-            sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+        Expected:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          sha512:e30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
 
-          Computed:
-            sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
-            sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
+        Computed:
+          sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f
+          sha512:f30761c1e8725b49c498273b90dba4b05c0fd157811994c806183062cb6647e773364ce45f0e1ff0b10e32fe6d0232ea5ad39476ccf37109d6b49603a09c11c2
     "
     );
 
@@ -4788,14 +4797,15 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:123
+        Expected:
+          sha256:123
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+        Computed:
+          sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -4907,14 +4917,15 @@ fn require_hashes_find_links_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:123
+        Expected:
+          sha256:123
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+        Computed:
+          sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -5080,8 +5091,8 @@ fn require_hashes_registry_valid_hash() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because example-a-961b4c22 was not found in the package registry and you require example-a-961b4c22==1.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -5110,14 +5121,15 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `example-a-961b4c22==1.0.0`
+      Caused by: Hash mismatch for `example-a-961b4c22==1.0.0`
 
-          Expected:
-            sha256:123
+        Expected:
+          sha256:123
 
-          Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+        Computed:
+          sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
     "
     );
 
@@ -5306,14 +5318,15 @@ fn require_hashes_url_invalid() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
-      ╰─▶ Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+    error: Failed to prepare distributions
+      Caused by: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
+      Caused by: Hash mismatch for `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374`
 
-          Expected:
-            sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Expected:
+          sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
 
-          Computed:
-            sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
+        Computed:
+          sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374
     "
     );
 
@@ -5744,10 +5757,12 @@ fn incompatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to prepare distributions
+      Caused by: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 

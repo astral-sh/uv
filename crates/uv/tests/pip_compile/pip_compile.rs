@@ -445,8 +445,8 @@ fn compile_constraints_many_versions() -> Result<()> {
 
     let mut filters = context.filters();
     filters.push((
-        r"(?s)  × No solution found when resolving dependencies:.*requirements are unsatisfiable\.",
-        "  × No solution found when resolving dependencies: [LONG DERIVATION]",
+        r"(?s)error: No solution found when resolving dependencies:.*requirements are unsatisfiable\.",
+        "error: No solution found when resolving dependencies: [LONG DERIVATION]",
     ));
 
     uv_snapshot!(filters, context.pip_compile()
@@ -461,7 +461,7 @@ fn compile_constraints_many_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies: [LONG DERIVATION]
+    error: No solution found when resolving dependencies: [LONG DERIVATION]
     ");
 
     Ok(())
@@ -2091,9 +2091,9 @@ fn compile_python_37() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
-          And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and black==23.10.1 depends on Python>=3.8, we can conclude that black==23.10.1 cannot be used.
+        And because you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
     hint: The `--python-version` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., black==23.10.1 only supports >=3.8). Consider using a higher `--python-version` value.
     ");
@@ -2630,8 +2630,8 @@ fn compile_git_mismatched_name() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
-      ╰─▶ Package metadata name `flask` does not match given name `dask`
+    error: Failed to download and build `dask @ git+https://github.com/pallets/flask.git@3.0.0`
+      Caused by: Package metadata name `flask` does not match given name `dask`
     "
     );
 
@@ -2803,8 +2803,8 @@ fn conflicting_direct_url_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of werkzeug==3.0.0 and you require werkzeug==3.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -2929,9 +2929,9 @@ fn conflicting_transitive_url_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
-          And because you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only werkzeug<3.0.0 is available and flask==3.0.0 depends on werkzeug>=3.0.0, we can conclude that flask==3.0.0 cannot be used.
+        And because you require flask==3.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3282,8 +3282,8 @@ fn requirement_constraint_override_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of anyio==3.7.0 and you require anyio==3.7.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3508,8 +3508,8 @@ dependencies = ["anyio==3.7.0", "anyio==4.0.0"]
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because my-project depends on anyio==3.7.0 and anyio==4.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -3541,8 +3541,8 @@ dependencies = ["anyio==300.1.4"]
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of anyio==300.1.4 and my-project depends on anyio==300.1.4, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -4159,13 +4159,13 @@ fn compile_yanked_version_indirect() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of attrs are available:
-              attrs<=20.3.0
-              attrs==21.1.0
-              attrs>=21.2.0
-          and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
-          And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of attrs are available:
+            attrs<=20.3.0
+            attrs==21.1.0
+            attrs>=21.2.0
+        and attrs==21.1.0 was yanked (reason: Installable but not importable on Python 3.4), we can conclude that attrs>20.3.0,<21.2.0 cannot be used.
+        And because you require attrs>20.3.0,<21.2.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7147,8 +7147,8 @@ fn no_index_requirements_txt() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because tqdm was not found in the provided package locations and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     "
@@ -7256,8 +7256,8 @@ fn offline_registry() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because black was not found in the cache and you require black==23.10.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -7387,8 +7387,8 @@ fn offline_find_links() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because tqdm was not found in the cache and you require tqdm, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     "
@@ -7432,8 +7432,8 @@ fn offline_direct_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+    error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
+      Caused by: Network connectivity is disabled, but the requested data wasn't found in the cache for: `https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
     "
     );
 
@@ -7492,8 +7492,8 @@ fn invalid_metadata_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Metadata for `validation` (v2.0.0) could not be parsed:
       Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
@@ -7523,8 +7523,8 @@ fn invalid_metadata_multiple_dist_info() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because validation==3.0.0 has an invalid package format and you require validation==3.0.0, we can conclude that your requirements are unsatisfiable.
 
     hint: The structure of `validation` (v3.0.0) was invalid:
       Multiple .dist-info directories found: validation-2.0.0, validation-3.0.0
@@ -7817,8 +7817,8 @@ fn compile_constraints_incompatible_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only anyio>=4 is available and you require anyio<4, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only anyio>=4 is available and you require anyio<4, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -7841,8 +7841,8 @@ fn index_url_in_requirements() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and you require anyio<4, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because anyio was not found in the package registry and you require anyio<4, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10591,8 +10591,8 @@ fn compile_constraints_incompatible_version() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10619,8 +10619,8 @@ fn conflicting_url_markers() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require filelock==1.0.0 and filelock==3.8.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -10773,8 +10773,8 @@ fn override_with_incompatible_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because you require anyio>=3.0.0 and anyio<3.0.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -11774,9 +11774,9 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -11816,9 +11816,9 @@ requires-python = ">=3.13"
 
     ----- stderr -----
     warning: The requested Python version 3.11 is not available; 3.12.[X] will be used to build dependencies instead.
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the requested Python version (>=3.11) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
 
     hint: The `--python-version` value (>=3.11) includes Python versions that are not supported by your dependencies (e.g., example==0.0.0 only supports >=3.13). Consider using a higher `--python-version` value.
     "
@@ -12019,9 +12019,9 @@ fn not_found_direct_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
-      ├─▶ Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
+    error: Failed to download `iniconfig @ https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+      Caused by: Failed to fetch: `https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl`
+      Caused by: HTTP status client error (404 Not Found) for url (https://files.pythonhosted.org/packages/ef/a6/fake/iniconfig-2.0.0-py3-none-any.whl)
     "
     );
 
@@ -12059,9 +12059,9 @@ requires-python = ">=3.13"
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -13180,10 +13180,10 @@ requires-python = ">3.8"
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
-          And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
-          And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of anyio==0.0.0 and lib==0.0.0 depends on anyio==0.0.0, we can conclude that lib==0.0.0 cannot be used.
+        And because only lib==0.0.0 is available and example==0.0.0 depends on lib, we can conclude that example==0.0.0 cannot be used.
+        And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -13353,8 +13353,8 @@ fn compile_index_url_first_match_base() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of jinja2==3.1.0 and you require jinja2==3.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "
@@ -13387,8 +13387,8 @@ fn compile_index_url_first_match_marker() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of jinja2{sys_platform == 'linux'}==3.1.0 and you require jinja2{sys_platform == 'linux'}==3.1.0, we can conclude that your requirements are unsatisfiable.
 
     hint: `jinja2` was found on https://astral-sh.github.io/pytorch-mirror/whl/cpu, but not at the requested version (jinja2==3.1.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
     "
@@ -13420,8 +13420,8 @@ fn compile_index_url_first_match_all_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of pandas and you require pandas, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there are no versions of pandas and you require pandas, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -13805,8 +13805,8 @@ fn no_version_for_direct_dependency() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ you require pypyp ∅
+    error: No solution found when resolving dependencies:
+      Caused by: you require pypyp ∅
     "
     );
 
@@ -14135,13 +14135,13 @@ fn git_source_missing_tag() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
-      ├─▶ Git operation failed
-      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ├─▶ failed to fetch tag `missing`
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
-          --- stderr
-          fatal: couldn't find remote ref refs/tags/missing
+    error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
+      Caused by: Git operation failed
+      Caused by: failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      Caused by: failed to fetch tag `missing`
+      Caused by: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
+        --- stderr
+        fatal: couldn't find remote ref refs/tags/missing
     ");
 
     Ok(())
@@ -14440,9 +14440,9 @@ fn no_binary_only_binary() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels, we can conclude that source-distribution<=0.0.1 cannot be used.
-          And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only source-distribution>=0.0.1 is available and source-distribution==0.0.1 has no usable wheels, we can conclude that source-distribution<=0.0.1 cannot be used.
+        And because you require source-distribution<=0.0.1, we can conclude that your requirements are unsatisfiable.
 
     hint: Wheels are required for `source-distribution` because building from source is disabled for all packages (i.e., with `--no-build`)
     "
@@ -14525,10 +14525,11 @@ fn incompatible_build_constraint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -14595,10 +14596,11 @@ build-constraint-dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -14683,10 +14685,11 @@ build-constraint-dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40 and setuptools==1, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -15040,9 +15043,9 @@ fn universal_required_environment() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
-      ╰─▶ Because only a==1.0.0 is available and a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of a cannot be used.
-          And because project depends on a, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'arm64'):
+      Caused by: Because only a==1.0.0 is available and a==1.0.0 has no `platform_machine == 'arm64'`-compatible wheels, we can conclude that all versions of a cannot be used.
+        And because project depends on a, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -15063,9 +15066,9 @@ fn compile_enumerate_no_versions() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
-          And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.10.[X]) does not satisfy Python>=3.11,<4.0 and all versions of rooster-blue depend on Python>=3.11,<4.0, we can conclude that all versions of rooster-blue cannot be used.
+        And because you require rooster-blue, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -15780,30 +15783,30 @@ fn compile_derivation_chain() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `wsgiref==0.1.2`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to build `wsgiref==0.1.2`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 14, in <module>
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
-              return self._get_build_requires(config_settings, requirements=['wheel'])
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
-              self.run_setup()
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
-              super().run_setup(setup_script=setup_script)
-            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
-              exec(code, locals())
-            File "<string>", line 5, in <module>
-            File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
-              print "Setuptools version",version,"or greater has been installed."
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
-
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 14, in <module>
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 325, in get_requires_for_build_wheel
+            return self._get_build_requires(config_settings, requirements=['wheel'])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 295, in _get_build_requires
+            self.run_setup()
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 487, in run_setup
+            super().run_setup(setup_script=setup_script)
+          File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 311, in run_setup
+            exec(code, locals())
+          File "<string>", line 5, in <module>
+          File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
+            print "Setuptools version",version,"or greater has been installed."
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        SyntaxError: Missing parentheses in call to 'print'. Did you mean print(...)?
 
     hint: `wsgiref` (v0.1.2) was included because `child` (v0.1.0) depends on `wsgiref`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     "#
     );
@@ -15828,28 +15831,29 @@ fn invalid_platform() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of open3d are available:
-              open3d==0.8.0.0
-              open3d==0.9.0.0
-              open3d==0.10.0.0
-              open3d==0.10.0.1
-              open3d==0.11.0
-              open3d==0.11.1
-              open3d==0.11.2
-              open3d==0.12.0
-              open3d==0.13.0
-              open3d==0.14.1
-              open3d==0.15.1
-              open3d==0.15.2
-              open3d==0.16.0
-              open3d==0.16.1
-              open3d==0.17.0
-              open3d==0.18.0
-          and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
-          And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because only the following versions of open3d are available:
+            open3d==0.8.0.0
+            open3d==0.9.0.0
+            open3d==0.10.0.0
+            open3d==0.10.0.1
+            open3d==0.11.0
+            open3d==0.11.1
+            open3d==0.11.2
+            open3d==0.12.0
+            open3d==0.13.0
+            open3d==0.14.1
+            open3d==0.15.1
+            open3d==0.15.2
+            open3d==0.16.0
+            open3d==0.16.1
+            open3d==0.17.0
+            open3d==0.18.0
+        and open3d<=0.15.2 has no wheels with a matching Python ABI tag (e.g., `cp310`), we can conclude that open3d<=0.15.2 cannot be used.
+        And because open3d>=0.16.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`) and you require open3d, we can conclude that your requirements are unsatisfiable.
 
     hint: You require CPython 3.10 (`cp310`), but we only found wheels for `open3d` (v0.15.2) with the following Python ABI tags: `cp36m`, `cp37m`, `cp38`, `cp39`
+
     hint: Wheels are available for `open3d` (v0.18.0) on the following platforms: `manylinux_2_27_aarch64`, `manylinux_2_27_x86_64`, `macosx_11_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`
     ");
 
@@ -15958,10 +15962,10 @@ fn universal_conflicting_override_urls() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to resolve dependencies for `anyio` (v4.3.0)
-      ╰─▶ Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
-          - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
-          - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
+    error: Failed to resolve dependencies for package `anyio==4.3.0`
+      Caused by: Requirements contain conflicting URLs for package `sniffio` in split `sys_platform == 'win32'`:
+        - https://files.pythonhosted.org/packages/c3/a0/5dba8ed157b0136607c7f2151db695885606968d1fae123dc3391e0cfdbf/sniffio-1.3.0-py3-none-any.whl
+        - https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl
     "
     );
 
@@ -18540,9 +18544,9 @@ fn incompatible_cuda() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
-          And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because torchvision==0.17.1+cu118 depends on system:cuda==11.8 and torch==2.2.1+cu121 depends on system:cuda==12.1, we can conclude that torch==2.2.1+cu121 and torchvision==0.17.1+cu118 are incompatible.
+        And because you require torch==2.2.1+cu121 and torchvision==0.17.1+cu118, we can conclude that your requirements are unsatisfiable.
     ");
 
     Ok(())
@@ -18800,8 +18804,8 @@ async fn credentials_from_subdirectory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and foo depends on iniconfig, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because iniconfig was not found in the package registry and foo depends on iniconfig, we can conclude that your requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context

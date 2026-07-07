@@ -1669,10 +1669,11 @@ fn tool_install_with_incompatible_build_constraints() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
     ");
 
     tool_dir
@@ -3418,26 +3419,25 @@ fn tool_install_uninstallable() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `pyenv==0.0.1`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `pyenv==0.0.1`
+      Caused by: The build backend returned an error
+      Caused by: Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
 
-          [stdout]
-          running bdist_wheel
-          running build
-          installing to build/bdist.linux-x86_64/wheel
-          running install
+        [stdout]
+        running bdist_wheel
+        running build
+        installing to build/bdist.linux-x86_64/wheel
+        running install
 
-          [stderr]
-          # NOTE #
-          We are sorry, but this package is not installable with pip.
+        [stderr]
+        # NOTE #
+        We are sorry, but this package is not installable with pip.
 
-          Please read the installation instructions at:
+        Please read the installation instructions at:
 
-          https://github.com/pyenv/pyenv#installation
-          #
-
-
+        https://github.com/pyenv/pyenv#installation
+        #
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
@@ -3686,9 +3686,9 @@ fn tool_install_git_does_not_infer_dynamic_requires_python() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
-          And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because the current Python version (3.11.[X]) does not satisfy Python>=3.12,<3.13 and dynamic-requires-python-tool==0.1.0 depends on Python>=3.12,<3.13, we can conclude that dynamic-requires-python-tool==0.1.0 cannot be used.
+        And because only dynamic-requires-python-tool==0.1.0 is available and you require dynamic-requires-python-tool, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
@@ -4884,9 +4884,9 @@ fn tool_install_preserve_environment() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
-          And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because black==24.1.1 depends on packaging>=22.0 and you require black==24.1.1, we can conclude that you require packaging>=22.0.
+        And because you require packaging==0.0.1, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Install `black`. The tool should already be installed, since we didn't remove the environment.
@@ -6272,9 +6272,9 @@ fn tool_install_find_links() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
-          And because you require basic-app, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because only basic-app==0.1 is available and basic-app==0.1 needs to be downloaded from a registry, we can conclude that all versions of basic-app cannot be used.
+        And because you require basic-app, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because the network was disabled. When the network is disabled, registry packages may only be read from the cache.
     ");
@@ -6564,21 +6564,22 @@ fn tool_install_lock_verifies_hashes() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
-      ╰─▶ Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+    error: Failed to prepare distributions
+      Caused by: Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      Caused by: Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
 
-          Expected:
-            sha256:0000000000000000000000000000000000000000000000000000000000000000
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-          Computed:
-            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
-    "#);
+        Computed:
+          sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+    ");
 
     Ok(())
 }
