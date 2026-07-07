@@ -29,6 +29,7 @@ See the [upstream commits](https://github.com/astral-sh/rs-async-zip/compare/v0.
 
 ### Performance
 
+- Only compile bytecode for installed distributions in `uv pip install` ([#19914](https://github.com/astral-sh/uv/pull/19914))
 - Avoid allocating URL-safe Git revisions ([#20194](https://github.com/astral-sh/uv/pull/20194))
 - Avoid allocating canonical Python request strings ([#20193](https://github.com/astral-sh/uv/pull/20193))
 - Avoid allocating custom Astral mirror URLs ([#20204](https://github.com/astral-sh/uv/pull/20204))
@@ -49,7 +50,6 @@ See the [upstream commits](https://github.com/astral-sh/rs-async-zip/compare/v0.
 - Avoid cloning owned dependency metadata ([#20212](https://github.com/astral-sh/uv/pull/20212))
 - Avoid redundant direct URL clones ([#20207](https://github.com/astral-sh/uv/pull/20207))
 - Create metadata version errors lazily ([#20205](https://github.com/astral-sh/uv/pull/20205))
-- Only compile bytecode for installed distributions in `uv pip install` ([#19914](https://github.com/astral-sh/uv/pull/19914))
 - Optimize expanded tag compatibility checks ([#20171](https://github.com/astral-sh/uv/pull/20171))
 - Optimize parsing of single-digit three-part versions ([#20118](https://github.com/astral-sh/uv/pull/20118))
 
