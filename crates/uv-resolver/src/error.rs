@@ -617,7 +617,7 @@ impl NoSolutionError {
     }
 
     /// Initialize a [`NoSolutionHeader`] for this error.
-    pub fn header(&self) -> NoSolutionHeader {
+    pub(crate) fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
     }
 
@@ -634,7 +634,7 @@ impl NoSolutionError {
     /// The result is cached so repeated calls (e.g., from both `Display` and
     /// explicit hint collection) don't recompute the derivation tree.
     /// Return the formatted report string.
-    pub fn report(&self) -> &str {
+    pub(crate) fn report(&self) -> &str {
         &self.cached().0
     }
 
@@ -1495,7 +1495,7 @@ impl NoSolutionHeader {
 
     /// Set the context for the resolution failure.
     #[must_use]
-    pub fn with_context(mut self, context: &'static str) -> Self {
+    pub(crate) fn with_context(mut self, context: &'static str) -> Self {
         self.context = Some(context);
         self
     }
