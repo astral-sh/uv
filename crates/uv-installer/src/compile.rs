@@ -161,8 +161,9 @@ async fn wait_for_workers(
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
 /// that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
-/// a broken `python`.
+/// All compilation errors are muted (like pip). By default, each file has a 60-second timeout to
+/// handle a broken `python`. Set `UV_COMPILE_BYTECODE_TIMEOUT` to a number of seconds to override
+/// the timeout, or to `0` to disable it.
 ///
 /// We only compile all files, but we don't update the RECORD, relying on PEP 491:
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
