@@ -69,12 +69,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         build_context: &'a Context,
         downloads_semaphore: Arc<Semaphore>,
     ) -> Self {
+        // When ZIP validation is disabled, the extracted tree can contain files that aren't
+        // represented in the central directory and therefore aren't included in its digest.
+        // Avoid using an incomplete digest as a content-addressed archive ID.
+        let content_addressed_cache = uv_preview::is_enabled(PreviewFeature::ContentAddressedCache)
+            && !uv_extract::insecure_no_validate();
         Self {
             build_context,
             builder: SourceDistributionBuilder::new(build_context),
             client: ManagedClient::new(client, downloads_semaphore),
             reporter: None,
-            content_addressed_cache: uv_preview::is_enabled(PreviewFeature::ContentAddressedCache),
+            content_addressed_cache,
         }
     }
 

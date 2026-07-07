@@ -89,7 +89,7 @@ pub(crate) fn validate_archive_member_name(name: &str) -> Result<(), Error> {
 }
 
 /// Returns `true` if ZIP validation is disabled.
-pub(crate) fn insecure_no_validate() -> bool {
+pub fn insecure_no_validate() -> bool {
     // TODO(charlie) Parse this in `EnvironmentOptions`.
     let Some(value) = std::env::var_os(EnvVars::UV_INSECURE_NO_ZIP_VALIDATION) else {
         return false;
