@@ -3308,8 +3308,8 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because nonexistent-package-quux was not found in the package registry and you require nonexistent-package-quux, we can conclude that your requirements are unsatisfiable.
     ");
 }
 
