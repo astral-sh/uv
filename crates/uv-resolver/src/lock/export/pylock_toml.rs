@@ -1384,7 +1384,7 @@ impl PylockTomlPackage {
         };
         Some(ResolvedRepositoryReference {
             reference: RepositoryReference {
-                url: RepositoryUrl::new(url),
+                url: RepositoryUrl::new(url.clone()),
                 reference,
             },
             sha: vcs.commit_id,

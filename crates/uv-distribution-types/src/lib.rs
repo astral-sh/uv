@@ -1417,11 +1417,11 @@ impl RemoteSource for Dist {
 
 impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
+        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self))
+        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
     }
 }
 

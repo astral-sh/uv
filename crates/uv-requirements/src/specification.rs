@@ -580,7 +580,8 @@ impl RequirementsSpecification {
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
@@ -618,7 +619,8 @@ impl RequirementsSpecification {
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
@@ -644,7 +646,8 @@ impl RequirementsSpecification {
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",

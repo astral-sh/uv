@@ -30,7 +30,7 @@ impl PackageId {
 
     /// Create a new [`PackageId`] from a URL.
     pub(crate) fn from_url(url: &DisplaySafeUrl) -> Self {
-        Self::Url(CanonicalUrl::new(url))
+        Self::Url(CanonicalUrl::new(url.clone()))
     }
 }
 
@@ -101,7 +101,7 @@ impl VersionId {
     /// Create a new [`VersionId`] from an archive URL.
     pub fn from_archive(location: &DisplaySafeUrl, subdirectory: Option<&Path>) -> Self {
         Self::ArchiveUrl {
-            location: CanonicalUrl::new(location),
+            location: CanonicalUrl::new(location.clone()),
             subdirectory: subdirectory.map(Path::to_path_buf),
         }
     }

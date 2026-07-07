@@ -3944,7 +3944,7 @@ impl Package {
         match &self.id.source {
             Source::Git(url, git) => Ok(Some(ResolvedRepositoryReference {
                 reference: RepositoryReference {
-                    url: RepositoryUrl::new(&url.to_url().map_err(LockErrorKind::InvalidUrl)?),
+                    url: RepositoryUrl::new(url.to_url().map_err(LockErrorKind::InvalidUrl)?),
                     reference: GitReference::from(git.kind.clone()),
                 },
                 sha: git.precise,

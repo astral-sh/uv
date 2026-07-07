@@ -29,19 +29,19 @@ impl WheelCache<'_> {
             Self::Index(IndexUrl::Pypi(_)) => WheelCacheKind::Pypi.root(),
             Self::Index(url) => WheelCacheKind::Index
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url.url()))),
+                .join(cache_digest(&CanonicalUrl::new(url.url().clone()))),
             Self::Url(url) => WheelCacheKind::Url
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url))),
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Path(url) => WheelCacheKind::Path
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url))),
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Editable(url) => WheelCacheKind::Editable
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url))),
+                .join(cache_digest(&CanonicalUrl::new((*url).clone()))),
             Self::Git(url, sha) => WheelCacheKind::Git
                 .root()
-                .join(cache_digest(&CanonicalUrl::new(url)))
+                .join(cache_digest(&CanonicalUrl::new((*url).clone())))
                 .join(sha),
         }
     }
