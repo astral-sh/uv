@@ -22,6 +22,7 @@ use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
 use crate::commands::tool::common::NoExecutablesError;
 use crate::commands::tool::run::ToolRunScriptError;
+use crate::printer::Printer;
 
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
@@ -221,6 +222,15 @@ fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>
     anstream::eprint!("{report:?}");
     let hints = err.hints();
     anstream::eprint!("{hints}");
+}
+
+/// Format an error chain with the default user-facing hints and output settings.
+pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::fmt::Result {
+    uv_errors::write_error_chain_with_options(
+        err.as_ref(),
+        hints_for_error(err),
+        uv_errors::ErrorOptions::default().with_stream(printer.stderr_important()),
+    )
 }
 
 /// Walk an error chain and collect hint strings from all known error types.
