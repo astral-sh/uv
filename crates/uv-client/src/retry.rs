@@ -18,7 +18,7 @@ use crate::WrappedReqwestError;
 
 /// An extension over [`DefaultRetryableStrategy`] that logs transient request failures and
 /// adds additional retry cases.
-pub struct UvRetryableStrategy;
+pub(crate) struct UvRetryableStrategy;
 
 impl RetryableStrategy for UvRetryableStrategy {
     fn handle(&self, res: &Result<Response, reqwest_middleware::Error>) -> Option<Retryable> {

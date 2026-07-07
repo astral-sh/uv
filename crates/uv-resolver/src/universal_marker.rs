@@ -430,19 +430,14 @@ impl std::fmt::Debug for UniversalMarker {
 /// This encapsulates the encoding of extras and groups into PEP 508
 /// markers.
 #[derive(Default, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct ConflictMarker {
+pub(crate) struct ConflictMarker {
     marker: MarkerTree,
 }
 
 impl ConflictMarker {
     /// A constant conflict marker that always evaluates to `true`.
-    pub const TRUE: Self = Self {
+    pub(crate) const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
-    };
-
-    /// A constant conflict marker that always evaluates to `false`.
-    pub const FALSE: Self = Self {
-        marker: MarkerTree::FALSE,
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.

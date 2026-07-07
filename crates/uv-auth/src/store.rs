@@ -57,7 +57,7 @@ impl AuthBackend {
 /// Authentication scheme to use.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AuthScheme {
+enum AuthScheme {
     /// HTTP Basic Authentication
     ///
     /// Uses a username and password.

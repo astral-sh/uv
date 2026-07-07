@@ -1,0 +1,344 @@
+# Keep intentional uniform field visibility audited instead of excluding whole files.
+
+preserve-uniform-field-visibility = true
+
+[[production]]
+package = "uv"
+bin = "uv"
+reason = "shipped package manager binary"
+
+[[production]]
+package = "uv-dev"
+bin = "uv-dev"
+reason = "developer binary shipped from this workspace"
+
+# Keep public APIs that are consumed by downstream Rust integrations.
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::custom_client"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to provide its own HTTP client"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::extra_middleware"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to attach downstream HTTP middleware"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "base_client::BaseClientBuilder::<'a>::proxy"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-client consumers"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "registry_client::RegistryClientBuilder::<'a>::extra_middleware"
+kind = "inherent_method"
+level = "expect"
+reason = "used by downstream integrations to attach HTTP middleware"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_client"
+item = "registry_client::RegistryClientBuilder::<'a>::proxy"
+kind = "inherent_method"
+level = "expect"
+reason = "retained for downstream uv-client consumers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_distribution"
+item = "index::registry_wheel_index::RegistryWheelIndex::<'a>::get"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to inspect cached registry wheels"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "python_requirement::PythonRequirement::from_marker_environment"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct resolver inputs"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "resolver::Resolver::<Provider, InstalledPackages>::new_custom_io"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a resolver with custom providers"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "resolver::provider::DefaultResolverProvider::<'a, Context>::new"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to construct a custom resolver provider"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_resolver"
+item = "yanks::AllowedYanks::from_manifest"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to build resolver policy from a manifest"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_dispatch"
+item = "BuildDispatch::<'a>::with_build_extra_env_vars"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to pass its activated environment into source builds"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_installer"
+item = "installer::Installer::<'a>::with_installer_name"
+kind = "inherent_method"
+level = "expect"
+reason = "used by Pixi to distinguish packages installed through its uv integration"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv"
+item = "run"
+kind = "function"
+level = "expect"
+reason = "used as a benchmark entrypoint"
+
+# Keep APIs that are consumed by another platform or by non-Rust components.
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_fs"
+item = "with_retry_sync"
+kind = "function"
+level = "expect"
+target = "cfg(not(windows))"
+reason = "used by the Windows installer path"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_trampoline_builder"
+item = "Launcher::write_to_file"
+kind = "inherent_method"
+level = "expect"
+target = "cfg(not(windows))"
+reason = "used to create Windows launchers"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_trampoline_builder"
+item = "Launcher::with_python_path"
+kind = "inherent_method"
+level = "expect"
+target = "cfg(not(windows))"
+reason = "used to create Windows launchers"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::UV_INTERNAL__TEST_DIR"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "used by the integration test harness"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::UV_INTERNAL__TEST_SMB_FS"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "used by the Windows integration test harness"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::XDG_CACHE_HOME"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the platform directory implementation"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::PYC_INVALIDATION_MODE"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the embedded bytecode compilation helper"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::VIRTUAL_ENV_DISABLE_PROMPT"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the generated activation scripts"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::LOCALAPPDATA"
+kind = "inherent_associated_constant"
+level = "expect"
+target = "cfg(not(windows))"
+reason = "used for Windows platform discovery"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::PYTHONHOME"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by generated activation scripts"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::PYVENV_LAUNCHER"
+kind = "inherent_associated_constant"
+level = "expect"
+target = "cfg(not(windows))"
+reason = "used by Windows trampoline launchers"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::UV_UNMANAGED_INSTALL"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the standalone installer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::UV_NO_MODIFY_PATH"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the standalone installer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_ACCESS_KEY_ID"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_SECRET_ACCESS_KEY"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_SESSION_TOKEN"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_PROFILE"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_CONFIG_FILE"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_static"
+item = "env_vars::EnvVars::AWS_SHARED_CREDENTIALS_FILE"
+kind = "inherent_associated_constant"
+level = "expect"
+reason = "read by the AWS request signer"
+
+# Keep conventional collection accessors together.
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_pypi_types"
+item = "dependency_groups::DependencyGroups::iter"
+kind = "inherent_method"
+level = "expect"
+reason = "required alongside IntoIterator by Clippy"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_resolver"
+item = "lock::Lock::is_empty"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside Lock::len"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_resolver"
+item = "resolution::output::ResolverOutput::is_empty"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside ResolverOutput::len"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::arch"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::libc"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_python"
+item = "installation::PythonInstallation::os"
+kind = "inherent_method"
+level = "expect"
+reason = "kept public alongside the other PythonInstallation platform accessors"
+
+[[override]]
+lint = "hawk::dead_public"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::is_virtualenv"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as part of the PyVenvConfiguration accessors"
+
+[[override]]
+lint = "hawk::unnecessary_public"
+crate = "uv_python"
+item = "virtualenv::PyVenvConfiguration::set"
+kind = "inherent_method"
+level = "expect"
+reason = "retained as a public pyvenv.cfg editing helper"

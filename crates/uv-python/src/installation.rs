@@ -50,7 +50,7 @@ impl PythonInstallation {
 
     /// Return a new installation with the given [`PythonSource`].
     #[must_use]
-    pub(crate) fn with_source(self, source: PythonSource) -> Self {
+    fn with_source(self, source: PythonSource) -> Self {
         Self { source, ..self }
     }
 
@@ -555,13 +555,13 @@ pub enum PythonInstallationKeyError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonInstallationKey {
-    pub(crate) implementation: LenientImplementationName,
-    pub(crate) major: u8,
-    pub(crate) minor: u8,
-    pub(crate) patch: u8,
-    pub(crate) prerelease: Option<Prerelease>,
-    pub(crate) platform: Platform,
-    pub(crate) variant: PythonVariant,
+    pub(super) implementation: LenientImplementationName,
+    pub(super) major: u8,
+    pub(super) minor: u8,
+    pub(super) patch: u8,
+    pub(super) prerelease: Option<Prerelease>,
+    pub(super) platform: Platform,
+    pub(super) variant: PythonVariant,
 }
 
 impl PythonInstallationKey {

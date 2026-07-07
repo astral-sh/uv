@@ -11,7 +11,8 @@ pub use registry_client::{
     Connectivity, MetadataFormat, RegistryClient, RegistryClientBuilder, SimpleDetailMetadata,
     SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
 };
-pub use retry::{RetriableError, RetryState, UvRetryableStrategy, retryable_on_request_failure};
+pub(crate) use retry::UvRetryableStrategy;
+pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
 pub use rkyvutil::OwnedArchive;
 
 mod base_client;

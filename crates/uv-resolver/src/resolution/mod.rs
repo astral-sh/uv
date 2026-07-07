@@ -42,7 +42,7 @@ pub(crate) struct AnnotatedDist {
 impl AnnotatedDist {
     /// Returns `true` if the [`AnnotatedDist`] is a base package (i.e., not an extra or a
     /// dependency group).
-    pub(crate) fn is_base(&self) -> bool {
+    fn is_base(&self) -> bool {
         self.extra.is_none() && self.group.is_none()
     }
 

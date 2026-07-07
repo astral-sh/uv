@@ -80,7 +80,7 @@ pub(crate) mod lock_target;
 pub(crate) mod remove;
 pub(crate) mod run;
 pub(crate) mod sync;
-pub(crate) mod toolchain;
+mod toolchain;
 pub(crate) mod tree;
 pub(crate) mod upgrade;
 pub(crate) mod version;
@@ -2722,7 +2722,7 @@ pub(crate) struct EnvironmentUpdate {
 
 impl EnvironmentUpdate {
     /// Convert the [`EnvironmentUpdate`] into a [`PythonEnvironment`].
-    pub(crate) fn into_environment(self) -> PythonEnvironment {
+    fn into_environment(self) -> PythonEnvironment {
         self.environment
     }
 }

@@ -1,8 +1,9 @@
 use std::borrow::Cow;
+#[cfg(any(test, feature = "testing"))]
+use std::ops::BitOr;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::BitOr,
     str::FromStr,
 };
 
@@ -444,7 +445,8 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
+    #[cfg(any(test, feature = "testing"))]
+    fn new(flags: &[PreviewFeature]) -> Self {
         Self {
             flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
         }

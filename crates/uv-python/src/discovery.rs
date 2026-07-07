@@ -215,9 +215,9 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// See [`FindPythonResult`].
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
-    pub(crate) request: PythonRequest,
-    pub(crate) python_preference: PythonPreference,
-    pub(crate) environment_preference: EnvironmentPreference,
+    pub(super) request: PythonRequest,
+    pub(super) python_preference: PythonPreference,
+    pub(super) environment_preference: EnvironmentPreference,
 }
 
 /// A location for discovery of a Python installation or interpreter.
@@ -941,7 +941,7 @@ fn source_satisfies_environment_preference(
 ///
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
 impl Error {
-    pub fn is_critical(&self) -> bool {
+    pub(crate) fn is_critical(&self) -> bool {
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
@@ -1033,7 +1033,7 @@ fn python_installations_with_name<'a>(
 }
 
 /// Iterate over all Python installations that satisfy the given request.
-pub fn find_python_installations<'a>(
+pub(crate) fn find_python_installations<'a>(
     request: &'a PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,

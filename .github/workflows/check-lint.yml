@@ -15,6 +15,8 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
+  # renovate: datasource=github-releases depName=astral-sh/hawk
+  HAWK_VERSION: 0.1.5
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
@@ -149,6 +151,23 @@ jobs:
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  hawk:
+    timeout-minutes: 15
+    if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install 1.96.1
+      - name: "Install Hawk"
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
+      - name: "Hawk"
+        run: cargo +1.96.1 hawk -D warnings
 
   shear:
     name: "cargo shear"

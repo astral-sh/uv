@@ -3603,19 +3603,19 @@ pub(crate) struct ResolutionPackage {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct ResolutionDependencyEdge {
     /// This value is `None` if the dependency comes from the root package.
-    pub(crate) from: Option<PackageName>,
-    pub(crate) from_version: Version,
-    pub(crate) from_url: Option<VerbatimParsedUrl>,
-    pub(crate) from_index: Option<IndexUrl>,
-    pub(crate) from_extra: Option<ExtraName>,
-    pub(crate) from_group: Option<GroupName>,
-    pub(crate) to: PackageName,
-    pub(crate) to_version: Version,
-    pub(crate) to_url: Option<VerbatimParsedUrl>,
-    pub(crate) to_index: Option<IndexUrl>,
-    pub(crate) to_extra: Option<ExtraName>,
-    pub(crate) to_group: Option<GroupName>,
-    pub(crate) marker: MarkerTree,
+    pub(super) from: Option<PackageName>,
+    pub(super) from_version: Version,
+    pub(super) from_url: Option<VerbatimParsedUrl>,
+    pub(super) from_index: Option<IndexUrl>,
+    pub(super) from_extra: Option<ExtraName>,
+    pub(super) from_group: Option<GroupName>,
+    pub(super) to: PackageName,
+    pub(super) to_version: Version,
+    pub(super) to_url: Option<VerbatimParsedUrl>,
+    pub(super) to_index: Option<IndexUrl>,
+    pub(super) to_extra: Option<ExtraName>,
+    pub(super) to_group: Option<GroupName>,
+    pub(super) marker: MarkerTree,
 }
 
 impl ResolutionDependencyEdge {
