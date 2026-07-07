@@ -72,7 +72,7 @@ pub(crate) async fn logout(
         }
         AuthBackend::TextStore(mut store, _lock) => {
             if store
-                .remove(&service, Username::from(Some(username.clone())))
+                .remove(service, Username::from(Some(username)))
                 .is_none()
             {
                 bail!("No matching entry found for {display_url}");
