@@ -961,7 +961,10 @@ fn python_source_path_from_record(
 
 #[cfg(test)]
 mod tests {
-    use super::python_source_path_from_record;
+    use super::{
+        Error, is_build_user_failure, is_distribution_user_failure, is_git_user_failure,
+        python_source_path_from_record,
+    };
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -992,6 +995,73 @@ mod tests {
         assert_eq!(
             python_source_path_from_record(record_root, "package/data.txt", &site_packages),
             None
+        );
+    }
+
+    #[test]
+    fn classifies_distribution_failures() {
+        assert!(is_distribution_user_failure(
+            &uv_distribution::Error::NoBuild
+        ));
+        assert!(is_distribution_user_failure(
+            &uv_distribution::Error::MismatchedSize {
+                distribution: "demo".to_string(),
+                expected: 10,
+                actual: 5,
+            }
+        ));
+        assert!(is_distribution_user_failure(
+            &uv_distribution::Error::InstallWheelError(uv_install_wheel::Error::InvalidWheel(
+                "missing RECORD".to_string()
+            ))
+        ));
+        assert!(!is_distribution_user_failure(
+            &uv_distribution::Error::CacheRead(std::io::Error::other("broken cache"))
+        ));
+        assert!(!is_distribution_user_failure(
+            &uv_distribution::Error::InstallWheelError(uv_install_wheel::Error::Io(
+                std::io::Error::other("disk failure")
+            ))
+        ));
+    }
+
+    #[test]
+    fn classifies_build_failures() {
+        assert!(is_build_user_failure(&uv_types::AnyErrorBuild::from(
+            uv_build_frontend::Error::InvalidBackendPath("backend".to_string())
+        )));
+        assert!(is_build_user_failure(&uv_types::AnyErrorBuild::from(
+            uv_build_frontend::Error::BackendPathOutsideSourceTree("../backend".to_string())
+        )));
+        assert!(!is_build_user_failure(&uv_types::AnyErrorBuild::from(
+            uv_build_frontend::Error::Io(std::io::Error::other("disk failure"))
+        )));
+    }
+
+    #[test]
+    fn classifies_git_io_failures() {
+        assert!(!is_git_user_failure(&uv_git::GitResolverError::Io(
+            std::io::Error::other("broken cache")
+        )));
+        assert!(!is_git_user_failure(&uv_git::GitResolverError::Git(
+            anyhow::Error::from(std::io::Error::other("disk failure"))
+                .context("Failed to fetch repository")
+        )));
+    }
+
+    #[test]
+    fn operation_classification_delegates_to_causes() {
+        assert!(
+            Error::Resolve(uv_resolver::ResolveError::Distribution(
+                uv_distribution::Error::NoBuild
+            ))
+            .is_user_failure()
+        );
+        assert!(
+            !Error::Resolve(uv_resolver::ResolveError::Distribution(
+                uv_distribution::Error::CacheRead(std::io::Error::other("broken cache"))
+            ))
+            .is_user_failure()
         );
     }
 }
@@ -1396,6 +1466,279 @@ pub(crate) enum Error {
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
     OutdatedEnvironment(Box<Changelog>),
+}
+
+impl Error {
+    /// Return whether this operation failure is an expected user-facing failure.
+    pub(crate) fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Prepare(error) => is_prepare_user_failure(error),
+            Self::Resolve(error) => is_resolve_user_failure(error),
+            Self::Hash(_) | Self::OutdatedEnvironment(_) => true,
+            Self::Requirements(error) => is_requirements_user_failure(error),
+            Self::Uninstall(_) | Self::Io(_) | Self::Fmt(_) | Self::Anyhow(_) => false,
+        }
+    }
+}
+
+fn is_prepare_user_failure(error: &uv_installer::PrepareError) -> bool {
+    match error {
+        uv_installer::PrepareError::NoBuild(_)
+        | uv_installer::PrepareError::NoBinary(_)
+        | uv_installer::PrepareError::CyclicBuildDependency(_) => true,
+        uv_installer::PrepareError::Dist(_, _, _, error) => is_distribution_user_failure(error),
+        uv_installer::PrepareError::Thread(_) => false,
+    }
+}
+
+fn is_requirements_user_failure(error: &uv_requirements::Error) -> bool {
+    match error {
+        uv_requirements::Error::Dist(_, _, error) | uv_requirements::Error::Distribution(error) => {
+            is_distribution_user_failure(error)
+        }
+        uv_requirements::Error::DistributionTypes(_)
+        | uv_requirements::Error::HashStrategy(_)
+        | uv_requirements::Error::WheelFilename(_) => true,
+        uv_requirements::Error::Io(error) => matches!(
+            error.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+        ),
+    }
+}
+
+fn is_resolve_user_failure(error: &uv_resolver::ResolveError) -> bool {
+    match error {
+        uv_resolver::ResolveError::Dependencies(error, ..) => is_resolve_user_failure(error),
+        uv_resolver::ResolveError::Distribution(error) => is_distribution_user_failure(error),
+        uv_resolver::ResolveError::ConflictingUrls { .. }
+        | uv_resolver::ResolveError::ConflictingIndexesForEnvironment { .. }
+        | uv_resolver::ResolveError::ConflictingIndexes(..)
+        | uv_resolver::ResolveError::DisallowedUrl { .. }
+        | uv_resolver::ResolveError::DistributionType(_)
+        | uv_resolver::ResolveError::NoSolution(_)
+        | uv_resolver::ResolveError::UnhashedPackage(_)
+        | uv_resolver::ResolveError::PackageUnavailable(_)
+        | uv_resolver::ResolveError::InvalidExtraInConflictMarker { .. }
+        | uv_resolver::ResolveError::InvalidValueInConflictMarker { .. }
+        | uv_resolver::ResolveError::MismatchedPackageName { .. } => true,
+        uv_resolver::ResolveError::Dist(_, _, _, error) => is_distribution_user_failure(error),
+        uv_resolver::ResolveError::Client(error) => is_client_user_failure(error),
+        uv_resolver::ResolveError::ChannelClosed
+        | uv_resolver::ResolveError::UnregisteredTask(_)
+        | uv_resolver::ResolveError::InvalidVersion(_)
+        | uv_resolver::ResolveError::ConflictingDistribution(_) => false,
+    }
+}
+
+fn is_distribution_user_failure(error: &uv_distribution::Error) -> bool {
+    match error {
+        uv_distribution::Error::NoBuild
+        | uv_distribution::Error::NoBuildPackage(_)
+        | uv_distribution::Error::InvalidUrl(_)
+        | uv_distribution::Error::NonFileUrl(_)
+        | uv_distribution::Error::WheelFilename(_)
+        | uv_distribution::Error::WheelMetadataNameMismatch { .. }
+        | uv_distribution::Error::WheelMetadataVersionMismatch { .. }
+        | uv_distribution::Error::WheelFilenameNameMismatch { .. }
+        | uv_distribution::Error::WheelFilenameVersionMismatch { .. }
+        | uv_distribution::Error::BuiltWheelIncompatibleHostPlatform { .. }
+        | uv_distribution::Error::BuiltWheelIncompatibleTargetPlatform { .. }
+        | uv_distribution::Error::Metadata(_)
+        | uv_distribution::Error::WheelMetadata(..)
+        | uv_distribution::Error::Extract(..)
+        | uv_distribution::Error::MissingPkgInfo
+        | uv_distribution::Error::MissingSubdirectory(..)
+        | uv_distribution::Error::MissingSourceDistGitLfsArtifacts(..)
+        | uv_distribution::Error::MissingWheelGitLfsArtifacts(..)
+        | uv_distribution::Error::PkgInfo(_)
+        | uv_distribution::Error::MissingPyprojectToml
+        | uv_distribution::Error::PyprojectToml(_)
+        | uv_distribution::Error::MetadataLowering(_)
+        | uv_distribution::Error::NotFound(_)
+        | uv_distribution::Error::RequiresPython(..)
+        | uv_distribution::Error::MismatchedHashes { .. }
+        | uv_distribution::Error::MismatchedSize { .. }
+        | uv_distribution::Error::MissingHashes { .. }
+        | uv_distribution::Error::MissingActualHashes { .. }
+        | uv_distribution::Error::MissingExpectedHashes { .. }
+        | uv_distribution::Error::HashesNotSupportedSourceTree(_)
+        | uv_distribution::Error::HashesNotSupportedGit(_) => true,
+        uv_distribution::Error::Build(error) => is_build_user_failure(error),
+        uv_distribution::Error::InstallWheelError(error) => is_install_wheel_user_failure(error),
+        uv_distribution::Error::Git(error) => is_git_user_failure(error),
+        uv_distribution::Error::Reqwest(error) => error
+            .inner()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND),
+        uv_distribution::Error::Client(error) => is_client_user_failure(error),
+        uv_distribution::Error::ClientBuild(error) => match error {
+            uv_client::ClientBuildError::Credentials(_)
+            | uv_client::ClientBuildError::IndexCredentials(_) => true,
+            uv_client::ClientBuildError::Reqwest(_) => false,
+        },
+        uv_distribution::Error::CacheRead(_)
+        | uv_distribution::Error::CacheWrite(_)
+        | uv_distribution::Error::CacheLock(_)
+        | uv_distribution::Error::CacheDecode(_)
+        | uv_distribution::Error::CacheEncode(_)
+        | uv_distribution::Error::CacheWalk(_)
+        | uv_distribution::Error::CacheInfo(_)
+        | uv_distribution::Error::ReadInstalled(..)
+        | uv_distribution::Error::CacheHeal(..)
+        | uv_distribution::Error::BaseInterpreter(_)
+        | uv_distribution::Error::Join(_)
+        | uv_distribution::Error::HashExhaustion(_) => false,
+        uv_distribution::Error::ReqwestMiddlewareError(error) => is_not_found_error(error.as_ref()),
+    }
+}
+
+fn is_client_user_failure(error: &uv_client::Error) -> bool {
+    match error.kind() {
+        uv_client::ErrorKind::InvalidUrl(_)
+        | uv_client::ErrorKind::MissingWheelGitLfsArtifacts(..)
+        | uv_client::ErrorKind::NonFileUrl(_)
+        | uv_client::ErrorKind::CannotBeABase(_)
+        | uv_client::ErrorKind::Metadata(..)
+        | uv_client::ErrorKind::NoIndex(_)
+        | uv_client::ErrorKind::RemotePackageNotFound(_)
+        | uv_client::ErrorKind::LocalPackageNotFound(_)
+        | uv_client::ErrorKind::LocalIndexNotFound(_)
+        | uv_client::ErrorKind::MetadataParseError(..)
+        | uv_client::ErrorKind::BadJson { .. }
+        | uv_client::ErrorKind::BadHtml { .. }
+        | uv_client::ErrorKind::MetadataRangeRequestsRequired(..)
+        | uv_client::ErrorKind::WheelFilename(_)
+        | uv_client::ErrorKind::NameMismatch { .. }
+        | uv_client::ErrorKind::Zip(..)
+        | uv_client::ErrorKind::MissingContentType(_)
+        | uv_client::ErrorKind::InvalidContentTypeHeader(..)
+        | uv_client::ErrorKind::UnsupportedMediaType(..)
+        | uv_client::ErrorKind::Offline(_) => true,
+        uv_client::ErrorKind::Git(error) => is_git_user_failure(error),
+        uv_client::ErrorKind::WrappedReqwestError(_, error) => error
+            .inner()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND),
+        uv_client::ErrorKind::Flat(uv_client::FlatIndexError::NonFileUrl(_)) => true,
+        uv_client::ErrorKind::Flat(
+            uv_client::FlatIndexError::FindLinksUrl(_, error)
+            | uv_client::FlatIndexError::FindLinksFile(_, error),
+        ) => is_client_user_failure(error),
+        uv_client::ErrorKind::Flat(uv_client::FlatIndexError::FindLinksDirectory(..))
+        | uv_client::ErrorKind::AsyncHttpRangeReader(..)
+        | uv_client::ErrorKind::CacheWrite(_)
+        | uv_client::ErrorKind::CacheLock(_)
+        | uv_client::ErrorKind::Io(_)
+        | uv_client::ErrorKind::Decode(_)
+        | uv_client::ErrorKind::Encode(_)
+        | uv_client::ErrorKind::ArchiveRead(_)
+        | uv_client::ErrorKind::ArchiveWrite(_) => false,
+    }
+}
+
+fn is_git_user_failure(error: &uv_git::GitResolverError) -> bool {
+    match error {
+        uv_git::GitResolverError::Git(error) => {
+            for cause in error.chain() {
+                if let Some(error) = cause.downcast_ref::<reqwest::Error>() {
+                    return error.status() == Some(reqwest::StatusCode::NOT_FOUND);
+                }
+                if cause.is::<std::io::Error>() {
+                    return false;
+                }
+            }
+            true
+        }
+        uv_git::GitResolverError::Reqwest(error) => {
+            error.status() == Some(reqwest::StatusCode::NOT_FOUND)
+        }
+        uv_git::GitResolverError::ReqwestMiddleware(error) => {
+            error.status() == Some(reqwest::StatusCode::NOT_FOUND)
+        }
+        uv_git::GitResolverError::Io(_)
+        | uv_git::GitResolverError::LockedFile(_)
+        | uv_git::GitResolverError::Join(_) => false,
+    }
+}
+
+fn is_not_found_error(mut error: &(dyn std::error::Error + 'static)) -> bool {
+    loop {
+        if error
+            .downcast_ref::<reqwest::Error>()
+            .and_then(reqwest::Error::status)
+            .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
+        {
+            return true;
+        }
+        let Some(source) = error.source() else {
+            return false;
+        };
+        error = source;
+    }
+}
+
+fn is_build_user_failure(error: &uv_types::AnyErrorBuild) -> bool {
+    let is_build_backend_error = error.is_build_backend_error();
+    let error = &**error as &(dyn std::error::Error + 'static);
+    if let Some(error) = error.downcast_ref::<uv_build_frontend::Error>() {
+        return match error {
+            uv_build_frontend::Error::InvalidSourceDist(_)
+            | uv_build_frontend::Error::InvalidPyprojectTomlSyntax(_)
+            | uv_build_frontend::Error::InvalidPyprojectTomlSchema(_)
+            | uv_build_frontend::Error::InvalidBackendPath(_)
+            | uv_build_frontend::Error::BackendPathOutsideSourceTree(_)
+            | uv_build_frontend::Error::CommandFailed(..)
+            | uv_build_frontend::Error::BuildBackend(_)
+            | uv_build_frontend::Error::MissingHeader(_)
+            | uv_build_frontend::Error::BuildScriptPath(_)
+            | uv_build_frontend::Error::CyclicBuildDependency(_)
+            | uv_build_frontend::Error::UnmatchedRuntime(..)
+            | uv_build_frontend::Error::Lowering(_) => true,
+            uv_build_frontend::Error::RequirementsResolve(_, error)
+            | uv_build_frontend::Error::RequirementsInstall(_, error) => {
+                is_build_user_failure(error)
+            }
+            uv_build_frontend::Error::Io(_) | uv_build_frontend::Error::Virtualenv(_) => false,
+        };
+    }
+    if let Some(error) = error.downcast_ref::<uv_dispatch::BuildDispatchError>() {
+        return match error {
+            uv_dispatch::BuildDispatchError::BuildFrontend(error) => is_build_user_failure(error),
+            uv_dispatch::BuildDispatchError::Resolve(error) => is_resolve_user_failure(error),
+            uv_dispatch::BuildDispatchError::Prepare(error) => is_prepare_user_failure(error),
+            uv_dispatch::BuildDispatchError::Lookahead(error) => {
+                is_requirements_user_failure(error)
+            }
+            uv_dispatch::BuildDispatchError::Tags(_)
+            | uv_dispatch::BuildDispatchError::Join(_)
+            | uv_dispatch::BuildDispatchError::Anyhow(_) => false,
+        };
+    }
+    is_build_backend_error
+}
+
+fn is_install_wheel_user_failure(error: &uv_install_wheel::Error) -> bool {
+    match error {
+        uv_install_wheel::Error::InvalidWheel(_)
+        | uv_install_wheel::Error::RecordFile { .. }
+        | uv_install_wheel::Error::RecordCsv(_)
+        | uv_install_wheel::Error::NonUtf8WheelPath(..)
+        | uv_install_wheel::Error::UnsupportedWindowsArch(_)
+        | uv_install_wheel::Error::DirectUrlJson(_)
+        | uv_install_wheel::Error::MissingRecord(_)
+        | uv_install_wheel::Error::MissingTopLevel(_)
+        | uv_install_wheel::Error::InvalidVersion(_)
+        | uv_install_wheel::Error::MismatchedName(..)
+        | uv_install_wheel::Error::MismatchedVersion(..)
+        | uv_install_wheel::Error::InvalidEggLink(_)
+        | uv_install_wheel::Error::ReservedScriptName { .. } => true,
+        uv_install_wheel::Error::Io(_)
+        | uv_install_wheel::Error::WalkDir(_)
+        | uv_install_wheel::Error::BrokenVenv(_)
+        | uv_install_wheel::Error::NotWindows
+        | uv_install_wheel::Error::LauncherError(_)
+        | uv_install_wheel::Error::Copy(_) => false,
+    }
 }
 
 impl uv_errors::Hinted for Error {

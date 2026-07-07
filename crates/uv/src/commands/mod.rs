@@ -160,7 +160,22 @@ impl From<project::ProjectError> for UvError {
             | project::ProjectError::LockFormat(..)
             | project::ProjectError::MissingLockfile(..)
             | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
+            project::ProjectError::Operation(error) => Self::from(error),
+            project::ProjectError::Requirements(error) => {
+                Self::from(pip::operations::Error::Requirements(error))
+            }
             error => Self::unexpected(error.into()),
+        }
+    }
+}
+
+impl From<pip::operations::Error> for UvError {
+    /// Classify an operation error at the point where it leaves its command.
+    fn from(error: pip::operations::Error) -> Self {
+        if error.is_user_failure() {
+            Self::user(error)
+        } else {
+            Self::unexpected(error.into())
         }
     }
 }
