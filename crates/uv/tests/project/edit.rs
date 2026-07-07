@@ -4991,9 +4991,9 @@ fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
     Ok(())
 }
 
-/// If an external package has unreadable metadata, retain candidates rather than risk breaking it.
+/// If an external package has unreadable metadata, prune based on the available metadata.
 #[test]
-fn remove_subset_retains_on_unreadable_external_metadata() -> Result<()> {
+fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
     let mut filters = context.filters();
@@ -5037,13 +5037,18 @@ fn remove_subset_retains_on_unreadable_external_metadata() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Retaining all removal candidates because dependency metadata is incomplete for b
-    Checked in [TIME]
+    warning: Unable to read complete dependency metadata for b; pruning based on available metadata
+    Uninstalled 4 packages in [TIME]
+     - candidate==1.0.0
+     - orphan==1.0.0
+     - orphan-leaf==1.0.0
+     - removed==1.0.0
     ");
 
+    context.assert_command("import b").success();
     context
         .assert_command("import candidate; import removed")
-        .success();
+        .failure();
 
     Ok(())
 }
