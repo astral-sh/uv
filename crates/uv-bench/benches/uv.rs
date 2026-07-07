@@ -17,9 +17,10 @@ use futures::io::AllowStdIo;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
-use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{ExpandedTags, SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
+use uv_platform_tags::{Arch, Os, Platform, Tags, TagsOptions};
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
@@ -281,6 +282,62 @@ fn layout(root: &Path) -> Layout {
     }
 }
 
+fn expanded_tags_compatibility(c: &mut Criterion<WallTime>) {
+    let compatible_tags = Tags::from_env(
+        &Platform::new(
+            Os::Manylinux {
+                major: 2,
+                minor: 17,
+            },
+            Arch::X86_64,
+        ),
+        (3, 12),
+        "cpython",
+        (3, 12),
+        TagsOptions::default(),
+    )
+    .expect("benchmark platform should be supported");
+
+    let cases = [
+        (
+            "expanded_tags_compatibility_small_exact",
+            ExpandedTags::parse(["cp312-cp312-manylinux_2_17_x86_64"])
+                .expect("benchmark input should be valid"),
+        ),
+        (
+            "expanded_tags_compatibility_small_pure",
+            ExpandedTags::parse(["py3-none-any"]).expect("benchmark input should be valid"),
+        ),
+        (
+            "expanded_tags_compatibility_multipart",
+            ExpandedTags::parse(["cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64"])
+                .expect("benchmark input should be valid"),
+        ),
+        (
+            "expanded_tags_compatibility_small_platform_incompatible",
+            ExpandedTags::parse(["cp312-cp312-win_amd64"])
+                .expect("benchmark input should be valid"),
+        ),
+        (
+            "expanded_tags_compatibility_separated_incompatible",
+            ExpandedTags::parse([
+                "cp312-foo-win_amd64",
+                "py2-cp312-win_amd64",
+                "py2-foo-manylinux_2_17_x86_64",
+            ])
+            .expect("benchmark input should be valid"),
+        ),
+    ];
+
+    for (name, expanded_tags) in cases {
+        c.bench_function(name, |b| {
+            b.iter(|| {
+                black_box(black_box(&expanded_tags).compatibility(black_box(&compatible_tags)));
+            });
+        });
+    }
+}
+
 fn resolve_warm_jupyter(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![Requirement::from(
         uv_pep508::Requirement::from_str("jupyter==1.0.0").unwrap(),
@@ -326,6 +383,7 @@ criterion_group!(
     unzip_wheel_many_files,
     prepare_wheel_many_files,
     install_wheel_many_files,
+    expanded_tags_compatibility,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
     resolve_warm_airflow
