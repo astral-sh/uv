@@ -4117,6 +4117,60 @@ fn install_upgrade() {
     );
 }
 
+/// `--upgrade` takes precedence over `upgrade-package` in configuration.
+#[test]
+fn install_upgrade_overrides_configured_upgrade_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Install old versions of two packages.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio==3.6.2")
+        .arg("httpcore==0.16.3"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==3.6.2
+     + certifi==2024.2.2
+     + h11==0.14.0
+     + httpcore==0.16.3
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        [pip]
+        upgrade-package = ["anyio"]
+    "#})?;
+
+    // Upgrade both packages, including `httpcore`, which is not selected in the configuration.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("anyio")
+        .arg("httpcore")
+        .arg("--upgrade"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - anyio==3.6.2
+     + anyio==4.3.0
+     - httpcore==0.16.3
+     + httpcore==1.0.4
+    ");
+
+    Ok(())
+}
+
 /// Install a package from a `requirements.txt` file, with a `constraints.txt` file.
 #[test]
 fn install_constraints_txt() -> Result<()> {

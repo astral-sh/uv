@@ -4008,9 +4008,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio>3.0.0")?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    let no_upgrade = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
+    // `--upgrade-package` takes precedence over `--no-upgrade`.
+    let upgrade_package = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.pip_compile())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -4044,10 +4043,10 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
     diff_uv_snapshot!(
         context.filters(),
-        &no_upgrade,
+        &upgrade_package,
         add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("idna")
@@ -4075,8 +4074,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "})?;
 
     // Despite `--upgrade-package idna` in the command line, we should upgrade all packages.
-    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings")
@@ -4108,8 +4107,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--no-upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
@@ -4134,8 +4133,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade")
             .arg("--show-settings")
             .arg("requirements.in"), @r#"
@@ -4160,8 +4159,8 @@ fn upgrade_pip_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.pip_compile())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.pip_compile())
             .arg("--upgrade-package")
             .arg("sniffio")
             .arg("--show-settings")
@@ -4206,9 +4205,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
         dependencies = ["anyio>3.0.0"]
     "#})?;
 
-    // `--no-upgrade` overrides `--upgrade-package`.
-    // TODO(charlie): This should mark `sniffio` for upgrade, but it doesn't.
-    let no_upgrade = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.lock())
+    // `--upgrade-package` takes precedence over `--no-upgrade`.
+    let upgrade_package = diff_uv_snapshot!(context.filters(), &baseline, add_shared_args(context.lock())
         .arg("--no-upgrade")
         .arg("--upgrade-package")
         .arg("sniffio")
@@ -4245,10 +4243,10 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade = false` in the configuration file, we should mark `idna` for upgrade.
-    // Compare against output before adding `upgrade = false`, with `--no-upgrade --upgrade-package sniffio`.
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
     diff_uv_snapshot!(
         context.filters(),
-        &no_upgrade,
+        &upgrade_package,
         add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("idna")
@@ -4279,8 +4277,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `--upgrade-package idna` on the CLI, we should upgrade all packages.
-    // Compare against output before adding `upgrade = true`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("idna")
             .arg("--show-settings"), @r#"
@@ -4315,8 +4313,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     "#})?;
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should disable upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--no-upgrade")
             .arg("--show-settings"), @r#"
     ...
@@ -4340,8 +4338,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Despite `upgrade-package = ["idna"]` in the configuration file, we should enable all upgrades.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade --upgrade-package sniffio`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade")
             .arg("--show-settings"), @r#"
     ...
@@ -4365,8 +4363,8 @@ fn upgrade_project_cli_config_interaction() -> anyhow::Result<()> {
     );
 
     // Mark both `sniffio` and `idna` for upgrade.
-    // Compare against output before adding `upgrade-package = ["idna"]`, with `--no-upgrade`.
-    diff_uv_snapshot!(context.filters(), &no_upgrade, add_shared_args(context.lock())
+    // Compare against the CLI `--no-upgrade --upgrade-package sniffio` baseline.
+    diff_uv_snapshot!(context.filters(), &upgrade_package, add_shared_args(context.lock())
             .arg("--upgrade-package")
             .arg("sniffio")
             .arg("--show-settings"), @r#"
