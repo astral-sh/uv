@@ -634,10 +634,18 @@ impl From<UpperBound> for Bound<Version> {
 mod tests {
     use super::*;
 
+    fn range(specifiers: &str) -> Ranges<Version> {
+        Ranges::from(specifiers.parse::<VersionSpecifiers>().unwrap())
+    }
+
+    fn version(version: &str) -> Version {
+        version.parse().unwrap()
+    }
+
     #[test]
     fn canonicalizes_known_pep440_successor_boundaries() {
-        let range = |specifier: &str| {
-            let range = Ranges::from(specifier.parse::<VersionSpecifiers>().unwrap());
+        let range = |specifiers| {
+            let range = range(specifiers);
             canonicalize_version_ranges(&range).unwrap_or(range)
         };
 
@@ -650,18 +658,10 @@ mod tests {
 
     #[test]
     fn canonicalization_preserves_pep440_floor_membership() {
-        let versions = ["0.dev0", "0a0.dev0"].map(|version| {
-            version
-                .parse::<Version>()
-                .expect("valid version for floor test")
-        });
+        let versions = ["0.dev0", "0a0.dev0"].map(version);
 
         for specifiers in ["==0.dev0", "!=0.dev0", ">=0a0.dev0", "<0a0.dev0"] {
-            let range = Ranges::from(
-                specifiers
-                    .parse::<VersionSpecifiers>()
-                    .expect("valid specifiers for floor test"),
-            );
+            let range = range(specifiers);
             let canonical = canonicalize_version_ranges(&range).unwrap_or_else(|| range.clone());
 
             for version in &versions {
@@ -690,18 +690,10 @@ mod tests {
             "1.0.post1.dev0",
             "2.0",
         ]
-        .map(|version| {
-            version
-                .parse::<Version>()
-                .expect("valid version for canonicalization test")
-        });
+        .map(version);
 
         for specifiers in ["==1.0", "!=1.0", "<1.0", "<=1.0", ">1.0a1", "<1.0.post1"] {
-            let range = Ranges::from(
-                specifiers
-                    .parse::<VersionSpecifiers>()
-                    .expect("valid specifiers for canonicalization test"),
-            );
+            let range = range(specifiers);
             let canonical = canonicalize_version_ranges(&range)
                 .expect("the specifier should contain an internal sentinel");
 
@@ -717,7 +709,7 @@ mod tests {
 
     #[test]
     fn skips_ranges_without_internal_sentinels() {
-        let range = Ranges::singleton("1.0".parse::<Version>().expect("valid version"));
+        let range = Ranges::singleton(version("1.0"));
 
         assert!(canonicalize_version_ranges(&range).is_none());
     }
