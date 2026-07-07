@@ -25,7 +25,7 @@ pub fn astral_mirror_url_from_env() -> Option<String> {
 /// Return the effective Astral mirror base URL, using the default mirror when unset.
 pub fn astral_mirror_base_url(astral_mirror_url: Option<&str>) -> Cow<'_, str> {
     custom_astral_mirror_url(astral_mirror_url)
-        .map(|url| Cow::Owned(url.trim_end_matches('/').to_string()))
+        .map(|url| Cow::Borrowed(url.trim_end_matches('/')))
         .unwrap_or(Cow::Borrowed(ASTRAL_MIRROR_BASE_URL))
 }
 
@@ -40,6 +40,25 @@ pub struct InvalidEnvironmentVariable {
     pub name: String,
     pub value: String,
     pub err: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use super::astral_mirror_base_url;
+
+    #[test]
+    fn astral_mirror_base_url_is_borrowed() {
+        assert!(matches!(
+            astral_mirror_base_url(None),
+            Cow::Borrowed("https://releases.astral.sh")
+        ));
+        assert!(matches!(
+            astral_mirror_base_url(Some("https://mirror.example.com/")),
+            Cow::Borrowed("https://mirror.example.com")
+        ));
+    }
 }
 
 /// Parse a boolean environment variable.
