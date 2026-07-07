@@ -76,13 +76,7 @@ impl GitReference {
 
     /// Percent-encode a revision string for use in a URL.
     pub(crate) fn encode_rev(rev: &str) -> Cow<'_, str> {
-        if rev.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~')
-        }) {
-            Cow::Borrowed(rev)
-        } else {
-            Cow::Owned(utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).to_string())
-        }
+        utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).into()
     }
 
     /// Returns the kind of this reference.
