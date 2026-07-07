@@ -159,11 +159,13 @@ impl VersionMap {
         }
     }
 
-    /// Return an iterator over the versions with at least one file within the exclude-newer
-    /// cutoffs, i.e., the versions that resolution could select.
+    /// Returns versions with at least one file not excluded by an upload-time cutoff, in ascending
+    /// order.
     ///
-    /// A superset of the selectable versions: Files that are unavailable for other reasons
-    /// (yanked, hashes, `requires-python`, `--no-binary`/`--no-build`) are not checked.
+    /// Versions unavailable for other reasons remain present so callers receive a conservative
+    /// superset of selectable versions. These reasons include yanks, hashes, `requires-python`,
+    /// and `--no-binary` or `--no-build` policies. Flat-index versions bypass upload-time cutoffs
+    /// because their files do not carry upload times.
     pub(crate) fn included_versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
         match &self.inner {
             VersionMapInner::Eager(eager) => either::Either::Left(eager.map.keys()),
@@ -529,8 +531,10 @@ impl VersionMapLazy {
         })
     }
 
-    /// Whether at least one file for this version is within the exclude-newer cutoffs,
-    /// mirroring the per-file exclusion in `get_simple` on the archived metadata.
+    /// Returns whether at least one file keeps this version inside the candidate universe.
+    ///
+    /// This mirrors the per-file cutoff handling in [`Self::get_simple`] without materializing the
+    /// distribution, including the two cutoff modes' distinct handling of missing upload times.
     fn any_file_included(&self, simple: &SimplePrioritizedDist) -> bool {
         if self.included_version_cutoff.is_none() && self.available_version_cutoff.is_none() {
             return true;

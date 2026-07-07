@@ -1109,11 +1109,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(())
     }
 
-    /// All versions that resolution could select for the package: all indexes, including
-    /// versions that are yanked or otherwise unavailable, plus installed versions that may be
-    /// missing from the indexes. Versions past the exclude-newer cutoff are omitted, so that
-    /// widening doesn't depend on versions published after the cutoff. A superset of the
-    /// selectable versions is sound for simplification, it only keeps some unneeded segments.
+    /// Returns the sorted, deduplicated candidate universe used to widen dependency ranges.
+    ///
+    /// Every selectable version must be present: omitting one could extend a dependency
+    /// incompatibility across it, while including an unselectable version only prevents a
+    /// possible simplification. The result is therefore conservative, including yanked and
+    /// otherwise unavailable versions from every index plus installed versions missing from the
+    /// indexes. Versions past the exclude-newer cutoff are omitted because resolution treats them
+    /// as nonexistent.
     ///
     /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
     /// package is not a registry package.
@@ -3209,7 +3212,11 @@ impl ForkState {
         Ok(())
     }
 
-    /// Add the dependencies for the selected version of the current package.
+    /// Adds the dependencies for the selected version of the current package.
+    ///
+    /// For registry packages, the depending version is widened across gaps containing no other
+    /// known version before its incompatibilities are added. Packages without a complete registry
+    /// version map retain the selected version's singleton range.
     fn add_package_version_dependencies<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
         for_package: Id<PubGrubPackage>,
@@ -3239,37 +3246,28 @@ impl ForkState {
             );
         }
 
-        let Self {
-            pubgrub,
-            next,
-            fork_urls,
-            fork_indexes,
-            known_versions,
-            ..
-        } = &mut *self;
-        // Widen the version whose dependencies we are adding to the largest set that contains
-        // no other known version: If these dependencies conflict, resolution rejects the whole
-        // set instead of accumulating one hole per rejected version, and the incompatibilities
-        // of adjacent versions merge into contiguous sets. This keeps the version sets minimal.
+        // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
+        // than leaving one hole per version.
         let versions = Range::singleton(for_version.clone());
-        let known_version = ResolverState::<InstalledPackages>::known_versions(
-            index,
-            installed_packages,
-            fork_urls,
-            fork_indexes,
-            known_versions,
-            &pubgrub.package_store[*next],
-        );
-        // A decided version is always selectable and thus in the list, but an empty list would
-        // unsoundly widen to the full range.
-        let versions =
-            if let Some(known_versions) = known_version.filter(|versions| !versions.is_empty()) {
-                versions.widen_versions(known_versions)
-            } else {
-                versions
-            };
-        let conflict = pubgrub.add_package_version_dependencies(
-            *next,
+        let versions = if let Some(known_versions) =
+            ResolverState::<InstalledPackages>::known_versions(
+                index,
+                installed_packages,
+                &self.fork_urls,
+                &self.fork_indexes,
+                &mut self.known_versions,
+                &self.pubgrub.package_store[self.next],
+            )
+            .filter(|versions| !versions.is_empty())
+        {
+            versions.widen_versions(known_versions)
+        } else {
+            // A decided version is always selectable and thus in the list, but an empty list
+            // would unsoundly widen to the full range.
+            versions
+        };
+        let conflict = self.pubgrub.add_package_version_dependencies(
+            self.next,
             for_version.clone(),
             versions,
             dependencies.into_iter().map(|dependency| {

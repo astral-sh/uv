@@ -577,23 +577,22 @@ impl NoSolutionError {
     /// ([`Ranges::widen_versions`]), keeping version sets small during resolution. The widened
     /// bounds are misleading in error messages, e.g., `a>1.5.2,<2.0.0` when `a 1.5.3` is the only
     /// version in that interval. Shrink the depending side and positive terms back: a set
-    /// containing all known versions of a package becomes the full range ("all versions of a"),
-    /// any other set is narrowed to inclusive bounds on the known versions it contains.
-    /// Dependency requests (the depended-on side and negative terms) are shown as requested.
+    /// containing all known versions of a package becomes the full range ("all versions of a");
+    /// otherwise, bounded ends are narrowed to inclusive bounds on the known versions they
+    /// contain while unbounded ends are preserved. Dependency requests (the depended-on side and
+    /// negative terms) are shown as requested.
     pub(crate) fn narrow_widened_sets(
         derivation_tree: ErrorTree,
         known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
     ) -> ErrorTree {
         let narrow = |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
-            let Some(name) = package.name_no_root() else {
+            let Some(versions) = package
+                .name_no_root()
+                .and_then(|name| known_versions.get(name))
+                .filter(|versions| !versions.is_empty())
+            else {
                 return set;
             };
-            let Some(versions) = known_versions.get(name) else {
-                return set;
-            };
-            if versions.is_empty() {
-                return set;
-            }
             if versions.iter().all(|version| set.contains(version)) {
                 Range::full()
             } else {
@@ -601,16 +600,16 @@ impl NoSolutionError {
             }
         };
 
-        transform_derivation_tree(
+        map_derivation_tree(
             derivation_tree,
             |external| match external {
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
                     let versions1 = narrow(&package1, versions1);
-                    Some(DerivationTree::External(External::FromDependencyOf(
+                    DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
-                    )))
+                    ))
                 }
-                external => Some(DerivationTree::External(external)),
+                external => DerivationTree::External(external),
             },
             |mut metadata, cause1, cause2| {
                 metadata.terms = metadata
@@ -625,14 +624,9 @@ impl NoSolutionError {
                     })
                     .collect();
 
-                match (cause1, cause2) {
-                    (Some(cause1), Some(cause2)) => Some(derived_tree(metadata, cause1, cause2)),
-                    (Some(cause), None) | (None, Some(cause)) => Some(cause),
-                    (None, None) => None,
-                }
+                derived_tree(metadata, cause1, cause2)
             },
         )
-        .expect("derivation tree should contain at least one term")
     }
 
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
