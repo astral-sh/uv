@@ -283,11 +283,11 @@ impl<T: Pep508Url> Requirement<T> {
     /// For example, given `flask >= 2.0.2`, calling `with_extra_marker("dotenv")` would return
     /// `flask >= 2.0.2 ; extra == "dotenv"`.
     #[must_use]
-    pub fn with_extra_marker(mut self, extra: &ExtraName) -> Self {
+    pub fn with_extra_marker(mut self, extra: ExtraName) -> Self {
         self.marker
             .and(MarkerTree::expression(MarkerExpression::Extra {
                 operator: ExtraOperator::Equal,
-                name: MarkerValueExtra::Extra(extra.clone()),
+                name: MarkerValueExtra::Extra(extra),
             }));
 
         self
@@ -1947,13 +1947,13 @@ mod tests {
     fn add_extra_marker() -> Result<(), InvalidNameError> {
         let requirement = Requirement::<Url>::from_str("pytest").unwrap();
         let expected = Requirement::<Url>::from_str("pytest; extra == 'dotenv'").unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         let requirement = Requirement::<Url>::from_str("pytest; '4.0' >= python_version").unwrap();
         let expected =
             Requirement::from_str("pytest; '4.0' >= python_version and extra == 'dotenv'").unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         let requirement = Requirement::<Url>::from_str(
@@ -1964,7 +1964,7 @@ mod tests {
             "pytest; ('4.0' >= python_version or sys_platform == 'win32') and extra == 'dotenv'",
         )
         .unwrap();
-        let actual = requirement.with_extra_marker(&ExtraName::from_str("dotenv")?);
+        let actual = requirement.with_extra_marker(ExtraName::from_str("dotenv")?);
         assert_eq!(actual, expected);
 
         Ok(())
