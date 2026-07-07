@@ -2,7 +2,7 @@ use std::env;
 use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTimeError};
+use std::time::{Duration, SystemTimeError};
 
 use anyhow::anyhow;
 use http::header::{
@@ -40,9 +40,7 @@ use uv_warnings::warn_user_once;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::{Certificates, read_identity};
-use crate::{
-    Connectivity, Error as ClientError, ErrorKind, RetriableError, RetryState, UvRetryableStrategy,
-};
+use crate::{Connectivity, RetriableError, RetryState, UvRetryableStrategy};
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -774,21 +772,8 @@ impl BaseClient {
         &self.credentials_cache
     }
 
-    pub(crate) fn reqwest_error_kind(
-        &self,
-        url: DisplaySafeUrl,
-        error: reqwest::Error,
-    ) -> ErrorKind {
-        ErrorKind::from_reqwest(url, error, self.certificate_source)
-    }
-
-    pub(crate) fn reqwest_middleware_error(
-        &self,
-        url: DisplaySafeUrl,
-        error: reqwest_middleware::Error,
-        start: Instant,
-    ) -> ClientError {
-        ClientError::from_reqwest_middleware(url, error, start, self.certificate_source)
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.certificate_source
     }
 
     /// The reqwest client without middleware.

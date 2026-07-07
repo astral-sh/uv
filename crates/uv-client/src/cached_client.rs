@@ -12,6 +12,7 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
+use crate::base_client::CertificateSource;
 use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
 use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
@@ -215,6 +216,10 @@ impl CachedClient {
     /// The underlying [`BaseClient`] without caching.
     pub fn uncached(&self) -> &BaseClient {
         &self.0
+    }
+
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.0.certificate_source()
     }
 
     /// Make a cached request with a custom response transformation while using
@@ -519,7 +524,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = %url))
             .await
-            .map_err(|err| self.0.reqwest_middleware_error(url.clone(), err, start))?;
+            .map_err(|err| {
+                Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+            })?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
             response.status(),
@@ -578,11 +585,9 @@ impl CachedClient {
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();
-        let mut response = self
-            .0
-            .execute(req)
-            .await
-            .map_err(|err| self.0.reqwest_middleware_error(url.clone(), err, start))?;
+        let mut response = self.0.execute(req).await.map_err(|err| {
+            Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+        })?;
         trace!(
             "Received response for fresh request with status {} for: {}",
             response.status(),
