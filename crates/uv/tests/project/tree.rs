@@ -2226,6 +2226,41 @@ fn non_project() -> Result<()> {
     Ok(())
 }
 
+/// A pyproject.toml with only `[dependency-groups]` (no `[project]`, no `[tool.uv.workspace]`)
+/// is valid per PEP 735, and `uv tree` must handle it.
+#[test]
+fn dependency_groups_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [dependency-groups]
+        async = ["anyio"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0 (group: async)
+    ├── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
 #[test]
 fn non_project_group_selection_with_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
