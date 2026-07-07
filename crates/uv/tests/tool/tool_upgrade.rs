@@ -1841,7 +1841,7 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
         .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1852,12 +1852,12 @@ async fn tool_upgrade_lock_verifies_hashes() -> Result<()> {
       Caused by: Failed to download `simple-launcher==0.1.0`
       Caused by: Hash mismatch for `simple-launcher==0.1.0`
 
-    Expected:
-      sha256:0000000000000000000000000000000000000000000000000000000000000000
+        Expected:
+          sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-    Computed:
-      sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
-    "#);
+        Computed:
+          sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+    ");
 
     Ok(())
 }

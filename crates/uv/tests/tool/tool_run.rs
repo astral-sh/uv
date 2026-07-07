@@ -105,8 +105,8 @@ fn tool_run_at_version() {
     ----- stderr -----
     error: Failed to parse: `pytest@`
       Caused by: Expected URL
-    pytest@
-           ^
+        pytest@
+               ^
     ");
 
     // Invalid versions are just treated as package and command names

@@ -1308,10 +1308,10 @@ fn check_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
       Caused by: TOML parse error at line 1, column 8
-      |
-    1 | invalid
-      |        ^
-    key with no value, expected `=`
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
     "
     );
 
@@ -1355,10 +1355,10 @@ fn check_script_no_sync_errors_on_invalid_lockfile() -> Result<()> {
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
     error: Failed to parse `uv.lock`
       Caused by: TOML parse error at line 1, column 8
-      |
-    1 | invalid
-      |        ^
-    key with no value, expected `=`
+          |
+        1 | invalid
+          |        ^
+        key with no value, expected `=`
     "
     );
 
