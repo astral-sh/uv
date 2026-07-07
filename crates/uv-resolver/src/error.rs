@@ -1277,7 +1277,7 @@ pub struct SentinelRange<'range>(&'range Ranges<Version>);
 
 impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
     fn from(range: &'range Range<Version>) -> Self {
-        Self(range.versions())
+        Self(range.raw_versions())
     }
 }
 
@@ -1598,7 +1598,7 @@ fn simplify_range(
     let versions = included_versions.get(name)?;
 
     // If this is a full range, there's nothing to simplify
-    if range.versions() == &Ranges::full() {
+    if range.raw_versions() == &Ranges::full() {
         return None;
     }
 

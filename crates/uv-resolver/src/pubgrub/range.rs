@@ -49,7 +49,8 @@ impl<T> Range<T> {
         &self.logical_versions
     }
 
-    fn raw_versions(&self) -> &Ranges<T> {
+    /// Return the original range bounds before logical canonicalization.
+    pub(crate) fn raw_versions(&self) -> &Ranges<T> {
         self.raw_versions
             .as_deref()
             .unwrap_or(&self.logical_versions)
@@ -178,11 +179,6 @@ impl Range<Version> {
 
     pub(crate) fn strictly_higher_than(version: Version) -> Self {
         Self::from_versions(Ranges::strictly_higher_than(version))
-    }
-
-    /// Return the original version bounds used for candidate iteration and diagnostics.
-    pub(crate) fn versions(&self) -> &Ranges<Version> {
-        self.raw_versions()
     }
 
     pub(crate) fn contains(&self, version: &Version) -> bool {
@@ -537,7 +533,7 @@ mod tests {
         let via_complement = exclusion.complement().intersection(&requirement);
 
         assert_eq!(range, via_complement);
-        assert_eq!(range.versions(), via_complement.versions());
+        assert_eq!(range.raw_versions(), via_complement.raw_versions());
         assert!(range.selection_eq(&via_complement));
         assert!(range.prerelease_region().is_none());
         assert!(via_complement.prerelease_region().is_none());
@@ -551,7 +547,7 @@ mod tests {
         let range = requirement.difference(&exclusion);
         let via_complement = exclusion.complement().intersection(&requirement);
 
-        assert_eq!(range.versions(), via_complement.versions());
+        assert_eq!(range.raw_versions(), via_complement.raw_versions());
         assert!(range.selection_eq(&via_complement));
         let prereleases = range
             .prerelease_region()
@@ -639,7 +635,7 @@ mod tests {
                 assert_matches_recanonicalized(&left.union(right));
                 let difference = left.difference(right);
                 let via_complement = right.complement().intersection(left);
-                assert_eq!(difference.versions(), via_complement.versions());
+                assert_eq!(difference.raw_versions(), via_complement.raw_versions());
                 assert!(difference.selection_eq(&via_complement));
                 assert_matches_recanonicalized(&difference);
             }
@@ -659,7 +655,7 @@ mod tests {
             empty.union(&range),
         ] {
             assert_eq!(collapsed, range);
-            assert_eq!(collapsed.versions(), range.versions());
+            assert_eq!(collapsed.raw_versions(), range.raw_versions());
             assert_matches_recanonicalized(&collapsed);
         }
     }
@@ -683,7 +679,7 @@ mod tests {
             let range = Range::from(parsed);
 
             assert!(range.raw_versions.is_some());
-            assert_eq!(range.versions(), &expected);
+            assert_eq!(range.raw_versions(), &expected);
             assert_eq!(&*range, &expected);
             assert_eq!(range.to_string(), expected.to_string());
             for candidate in &candidates {
