@@ -387,10 +387,10 @@ async fn direct_url_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries in [TIME]
-      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -413,12 +413,12 @@ async fn direct_url_io_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries in [TIME]
-      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ error sending request for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
-      ├─▶ client error (SendRequest)
-      ╰─▶ connection closed before message completed
+    error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: error sending request for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+      Caused by: client error (SendRequest)
+      Caused by: connection closed before message completed
     ");
 }
 
@@ -442,10 +442,10 @@ async fn direct_url_mixed_error() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Request failed after 3 retries in [TIME]
-      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
-      ╰─▶ HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    error: Failed to download `tqdm @ http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: Request failed after 3 retries in [TIME]
+      Caused by: Failed to fetch: `http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: HTTP status server error (500 Internal Server Error) for url (http://[LOCALHOST]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -685,10 +685,10 @@ async fn rfc9457_problem_details_license_violation() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
-      ├─▶ Server message: License Compliance Issue, This package version has a license that violates organizational policy.
-      ╰─▶ HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
+    error: Failed to download `tqdm @ http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: Failed to fetch: `http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl`
+      Caused by: Server message: License Compliance Issue, This package version has a license that violates organizational policy.
+      Caused by: HTTP status client error (403 Forbidden) for url (http://[LOCALHOST]/packages/tqdm-4.67.1-py3-none-any.whl)
     ");
 }
 
@@ -1037,11 +1037,11 @@ fn connect_timeout_stream() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      ├─▶ Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      ├─▶ error sending request for url (https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl)
-      ├─▶ client error (Connect)
-      ╰─▶ operation timed out
+    error: Failed to download `tqdm @ https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      Caused by: Failed to fetch: `https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      Caused by: error sending request for url (https://[LOCALHOST]/tqdm-0.1-py3-none-any.whl)
+      Caused by: client error (Connect)
+      Caused by: operation timed out
     ");
 
     // Assumption: There's less than 2s overhead for this test and startup.
@@ -1124,11 +1124,11 @@ async fn retry_read_timeout_stream() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      ├─▶ Request failed after 1 retry in [TIME]
-      ├─▶ Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
-      ├─▶ Failed to read from zip file
-      ├─▶ an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
-      ╰─▶ Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+    error: Failed to download `tqdm @ http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      Caused by: Request failed after 1 retry in [TIME]
+      Caused by: Failed to read metadata: `http://[LOCALHOST]/tqdm-0.1-py3-none-any.whl`
+      Caused by: Failed to read from zip file
+      Caused by: an upstream reader returned an error: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
+      Caused by: Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: [TIME]).
     ");
 }

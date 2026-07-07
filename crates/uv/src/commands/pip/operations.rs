@@ -1252,6 +1252,26 @@ pub(crate) enum Error {
     OutdatedEnvironment(Box<Changelog>),
 }
 
+impl Error {
+    /// Return whether this operation failure should be reported as a user-facing failure.
+    pub(crate) fn is_user_failure(&self) -> bool {
+        matches!(
+            self,
+            Self::Resolve(
+                uv_resolver::ResolveError::NoSolution { .. }
+                    | uv_resolver::ResolveError::Dist(..)
+                    | uv_resolver::ResolveError::Dependencies(..)
+            ) | Self::Requirements(uv_requirements::Error::Dist(..))
+                | Self::Prepare(uv_installer::PrepareError::Dist(..))
+                | Self::OutdatedEnvironment(..)
+        ) || matches!(
+            self,
+            Self::Resolve(uv_resolver::ResolveError::Client(error))
+                if error.suggests_system_certs()
+        )
+    }
+}
+
 impl uv_errors::Hint for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {

@@ -1000,6 +1000,7 @@ fn build_constraints() -> Result<()> {
     error: Failed to build `[TEMP_DIR]/project`
       Caused by: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `hatchling>=1.0`
+      Caused by: No solution found when resolving dependencies:
       Caused by: Because you require hatchling>=1.0 and hatchling==0.1.0, we can conclude that your requirements are unsatisfiable.
     ");
 

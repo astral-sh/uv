@@ -33,7 +33,6 @@ use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryResolveLogger,
@@ -44,12 +43,13 @@ use crate::commands::project::{
     EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
     resolve_environment, resolve_names, sync_environment, update_environment,
 };
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
     tool_environment_spec,
 };
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::{ResolverInstallerSettings, ResolverSettings};
 
@@ -728,9 +728,7 @@ pub(crate) async fn install(
                 {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -859,9 +857,7 @@ pub(crate) async fn install(
             {
                 Ok(update) => update,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(UvError::from(err).into());
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -950,9 +946,7 @@ pub(crate) async fn install(
                         .await
                         .ok()
                         .flatten() else {
-                            return diagnostics::OperationDiagnostic::default()
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return Err(UvError::from(err).into());
                         };
 
                         debug!(
@@ -984,9 +978,7 @@ pub(crate) async fn install(
                         {
                             Ok(resolution) => (resolution, interpreter),
                             Err(ProjectError::Operation(err)) => {
-                                return diagnostics::OperationDiagnostic::default()
-                                    .report(err)
-                                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                                return Err(UvError::from(err).into());
                             }
                             Err(err) => return Err(err.into()),
                         }
@@ -1046,9 +1038,7 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(UvError::from(err).into());
             }
             Err(err) => return Err(err.into()),
         }

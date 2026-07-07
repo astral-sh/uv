@@ -74,7 +74,7 @@ use crate::commands::project::{
     update_environment, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project, read_env_files};
+use crate::commands::{ExitStatus, UvError, diagnostics, project, read_env_files};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, GlobalSettings, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -261,10 +261,7 @@ pub(crate) async fn run(
             {
                 Ok(result) => result.into_lock(),
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error_with_context("script", err).into());
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -307,10 +304,7 @@ pub(crate) async fn run(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("script")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error_with_context("script", err).into());
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -444,10 +438,7 @@ pub(crate) async fn run(
                 {
                     Ok(update) => Some(update.into_environment().into_interpreter()),
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .with_context("script")
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(diagnostics::operation_error_with_context("script", err).into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -769,9 +760,7 @@ pub(crate) async fn run(
                 {
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -856,9 +845,7 @@ pub(crate) async fn run(
                 {
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(UvError::from(err).into());
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -1008,10 +995,7 @@ pub(crate) async fn run(
             let environment = match result {
                 Ok(resolution) => resolution,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .with_context("`--with`")
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error_with_context("`--with`", err).into());
                 }
                 Err(err) => return Err(err.into()),
             };

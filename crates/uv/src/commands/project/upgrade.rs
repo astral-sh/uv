@@ -29,7 +29,7 @@ use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::lock::{LockEvent, LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{ProjectError, ProjectInterpreter, UniversalState, WorkspacePython};
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError};
 use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
@@ -166,9 +166,7 @@ pub(crate) async fn upgrade(
     {
         Ok(result) => result,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(UvError::from(err).into());
         }
         Err(err) => return Err(err.into()),
     };
