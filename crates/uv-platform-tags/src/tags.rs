@@ -3032,58 +3032,37 @@ mod tests {
 
     #[test]
     fn test_compatibility_tag() {
-        let tags = Tags::from_env(
-            &Platform::new(
-                Os::Manylinux {
-                    major: 2,
-                    minor: 28,
-                },
-                Arch::X86_64,
-            ),
-            (3, 14),
-            "cpython",
-            (3, 14),
-            TagsOptions::default(),
-        )
-        .unwrap();
         let python_tag = LanguageTag::from_str("cp314").unwrap();
         let abi_tag = AbiTag::from_str("cp314").unwrap();
         let platform_tag = PlatformTag::from_str("manylinux_2_28_x86_64").unwrap();
 
-        assert_eq!(
-            tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
-            tags.compatibility(
-                std::slice::from_ref(&python_tag),
-                std::slice::from_ref(&abi_tag),
-                std::slice::from_ref(&platform_tag),
-            )
-        );
-
-        let free_threaded_tags = Tags::from_env(
-            &Platform::new(
-                Os::Manylinux {
-                    major: 2,
-                    minor: 28,
+        for gil_disabled in [false, true] {
+            let tags = Tags::from_env(
+                &Platform::new(
+                    Os::Manylinux {
+                        major: 2,
+                        minor: 28,
+                    },
+                    Arch::X86_64,
+                ),
+                (3, 14),
+                "cpython",
+                (3, 14),
+                TagsOptions {
+                    gil_disabled,
+                    ..TagsOptions::default()
                 },
-                Arch::X86_64,
-            ),
-            (3, 14),
-            "cpython",
-            (3, 14),
-            TagsOptions {
-                gil_disabled: true,
-                ..TagsOptions::default()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(
-            free_threaded_tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
-            free_threaded_tags.compatibility(
-                std::slice::from_ref(&python_tag),
-                std::slice::from_ref(&abi_tag),
-                std::slice::from_ref(&platform_tag),
             )
-        );
+            .unwrap();
+
+            assert_eq!(
+                tags.compatibility_tag(&python_tag, &abi_tag, &platform_tag),
+                tags.compatibility(
+                    std::slice::from_ref(&python_tag),
+                    std::slice::from_ref(&abi_tag),
+                    std::slice::from_ref(&platform_tag),
+                )
+            );
+        }
     }
 }
