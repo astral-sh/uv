@@ -371,12 +371,31 @@ impl<'env> LockOperation<'env> {
                 // Check if the discovered workspace members match the locked workspace members.
                 if let LockTarget::Workspace(workspace) = target {
                     for package_name in workspace.packages().keys() {
-                        existing
-                            .find_by_name(package_name)
-                            .map_err(|_| ProjectError::LockWorkspaceMismatch(package_name.clone()))?
-                            .ok_or_else(|| {
-                                ProjectError::LockWorkspaceMismatch(package_name.clone())
-                            })?;
+                        match existing.find_by_name(package_name) {
+                            Ok(Some(_)) => {}
+                            Ok(None) => {
+                                // The workspace member is missing from the lockfile. If a
+                                // workspace member recorded in the lockfile is no longer present
+                                // in the current workspace, it may have been renamed.
+                                let renamed_from = existing
+                                    .root()
+                                    .into_iter()
+                                    .map(Package::name)
+                                    .chain(existing.members().iter())
+                                    .find(|name| !workspace.packages().contains_key(*name))
+                                    .cloned();
+                                return Err(ProjectError::LockWorkspaceMismatch(
+                                    package_name.clone(),
+                                    renamed_from,
+                                ));
+                            }
+                            Err(_) => {
+                                return Err(ProjectError::LockWorkspaceMismatch(
+                                    package_name.clone(),
+                                    None,
+                                ));
+                            }
+                        }
                     }
                 }
                 Ok(LockResult::Unchanged(existing))

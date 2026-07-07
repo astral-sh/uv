@@ -5290,6 +5290,9 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
         revision = 3
         requires-python = ">=3.12"
 
+        [manifest]
+        members = ["bar"]
+
         [[package]]
         name = "bar"
         version = "0.1.0"
@@ -5305,6 +5308,8 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
 
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `foo`. To update the lockfile, run `uv lock`.
+
+    hint: If you renamed `bar` to `foo`, run `uv lock` to update the lockfile
     ");
 
     Ok(())
