@@ -50,7 +50,7 @@ use crate::commands::project::{
     ProjectError, ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
     script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -373,14 +373,9 @@ pub(crate) async fn sync(
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    ProjectError::LockMismatch(prev, cur, lock_source)
-                        .to_string()
-                        .bold()
-                )?;
-                return Ok(ExitStatus::Failure);
+                return Err(
+                    UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into(),
+                );
             }
         }
         Err(err) => return Err(err.into()),
@@ -474,14 +469,7 @@ pub(crate) async fn sync(
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                ProjectError::LockMismatch(prev, cur, lock_source)
-                    .to_string()
-                    .bold()
-            )?;
-            Ok(ExitStatus::Failure)
+            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
         }
     }
 }

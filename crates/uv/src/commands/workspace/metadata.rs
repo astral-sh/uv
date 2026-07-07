@@ -2,8 +2,6 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
-
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -25,7 +23,7 @@ use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment,
     ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -237,10 +235,7 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
         Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
