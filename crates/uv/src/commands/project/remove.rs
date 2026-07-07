@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
+    Concurrency, DependencyGroups, DevMode, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -209,7 +209,7 @@ pub(crate) async fn remove(
         }
     }
 
-    // Update the `pypackage.toml` in-memory.
+    // Update the `pyproject.toml` in-memory.
     let target = target.update(&content, &WorkspaceCache::default())?;
 
     // Determine enabled groups and extras
@@ -217,8 +217,35 @@ pub(crate) async fn remove(
         RemoveTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         RemoveTarget::Script(_) => DefaultGroups::default(),
     };
-    let groups = DependencyGroups::default().with_defaults(default_groups);
-    let extras = ExtrasSpecification::default().with_defaults(DefaultExtras::default());
+
+    // When syncing after removal, include the groups/extras that were targeted by the
+    // removal in the sync to avoid removing other packages in those groups. For example,
+    // `uv remove --group foo bar` should still include group `foo` in the sync so that
+    // other `foo` packages are preserved from removal. This mirrors the pattern in `add.rs`.
+    let (extras, groups) = match &dependency_type {
+        DependencyType::Production => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Dev => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Include);
+            (extras, groups)
+        }
+        DependencyType::Optional(extra_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
+            let groups = DependencyGroups::from_dev_mode(DevMode::Exclude);
+            (extras, groups)
+        }
+        DependencyType::Group(group_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
+            let groups = DependencyGroups::from_group(group_name.clone());
+            (extras, groups)
+        }
+    };
+    let groups = groups.with_defaults(default_groups);
+    let extras = extras.with_defaults(DefaultExtras::default());
 
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = match target {
