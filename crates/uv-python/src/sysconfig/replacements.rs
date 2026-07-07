@@ -14,14 +14,23 @@ pub(crate) struct ReplacementEntry {
 
 impl ReplacementEntry {
     /// Patches a sysconfig value either partially (replacing a specific word) or fully.
-    pub(crate) fn patch(&self, entry: &str) -> String {
+    pub(crate) fn patch(&self, entry: &str) -> Option<String> {
         match &self.mode {
-            ReplacementMode::Partial { from } => entry
-                .split_whitespace()
-                .map(|word| if word == from { &self.to } else { word })
-                .collect::<Vec<_>>()
-                .join(" "),
-            ReplacementMode::Full => self.to.clone(),
+            ReplacementMode::Partial { from } => {
+                if !entry.split_whitespace().any(|word| word == from) {
+                    return None;
+                }
+
+                let mut output = String::with_capacity(entry.len());
+                for word in entry.split_whitespace() {
+                    if !output.is_empty() {
+                        output.push(' ');
+                    }
+                    output.push_str(if word == from { &self.to } else { word });
+                }
+                Some(output)
+            }
+            ReplacementMode::Full => (entry != self.to).then(|| self.to.clone()),
         }
     }
 }

@@ -25,6 +25,7 @@
 //! ```
 
 use std::borrow::Cow;
+use std::fmt::Write as _;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -142,36 +143,53 @@ fn find_sysconfigdata(
 /// Patch the given `_sysconfigdata_` contents.
 fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> SysconfigData {
     /// Update the `/install` prefix in a whitespace-separated string.
-    fn update_prefix(s: &str, real_prefix: &Path) -> String {
-        s.split_whitespace()
-            .map(|part| {
-                if let Some(rest) = part.strip_prefix("/install") {
-                    if rest.is_empty() {
-                        real_prefix.display().to_string()
-                    } else {
-                        real_prefix.join(&rest[1..]).display().to_string()
-                    }
+    fn update_prefix<'a>(s: &'a str, real_prefix: &Path) -> Cow<'a, str> {
+        if !s
+            .split_whitespace()
+            .any(|part| part.starts_with("/install"))
+        {
+            return Cow::Borrowed(s);
+        }
+
+        let mut output = String::with_capacity(s.len());
+        for part in s.split_whitespace() {
+            if !output.is_empty() {
+                output.push(' ');
+            }
+            if let Some(rest) = part.strip_prefix("/install") {
+                if rest.is_empty() {
+                    write!(output, "{}", real_prefix.display()).expect("writing to a string");
                 } else {
-                    part.to_string()
+                    write!(output, "{}", real_prefix.join(&rest[1..]).display())
+                        .expect("writing to a string");
                 }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
+            } else {
+                output.push_str(part);
+            }
+        }
+        Cow::Owned(output)
     }
 
     /// Remove any references to `-isysroot` in a whitespace-separated string.
-    fn remove_isysroot(s: &str) -> String {
+    fn remove_isysroot(s: &str) -> Option<String> {
+        if !s.split_whitespace().any(|part| part == "-isysroot") {
+            return None;
+        }
+
         // If we see `-isysroot`, drop it and the next part.
         let mut parts = s.split_whitespace().peekable();
-        let mut result = Vec::with_capacity(parts.size_hint().0);
+        let mut output = String::with_capacity(s.len());
         while let Some(part) = parts.next() {
             if part == "-isysroot" {
                 parts.next();
             } else {
-                result.push(part);
+                if !output.is_empty() {
+                    output.push(' ');
+                }
+                output.push_str(part);
             }
         }
-        result.join(" ")
+        Some(output)
     }
 
     // Patch each value, as needed.
@@ -180,18 +198,23 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
         let Value::String(value) = value else {
             continue;
         };
-        let patched = update_prefix(value, real_prefix);
-        let mut patched = remove_isysroot(&patched);
+        let mut patched = update_prefix(value, real_prefix);
+        if let Some(without_isysroot) = remove_isysroot(&patched) {
+            patched = Cow::Owned(without_isysroot);
+        }
 
         if let Some(replacement_entries) = DEFAULT_VARIABLE_UPDATES.get(key) {
             for replacement_entry in replacement_entries {
-                patched = replacement_entry.patch(&patched);
+                if let Some(replacement) = replacement_entry.patch(&patched) {
+                    patched = Cow::Owned(replacement);
+                }
             }
         }
 
-        if *value != patched {
+        if value.as_str() != patched {
             trace!("Updated `{key}` from `{value}` to `{patched}`");
             count += 1;
+            let patched = patched.into_owned();
             *value = patched;
         }
     }
