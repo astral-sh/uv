@@ -1834,7 +1834,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
-                globals.preview,
                 printer,
             )
             .await
@@ -1869,7 +1868,6 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 args.compile_bytecode,
                 &globals.concurrency,
                 &cache,
-                globals.preview,
                 printer,
             )
             .await

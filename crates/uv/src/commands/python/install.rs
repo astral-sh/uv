@@ -20,7 +20,6 @@ use uv_configuration::Concurrency;
 use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
 use uv_fs::Simplified;
 use uv_platform::{Arch, Libc};
-use uv_preview::{Preview, PreviewFeature};
 use uv_python::downloads::{
     self, ArchRequest, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
     PythonDownloadRequest,
@@ -198,7 +197,6 @@ pub(crate) async fn install(
     compile_bytecode: bool,
     concurrency: &Concurrency,
     cache: &Cache,
-    preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
@@ -245,7 +243,6 @@ pub(crate) async fn install(
         config_discovery,
         compile_bytecode.then_some(sender),
         concurrency,
-        preview,
         printer,
     );
 
@@ -304,7 +301,6 @@ async fn perform_install(
     config_discovery: ConfigDiscovery,
     bytecode_compilation_sender: Option<mpsc::UnboundedSender<ManagedPythonInstallation>>,
     concurrency: &Concurrency,
-    preview: Preview,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
@@ -313,13 +309,6 @@ async fn perform_install(
     // `--default` is used. It's not clear how this overlaps with a global Python pin, but I'd be
     // surprised if `uv python find` returned the "newest" Python version rather than the one I just
     // installed with the `--default` flag.
-    if default && !preview.is_enabled(PreviewFeature::PythonInstallDefault) {
-        warn_user!(
-            "The `--default` option is experimental and may change without warning. Pass `--preview-features {}` to disable this warning",
-            PreviewFeature::PythonInstallDefault
-        );
-    }
-
     if default && targets.len() > 1 {
         anyhow::bail!("The `--default` flag cannot be used with multiple targets");
     }
@@ -708,7 +697,6 @@ async fn perform_install(
                 &installations,
                 &mut changelog,
                 &mut errors,
-                preview,
             );
         }
 
@@ -989,13 +977,8 @@ fn create_bin_links(
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
     errors: &mut Vec<(InstallErrorKind, PythonInstallationKey, Error)>,
-    preview: Preview,
 ) {
-    // TODO(zanieb): We want more feedback on the `is_default_install` behavior before stabilizing
-    // it. In particular, it may be confusing because it does not apply when versions are loaded
-    // from a `.python-version` file.
-    let should_create_default_links =
-        default || (is_default_install && preview.is_enabled(PreviewFeature::PythonInstallDefault));
+    let should_create_default_links = default || is_default_install;
 
     let targets = if should_create_default_links {
         vec![
