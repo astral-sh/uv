@@ -163,11 +163,6 @@ async fn wait_for_workers(
 ///
 /// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
 /// a broken `python`.
-///
-/// We only compile all files, but we don't update the RECORD, relying on PEP 491:
-/// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
-///
-/// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
 #[instrument(skip(python_executable))]
 pub async fn compile_tree(
     dir: &Path,
