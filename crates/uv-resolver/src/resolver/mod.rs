@@ -3262,13 +3262,12 @@ impl ForkState {
         );
         // A decided version is always selectable and thus in the list, but an empty list would
         // unsoundly widen to the full range.
-        let versions = if let Some(known_versions) =
-            known_version.filter(|versions| !versions.is_empty())
-        {
-            versions.widen_versions(known_versions)
-        } else {
-            versions
-        };
+        let versions =
+            if let Some(known_versions) = known_version.filter(|versions| !versions.is_empty()) {
+                versions.widen_versions(known_versions)
+            } else {
+                versions
+            };
         let conflict = pubgrub.add_package_version_dependencies(
             *next,
             for_version.clone(),
