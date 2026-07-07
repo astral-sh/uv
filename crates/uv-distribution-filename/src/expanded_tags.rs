@@ -61,18 +61,10 @@ impl ExpandedTags {
             return TagCompatibility::Incompatible(IncompatibleTag::Invalid);
         };
 
-        let mut max_compatibility = compatible_tags.compatibility(
-            first.python_tags(),
-            first.abi_tags(),
-            first.platform_tags(),
-        );
+        let mut max_compatibility = first.compatibility(compatible_tags);
 
         for tag in rest {
-            max_compatibility = max_compatibility.max(compatible_tags.compatibility(
-                tag.python_tags(),
-                tag.abi_tags(),
-                tag.platform_tags(),
-            ));
+            max_compatibility = max_compatibility.max(tag.compatibility(compatible_tags));
         }
 
         max_compatibility
