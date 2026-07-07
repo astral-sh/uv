@@ -40,34 +40,35 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
-By default, uv respects pre-release identifiers in both direct and transitive requirements. A
-requirement like `flask>=2.0.0rc1` enables matching Flask pre-releases when it contributes to
-candidate selection. Requirements on the same distribution target from one dependency batch share
-their final opt-in region, including requirements that select an extra or apply within the same
-marker fork, so their declaration order does not affect admission. The opt-in is limited to the
-batch's combined bounds and is removed if the resolver backtracks away from the package version that
-introduced it.
+By default, uv prefers stable versions over pre-releases, falling back to pre-releases only if every
+stable candidate that satisfies the active constraints is rejected during resolution. An applicable
+direct or transitive requirement, constraint, or override that includes a pre-release identifier
+(e.g., `flask>=2.0.0rc1`) instead authorizes matching pre-releases to participate in normal version
+selection. This makes those pre-releases eligible, but does not guarantee that a pre-release will be
+selected.
 
-Separate dependency batches are handled prospectively. A newly activated pre-release requirement
-that is already satisfied by the active logical range does not retroactively expand that range's
-admission policy. If it narrows the range, its admission policy participates in the resulting
-intersection.
+Requirements discovered at different points in resolution can affect which valid candidate is
+selected according to uv's ordinary [package priorities](#package-priority). For example, suppose
+only `c==1.0` and `c==2.0a1` are available. Together, `c>=1` and `a -> c>=0.5a1` allow both versions
+and authorize the pre-release, making `c==2.0a1` the newest eligible version under the default
+resolution strategy. However, if uv selects `c==1.0` for `c>=1` before discovering the authorizing
+edge from `a`, it may retain that older stable version. If the authorizing edge is active before `c`
+is selected, `c==2.0a1` participates in normal version order and is preferred as the newest eligible
+version. A later requirement that excludes `c==1.0` forces uv to reconsider it. In every case, the
+selected version satisfies all active requirements.
 
-For requirements without a pre-release identifier, uv prefers stable candidates. If every stable
-candidate is rejected during resolution, uv falls back to a pre-release without restarting. This
-follows the same overall policy as `pip`: explicit pre-release requirements are honored
-transitively, and otherwise pre-releases are eligible when no stable candidate can complete the
-resolution.
+Use `--prerelease allow` to consider pre-releases for every package without preferring stable
+candidates first, or `--prerelease disallow` to exclude them entirely.
 
 !!! note
 
     Prior to pip 26.0, this behavior was not consistent.
 
-The Python packaging specifications define pre-release behavior for a single specifier, but
-[do not fully specify dependency resolution](https://discuss.python.org/t/handling-of-pre-releases-when-backtracking/40505/17).
-uv models pre-release authorization as candidate-selection metadata on dependency ranges. Logical
-set operations remain independent of that metadata, while conflict learning and backtracking retain
-the dependency batch that granted it.
+Pre-releases are
+[notoriously difficult](https://pubgrub-rs-guide.pages.dev/limitations/prerelease_versions) to model
+because dependency requirements are discovered incrementally during resolution. uv tracks
+pre-release authorization with the dependencies that introduced it, so the authorization is removed
+if resolution backtracks away from those dependencies.
 
 ## Packages that exist on multiple indexes
 

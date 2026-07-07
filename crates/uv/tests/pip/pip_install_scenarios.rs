@@ -2182,54 +2182,6 @@ fn post_simple() {
     context.assert_not_installed("a");
 }
 
-/// The default resolution strategy prefers stable releases, then falls back to a pre-release when no stable release is available.
-///
-/// ```text
-/// package-lowest-prereleases
-/// ├── environment
-/// │   └── python3.12
-/// ├── root
-/// │   ├── requires a>=0
-/// │   │   ├── satisfied by a-1.0.0rc1
-/// │   │   ├── satisfied by a-1.0.0
-/// │   │   └── satisfied by a-2.0.0
-/// │   └── requires b>=0
-/// │       ├── satisfied by b-1.0.0rc1
-/// │       └── satisfied by b-1.0.0rc2
-/// ├── a
-/// │   ├── a-1.0.0rc1
-/// │   ├── a-1.0.0
-/// │   └── a-2.0.0
-/// └── b
-///     ├── b-1.0.0rc1
-///     └── b-1.0.0rc2
-/// ```
-#[test]
-fn package_lowest_prereleases() {
-    let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/package-lowest-prereleases.toml");
-
-    uv_snapshot!(context.filters(), command(&context, &server)
-        .arg("a>=0")
-        .arg("b>=0")
-        , @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + a==2.0.0
-     + b==1.0.0rc2
-    ");
-
-    // The default resolution strategy selects the latest stable version of `a` and, because `b` has no stable releases, its latest pre-release.
-    context.assert_installed("a", "2.0.0");
-    context.assert_installed("b", "1.0.0rc2");
-}
-
 /// The user requires `a` which has multiple prereleases available with different labels.
 ///
 /// ```text
@@ -2653,6 +2605,54 @@ fn package_prereleases_specifier_boundary() {
 
     // Since the user used a pre-release specifier, pre-releases at the boundary should be selected.
     context.assert_installed("a", "0.2.0a1");
+}
+
+/// A package graph with stable and pre-release candidates for `a`, and only pre-release candidates for `b`.
+///
+/// ```text
+/// package-stable-prerelease-candidates
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a>=0
+/// │   │   ├── satisfied by a-1.0.0rc1
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b>=0
+/// │       ├── satisfied by b-1.0.0rc1
+/// │       └── satisfied by b-1.0.0rc2
+/// ├── a
+/// │   ├── a-1.0.0rc1
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// └── b
+///     ├── b-1.0.0rc1
+///     └── b-1.0.0rc2
+/// ```
+#[test]
+fn package_stable_prerelease_candidates() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-stable-prerelease-candidates.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a>=0")
+        .arg("b>=0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==2.0.0
+     + b==1.0.0rc2
+    ");
+
+    // The default resolution strategy selects the latest stable version of `a` and, because `b` has no stable releases, its latest pre-release.
+    context.assert_installed("a", "2.0.0");
+    context.assert_installed("b", "1.0.0rc2");
 }
 
 /// A same-distribution admission batch remains order-independent after rejecting an earlier parent version.
@@ -4147,10 +4147,10 @@ fn transitive_prerelease_equivalent_authorization_plain_first() {
     context.assert_installed("c", "2.0.0a1");
 }
 
-/// A transitive pre-release requirement that does not narrow the active version range does not change pre-release admission.
+/// A transitive pre-release requirement can select a pre-release when its parent is prioritized before a compatible plain root requirement.
 ///
 /// ```text
-/// transitive-prerelease-redundant-authorization
+/// transitive-prerelease-redundant-authorization-parent-first
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
@@ -4169,10 +4169,11 @@ fn transitive_prerelease_equivalent_authorization_plain_first() {
 ///     └── c-2.0.0a1
 /// ```
 #[test]
-fn transitive_prerelease_redundant_authorization() {
+fn transitive_prerelease_redundant_authorization_parent_first() {
     let context = uv_test::test_context!("3.12");
-    let server =
-        PackseServer::new("prereleases/transitive-prerelease-redundant-authorization.toml");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-redundant-authorization-parent-first.toml",
+    );
 
     uv_snapshot!(context.filters(), command(&context, &server)
         .arg("a")
@@ -4187,10 +4188,59 @@ fn transitive_prerelease_redundant_authorization() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
+     + c==2.0.0a1
+    ");
+
+    // Resolving `a` first activates `c>=0.5a1` before `c` is selected, so the resolver selects the newer `c==2.0.0a1`, which also satisfies `c>=1.0`.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("c", "2.0.0a1");
+}
+
+/// A stable selection can be retained when a compatible plain root requirement is prioritized before a redundant transitive pre-release requirement.
+///
+/// ```text
+/// transitive-prerelease-redundant-authorization-plain-first
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires c>=1.0
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires c>=0.5a1
+/// │           ├── satisfied by c-1.0.0
+/// │           └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn transitive_prerelease_redundant_authorization_plain_first() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new(
+        "prereleases/transitive-prerelease-redundant-authorization-plain-first.toml",
+    );
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("c>=1.0")
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
      + c==1.0.0
     ");
 
-    // The transitive requirement on `c>=0.5a1` is already satisfied by the root requirement on `c>=1.0`, so the stable release remains preferred.
+    // Resolving the root `c>=1.0` requirement first selects `c==1.0.0`. The later `c>=0.5a1` requirement is compatible with that decision, so it does not require a different solution.
     context.assert_installed("a", "1.0.0");
     context.assert_installed("c", "1.0.0");
 }

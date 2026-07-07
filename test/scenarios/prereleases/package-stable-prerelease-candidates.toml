@@ -1,5 +1,5 @@
-name = "package-lowest-prereleases"
-description = "The default resolution strategy prefers stable releases, then falls back to a pre-release when no stable release is available."
+name = "package-stable-prerelease-candidates"
+description = "A package graph with stable and pre-release candidates for `a`, and only pre-release candidates for `b`."
 
 [root]
 requires = ["a>=0", "b>=0"]

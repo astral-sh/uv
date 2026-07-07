@@ -321,35 +321,20 @@ lower bounds.
 
 ## Pre-release handling
 
-By default, uv prefers stable releases, but considers pre-releases authorized by a requirement in
-normal version order. A requirement authorizes pre-releases when one of its version specifiers names
-a pre-release, whether the requirement is direct or transitive. For example, a dependency on
-`flask>=2.0.0rc1` enables matching Flask pre-releases when that dependency contributes to candidate
-selection.
+By default, uv prefers stable versions over pre-releases, falling back to pre-releases only if every
+stable candidate that satisfies the active constraints is rejected during resolution. An applicable
+direct or transitive requirement, constraint, or override that includes a pre-release identifier
+(e.g., `flask>=2.0.0rc1`) instead authorizes matching pre-releases to participate in normal version
+selection. This makes those pre-releases eligible, but does not guarantee that a pre-release will be
+selected.
 
-Requirements for the same distribution target that are declared together by the project or by one
-selected package version share their final pre-release authorization. This includes requirements
-that select an extra or apply only within the same marker fork. Declaration order therefore does not
-affect a requirement set such as `flask>=2` and `flask[async]>=1.0rc1`.
+Requirements discovered at different points in resolution can affect which valid candidate is
+selected according to uv's ordinary [package priorities](../pip/compatibility.md#package-priority).
+If uv selects a compatible stable version before discovering a later requirement that authorizes
+pre-releases, it may retain that stable version even when a newer pre-release becomes eligible.
 
-Authorization is prospective across separate dependency batches, such as requirements activated by
-different package versions. If an active `flask>=2` range is already established, a separately
-discovered `flask>=1.0rc1` requirement that does not narrow that range does not expand its
-pre-release authorization. A newly activated requirement that does narrow the range contributes its
-authorization through the resulting intersection as usual.
-
-The authorization is limited to the combined bounds of the dependency batch that introduced it. For
-example, `>=2.0.0rc1,<3` does not enable a `3.1.0b1` candidate that is admitted by some other
-requirement. Exclusions do not enable pre-releases, and authorization introduced by a package
-version disappears if the resolver backtracks away from that version.
-
-For requirements that do not authorize a pre-release, uv considers pre-releases only after no stable
-candidate can satisfy the active constraints. This fallback is based on the current resolver state:
-if every stable candidate is rejected during resolution, uv can continue with a pre-release without
-restarting.
-
-Use `--prerelease allow` to consider every pre-release in normal version order, or
-`--prerelease disallow` to reject all pre-releases, including those named by a requirement.
+Use `--prerelease allow` to consider pre-releases for every package without preferring stable
+candidates first, or `--prerelease disallow` to exclude them entirely.
 
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).

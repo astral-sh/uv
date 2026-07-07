@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, VersionSet};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term, VersionSet};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -512,6 +512,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .term_intersection_for_package(next_id)
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
+                    let selection_range =
+                        ForkState::selection_range(&state.pubgrub, next_id, range);
 
                     // In a specific environment, an implicit registry candidate is stable for a
                     // given range. Avoid repeating candidate selection when PubGrub revisits an
@@ -522,7 +524,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let decision = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
-                        && selected_range.selection_eq(range)
+                        && selected_range.selection_eq(&selection_range)
                     {
                         Some(ResolverVersion::Unforked(version.clone()))
                     } else {
@@ -530,7 +532,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             next_package,
                             next_id,
                             index.map(IndexMetadata::url),
-                            range,
+                            &selection_range,
                             &mut state.pins,
                             &preferences,
                             &state.fork_urls,
@@ -546,7 +548,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         {
                             state
                                 .selected_versions
-                                .insert(next_id, (range.clone(), version.clone()));
+                                .insert(next_id, (selection_range.into_owned(), version.clone()));
                         }
 
                         decision
@@ -3039,6 +3041,60 @@ impl ForkState {
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
         }
+    }
+
+    /// Add candidate-selection metadata from dependency edges that are active in the partial
+    /// solution.
+    ///
+    /// PubGrub only needs the logical version set for propagation and conflict resolution. A
+    /// pre-release admission region instead affects which member of that set is tried first. The
+    /// dependency that grants admission can therefore be logically redundant while still being
+    /// relevant to candidate selection. Recover that metadata from active dependency
+    /// incompatibilities immediately before making a decision, without changing PubGrub's term
+    /// relations.
+    fn selection_range<'a>(
+        pubgrub: &'a State<UvDependencyProvider>,
+        package: Id<PubGrubPackage>,
+        range: &'a Range<Version>,
+    ) -> Cow<'a, Range<Version>> {
+        let Some(incompatibilities) = pubgrub.incompatibilities.get(&package) else {
+            return Cow::Borrowed(range);
+        };
+
+        let mut selection_range = Cow::Borrowed(range);
+        for &incompatibility_id in incompatibilities {
+            let incompatibility = &pubgrub.incompatibility_store[incompatibility_id];
+            let Kind::FromDependencyOf(dependent, dependency) = &incompatibility.kind else {
+                continue;
+            };
+            if *dependency != package || dependent == dependency {
+                continue;
+            }
+
+            let Some((dependent_versions, Some(dependency_versions))) =
+                incompatibility.dependency_version_sets()
+            else {
+                continue;
+            };
+            if dependency_versions.prerelease_region().is_none() {
+                continue;
+            }
+
+            let Some(Term::Positive(active_dependent_versions)) = pubgrub
+                .partial_solution
+                .term_intersection_for_package(*dependent)
+            else {
+                continue;
+            };
+            if !active_dependent_versions.subset_of(dependent_versions) {
+                continue;
+            }
+
+            let combined = selection_range.intersection(dependency_versions);
+            debug_assert_eq!(combined, *range);
+            selection_range = Cow::Owned(combined);
+        }
+        selection_range
     }
 
     /// Visit the dependencies for the selected version of the current package, incorporating any
