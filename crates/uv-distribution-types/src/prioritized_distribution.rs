@@ -341,11 +341,12 @@ pub enum HashComparison {
 
 impl PrioritizedDist {
     /// Create a new [`PrioritizedDist`] from the given wheel distribution.
-    pub fn from_built(
-        dist: RegistryBuiltWheel,
-        hashes: Vec<HashDigest>,
-        compatibility: WheelCompatibility,
-    ) -> Self {
+    pub fn from_built(dist: RegistryBuiltWheel, compatibility: WheelCompatibility) -> Self {
+        let hashes = if compatibility.is_excluded() {
+            Vec::new()
+        } else {
+            dist.file.hashes.iter().cloned().collect()
+        };
         Self(Box::new(PrioritizedDistInner {
             markers: implied_markers(&dist.filename),
             best_wheel_index: Some(0),
@@ -356,11 +357,12 @@ impl PrioritizedDist {
     }
 
     /// Create a new [`PrioritizedDist`] from the given source distribution.
-    pub fn from_source(
-        dist: RegistrySourceDist,
-        hashes: Vec<HashDigest>,
-        compatibility: SourceDistCompatibility,
-    ) -> Self {
+    pub fn from_source(dist: RegistrySourceDist, compatibility: SourceDistCompatibility) -> Self {
+        let hashes = if compatibility.is_excluded() {
+            Vec::new()
+        } else {
+            dist.file.hashes.iter().cloned().collect()
+        };
         Self(Box::new(PrioritizedDistInner {
             markers: MarkerTree::TRUE,
             best_wheel_index: None,
@@ -371,12 +373,7 @@ impl PrioritizedDist {
     }
 
     /// Insert the given built distribution into the [`PrioritizedDist`].
-    pub fn insert_built(
-        &mut self,
-        dist: RegistryBuiltWheel,
-        hashes: impl IntoIterator<Item = HashDigest>,
-        compatibility: WheelCompatibility,
-    ) {
+    pub fn insert_built(&mut self, dist: RegistryBuiltWheel, compatibility: WheelCompatibility) {
         // Track the implied markers.
         if compatibility.is_compatible() {
             if !self.0.markers.is_true() {
@@ -385,7 +382,7 @@ impl PrioritizedDist {
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
-            self.0.hashes.extend(hashes);
+            self.0.hashes.extend(dist.file.hashes.iter().cloned());
         }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
@@ -402,7 +399,6 @@ impl PrioritizedDist {
     pub fn insert_source(
         &mut self,
         dist: RegistrySourceDist,
-        hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
         // Track the implied markers.
@@ -411,7 +407,7 @@ impl PrioritizedDist {
         }
         // Track the hashes.
         if !compatibility.is_excluded() {
-            self.0.hashes.extend(hashes);
+            self.0.hashes.extend(dist.file.hashes.iter().cloned());
         }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {

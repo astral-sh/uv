@@ -119,10 +119,10 @@ impl FlatDistributions {
                 };
                 match self.0.entry(version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_built(dist, vec![], compatibility);
+                        entry.get_mut().insert_built(dist, compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_built(dist, vec![], compatibility));
+                        entry.insert(PrioritizedDist::from_built(dist, compatibility));
                     }
                 }
             }
@@ -143,10 +143,10 @@ impl FlatDistributions {
                 };
                 match self.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
-                        entry.get_mut().insert_source(dist, vec![], compatibility);
+                        entry.get_mut().insert_source(dist, compatibility);
                     }
                     Entry::Vacant(entry) => {
-                        entry.insert(PrioritizedDist::from_source(dist, vec![], compatibility));
+                        entry.insert(PrioritizedDist::from_source(dist, compatibility));
                     }
                 }
             }

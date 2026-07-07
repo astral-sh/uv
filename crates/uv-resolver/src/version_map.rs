@@ -580,14 +580,14 @@ impl VersionMapLazy {
 
                 // Prioritize amongst all available files.
                 let yanked = file.yanked.as_deref();
-                let hashes = file.hashes.clone();
+                let hashes = file.hashes.as_slice();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
                         let compatibility = self.wheel_compatibility(
                             &filename,
                             &filename.name,
                             &filename.version,
-                            hashes.as_slice(),
+                            hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -597,13 +597,13 @@ impl VersionMapLazy {
                             file: Box::new(file),
                             index: self.index.clone(),
                         };
-                        priority_dist.insert_built(dist, hashes, compatibility);
+                        priority_dist.insert_built(dist, compatibility);
                     }
                     DistFilename::SourceDistFilename(filename) => {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
-                            hashes.as_slice(),
+                            hashes,
                             yanked,
                             excluded,
                             upload_time,
@@ -616,7 +616,7 @@ impl VersionMapLazy {
                             index: self.index.clone(),
                             wheels: vec![],
                         };
-                        priority_dist.insert_source(dist, hashes, compatibility);
+                        priority_dist.insert_source(dist, compatibility);
                     }
                 }
             }

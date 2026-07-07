@@ -297,6 +297,14 @@ fn resolve_warm_jupyter_universal(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_jupyter_universal", |b| b.iter(&run));
 }
 
+fn resolve_warm_numpy_many_wheels(c: &mut Criterion<WallTime>) {
+    let manifest = Manifest::simple(vec![Requirement::from(
+        uv_pep508::Requirement::from_str("numpy==2.1.0").unwrap(),
+    )]);
+    let run = setup(manifest, false);
+    c.bench_function("resolve_warm_numpy_many_wheels", |b| b.iter(&run));
+}
+
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![
         Requirement::from(uv_pep508::Requirement::from_str("apache-airflow[all]==2.9.3").unwrap()),
@@ -328,6 +336,7 @@ criterion_group!(
     install_wheel_many_files,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
+    resolve_warm_numpy_many_wheels,
     resolve_warm_airflow
 );
 criterion_main!(uv);
