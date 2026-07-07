@@ -1139,7 +1139,7 @@ fn report_dry_run(
         vec![]
     } else {
         logger.on_prepare(remote.len(), None, start, printer, dry_run)?;
-        remote.clone()
+        remote
     };
 
     // Remove any upgraded or extraneous installations.
