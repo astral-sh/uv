@@ -799,7 +799,7 @@ impl RegistryBuiltDist {
 
 impl DirectUrlBuiltDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             None,
@@ -810,7 +810,7 @@ impl DirectUrlBuiltDist {
 
 impl PathBuiltDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Path(ParsedPathUrl::from_source(
             self.install_path.clone(),
             DistExtension::Wheel,
@@ -821,7 +821,7 @@ impl PathBuiltDist {
 
 impl PathSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Path(ParsedPathUrl::from_source(
             self.install_path.clone(),
             DistExtension::Source(self.ext),
@@ -832,7 +832,7 @@ impl PathSourceDist {
 
 impl DirectUrlSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Archive(ParsedArchiveUrl::from_source(
             (*self.location).clone(),
             self.subdirectory.clone(),
@@ -843,7 +843,7 @@ impl DirectUrlSourceDist {
 
 impl GitDirectorySourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::GitDirectory(ParsedGitDirectoryUrl::from_source(
             (*self.git).clone(),
             self.subdirectory.clone(),
@@ -853,7 +853,7 @@ impl GitDirectorySourceDist {
 
 impl GitPathBuiltDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
             (*self.git).clone(),
             self.install_path.clone(),
@@ -864,7 +864,7 @@ impl GitPathBuiltDist {
 
 impl GitPathSourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::GitPath(ParsedGitPathUrl::from_source(
             (*self.git).clone(),
             self.install_path.clone(),
@@ -875,7 +875,7 @@ impl GitPathSourceDist {
 
 impl DirectorySourceDist {
     /// Return the [`ParsedUrl`] for the distribution.
-    pub fn parsed_url(&self) -> ParsedUrl {
+    pub fn to_parsed_url(&self) -> ParsedUrl {
         ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
             self.install_path.clone(),
             self.editable,

@@ -443,7 +443,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
+                                        parsed_url: wheel.to_parsed_url(),
                                         verbatim: wheel.url.clone(),
                                     },
                                     hashes: archive.hashes,
@@ -512,7 +512,7 @@ impl<'a> Planner<'a> {
                                         let cached_dist = CachedDirectUrlDist {
                                             filename: wheel.filename.clone(),
                                             url: VerbatimParsedUrl {
-                                                parsed_url: wheel.parsed_url(),
+                                                parsed_url: wheel.to_parsed_url(),
                                                 verbatim: wheel.url.clone(),
                                             },
                                             hashes: archive.hashes,
@@ -576,7 +576,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
+                                        parsed_url: wheel.to_parsed_url(),
                                         verbatim: wheel.url.clone(),
                                     },
                                     hashes: archive.hashes,
@@ -606,7 +606,7 @@ impl<'a> Planner<'a> {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.parsed_url(),
+                                    parsed_url: sdist.to_parsed_url(),
                                     verbatim: sdist.url.clone(),
                                 });
                                 debug!("URL source requirement already cached: {cached_dist}");
@@ -634,7 +634,7 @@ impl<'a> Planner<'a> {
                     if let Some(wheel) = built_index.git_path(sdist)? {
                         if wheel.filename().name == sdist.name {
                             let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                parsed_url: sdist.parsed_url(),
+                                parsed_url: sdist.to_parsed_url(),
                                 verbatim: sdist.url.clone(),
                             });
                             debug!("Git source requirement already cached: {cached_dist}");
@@ -655,7 +655,7 @@ impl<'a> Planner<'a> {
                     if let Some(wheel) = built_index.git_directory(sdist) {
                         if wheel.filename().name == sdist.name {
                             let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                parsed_url: sdist.parsed_url(),
+                                parsed_url: sdist.to_parsed_url(),
                                 verbatim: sdist.url.clone(),
                             });
                             debug!("Git source requirement already cached: {cached_dist}");
@@ -682,7 +682,7 @@ impl<'a> Planner<'a> {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.parsed_url(),
+                                    parsed_url: sdist.to_parsed_url(),
                                     verbatim: sdist.url.clone(),
                                 });
                                 debug!("Path source requirement already cached: {cached_dist}");
@@ -716,7 +716,7 @@ impl<'a> Planner<'a> {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
                                 let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
-                                    parsed_url: sdist.parsed_url(),
+                                    parsed_url: sdist.to_parsed_url(),
                                     verbatim: sdist.url.clone(),
                                 });
                                 debug!(
