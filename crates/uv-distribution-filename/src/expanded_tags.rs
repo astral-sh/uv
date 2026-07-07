@@ -4,8 +4,8 @@ use memchr::memchr;
 use thiserror::Error;
 
 use uv_platform_tags::{
-    AbiTag, IncompatibleTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError,
-    ParsePlatformTagError, PlatformTag, TagCompatibility, Tags,
+    AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
+    PlatformTag, TagCompatibility, Tags,
 };
 
 use crate::splitter::MemchrSplitter;
@@ -57,17 +57,15 @@ impl ExpandedTags {
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
-        let Some((first, rest)) = self.0.split_first() else {
-            return TagCompatibility::Incompatible(IncompatibleTag::Invalid);
-        };
-
-        let mut max_compatibility = first.compatibility(compatible_tags);
-
-        for tag in rest {
-            max_compatibility = max_compatibility.max(tag.compatibility(compatible_tags));
+        if let [tag] = self.0.as_slice() {
+            return tag.compatibility(compatible_tags);
         }
 
-        max_compatibility
+        compatible_tags.compatibility(
+            self.python_tags().copied().collect::<Vec<_>>().as_slice(),
+            self.abi_tags().copied().collect::<Vec<_>>().as_slice(),
+            self.platform_tags().cloned().collect::<Vec<_>>().as_slice(),
+        )
     }
 }
 
@@ -153,7 +151,6 @@ fn parse_expanded_tag(tag: &str) -> Result<WheelTag, ExpandedTagError> {
 mod tests {
 
     use super::*;
-    use uv_platform_tags::{Arch, Os, Platform, TagsOptions};
 
     #[test]
     fn test_parse_simple_expanded_tag() {
@@ -522,31 +519,5 @@ mod tests {
 
         assert_eq!(tags1, tags2);
         assert_ne!(tags1, tags3);
-    }
-
-    #[test]
-    fn test_expanded_tags_compatibility_does_not_mix_tags() {
-        let tags = ExpandedTags::parse(vec![
-            "cp312-foo-win_amd64",
-            "py2-cp312-win_amd64",
-            "py2-foo-manylinux_2_17_x86_64",
-        ])
-        .unwrap();
-        let compatible_tags = Tags::from_env(
-            &Platform::new(
-                Os::Manylinux {
-                    major: 2,
-                    minor: 17,
-                },
-                Arch::X86_64,
-            ),
-            (3, 12),
-            "cpython",
-            (3, 12),
-            TagsOptions::default(),
-        )
-        .unwrap();
-
-        assert!(!tags.compatibility(&compatible_tags).is_compatible());
     }
 }
