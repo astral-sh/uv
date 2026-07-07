@@ -605,7 +605,10 @@ impl<'a> Planner<'a> {
                     match built_index.url(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_url_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -630,7 +633,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_path(sdist)? {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_git_path_dist(sdist);
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                parsed_url: sdist.parsed_url(),
+                                verbatim: sdist.url.clone(),
+                            });
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -648,7 +654,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_directory(sdist) {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_git_dist(sdist);
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                parsed_url: sdist.parsed_url(),
+                                verbatim: sdist.url.clone(),
+                            });
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -672,7 +681,10 @@ impl<'a> Planner<'a> {
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_path_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -703,7 +715,10 @@ impl<'a> Planner<'a> {
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_directory_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
                                 );
