@@ -814,14 +814,18 @@ impl ArchivedCachePolicy {
                 }
             }
         }
-        if age > freshness_lifetime {
+        // RFC 9111 S4.2 defines freshness as
+        // `freshness_lifetime > current_age`, so equality is stale.
+        //
+        // [RFC 9111 S4.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2
+        if age >= freshness_lifetime {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
                     "Request to {} does not have a fresh cache entry because \
-                     its age is {} seconds, it is greater than the freshness \
-                     lifetime of {} seconds and stale cached responses are not \
-                     allowed",
+                     its age is {} seconds, it is greater than or equal to the \
+                     freshness lifetime of {} seconds and stale cached responses \
+                     are not allowed",
                     request.url(),
                     age,
                     freshness_lifetime,
@@ -1410,7 +1414,9 @@ mod tests {
     /// RFC 9111 S4.2.3 age computation must not overflow. Every term uses
     /// saturating arithmetic, so the age saturates to `Duration::from_secs`
     /// `(u64::MAX)` and the response is treated as stale rather than panicking
-    /// (debug) or wrapping around to a bogus "fresh" age (release).
+    /// (debug) or wrapping around to a bogus "fresh" age (release). This must
+    /// remain stale even if the response's freshness lifetime also reaches
+    /// `u64::MAX`.
     #[test]
     fn age_saturates_on_huge_age_header() {
         let request =
@@ -1418,6 +1424,7 @@ mod tests {
         let http_response = http::Response::builder()
             .status(http::StatusCode::OK)
             .header(http::header::AGE, u64::MAX.to_string())
+            .header(http::header::CACHE_CONTROL, format!("max-age={}", u64::MAX))
             .body(Vec::new())
             .unwrap();
         let response = reqwest::Response::from(http_response);
@@ -1430,5 +1437,6 @@ mod tests {
         // overflow when added to a `u64::MAX`-derived initial age.
         let now = SystemTime::now() + Duration::from_secs(5);
         assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
+        assert!(!archived.is_fresh(now, &request));
     }
 }
