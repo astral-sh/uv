@@ -48,11 +48,14 @@ pub(crate) fn resolution_tags<'env>(
 
     let (platform, manylinux_compatible) = if let Some(python_platform) = python_platform {
         (
-            &python_platform.platform(),
+            python_platform.platform(),
             python_platform.manylinux_compatible(),
         )
     } else {
-        (interpreter.platform(), interpreter.manylinux_compatible())
+        (
+            interpreter.platform().clone(),
+            interpreter.manylinux_compatible(),
+        )
     };
 
     let version_tuple = if let Some(python_version) = python_version {

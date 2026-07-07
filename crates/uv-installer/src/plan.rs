@@ -923,7 +923,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
@@ -959,7 +959,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
@@ -995,7 +995,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version

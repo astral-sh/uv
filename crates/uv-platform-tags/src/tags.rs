@@ -153,7 +153,7 @@ impl Tags {
     /// Returns the compatible tags for the given Python implementation (e.g., `cpython`), version,
     /// and platform.
     pub fn from_env(
-        platform: &Platform,
+        platform: Platform,
         python_version: (u8, u8),
         implementation_name: &str,
         implementation_version: (u8, u8),
@@ -188,7 +188,7 @@ impl Tags {
 
         // Determine the compatible tags for the current platform.
         let platform_tags = {
-            let mut platform_tags = compatible_tags(platform)?;
+            let mut platform_tags = compatible_tags(&platform)?;
             if matches!(platform.os(), Os::Manylinux { .. }) && !options.manylinux_compatible {
                 platform_tags.retain(|tag| !tag.is_manylinux());
             }
@@ -315,7 +315,7 @@ impl Tags {
         }
         Ok(Self::new(
             tags,
-            platform.clone(),
+            platform,
             python_version,
             options.is_cross,
             options.gil_disabled,
@@ -1746,7 +1746,7 @@ mod tests {
     #[test]
     fn test_manylinux_incompatible() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -1808,7 +1808,7 @@ mod tests {
     #[test]
     fn test_system_tags_manylinux() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -2434,7 +2434,7 @@ mod tests {
     #[test]
     fn test_system_tags_macos() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Macos {
                     major: 14,
                     minor: 0,
@@ -2910,7 +2910,7 @@ mod tests {
     #[test]
     fn test_system_tags_freethreaded_include_abi3t() {
         let tags = Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Manylinux {
                     major: 2,
                     minor: 28,
@@ -2990,7 +2990,7 @@ mod tests {
     fn test_system_tags_debug_cpython() {
         fn debug_compatibilities(debug_enabled: bool) -> (TagCompatibility, TagCompatibility) {
             let tags = Tags::from_env(
-                &Platform::new(
+                Platform::new(
                     Os::Manylinux {
                         major: 2,
                         minor: 28,
@@ -3042,7 +3042,7 @@ mod tests {
 
         for gil_disabled in [false, true] {
             let tags = Tags::from_env(
-                &Platform::new(
+                Platform::new(
                     Os::Manylinux {
                         major: 2,
                         minor: 28,

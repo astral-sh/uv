@@ -867,7 +867,7 @@ mod tests {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Macos {
                     major: 14,
                     minor: 0,

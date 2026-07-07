@@ -247,7 +247,7 @@ impl Interpreter {
     pub fn tags(&self) -> Result<&Tags, TagsError> {
         if self.tags.get().is_none() {
             let tags = Tags::from_env(
-                self.platform(),
+                self.platform().clone(),
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),

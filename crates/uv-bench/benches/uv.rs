@@ -443,7 +443,7 @@ mod resolver {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &PLATFORM,
+            PLATFORM.clone(),
             (3, 11),
             "cpython",
             (3, 11),
