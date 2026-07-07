@@ -336,6 +336,10 @@ impl Entry {
     #[cfg(all(
         test,
         any(
+            all(
+                any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"),
+                feature = "secret-service"
+            ),
             all(target_os = "macos", feature = "apple-native"),
             all(target_os = "windows", feature = "windows-native"),
         )
