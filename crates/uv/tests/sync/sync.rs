@@ -1052,10 +1052,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+      Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+        And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+        And because pharaohs-tomp:dev depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:dev, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -1196,10 +1196,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     ----- stderr -----
     Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
     Creating virtual environment at: .venv
-      × No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
-      ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
-          And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
-          And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: python_full_version == '3.8.*'):
+      Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.9 and sphinx==7.2.6 depends on Python>=3.9, we can conclude that sphinx==7.2.6 cannot be used.
+        And because only sphinx<=7.2.6 is available, we can conclude that sphinx>=7.2.6 cannot be used.
+        And because pharaohs-tomp:mygroup depends on sphinx>=7.2.6 and your project requires pharaohs-tomp:mygroup, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
@@ -2367,15 +2367,16 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Missing `anyio` module
-
+        [stderr]
+        Missing `anyio` module
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -2883,15 +2884,16 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 4.3 but got 3.5.0
-
+        [stderr]
+        Expected `anyio` version 4.3 but got 3.5.0
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -3114,18 +3116,20 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Traceback (most recent call last):
-            File "<string>", line 8, in <module>
-            File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
-              import sklearn
-          ModuleNotFoundError: No module named 'sklearn'
+        [stderr]
+        Traceback (most recent call last):
+          File "<string>", line 8, in <module>
+          File "[TEMP_DIR]/child/build_backend.py", line 5, in <module>
+            import sklearn
+        ModuleNotFoundError: No module named 'sklearn'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: This error likely indicates that `child@0.1.0` depends on `scikit-learn`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `scikit-learn` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
@@ -15299,15 +15303,16 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 4.0 but got 3.7.1
-
+        [stderr]
+        Expected `anyio` version 4.0 but got 3.7.1
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -15498,13 +15503,13 @@ fn sync_extra_build_variables() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `parent @ file://[TEMP_DIR]/`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_editable` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `parent @ file://[TEMP_DIR]/`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_editable` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
-
+        [stderr]
+        Expected `anyio` version 3.0 but got 4.3.0
 
     hint: Build failures usually indicate a problem with the package or the build environment
     ");

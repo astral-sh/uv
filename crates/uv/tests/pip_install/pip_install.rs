@@ -7734,8 +7734,8 @@ fn already_installed_local_version_of_remote_package() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because there is no version of anyio==4.3.0+foo and you require anyio==4.3.0+foo, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -8023,8 +8023,8 @@ fn already_installed_remote_url() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because uv-public-pypackage was not found in the provided package locations and you require uv-public-pypackage==0.2.0, we can conclude that your requirements are unsatisfiable.
 
     hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
     ");
@@ -10283,10 +10283,11 @@ build-constraint-dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `requests==1.2.0`
-      ├─▶ Failed to resolve requirements from `setup.py` build
-      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
+    error: Failed to download and build `requests==1.2.0`
+      Caused by: Failed to resolve requirements from `setup.py` build
+      Caused by: No solution found when resolving: `setuptools>=40.8.0`
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because you require setuptools==1 and setuptools>=40, we can conclude that your requirements are unsatisfiable.
     "
     );
 
@@ -15290,15 +15291,16 @@ fn pip_install_build_dependencies_respect_locked_versions() -> Result<()> {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-      × Failed to build `child @ file://[TEMP_DIR]/child`
-      ├─▶ The build backend returned an error
-      ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
+    error: Failed to prepare distributions
+      Caused by: Failed to build `child @ file://[TEMP_DIR]/child`
+      Caused by: The build backend returned an error
+      Caused by: Call to `build_backend.build_wheel` failed (exit status: 1)
 
-          [stderr]
-          Expected `anyio` version 4.0 but got 3.7.1
-
+        [stderr]
+        Expected `anyio` version 4.0 but got 3.7.1
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
+
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
@@ -16167,8 +16169,9 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to build `py313 @ file://[TEMP_DIR]/child`
-      ╰─▶ The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
+    error: Failed to prepare distributions
+      Caused by: Failed to build `py313 @ file://[TEMP_DIR]/child`
+      Caused by: The built wheel `py313-0.1.0-py313-none-any.whl` is not compatible with the target Python 3.12 on [ARCH] [OS]. Consider using `--no-build` to disable building wheels.
     ");
 
     // Create a project that will resolve to a non-latest version of `anyio`

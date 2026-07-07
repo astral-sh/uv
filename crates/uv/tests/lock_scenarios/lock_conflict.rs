@@ -646,9 +646,9 @@ fn extra_multiple_not_conflicting2() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
-      ╰─▶ Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
-          And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (included: project[extra2], project[project3]; excluded: project[extra1], project[project4]):
+      Caused by: Because project[project3] depends on sortedcontainers==2.3.0 and project[extra2] depends on sortedcontainers==2.4.0, we can conclude that project[extra2] and project[project3] are incompatible.
+        And because your project requires project[extra2] and project[project3], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // One could try to declare all pairs of conflicting extras as
@@ -803,9 +803,9 @@ fn extra_multiple_independent() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
-      ╰─▶ Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
-          And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (included: project[project4]; excluded: project[project3]):
+      Caused by: Because project[extra2] depends on sortedcontainers==2.4.0 and project[extra1] depends on sortedcontainers==2.3.0, we can conclude that project[extra1] and project[extra2] are incompatible.
+        And because your project requires project[extra1] and project[extra2], we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // Once we declare ALL our conflicting extras, resolution succeeds.

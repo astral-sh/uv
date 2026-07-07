@@ -2367,8 +2367,8 @@ fn tool_run_python_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving tool dependencies:
-      ╰─▶ Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving tool dependencies:
+      Caused by: Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Request a version via `-p`
@@ -3272,8 +3272,9 @@ fn tool_run_verbose_hint() {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
+    error: Failed to run tool
+      Caused by: No solution found when resolving dependencies:
+      Caused by: Because nonexistent-package-bar was not found in the package registry and you require nonexistent-package-bar, we can conclude that your requirements are unsatisfiable.
 
     hint: You provided `-v` to `nonexistent-package-bar`. Did you mean to provide it to `uv tool run`? e.g., `uv tool run -v nonexistent-package-bar`
     ");

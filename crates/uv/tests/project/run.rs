@@ -479,8 +479,8 @@ fn run_pep723_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving script dependencies:
-      ╰─▶ Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
+    error: No solution found when resolving script dependencies:
+      Caused by: Because there are no versions of add and you require add, we can conclude that your requirements are unsatisfiable.
     ");
 
     // If the script contains an unclosed PEP 723 tag, we should error.
