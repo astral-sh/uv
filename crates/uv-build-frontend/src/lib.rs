@@ -624,7 +624,8 @@ impl SourceBuild {
         }
 
         // Only show the warning for first party and URL dependencies, not for registry dependencies
-        // (which have sources disabled).
+        // (which have sources disabled). Skip the warning when `backend-path` is set, since that
+        // indicates an in-tree backend that wraps `uv_build` intentionally.
         if !no_sources.all()
             && pyproject_toml
                 .tool
@@ -632,6 +633,11 @@ impl SourceBuild {
                 .and_then(|tool| tool.uv.as_ref())
                 .is_some_and(|uv| uv.build_backend.is_some())
             && build_backend != Some("uv_build")
+            && pyproject_toml
+                .build_system
+                .as_ref()
+                .and_then(|build_system| build_system.backend_path.as_ref())
+                .is_none()
             && let Some(package_name) =
                 package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))
         {
