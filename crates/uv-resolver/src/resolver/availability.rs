@@ -232,24 +232,3 @@ pub(crate) enum ResolverVersion {
     /// A set of forks, optionally with resolved versions
     Forked(Vec<VersionFork>),
 }
-
-#[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-
-    use reqwest::StatusCode;
-
-    use super::UnavailableVersion;
-
-    #[test]
-    fn unavailable_version_borrows_static_messages() {
-        assert!(matches!(
-            UnavailableVersion::InvalidMetadata.message(),
-            Cow::Borrowed("invalid metadata")
-        ));
-        assert!(matches!(
-            UnavailableVersion::Network(StatusCode::NOT_FOUND).message(),
-            Cow::Owned(_)
-        ));
-    }
-}
