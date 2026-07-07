@@ -1329,7 +1329,7 @@ fn can_skip_ephemeral(
     }
 
     // Determine the markers and tags to use for resolution.
-    let markers = interpreter.resolver_marker_environment();
+    let markers = interpreter.to_resolver_marker_environment();
     let Ok(tags) = interpreter.tags() else {
         return false;
     };

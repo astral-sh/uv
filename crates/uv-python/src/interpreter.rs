@@ -197,7 +197,7 @@ impl Interpreter {
     }
 
     /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
-    pub fn resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
+    pub fn to_resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
         ResolverMarkerEnvironment::from(self.markers().clone())
     }
 

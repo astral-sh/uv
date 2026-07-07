@@ -80,7 +80,7 @@ pub(crate) async fn pip_tree(
     };
 
     // Determine the markers and tags to use for the resolution.
-    let markers = environment.interpreter().resolver_marker_environment();
+    let markers = environment.interpreter().to_resolver_marker_environment();
     let tags = environment.interpreter().tags()?;
 
     // Determine the latest version for each package.

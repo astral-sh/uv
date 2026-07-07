@@ -33,7 +33,7 @@ pub(crate) fn resolution_markers(
         (None, Some(python_version)) => {
             ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers().clone()))
         }
-        (None, None) => interpreter.resolver_marker_environment(),
+        (None, None) => interpreter.to_resolver_marker_environment(),
     }
 }
 
