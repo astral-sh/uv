@@ -752,17 +752,15 @@ pub(crate) async fn install(
                 &markers,
             );
 
-            if external_graph.incomplete().is_empty() {
-                candidates.retain(|candidate| {
-                    !retained.contains(candidate) && !external_graph.packages().contains(candidate)
-                });
-            } else {
+            if !external_graph.incomplete().is_empty() {
                 warn_user!(
-                    "Retaining all removal candidates because dependency metadata is incomplete for {}",
+                    "Unable to read complete dependency metadata for {}; pruning based on available metadata",
                     external_graph.incomplete().iter().join(", ")
                 );
-                candidates.clear();
             }
+            candidates.retain(|candidate| {
+                !retained.contains(candidate) && !external_graph.packages().contains(candidate)
+            });
 
             Modifications::Prune {
                 roots,
