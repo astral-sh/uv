@@ -705,22 +705,26 @@ pub(crate) async fn add(
     // Save the modified `pyproject.toml` or script.
     modified |= target.write(&content)?;
 
-    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
-    // to exist at all.
-    if frozen.is_some() {
+    // Determine whether to skip the sync, or run in dry-run mode.
+    //
+    // - `--frozen` with `--bounds` (non-raw): Run resolution in dry-run mode to compute
+    //   version bounds from the lock resolution, but skip writing `uv.lock` and syncing.
+    // - `--frozen` without `--bounds` (or with `--raw`): Exit early with no resolution.
+    // - Script without an existing `uv.lock`: Avoid creating one; resolve in dry-run mode
+    //   to populate version bounds for the script's inline metadata.
+    // - Default: Full lock + sync.
+    let dry_run;
+    if frozen.is_some() && !raw && bounds.is_some() {
+        dry_run = true;
+    } else if frozen.is_some() {
         return Ok(ExitStatus::Success);
-    }
-
-    // If we're modifying a script, and lockfile doesn't exist, avoid creating it. We still need
-    // to perform resolution, since we want to use the resolved versions to populate lower bounds
-    // in the script.
-    let dry_run = if let AddTarget::Script(ref script, _) = target {
-        !LockTarget::from(script).lock_path().is_file()
+    } else if let AddTarget::Script(ref script, _) = target {
+        dry_run = !LockTarget::from(script).lock_path().is_file();
     } else {
-        false
+        dry_run = false;
     };
 
-    // Update the `pypackage.toml` in-memory.
+    // Update the `pyproject.toml` in-memory.
     let target = target.update(&content, &WorkspaceCache::default())?;
 
     // Set the Ctrl-C handler to revert changes on exit.
