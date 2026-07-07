@@ -1,5 +1,6 @@
 //! Platform detection for operating system, architecture, and libc.
 
+use std::borrow::Cow;
 use std::cmp;
 use std::fmt;
 use std::str::FromStr;
@@ -146,9 +147,9 @@ impl Platform {
 
         let arch_name = match arch.family() {
             // Special cases where Display doesn't match target triple
-            Architecture::X86_32(X86_32Architecture::I686) => "i686".to_string(),
-            Architecture::Riscv64(Riscv64Architecture::Riscv64) => "riscv64gc".to_string(),
-            _ => arch.to_string(),
+            Architecture::X86_32(X86_32Architecture::I686) => Cow::Borrowed("i686"),
+            Architecture::Riscv64(Riscv64Architecture::Riscv64) => Cow::Borrowed("riscv64gc"),
+            _ => Cow::Owned(arch.to_string()),
         };
         let vendor = match &**os {
             OperatingSystem::Darwin(_) => "apple",
@@ -156,12 +157,12 @@ impl Platform {
             _ => "unknown",
         };
         let os_name = match &**os {
-            OperatingSystem::Darwin(_) => "darwin",
-            _ => &os.to_string(),
+            OperatingSystem::Darwin(_) => Cow::Borrowed("darwin"),
+            _ => Cow::Owned(os.to_string()),
         };
 
         let abi = match (&**os, libc) {
-            (OperatingSystem::Windows, _) => Some("msvc".to_string()),
+            (OperatingSystem::Windows, _) => Some(Cow::Borrowed("msvc")),
             (OperatingSystem::Linux, Libc::Some(env)) => Some({
                 // If we've detected a bare `gnu` or `musl` environment on ARMv7,
                 // that means our floating point environment detection failed.
@@ -175,9 +176,9 @@ impl Platform {
                 if matches!(arch.family(), Architecture::Arm(ArmArchitecture::Armv7))
                     && matches!(env, Environment::Gnu | Environment::Musl)
                 {
-                    format!("{env}eabihf")
+                    Cow::Owned(format!("{env}eabihf"))
                 } else {
-                    env.to_string()
+                    Cow::Owned(env.to_string())
                 }
             }),
             _ => None,
