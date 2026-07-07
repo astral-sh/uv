@@ -143,7 +143,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+            return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
         let metadata = dist
@@ -586,7 +586,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 .dependency_metadata()
                 .get(dist.name(), Some(dist.version()))
             {
-                metadata.clone()
+                metadata
             } else {
                 wheel.metadata()?
             };
@@ -603,7 +603,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .dependency_metadata()
             .get(dist.name(), Some(dist.version()))
         {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
+            return Ok(ArchiveMetadata::from_metadata23(metadata));
         }
 
         let result = self
