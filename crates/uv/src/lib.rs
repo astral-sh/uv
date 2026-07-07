@@ -3058,13 +3058,18 @@ where
             };
             match error {
                 UvError::User(err) => {
-                    trace!("Error trace: {err:?}");
                     commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Failure.into()
                 }
                 UvError::Unexpected(err) => {
-                    trace!("Error trace: {err:?}");
+                    trace!(
+                        "Error chain:\n{}",
+                        uv_errors::debug_error_chain(err.as_ref())
+                    );
+                    if err.backtrace().status() == std::backtrace::BacktraceStatus::Captured {
+                        trace!("Error backtrace:\n{}", err.backtrace());
+                    }
                     commands::diagnostics::write_error_chain(&err, printer)
                         .expect("writing to stderr should not fail");
                     ExitStatus::Error.into()
