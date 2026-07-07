@@ -8,18 +8,20 @@ use uv_pep440::{Version, VersionSpecifiers, canonicalize_version_ranges};
 
 /// A PEP 440 version range with separate representations for diagnostics and PubGrub reasoning.
 ///
-/// `versions` retains the original sentinel bounds used to format PEP 440 constraints, while
+/// `raw_versions` retains the original sentinel bounds used to format PEP 440 constraints, while
 /// `canonical_versions` folds those sentinels onto their least valid successors. PubGrub uses the
 /// canonical representation for equality, hashing, and set relations.
 #[derive(Clone, Debug)]
 pub struct Range<T> {
-    versions: Ranges<T>,
+    raw_versions: Ranges<T>,
     canonical_versions: Option<Box<Ranges<T>>>,
 }
 
 impl<T> Range<T> {
     fn logical_versions(&self) -> &Ranges<T> {
-        self.canonical_versions.as_deref().unwrap_or(&self.versions)
+        self.canonical_versions
+            .as_deref()
+            .unwrap_or(&self.raw_versions)
     }
 }
 
@@ -41,24 +43,27 @@ impl<T> Deref for Range<T> {
     type Target = Ranges<T>;
 
     fn deref(&self) -> &Self::Target {
-        &self.versions
+        &self.raw_versions
     }
 }
 
 impl Range<Version> {
-    fn from_parts(versions: Ranges<Version>, canonical_versions: Option<Ranges<Version>>) -> Self {
+    fn from_parts(
+        raw_versions: Ranges<Version>,
+        canonical_versions: Option<Ranges<Version>>,
+    ) -> Self {
         let canonical_versions = canonical_versions
-            .filter(|canonical| canonical != &versions)
+            .filter(|canonical| canonical != &raw_versions)
             .map(Box::new);
         Self {
-            versions,
+            raw_versions,
             canonical_versions,
         }
     }
 
     fn from_canonical_versions(versions: Ranges<Version>) -> Self {
         Self {
-            versions,
+            raw_versions: versions,
             canonical_versions: None,
         }
     }
@@ -94,13 +99,13 @@ impl Range<Version> {
     }
 
     /// Return the original PEP 440 bounds used for candidate iteration and diagnostics.
-    pub(crate) fn versions(&self) -> &Ranges<Version> {
-        &self.versions
+    pub(crate) fn raw_versions(&self) -> &Ranges<Version> {
+        &self.raw_versions
     }
 
     pub(crate) fn complement(&self) -> Self {
         Self::from_parts(
-            self.versions.complement(),
+            self.raw_versions.complement(),
             self.canonical_versions.as_deref().map(Ranges::complement),
         )
     }
@@ -118,11 +123,11 @@ impl Range<Version> {
         other: &Self,
         operation: impl Fn(&Ranges<Version>, &Ranges<Version>) -> Ranges<Version>,
     ) -> Self {
-        let versions = operation(&self.versions, &other.versions);
+        let raw_versions = operation(&self.raw_versions, &other.raw_versions);
         let canonical_versions = (self.canonical_versions.is_some()
             || other.canonical_versions.is_some())
         .then(|| operation(self.logical_versions(), other.logical_versions()));
-        Self::from_parts(versions, canonical_versions)
+        Self::from_parts(raw_versions, canonical_versions)
     }
 }
 
@@ -164,7 +169,7 @@ impl VersionSet for Range<Version> {
     }
 
     fn contains(&self, version: &Self::V) -> bool {
-        self.versions.contains(version)
+        self.raw_versions.contains(version)
     }
 
     fn full() -> Self {
@@ -191,7 +196,7 @@ impl VersionSet for Range<Version> {
 
 impl<T: Debug + Display + Clone + Eq + Ord> Display for Range<T> {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.versions, formatter)
+        Display::fmt(&self.raw_versions, formatter)
     }
 }
 
@@ -246,9 +251,9 @@ mod tests {
         );
         let range = Range::from(raw.clone());
 
-        assert_eq!(range.versions(), &raw);
+        assert_eq!(range.raw_versions(), &raw);
         assert_eq!(range.to_string(), raw.to_string());
-        assert_ne!(range.versions(), range.logical_versions());
+        assert_ne!(range.raw_versions(), range.logical_versions());
     }
 
     #[test]
@@ -278,8 +283,8 @@ mod tests {
     }
 
     fn assert_matches_recanonicalized(range: &Range<Version>) {
-        let canonical_versions =
-            canonicalize_version_ranges(&range.versions).unwrap_or_else(|| range.versions.clone());
+        let canonical_versions = canonicalize_version_ranges(&range.raw_versions)
+            .unwrap_or_else(|| range.raw_versions.clone());
         assert_eq!(range.logical_versions(), &canonical_versions);
     }
 
