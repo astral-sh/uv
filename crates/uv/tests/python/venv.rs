@@ -11,7 +11,7 @@ use uv_static::EnvVars;
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
 
-use uv_test::uv_snapshot;
+use uv_test::{site_packages_path, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -72,6 +72,61 @@ fn create_venv() {
     );
 
     context.venv.assert(predicates::path::is_dir());
+}
+
+#[test]
+fn create_venv_preview_skips_distutils_patch_on_py310_plus() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .arg("--preview-features")
+        .arg("no-distutils-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    let site_packages = site_packages_path(context.venv.path(), "python3.12");
+    assert!(!site_packages.join("_virtualenv.py").exists());
+    assert!(!site_packages.join("_virtualenv.pth").exists());
+}
+
+#[test]
+#[cfg(feature = "test-python-eol")]
+fn create_venv_preview_keeps_distutils_patch_on_py39() {
+    let context = uv_test::test_context_with_versions!(&["3.9"]);
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.9")
+        .arg("--preview-features")
+        .arg("no-distutils-patch"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    context.venv.assert(predicates::path::is_dir());
+    let site_packages = site_packages_path(context.venv.path(), "python3.9");
+    assert!(site_packages.join("_virtualenv.py").is_file());
+    assert!(site_packages.join("_virtualenv.pth").is_file());
 }
 
 #[test]

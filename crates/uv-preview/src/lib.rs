@@ -262,6 +262,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    NoDistutilsPatch = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -306,6 +307,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::NoDistutilsPatch => "no-distutils-patch",
         }
     }
 }
@@ -363,6 +365,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "no-distutils-patch" => Self::NoDistutilsPatch,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -669,6 +672,10 @@ mod tests {
         assert_eq!(
             PreviewFeature::WorkspaceListScripts.as_str(),
             "workspace-list-scripts"
+        );
+        assert_eq!(
+            PreviewFeature::NoDistutilsPatch.as_str(),
+            "no-distutils-patch"
         );
     }
 
