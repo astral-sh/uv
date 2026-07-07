@@ -3144,12 +3144,14 @@ impl ForkState {
                 }
 
                 if let Some(index) = source.explicit_index() {
-                    self.fork_indexes.insert(name, index, &self.env)?;
+                    self.fork_indexes
+                        .insert(name.clone(), index.clone(), &self.env)?;
                 }
 
                 // If the package is pinned to an exact index, add it to the fork.
                 for index in indexes.get(name, &self.env) {
-                    self.fork_indexes.insert(name, index, &self.env)?;
+                    self.fork_indexes
+                        .insert(name.clone(), index.clone(), &self.env)?;
                 }
             }
 
