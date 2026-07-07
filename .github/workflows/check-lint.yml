@@ -167,8 +167,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        # `uv-keyring` is vendored from keyring-rs, so preserve its upstream public API.
-        run: cargo +1.96.1 hawk --exclude-crate uv_keyring -D warnings
+        run: cargo +1.96.1 hawk -D warnings
 
   shear:
     name: "cargo shear"

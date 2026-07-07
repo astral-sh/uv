@@ -30,24 +30,14 @@ documentation of each credential store to understand the
 effect of specifying the _target_ attribute on entries in that store,
 as well as which values are allowed for _target_ by that store.
 
-The abstract behavior of entries and credential stores are captured
-by two types (with associated traits):
-
-- a _credential builder_, represented by the [`CredentialBuilder`] type
-  (and [`CredentialBuilderApi`](credential::CredentialBuilderApi) trait).  Credential
-  builders are given the identifying information (and target, if any)
-  provided for an entry and map
-  it to the identifying information for a platform-specific credential.
-- a _credential_, represented by the [`Credential`] type
-  (and [`CredentialApi`](credential::CredentialApi) trait).  The platform-specific credential
-  identified by the builder for an entry is what provides the secure storage
-  for that entry's password/secret.
+The platform-specific credential identified for an entry provides the secure storage
+for that entry's password or secret.
 
 ## Crate-provided Credential Stores
 
 This crate runs on several different platforms, and on each one
 it provides (by default) an implementation of a default credential store used
-on that platform (see [`default_credential_builder`]).
+on that platform by [`Entry::new`].
 These implementations work by mapping the data used to identify an entry
 to data used to identify platform-specific storage objects.
 For example, on macOS, the service and user provided for an entry
@@ -84,38 +74,7 @@ default feature set:
 
 If you suppress the default feature set when building this crate, and you
 don't separately specify one of the included keystore features for your platform,
-then no keystore will be built in, and calls to [`Entry::new`] and [`Entry::new_with_target`]
-will fail unless the client brings their own keystore (see next section).
-
-## Client-provided Credential Stores
-
-In addition to the keystores implemented by this crate, clients
-are free to provide their own keystores and use those.  There are
-two mechanisms provided for this:
-
-- Clients can give their desired credential builder to the crate
-  for use by the [`Entry::new`] and [`Entry::new_with_target`] calls.
-  This is done by making a call to [`set_default_credential_builder`].
-  The major advantage of this approach is that client code remains
-  independent of the credential builder being used.
-
-- Clients can construct their concrete credentials directly and
-  then turn them into entries by using the [`Entry::new_with_credential`]
-  call. The major advantage of this approach is that credentials
-  can be identified however clients want, rather than being restricted
-  to the simple model used by this crate.
-
-## Mock Credential Store
-
-In addition to the platform-specific credential stores, this crate
-always provides a mock credential store that clients can use to
-test their code in a platform independent way.  The mock credential
-store allows for pre-setting errors as well as password values to
-be returned from [`Entry`] method calls. If you want to use the mock
-credential store as your default in tests, make this call:
-```
-uv_keyring::set_default_credential_builder(uv_keyring::mock::default_credential_builder())
-```
+then no keystore will be built in and calls to [`Entry::new`] will fail.
 
 ## Interoperability with Third Parties
 
@@ -153,14 +112,20 @@ Service, accesses from multiple threads (and even the same thread very quickly)
 are not recommended, as they may cause the RPC mechanism to fail.
  */
 
+#[cfg(test)]
 use std::collections::HashMap;
 
-pub use credential::{Credential, CredentialBuilder};
+pub use credential::Credential;
+use credential::CredentialBuilder;
 pub use error::{Error, Result};
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(
+    all(target_os = "macos", feature = "apple-native"),
+    all(target_os = "windows", feature = "windows-native"),
+))]
 mod blocking;
-pub mod mock;
+#[cfg(test)]
+mod mock;
 
 //
 // pick the *nix keystore
@@ -173,51 +138,26 @@ pub mod mock;
     docsrs,
     doc(cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd")))
 )]
-pub mod secret_service;
+mod secret_service;
 
 //
 // pick the Apple keystore
 //
 #[cfg(all(target_os = "macos", feature = "apple-native"))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "macos")))]
-pub mod macos;
+mod macos;
 
 //
 // pick the Windows keystore
 //
 #[cfg(all(target_os = "windows", feature = "windows-native"))]
 #[cfg_attr(docsrs, doc(cfg(target_os = "windows")))]
-pub mod windows;
+mod windows;
 
-pub mod credential;
-pub mod error;
+mod credential;
+mod error;
 
-#[derive(Default, Debug)]
-struct EntryBuilder {
-    inner: Option<Box<CredentialBuilder>>,
-}
-
-static DEFAULT_BUILDER: std::sync::RwLock<EntryBuilder> =
-    std::sync::RwLock::new(EntryBuilder { inner: None });
-
-/// Set the credential builder used by default to create entries.
-///
-/// This is really meant for use by clients who bring their own credential
-/// store and want to use it everywhere.  If you are using multiple credential
-/// stores and want precise control over which credential is in which store,
-/// then use [`new_with_credential`](Entry::new_with_credential).
-///
-/// This will block waiting for all other threads currently creating entries
-/// to complete what they are doing. It's really meant to be called
-/// at app startup before you start creating entries.
-pub fn set_default_credential_builder(new: Box<CredentialBuilder>) {
-    let mut guard = DEFAULT_BUILDER
-        .write()
-        .expect("Poisoned RwLock in keyring-rs: please report a bug!");
-    guard.inner = Some(new);
-}
-
-pub fn default_credential_builder() -> Box<CredentialBuilder> {
+fn default_credential_builder() -> Box<CredentialBuilder> {
     #[cfg(any(
         all(target_os = "linux", feature = "secret-service"),
         all(target_os = "freebsd", feature = "secret-service"),
@@ -241,11 +181,7 @@ pub fn default_credential_builder() -> Box<CredentialBuilder> {
 fn build_default_credential(target: Option<&str>, service: &str, user: &str) -> Result<Entry> {
     static DEFAULT: std::sync::LazyLock<Box<CredentialBuilder>> =
         std::sync::LazyLock::new(default_credential_builder);
-    let guard = DEFAULT_BUILDER
-        .read()
-        .expect("Poisoned RwLock in keyring-rs: please report a bug!");
-    let builder = guard.inner.as_ref().unwrap_or_else(|| &DEFAULT);
-    let credential = builder.build(target, service, user)?;
+    let credential = DEFAULT.build(target, service, user)?;
     Ok(Entry { inner: credential })
 }
 
@@ -277,13 +213,15 @@ impl Entry {
     /// Create an entry for the given target, service, and user.
     ///
     /// The default credential builder is used.
-    pub fn new_with_target(target: &str, service: &str, user: &str) -> Result<Self> {
+    #[cfg(all(test, target_os = "macos", feature = "apple-native"))]
+    fn new_with_target(target: &str, service: &str, user: &str) -> Result<Self> {
         let entry = build_default_credential(Some(target), service, user)?;
         Ok(entry)
     }
 
     /// Create an entry from a credential that may be in any credential store.
-    pub fn new_with_credential(credential: Box<Credential>) -> Self {
+    #[cfg(test)]
+    fn new_with_credential(credential: Box<Credential>) -> Self {
         Self { inner: credential }
     }
 
@@ -348,7 +286,8 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub async fn get_attributes(&self) -> Result<HashMap<String, String>> {
+    #[cfg(test)]
+    async fn get_attributes(&self) -> Result<HashMap<String, String>> {
         self.inner.get_attributes().await
     }
 
@@ -367,7 +306,8 @@ impl Entry {
     /// that matches this entry.  This can only happen
     /// on some platforms, and then only if a third-party
     /// application wrote the ambiguous credential.
-    pub async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
+    #[cfg(test)]
+    async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
         self.inner.update_attributes(attributes).await
     }
 
@@ -393,7 +333,14 @@ impl Entry {
     /// The reference is of the [Any](std::any::Any) type, so it can be
     /// downgraded to a concrete credential object.  The client must know
     /// what type of concrete object to cast to.
-    pub fn get_credential(&self) -> &dyn std::any::Any {
+    #[cfg(all(
+        test,
+        any(
+            all(target_os = "macos", feature = "apple-native"),
+            all(target_os = "windows", feature = "windows-native"),
+        )
+    ))]
+    fn get_credential(&self) -> &dyn std::any::Any {
         self.inner.as_any()
     }
 }
@@ -439,7 +386,7 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) async fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
+    async fn test_round_trip(case: &str, entry: &Entry, in_pass: &str) {
         test_round_trip_no_delete(case, entry, in_pass).await;
         entry
             .delete_credential()
@@ -453,7 +400,7 @@ mod tests {
     }
 
     /// A basic round-trip unit test given an entry and a password.
-    pub(crate) async fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
+    async fn test_round_trip_secret(case: &str, entry: &Entry, in_secret: &[u8]) {
         entry
             .set_secret(in_secret)
             .await
@@ -477,20 +424,19 @@ mod tests {
         );
     }
 
-    /// When tests fail, they leave keys behind, and those keys
-    /// have to be cleaned up before the tests can be run again
-    /// in order to avoid bad results.  So it's a lot easier just
-    /// to have tests use a random string for key names to avoid
-    /// the conflicts, and then do any needed cleanup once everything
-    /// is working correctly.  So we export this function for tests to use.
+    #[cfg(windows)]
     pub(crate) fn generate_random_string_of_len(len: usize) -> String {
+        random_string_of_len(len)
+    }
+
+    fn random_string_of_len(len: usize) -> String {
         use fastrand;
         use std::iter::repeat_with;
         repeat_with(fastrand::alphanumeric).take(len).collect()
     }
 
     pub(crate) fn generate_random_string() -> String {
-        generate_random_string_of_len(30)
+        random_string_of_len(30)
     }
 
     fn generate_random_bytes_of_len(len: usize) -> Vec<u8> {
