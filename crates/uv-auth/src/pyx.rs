@@ -170,9 +170,9 @@ struct PyxDirectories {
 
 impl PyxDirectories {
     /// Detect the [`PyxDirectories`] for a given API URL.
-    fn from_api(api: &DisplaySafeUrl) -> Result<Self, io::Error> {
+    fn from_api(api: DisplaySafeUrl) -> Result<Self, io::Error> {
         // Store credentials in a subdirectory based on the API URL.
-        let digest = uv_cache_key::cache_digest(&CanonicalUrl::new(api.clone()));
+        let digest = uv_cache_key::cache_digest(&CanonicalUrl::new(api));
 
         // If the user explicitly set `PYX_CREDENTIALS_DIR`, use that.
         if let Some(root) = std::env::var_os(EnvVars::PYX_CREDENTIALS_DIR) {
@@ -235,7 +235,7 @@ impl PyxTokenStore {
             .unwrap_or_else(|| SmallString::from(arcstr::literal!(PYX_DEFAULT_CDN_DOMAIN)));
 
         // Determine the root directory for the token store.
-        let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(&api)?;
+        let PyxDirectories { root, subdirectory } = PyxDirectories::from_api(api.clone())?;
 
         Ok(Self {
             root,
