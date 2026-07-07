@@ -1,10 +1,10 @@
 use std::convert::Infallible;
 
-use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics, Range};
+use pubgrub::{Dependencies, DependencyProvider, PackageResolutionStatistics};
 
 use uv_pep440::Version;
 
-use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker};
+use crate::pubgrub::{PubGrubPackage, PubGrubPriority, PubGrubTiebreaker, Range};
 use crate::resolver::UnavailableReason;
 
 /// We don't use a dependency provider, we interact with state directly, but we still need this one

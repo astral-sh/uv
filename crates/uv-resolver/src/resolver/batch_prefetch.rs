@@ -2,13 +2,13 @@ use std::cmp::min;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use pubgrub::{Range, Ranges, Term};
+use pubgrub::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
 
 use crate::candidate_selector::CandidateSelector;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
@@ -209,7 +209,7 @@ impl BatchPrefetcherRunner {
     fn send_prefetch(
         &self,
         name: &PackageName,
-        unchangeable_constraints: Option<&Term<Ranges<Version>>>,
+        unchangeable_constraints: Option<&Term<Range<Version>>>,
         total_prefetch: usize,
         versions_response: &Arc<VersionsResponse>,
         mut phase: BatchPrefetchStrategy,

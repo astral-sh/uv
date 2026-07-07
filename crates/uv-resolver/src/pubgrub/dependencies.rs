@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::iter;
 
 use either::Either;
-use pubgrub::Ranges;
 
 use uv_distribution_types::{IndexMetadata, Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -13,7 +12,7 @@ use uv_pypi_types::{
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 
 /// The source constraint carried by a single dependency edge.
 ///
@@ -83,7 +82,7 @@ impl DependencySource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PubGrubDependency {
     pub(crate) package: PubGrubPackage,
-    pub(crate) version: Ranges<Version>,
+    pub(crate) version: Range<Version>,
 
     /// When the parent that created this dependency is a "normal" package
     /// (non-extra non-group), this corresponds to its name.
@@ -244,7 +243,7 @@ impl PubGrubDependency {
 #[derive(Debug, Clone)]
 struct PubGrubRequirement {
     package: PubGrubPackage,
-    version: Ranges<Version>,
+    version: Range<Version>,
     source: DependencySource,
 }
 
@@ -335,7 +334,7 @@ impl PubGrubRequirement {
 
         Self {
             package: Self::package_for_requirement(requirement, extra, group),
-            version: Ranges::full(),
+            version: Range::full(),
             source: DependencySource::Url(Box::new(VerbatimParsedUrl {
                 parsed_url,
                 verbatim: verbatim_url.clone(),
@@ -352,7 +351,7 @@ impl PubGrubRequirement {
         Self {
             package: Self::package_for_requirement(requirement, extra, group),
             source: DependencySource::from_requirement(requirement),
-            version: Ranges::from(specifier.clone()),
+            version: Range::from(specifier.clone()),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 
 use hashbrown::hash_map::{EntryRef, OccupiedEntry};
-use pubgrub::{DependencyProvider, Range};
+use pubgrub::DependencyProvider;
 use rustc_hash::FxBuildHasher;
 
 use uv_normalize::PackageName;
@@ -9,7 +9,7 @@ use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
 use crate::fork_urls::ForkUrls;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::{FxHashbrownMap, SentinelRange};
 
 /// A prioritization map to guide the PubGrub resolution process.

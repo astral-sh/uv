@@ -3,7 +3,6 @@ use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
-use pubgrub::Range;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -17,6 +16,7 @@ use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
+use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
