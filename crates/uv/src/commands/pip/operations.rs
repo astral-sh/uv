@@ -968,6 +968,7 @@ mod tests {
         python_source_path_from_record,
     };
     use std::path::{Path, PathBuf};
+    use uv_normalize::PackageName;
 
     #[test]
     fn record_python_sources_stay_in_site_packages() {
@@ -1065,6 +1066,18 @@ mod tests {
             ))
             .is_user_failure()
         );
+    }
+
+    #[test]
+    fn preparation_errors_are_transparent() -> Result<(), uv_normalize::InvalidNameError> {
+        let error = Error::Prepare(uv_installer::PrepareError::NoBuild(
+            PackageName::from_owned("demo".to_string())?,
+        ));
+        assert_eq!(
+            error.to_string(),
+            "Building source distributions is disabled, but attempted to build `demo`"
+        );
+        Ok(())
     }
 }
 
@@ -1442,7 +1455,7 @@ pub(crate) fn diagnose_environment<'a>(
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("Failed to prepare distributions")]
+    #[error(transparent)]
     Prepare(#[from] uv_installer::PrepareError),
 
     #[error(transparent)]
