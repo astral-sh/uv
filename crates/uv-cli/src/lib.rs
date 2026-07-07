@@ -3417,9 +3417,9 @@ pub struct InitArgs {
 
     /// Do not set up the project to be built as a Python package.
     ///
-    /// This option creates a flat project structure without an importable module and without
-    /// a `[build-system]` for the project. It can be used for applications that are not expected to
-    /// be distributed as a package.
+    /// This option creates the project structure as a flat directory that is not importable as a
+    /// module and has no `[build-system]` entry. It can be used for applications that are not
+    /// expected to be distributed as a package.
     #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
     pub r#no_package: bool,
 
