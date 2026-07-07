@@ -57,9 +57,17 @@ impl ExpandedTags {
 
     /// Return the [`TagCompatibility`] of the wheel with the given tags
     pub fn compatibility(&self, compatible_tags: &Tags) -> TagCompatibility {
-        let mut max_compatibility = TagCompatibility::Incompatible(IncompatibleTag::Invalid);
+        let Some((first, rest)) = self.0.split_first() else {
+            return TagCompatibility::Incompatible(IncompatibleTag::Invalid);
+        };
 
-        for tag in &self.0 {
+        let mut max_compatibility = compatible_tags.compatibility(
+            first.python_tags(),
+            first.abi_tags(),
+            first.platform_tags(),
+        );
+
+        for tag in rest {
             max_compatibility = max_compatibility.max(compatible_tags.compatibility(
                 tag.python_tags(),
                 tag.abi_tags(),
