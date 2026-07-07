@@ -1,6 +1,8 @@
 //! Create a virtual environment.
 
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -714,54 +716,46 @@ enum WindowsExecutable {
 
 impl WindowsExecutable {
     /// The name of the Python executable.
-    fn exe(self, interpreter: &Interpreter) -> String {
+    fn exe(self, interpreter: &Interpreter) -> Cow<'static, OsStr> {
         match self {
-            Self::Python => String::from("python.exe"),
-            Self::PythonMajor => {
-                format!("python{}.exe", interpreter.python_major())
-            }
-            Self::PythonMajorMinor => {
-                format!(
-                    "python{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PythonMajorMinort => {
-                format!(
-                    "python{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::Pythonw => String::from("pythonw.exe"),
-            Self::PythonwMajorMinort => {
-                format!(
-                    "pythonw{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPy => String::from("pypy.exe"),
-            Self::PyPyMajor => {
-                format!("pypy{}.exe", interpreter.python_major())
-            }
-            Self::PyPyMajorMinor => {
-                format!(
-                    "pypy{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPyw => String::from("pypyw.exe"),
-            Self::PyPyMajorMinorw => {
-                format!(
-                    "pypy{}.{}w.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::GraalPy => String::from("graalpy.exe"),
+            Self::Python => Cow::Borrowed(OsStr::new("python.exe")),
+            Self::PythonMajor => Cow::Owned(OsString::from(format!(
+                "python{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PythonMajorMinor => Cow::Owned(OsString::from(format!(
+                "python{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PythonMajorMinort => Cow::Owned(OsString::from(format!(
+                "python{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::Pythonw => Cow::Borrowed(OsStr::new("pythonw.exe")),
+            Self::PythonwMajorMinort => Cow::Owned(OsString::from(format!(
+                "pythonw{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPy => Cow::Borrowed(OsStr::new("pypy.exe")),
+            Self::PyPyMajor => Cow::Owned(OsString::from(format!(
+                "pypy{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PyPyMajorMinor => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPyw => Cow::Borrowed(OsStr::new("pypyw.exe")),
+            Self::PyPyMajorMinorw => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}w.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::GraalPy => Cow::Borrowed(OsStr::new("graalpy.exe")),
         }
     }
 
