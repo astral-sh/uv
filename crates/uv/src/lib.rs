@@ -2228,27 +2228,16 @@ async fn run_project(
                 settings::InitSettings::resolve(args, filesystem, environment, globals.preview)?;
             show_settings!(args);
 
-            // The `--project` arg is being deprecated for `init` with a warning now and an error in preview.
+            // The `--project` argument is not supported for `init`.
             if explicit_project {
-                if globals.preview.is_enabled(PreviewFeature::InitProjectFlag) {
-                    bail!(
-                        "The `--project` option cannot be used in `uv init`. {}",
-                        if args.path.is_some() {
-                            "Use `--directory` instead."
-                        } else {
-                            "Use `--directory` or a positional path instead."
-                        }
-                    )
-                }
-
-                warn_user!(
-                    "Use of the `--project` option in `uv init` is deprecated and will be removed in a future release. {}",
+                bail!(
+                    "The `--project` option cannot be used in `uv init`. {}",
                     if args.path.is_some() {
-                        "Since a positional path was provided, the `--project` option has no effect. Consider using `--directory` instead."
+                        "Use `--directory` instead."
                     } else {
-                        "Consider using `uv init <PATH>` instead."
+                        "Use `--directory` or a positional path instead."
                     }
-                );
+                )
             }
 
             // Initialize the cache.
