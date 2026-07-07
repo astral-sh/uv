@@ -209,6 +209,25 @@ pub fn write_error_chain(err: &dyn Error, hints: Hints<'_>) -> fmt::Result {
     write_error_chain_with_options(err, hints, ErrorOptions::default())
 }
 
+/// Format the [`Debug`] representation of every error in an error chain.
+pub fn debug_error_chain(err: &dyn Error) -> impl fmt::Display + '_ {
+    DebugErrorChain(err)
+}
+
+struct DebugErrorChain<'a>(&'a dyn Error);
+
+impl fmt::Display for DebugErrorChain<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, error) in iter::successors(Some(self.0), |&error| error.source()).enumerate() {
+            if index > 0 {
+                formatter.write_str("\n")?;
+            }
+            write!(formatter, "{index}: {error:?}")?;
+        }
+        Ok(())
+    }
+}
+
 /// Formats an error or warning chain with custom options.
 ///
 /// Each hint is rendered on its own line, prefixed with the styled `hint:` label.
@@ -278,7 +297,10 @@ mod tests {
     use insta::assert_snapshot;
     use owo_colors::AnsiColors;
 
-    use super::{ErrorOptions, ErrorWithHints, HintPrefix, Hints, write_error_chain_with_options};
+    use super::{
+        ErrorOptions, ErrorWithHints, HintPrefix, Hints, debug_error_chain,
+        write_error_chain_with_options,
+    };
 
     #[test]
     fn extend_deduplicates_matching_hints() {
@@ -368,6 +390,31 @@ mod tests {
         error: Failed to write file
           Caused by: Permission denied
         ");
+    }
+
+    #[test]
+    fn formats_debug_error_chain() {
+        #[derive(Debug, thiserror::Error)]
+        #[error("inner error")]
+        struct InnerError {
+            code: u8,
+        }
+
+        #[derive(Debug, thiserror::Error)]
+        #[error("outer error")]
+        struct OuterError {
+            #[source]
+            source: InnerError,
+        }
+
+        let error = OuterError {
+            source: InnerError { code: 42 },
+        };
+
+        assert_eq!(
+            debug_error_chain(&error).to_string(),
+            "0: OuterError { source: InnerError { code: 42 } }\n1: InnerError { code: 42 }"
+        );
     }
 
     #[test]
