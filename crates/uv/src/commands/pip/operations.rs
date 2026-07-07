@@ -25,7 +25,7 @@ use uv_distribution_types::{
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
-use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_iter};
+use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -780,7 +780,7 @@ fn python_source_files_for_installs<'a>(
         };
         let site_packages = site_packages.clone();
 
-        Box::new(read_record_iter(record_file).filter_map(move |entry| {
+        Box::new(read_record_into_iter(record_file).filter_map(move |entry| {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(err) => {
