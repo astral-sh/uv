@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
@@ -24,8 +24,8 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
-use uv_fs::Simplified;
-use uv_install_wheel::LinkMode;
+use uv_fs::{CWD, Simplified, normalize_path_under};
+use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -47,9 +47,9 @@ use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
 use uv_warnings::warn_user;
 
-use crate::commands::compile_bytecode;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
+use crate::commands::{compile_bytecode, compile_bytecode_files};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -555,6 +555,14 @@ impl Changelog {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BytecodeCompilation {
+    /// Compile all Python source files in the environment.
+    All,
+    /// Compile Python source files installed by this operation.
+    Installed,
+}
+
 /// Install a set of requirements into the current environment.
 ///
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
@@ -566,7 +574,7 @@ pub(crate) async fn install(
     reinstall: &Reinstall,
     build_options: &BuildOptions,
     link_mode: LinkMode,
-    compile: bool,
+    compile: Option<BytecodeCompilation>,
     hasher: &HashStrategy,
     tags: &Tags,
     client: &RegistryClient,
@@ -633,7 +641,7 @@ pub(crate) async fn install(
         && cached.is_empty()
         && reinstalls.is_empty()
         && extraneous.is_empty()
-        && !compile
+        && compile.is_none()
     {
         logger.on_check(resolution.len(), start, printer, dry_run)?;
         return Ok(Changelog::default());
@@ -711,8 +719,16 @@ pub(crate) async fn install(
         uninstalls.extend(shared_uninstalls);
     }
 
-    if compile {
-        compile_bytecode(venv, concurrency, cache, printer).await?;
+    if let Some(compile) = compile {
+        match compile {
+            BytecodeCompilation::All => {
+                compile_bytecode(venv, concurrency, cache, printer).await?;
+            }
+            BytecodeCompilation::Installed => {
+                let files = python_source_files_for_installs(venv, &installs);
+                compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+            }
+        }
     }
 
     // Construct a summary of the changes made to the environment.
@@ -722,6 +738,115 @@ pub(crate) async fn install(
     logger.on_complete(&changelog, printer, dry_run)?;
 
     Ok(changelog)
+}
+
+type PythonSourceFileIterator = Box<dyn Iterator<Item = anyhow::Result<PathBuf>>>;
+
+/// Return the Python source files owned by the distributions installed by this operation.
+fn python_source_files_for_installs<'a>(
+    venv: &'a PythonEnvironment,
+    installs: &'a [CachedDist],
+) -> impl Iterator<Item = anyhow::Result<PathBuf>> + 'a {
+    let layout = venv.interpreter().layout();
+    let site_packages = [
+        CWD.join(&layout.scheme.purelib),
+        CWD.join(&layout.scheme.platlib),
+    ];
+    installs.iter().flat_map(move |install| {
+        let dist_info = match installed_dist_info_path(&layout, install.path()).with_context(|| {
+            format!("Failed to locate installed distribution for bytecode compilation: `{install}`")
+        }) {
+            Ok(dist_info) => dist_info,
+            Err(err) => return Box::new(std::iter::once(Err(err))) as PythonSourceFileIterator,
+        };
+        let Some(record_root) = dist_info.parent().map(|path| CWD.join(path)) else {
+            return Box::new(std::iter::once(Err(anyhow!(
+                "Invalid installed distribution path: `{}`",
+                dist_info.user_display()
+            ))));
+        };
+        let record_path = dist_info.join("RECORD");
+        let record_file = match fs_err::File::open(&record_path) {
+            Ok(record_file) => record_file,
+            // Another process may have removed the installed distribution.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Box::new(std::iter::empty());
+            }
+            Err(err) => {
+                return Box::new(std::iter::once(Err(err).with_context(|| {
+                    format!("Failed to read `{}`", record_path.user_display())
+                })));
+            }
+        };
+        let site_packages = site_packages.clone();
+
+        Box::new(read_record_into_iter(record_file).filter_map(move |entry| {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    return Some(Err(err).with_context(|| {
+                        format!("Failed to read `{}`", record_path.user_display())
+                    }));
+                }
+            };
+            let path = python_source_path_from_record(&record_root, &entry.path, &site_packages)?;
+            path.is_file().then_some(Ok(path))
+        }))
+    })
+}
+
+/// Resolve a Python source path from an installed `RECORD` entry.
+fn python_source_path_from_record(
+    record_root: &Path,
+    entry: &str,
+    site_packages: &[PathBuf],
+) -> Option<PathBuf> {
+    let path = Path::new(entry);
+    if path.extension().is_none_or(|extension| extension != "py") {
+        return None;
+    }
+
+    let path = record_root.join(path);
+    site_packages
+        .iter()
+        .find_map(|site_packages| normalize_path_under(&path, site_packages))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::python_source_path_from_record;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn record_python_sources_stay_in_site_packages() {
+        let record_root = Path::new("venv/purelib");
+        let site_packages = [PathBuf::from("venv/purelib"), PathBuf::from("venv/platlib")];
+
+        assert_eq!(
+            python_source_path_from_record(record_root, "package/__init__.py", &site_packages,),
+            Some(PathBuf::from("venv/purelib/package/__init__.py"))
+        );
+        assert_eq!(
+            python_source_path_from_record(
+                record_root,
+                "../platlib/package/module.py",
+                &site_packages,
+            ),
+            Some(PathBuf::from("venv/platlib/package/module.py"))
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "../scripts/tool.py", &site_packages),
+            None
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "/outside.py", &site_packages),
+            None
+        );
+        assert_eq!(
+            python_source_path_from_record(record_root, "package/data.txt", &site_packages),
+            None
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

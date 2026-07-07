@@ -6427,9 +6427,10 @@ pub struct ToolUpgradeArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7500,9 +7501,10 @@ pub struct InstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -8001,9 +8003,10 @@ pub struct ResolverInstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",

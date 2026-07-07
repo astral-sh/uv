@@ -67,7 +67,7 @@ use uv_cache::Cache;
 use uv_configuration::Concurrency;
 pub(crate) use uv_console::human_readable_bytes;
 use uv_fs::{CWD, Simplified};
-use uv_installer::compile_tree;
+use uv_installer::{compile_files, compile_tree};
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
@@ -281,6 +281,35 @@ pub(super) async fn compile_bytecode(
             )
         })?;
     }
+    write_bytecode_summary(files, start, printer)?;
+    Ok(())
+}
+
+/// Compile the given Python source files to bytecode.
+pub(super) async fn compile_bytecode_files(
+    files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
+    venv: &PythonEnvironment,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    printer: Printer,
+) -> anyhow::Result<()> {
+    let start = std::time::Instant::now();
+    let files = compile_files(files, venv.python_executable(), concurrency, cache.root())
+        .await
+        .context("Failed to bytecode-compile installed packages")?;
+    if files == 0 {
+        return Ok(());
+    }
+
+    write_bytecode_summary(files, start, printer)?;
+    Ok(())
+}
+
+fn write_bytecode_summary(
+    files: usize,
+    start: std::time::Instant,
+    printer: Printer,
+) -> std::fmt::Result {
     let s = if files == 1 { "" } else { "s" };
     writeln!(
         printer.stderr(),
@@ -291,8 +320,7 @@ pub(super) async fn compile_bytecode(
             format!("in {}", elapsed(start.elapsed())).dimmed()
         )
         .dimmed()
-    )?;
-    Ok(())
+    )
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
