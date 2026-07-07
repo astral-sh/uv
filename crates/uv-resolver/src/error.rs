@@ -154,6 +154,9 @@ impl uv_errors::Hint for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
+            Self::Client(error) => uv_errors::Hint::hints(error),
+            Self::Distribution(error) => uv_errors::Hint::hints(error),
+            Self::Dependencies(error, ..) => uv_errors::Hint::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }
     }

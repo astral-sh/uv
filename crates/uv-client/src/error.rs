@@ -5,15 +5,18 @@ use std::time::{Duration, Instant};
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
+use owo_colors::OwoColorize;
 use reqwest::Response;
 use serde::Deserialize;
 use tracing::warn;
 
+use crate::base_client::CertificateSource;
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::IndexUrl;
+use uv_errors::{Hint, Hints};
 use uv_git::GitError;
 use uv_normalize::PackageName;
 use uv_redacted::DisplaySafeUrl;
@@ -202,6 +205,7 @@ impl Error {
         url: DisplaySafeUrl,
         err: reqwest_middleware::Error,
         start: Instant,
+        certificate_source: CertificateSource,
     ) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
@@ -212,7 +216,10 @@ impl Error {
             {
                 let retries = *retries;
                 return Self::new(
-                    ErrorKind::WrappedReqwestError(url, WrappedReqwestError::from(err)),
+                    ErrorKind::WrappedReqwestError(
+                        url,
+                        WrappedReqwestError::from(err).with_certificate_source(certificate_source),
+                    ),
                     retries,
                     start.elapsed(),
                 );
@@ -220,7 +227,7 @@ impl Error {
         }
         Self::from(ErrorKind::WrappedReqwestError(
             url,
-            WrappedReqwestError::from(err),
+            WrappedReqwestError::from(err).with_certificate_source(certificate_source),
         ))
     }
 
@@ -237,9 +244,12 @@ impl Error {
         matches!(err.kind(), std::io::ErrorKind::NotFound)
     }
 
-    /// Returns `true` if the error is due to an SSL error.
-    pub fn is_ssl(&self) -> bool {
-        matches!(&*self.kind, ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
+    /// Returns `true` if this TLS error could be resolved by using system certificate roots.
+    fn suggests_system_certs(&self) -> bool {
+        matches!(
+            &*self.kind,
+            ErrorKind::WrappedReqwestError(_, err) if err.suggests_system_certs()
+        )
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
@@ -362,6 +372,19 @@ impl Error {
             &*self.kind,
             ErrorKind::Zip(_, ZipError::FeatureNotSupported(_))
         )
+    }
+}
+
+impl Hint for Error {
+    fn hints(&self) -> Hints<'_> {
+        if self.suggests_system_certs() {
+            Hints::from(format!(
+                "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+                "--system-certs".green()
+            ))
+        } else {
+            Hints::none()
+        }
     }
 }
 
@@ -499,8 +522,15 @@ pub enum ErrorKind {
 
 impl ErrorKind {
     /// Create an [`ErrorKind`] from a [`reqwest::Error`].
-    pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
-        Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
+    pub(crate) fn from_reqwest(
+        url: DisplaySafeUrl,
+        error: reqwest::Error,
+        certificate_source: CertificateSource,
+    ) -> Self {
+        Self::WrappedReqwestError(
+            url,
+            WrappedReqwestError::from(error).with_certificate_source(certificate_source),
+        )
     }
 
     /// Create an [`ErrorKind`] from a [`reqwest::Error`] with problem details.
@@ -524,7 +554,13 @@ impl ErrorKind {
 #[derive(Debug)]
 pub struct WrappedReqwestError {
     error: reqwest_middleware::Error,
-    problem_details: Option<Box<ProblemDetails>>,
+    context: Option<Box<WrappedReqwestErrorContext>>,
+}
+
+#[derive(Debug)]
+enum WrappedReqwestErrorContext {
+    ProblemDetails(ProblemDetails),
+    TlsCertificateSource(CertificateSource),
 }
 
 impl WrappedReqwestError {
@@ -535,8 +571,29 @@ impl WrappedReqwestError {
     ) -> Self {
         Self {
             error: Self::filter_retries_from_error(error),
-            problem_details: problem_details.map(Box::new),
+            context: problem_details
+                .map(WrappedReqwestErrorContext::ProblemDetails)
+                .map(Box::new),
         }
+    }
+
+    #[must_use]
+    fn with_certificate_source(mut self, certificate_source: CertificateSource) -> Self {
+        if self.is_ssl() {
+            self.context = Some(Box::new(WrappedReqwestErrorContext::TlsCertificateSource(
+                certificate_source,
+            )));
+        }
+        self
+    }
+
+    fn suggests_system_certs(&self) -> bool {
+        matches!(
+            self.context.as_deref(),
+            Some(WrappedReqwestErrorContext::TlsCertificateSource(
+                CertificateSource::WebPki
+            ))
+        )
     }
 
     /// Drop `RetryError::WithRetries` to avoid reporting the number of retries twice.
@@ -626,7 +683,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
         Self {
             // No need to filter retries as this error does not have retries.
             error: error.into(),
-            problem_details: None,
+            context: None,
         }
     }
 }
@@ -635,7 +692,7 @@ impl From<reqwest_middleware::Error> for WrappedReqwestError {
     fn from(error: reqwest_middleware::Error) -> Self {
         Self {
             error: Self::filter_retries_from_error(error),
-            problem_details: None,
+            context: None,
         }
     }
 }
@@ -653,7 +710,9 @@ impl Display for WrappedReqwestError {
         if self.is_likely_offline() {
             // Insert an extra hint, we'll show the wrapped error through `source`
             f.write_str("Could not connect, are you offline?")
-        } else if let Some(problem_details) = &self.problem_details {
+        } else if let Some(WrappedReqwestErrorContext::ProblemDetails(problem_details)) =
+            self.context.as_deref()
+        {
             // Show problem details if available
             match problem_details.description() {
                 None => Display::fmt(&self.error, f),
@@ -671,7 +730,10 @@ impl std::error::Error for WrappedReqwestError {
         if self.is_likely_offline() {
             // `Display` is inserting an extra message, so we need to show the wrapped error
             Some(&self.error)
-        } else if self.problem_details.is_some() {
+        } else if matches!(
+            self.context.as_deref(),
+            Some(WrappedReqwestErrorContext::ProblemDetails(_))
+        ) {
             // `Display` is showing problem details, so show the wrapped error as source
             Some(&self.error)
         } else {
