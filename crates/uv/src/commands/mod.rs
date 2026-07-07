@@ -152,6 +152,19 @@ impl UvError {
     }
 }
 
+impl From<project::ProjectError> for UvError {
+    /// Classify a project error at the point where it leaves its command.
+    fn from(error: project::ProjectError) -> Self {
+        match error {
+            error @ (project::ProjectError::LockMismatch(..)
+            | project::ProjectError::LockFormat(..)
+            | project::ProjectError::MissingLockfile(..)
+            | project::ProjectError::LockWorkspaceMismatch(..)) => Self::user(error),
+            error => Self::unexpected(error.into()),
+        }
+    }
+}
+
 /// Read dotenv files into an overlay for a spawned process.
 ///
 /// These values intentionally do not mutate uv's process environment and cannot mutate

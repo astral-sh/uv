@@ -391,7 +391,7 @@ pub(crate) async fn sync(
                 );
             }
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     let lock_report = LockReport::from((&lock_target, &mode, &outcome));

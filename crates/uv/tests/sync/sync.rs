@@ -409,7 +409,7 @@ fn locked() -> Result<()> {
 
     // Running with `--locked` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--locked"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--locked` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");
@@ -479,7 +479,7 @@ fn frozen() -> Result<()> {
 
     // Running with `--frozen` should error, if no lockfile is present.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
-    exit_code: 2 (failure)
+    exit_code: 1 (failure)
     ----- stderr -----
     error: Unable to find lockfile at `uv.lock`, but `--frozen` was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag.
     ");

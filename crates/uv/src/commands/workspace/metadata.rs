@@ -256,7 +256,7 @@ pub(crate) async fn metadata(
         Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
             .report(err)
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(UvError::from(err).into()),
     }
 }
 

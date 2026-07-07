@@ -35,7 +35,7 @@ use crate::commands::project::{
     default_dependency_groups, validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{ExitStatus, diagnostics, project};
+use crate::commands::{ExitStatus, UvError, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverInstallerSettings};
 
@@ -434,7 +434,7 @@ pub(crate) async fn check(
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let marker_environment = venv.interpreter().to_resolver_marker_environment();
@@ -491,7 +491,7 @@ pub(crate) async fn check(
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         }
 
         if no_sync {
@@ -609,7 +609,7 @@ pub(crate) async fn check(
                     .report(err)
                     .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(UvError::from(err).into()),
         };
 
         let target = project::sync::identify_project_installation_target(
@@ -677,7 +677,7 @@ pub(crate) async fn check(
                             .report(err)
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(UvError::from(err).into()),
                 };
                 malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
@@ -729,7 +729,7 @@ pub(crate) async fn check(
                         .report(err)
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
 
