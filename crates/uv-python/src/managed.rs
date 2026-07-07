@@ -7,6 +7,7 @@ use std::io::{self, Write};
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use fs_err as fs;
 use itertools::Itertools;
@@ -101,6 +102,20 @@ pub struct ManagedPythonInstallations {
     root: PathBuf,
 }
 
+/// A process-global override for the managed Python installation directory, populated from the
+/// `python-install-dir` configuration setting via [`set_python_install_dir`].
+static PYTHON_INSTALL_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Set the managed Python installation directory from the resolved configuration.
+///
+/// This is consulted by [`ManagedPythonInstallations::from_settings`] when neither an explicit
+/// directory nor the `UV_PYTHON_INSTALL_DIR` environment variable is set. It should be called once,
+/// early in the process lifetime, before any managed Python directory is resolved.
+pub fn set_python_install_dir(install_dir: PathBuf) {
+    // Keep the first value rather than panicking if this is called more than once.
+    let _ = PYTHON_INSTALL_DIR.set(install_dir);
+}
+
 impl ManagedPythonInstallations {
     /// A directory for Python installations at `root`.
     fn from_path(root: impl Into<PathBuf>) -> Self {
@@ -120,10 +135,11 @@ impl ManagedPythonInstallations {
 
     /// Prefer, in order:
     ///
-    /// 1. The specific Python directory passed via the `install_dir` argument.
+    /// 1. The specific Python directory passed via the `install_dir` argument (e.g., a CLI flag).
     /// 2. The specific Python directory specified with the `UV_PYTHON_INSTALL_DIR` environment variable.
-    /// 3. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
-    /// 4. A directory in the local data directory, e.g., `./.uv/python`.
+    /// 3. The `python-install-dir` configuration setting, set via [`set_python_install_dir`].
+    /// 4. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/python`.
+    /// 5. A directory in the local data directory, e.g., `./.uv/python`.
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
         if let Some(install_dir) = install_dir {
             Ok(Self::from_path(install_dir))
@@ -131,6 +147,8 @@ impl ManagedPythonInstallations {
             std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR).filter(|s| !s.is_empty())
         {
             Ok(Self::from_path(install_dir))
+        } else if let Some(install_dir) = PYTHON_INSTALL_DIR.get() {
+            Ok(Self::from_path(install_dir.clone()))
         } else {
             Ok(Self::from_path(
                 StateStore::from_settings(None)?.bucket(StateBucket::ManagedPython),
