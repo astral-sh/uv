@@ -6957,43 +6957,12 @@ fn run_project_precedes_target_workspace_discovery() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-existent directory should warn.
+/// Using `--project` with a non-existent directory should error.
 #[test]
 fn run_project_not_found() {
     let context = uv_test::test_context!("3.12");
 
     uv_snapshot!(context.filters(), context.run().arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    hello
-
-    ----- stderr -----
-    warning: Project directory `/tmp/does-not-exist-uv-test` does not exist. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    ");
-}
-
-/// Using `--project` with a non-existent directory should error with the preview flag.
-#[test]
-fn run_project_not_found_preview() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.run().arg("--preview-features").arg("project-directory-must-exist").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: Project directory `/tmp/does-not-exist-uv-test` does not exist
-    ");
-}
-
-/// Using `--project` with a non-existent directory should error with `UV_PREVIEW=1`.
-#[test]
-fn run_project_not_found_uv_preview_env() {
-    let context = uv_test::test_context!("3.12");
-
-    uv_snapshot!(context.filters(), context.run().env("UV_PREVIEW", "1").arg("--project").arg("/tmp/does-not-exist-uv-test").arg("python").arg("-c").arg("print('hello')"), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -7047,7 +7016,7 @@ fn run_project_pyproject_toml_file() -> Result<()> {
     Ok(())
 }
 
-/// Using `--project` with a non-`pyproject.toml` file should warn.
+/// Using `--project` with a non-`pyproject.toml` file should error.
 #[test]
 fn run_project_non_pyproject_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7075,24 +7044,18 @@ fn run_project_non_pyproject_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Python 3.12.[X]
 
     ----- stderr -----
-    warning: Project path `project/README.md` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/README.md` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a nested non-`pyproject.toml` file should warn. Workspace discovery
-/// walks ancestors to find the `pyproject.toml`.
+/// Using `--project` with a nested non-`pyproject.toml` file should error.
 #[test]
 fn run_project_nested_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7122,23 +7085,18 @@ fn run_project_nested_file() -> Result<()> {
         .arg("--")
         .arg("python")
         .arg("--version"), @"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    Python 3.12.[X]
 
     ----- stderr -----
-    warning: Project path `project/subdir/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    Creating virtual environment at: project/.venv
-    Resolved 1 package in [TIME]
-    Checked in [TIME]
+    error: Project path `project/subdir/somefile` is not a directory
     ");
 
     Ok(())
 }
 
-/// Using `--project` with a file that has no ancestor project should warn, then fail downstream.
+/// Using `--project` with a file that has no ancestor project should error.
 #[test]
 #[cfg(unix)]
 fn run_project_file_no_ancestor_project() -> Result<()> {
@@ -7160,8 +7118,7 @@ fn run_project_file_no_ancestor_project() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Project path `isolated/somefile` is not a directory. This will become an error in a future release. Use `--preview-features project-directory-must-exist` to error on this now.
-    error: failed to open file `[TEMP_DIR]/isolated/somefile/uv.toml`: Not a directory (os error 20)
+    error: Project path `isolated/somefile` is not a directory
     ");
 
     Ok(())

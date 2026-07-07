@@ -212,31 +212,15 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if !skip_project_validation {
         if let Some(project_path) = cli.top_level.global_args.project.as_ref() {
             if !project_dir.exists() {
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project directory `{}` does not exist",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project directory `{}` does not exist. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project directory `{}` does not exist",
                     project_path.user_display()
                 );
             } else if !project_dir.is_dir() {
                 // `--project path/to/pyproject.toml` is resolved to its parent above,
                 // so this only triggers for other file types (see #18508).
-                if early_preview.is_enabled(PreviewFeature::ProjectDirectoryMustExist) {
-                    bail!(
-                        "Project path `{}` is not a directory",
-                        project_path.user_display()
-                    );
-                }
-                warn_user_once!(
-                    "Project path `{}` is not a directory. \
-                    This will become an error in a future release. \
-                    Use `--preview-features project-directory-must-exist` to error on this now.",
+                bail!(
+                    "Project path `{}` is not a directory",
                     project_path.user_display()
                 );
             }
