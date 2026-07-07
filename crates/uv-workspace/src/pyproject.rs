@@ -6,7 +6,6 @@
 //!
 //! Then lowers them into a dependency specification.
 
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -1938,14 +1937,14 @@ pub enum DependencyType {
 
 impl DependencyType {
     /// Return the TOML table name(s) for this dependency type.
-    pub fn toml_table_name(&self) -> String {
+    pub fn toml_table_name(&self) -> Cow<'_, str> {
         match self {
-            Self::Production => "`project.dependencies`".to_string(),
+            Self::Production => Cow::Borrowed("`project.dependencies`"),
             Self::Dev => {
-                "`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`".to_string()
+                Cow::Borrowed("`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`")
             }
-            Self::Optional(extra) => format!("`project.optional-dependencies.{extra}`"),
-            Self::Group(group) => format!("`dependency-groups.{group}`"),
+            Self::Optional(extra) => Cow::Owned(format!("`project.optional-dependencies.{extra}`")),
+            Self::Group(group) => Cow::Owned(format!("`dependency-groups.{group}`")),
         }
     }
 }
