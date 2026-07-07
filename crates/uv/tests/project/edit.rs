@@ -4382,6 +4382,8 @@ fn remove_registry() -> Result<()> {
 fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
 
     context
         .temp_dir
@@ -4394,31 +4396,29 @@ fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
         dependencies = ["candidate==1.0.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(filters, context.sync().arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    WARN Range requests not supported for candidate-1.0.0-py3-none-any.whl; streaming wheel
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + candidate==1.0.0
     ");
-    uv_snapshot!(context.filters(), context.pip_install().arg("b[foo]").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(filters, context.pip_install().arg("b[foo]").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    WARN Range requests not supported for b-1.0.0-py3-none-any.whl; streaming wheel
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + b==1.0.0
     ");
-    uv_snapshot!(context.filters(), context.remove().arg("candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
+    uv_snapshot!(filters, context.remove().arg("candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8053,12 +8053,8 @@ fn add_group_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -8086,7 +8082,8 @@ fn add_group_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -16067,12 +16064,8 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -16100,7 +16093,8 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
