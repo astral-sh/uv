@@ -1128,8 +1128,9 @@ pub enum ProjectCommand {
     /// If any of the requested dependencies are not present in the project, uv will exit with an
     /// error.
     ///
-    /// If a package has been manually installed in the environment, i.e., with `uv pip install`, it
-    /// will not be removed by `uv remove`.
+    /// Dependencies made orphaned by the requested removals will be removed from the environment.
+    /// Unrelated packages that were manually installed in the environment, e.g., with `uv pip
+    /// install`, will be retained.
     ///
     /// uv will search for a project in the current directory or any parent directory. If a project
     /// cannot be found, uv will exit with an error.

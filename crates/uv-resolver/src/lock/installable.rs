@@ -24,6 +24,36 @@ use crate::lock::{
 };
 use crate::{Lock, LockError, UniversalMarker};
 
+/// The direct dependency scope used to seed a reachability query.
+#[derive(Debug, Clone, Copy)]
+pub enum DirectDependencyKind<'selection> {
+    /// Production dependencies.
+    Production,
+    /// Dependencies attached to a project extra.
+    Optional(&'selection ExtraName),
+    /// Dependencies attached to a dependency group.
+    Group(&'selection GroupName),
+}
+
+/// The roots used to determine package reachability in a lock target.
+#[derive(Debug, Clone, Copy)]
+pub enum ReachabilityRoots<'selection> {
+    /// The union of production dependencies, every project extra, and every dependency group.
+    AllDeclared {
+        /// Whether to include requirements and dependency groups attached to the lock manifest.
+        include_manifest: bool,
+    },
+    /// The dependency graph rooted at matching direct dependencies in one declaration scope.
+    Direct {
+        /// The project containing the direct edge, or [`None`] for a lock-manifest edge.
+        project: Option<&'selection PackageName>,
+        /// The declaration scope containing the direct edge.
+        kind: DirectDependencyKind<'selection>,
+        /// Direct dependency names that seed the traversal.
+        names: &'selection BTreeSet<PackageName>,
+    },
+}
+
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,
     activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
@@ -184,6 +214,217 @@ pub trait Installable<'lock> {
             self.non_installable_node(package, tags, marker_env)
         }
     }
+}
+
+fn enqueue_reachability_state<'lock>(
+    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+    package: &'lock Package,
+    extra: Option<&'lock ExtraName>,
+) {
+    if seen.insert((&package.id, extra)) {
+        queue.push_back((package, extra));
+    }
+}
+
+fn enqueue_reachable_dependency<'lock>(
+    lock: &'lock Lock,
+    dependency: &'lock Dependency,
+    marker_environment: &ResolverMarkerEnvironment,
+    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+) {
+    if !dependency
+        .complexified_marker
+        .pep508()
+        .evaluate(marker_environment, &[])
+    {
+        return;
+    }
+    let package = lock.find_by_id(&dependency.package_id);
+    enqueue_reachability_state(queue, seen, package, None);
+    for extra in &dependency.extra {
+        enqueue_reachability_state(queue, seen, package, Some(extra));
+    }
+}
+
+fn enqueue_reachable_requirement<'lock>(
+    lock: &'lock Lock,
+    requirement: &'lock uv_distribution_types::Requirement,
+    marker_environment: &ResolverMarkerEnvironment,
+    queue: &mut VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+    seen: &mut FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+) {
+    for package in lock
+        .packages()
+        .iter()
+        .filter(|package| package.name() == &requirement.name)
+    {
+        if !lock
+            .root_requirement_marker(requirement, package)
+            .is_some_and(|marker| marker.evaluate(marker_environment, &[]))
+        {
+            continue;
+        }
+        enqueue_reachability_state(queue, seen, package, None);
+        for extra in &requirement.extras {
+            enqueue_reachability_state(queue, seen, package, Some(extra));
+        }
+    }
+}
+
+fn walk_reachable_names<'lock>(
+    lock: &'lock Lock,
+    marker_environment: &ResolverMarkerEnvironment,
+    mut queue: VecDeque<(&'lock Package, Option<&'lock ExtraName>)>,
+    mut seen: FxHashSet<(&'lock PackageId, Option<&'lock ExtraName>)>,
+) -> BTreeSet<PackageName> {
+    let mut names = BTreeSet::new();
+    while let Some((package, extra)) = queue.pop_front() {
+        names.insert(package.name().clone());
+        let dependencies = if let Some(extra) = extra {
+            Either::Left(
+                package
+                    .optional_dependencies()
+                    .get(extra)
+                    .into_iter()
+                    .flatten(),
+            )
+        } else {
+            Either::Right(package.dependencies().iter())
+        };
+        for dependency in dependencies {
+            enqueue_reachable_dependency(
+                lock,
+                dependency,
+                marker_environment,
+                &mut queue,
+                &mut seen,
+            );
+        }
+    }
+    names
+}
+
+/// Return package names reachable in the target for the active marker environment.
+///
+/// The traversal preserves package IDs and activated extras until the final name projection. It
+/// evaluates PEP 508 markers for the active interpreter while treating every conflict selection
+/// as potentially active. This conservative union prevents a removal from deleting a package
+/// owned by any compatible combination of declared project extras or groups.
+pub fn reachable_package_names<'lock>(
+    target: &impl Installable<'lock>,
+    marker_environment: &ResolverMarkerEnvironment,
+    roots: ReachabilityRoots<'_>,
+) -> Result<BTreeSet<PackageName>, LockError> {
+    let lock = target.lock();
+    let mut queue = VecDeque::new();
+    let mut seen = FxHashSet::default();
+
+    match roots {
+        ReachabilityRoots::AllDeclared { include_manifest } => {
+            for root_name in target.roots() {
+                let root = lock
+                    .find_by_name(root_name)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages {
+                        name: root_name.clone(),
+                    })?
+                    .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                        name: root_name.clone(),
+                    })?;
+                enqueue_reachability_state(&mut queue, &mut seen, root, None);
+                for extra in root.optional_dependencies().keys() {
+                    enqueue_reachability_state(&mut queue, &mut seen, root, Some(extra));
+                }
+                for dependency in root.resolved_dependency_groups().values().flatten() {
+                    enqueue_reachable_dependency(
+                        lock,
+                        dependency,
+                        marker_environment,
+                        &mut queue,
+                        &mut seen,
+                    );
+                }
+            }
+            if include_manifest {
+                for requirement in lock
+                    .requirements()
+                    .iter()
+                    .chain(lock.dependency_groups().values().flatten())
+                {
+                    enqueue_reachable_requirement(
+                        lock,
+                        requirement,
+                        marker_environment,
+                        &mut queue,
+                        &mut seen,
+                    );
+                }
+            }
+        }
+        ReachabilityRoots::Direct {
+            project,
+            kind,
+            names,
+        } => {
+            if let Some(project_name) = project {
+                let project = lock
+                    .find_by_name(project_name)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages {
+                        name: project_name.clone(),
+                    })?
+                    .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                        name: project_name.clone(),
+                    })?;
+                let dependencies = match kind {
+                    DirectDependencyKind::Production => project.dependencies(),
+                    DirectDependencyKind::Optional(extra) => project
+                        .optional_dependencies()
+                        .get(extra)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                    DirectDependencyKind::Group(group) => project
+                        .resolved_dependency_groups()
+                        .get(group)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                };
+                for dependency in dependencies
+                    .iter()
+                    .filter(|dependency| names.contains(&dependency.package_id.name))
+                {
+                    enqueue_reachable_dependency(
+                        lock,
+                        dependency,
+                        marker_environment,
+                        &mut queue,
+                        &mut seen,
+                    );
+                }
+            } else {
+                let requirements = match kind {
+                    DirectDependencyKind::Production => Some(lock.requirements()),
+                    DirectDependencyKind::Optional(_) => None,
+                    DirectDependencyKind::Group(group) => lock.dependency_groups().get(group),
+                };
+                for requirement in requirements
+                    .into_iter()
+                    .flatten()
+                    .filter(|requirement| names.contains(&requirement.name))
+                {
+                    enqueue_reachable_requirement(
+                        lock,
+                        requirement,
+                        marker_environment,
+                        &mut queue,
+                        &mut seen,
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(walk_reachable_names(lock, marker_environment, queue, seen))
 }
 
 /// Internal lock-to-resolution implementation shared by [`Installable`] and [`Lock`].

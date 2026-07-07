@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeSet, VecDeque};
 use std::iter::Flatten;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -15,7 +16,7 @@ use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_normalize::PackageName;
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_platform_tags::Tags;
@@ -43,6 +44,34 @@ pub struct SitePackages {
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
     by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
+}
+
+/// A root in the installed dependency graph.
+#[derive(Debug, Clone)]
+pub struct DependencyGraphRoot {
+    /// The installed package that seeds the traversal.
+    pub name: PackageName,
+    /// Extras explicitly requested on the root edge.
+    pub extras: Box<[ExtraName]>,
+}
+
+/// Packages reachable in the installed dependency graph.
+#[derive(Debug)]
+pub struct DependencyGraph {
+    packages: BTreeSet<PackageName>,
+    incomplete: BTreeSet<PackageName>,
+}
+
+impl DependencyGraph {
+    /// Return all installed package names reached by the traversal.
+    pub fn packages(&self) -> &BTreeSet<PackageName> {
+        &self.packages
+    }
+
+    /// Return packages whose dependency metadata could not be read completely.
+    pub fn incomplete(&self) -> &BTreeSet<PackageName> {
+        &self.incomplete
+    }
 }
 
 impl SitePackages {
@@ -171,6 +200,93 @@ impl SitePackages {
             .iter()
             .flat_map(|&index| &self.distributions[index])
             .collect()
+    }
+
+    /// Return the installed packages reachable from the given roots.
+    ///
+    /// Every package is traversed once for its base dependencies and once for each explicitly
+    /// requested extra. Root extras are supplied by the caller; extras on transitive dependency
+    /// edges are read from installed metadata. Dependencies selected only by the historical
+    /// command that installed a root package are therefore intentionally not inferred.
+    pub fn dependency_graph(
+        &self,
+        roots: impl IntoIterator<Item = DependencyGraphRoot>,
+        markers: &ResolverMarkerEnvironment,
+    ) -> DependencyGraph {
+        let mut packages = BTreeSet::new();
+        let mut incomplete = BTreeSet::new();
+        let mut seen = FxHashSet::default();
+        let mut queue = VecDeque::new();
+
+        for root in roots {
+            queue.push_back((root.name.clone(), None));
+            queue.extend(
+                root.extras
+                    .into_vec()
+                    .into_iter()
+                    .map(|extra| (root.name.clone(), Some(extra))),
+            );
+        }
+
+        while let Some((package, extra)) = queue.pop_front() {
+            if !seen.insert((package.clone(), extra.clone())) {
+                continue;
+            }
+
+            let distributions = self.get_packages(&package);
+            if distributions.is_empty() {
+                continue;
+            }
+            packages.insert(package.clone());
+
+            for distribution in distributions {
+                // Legacy egg metadata can store dependencies in `requires.txt`, which
+                // [`InstalledDist::read_metadata`] does not read. Treat it as incomplete rather
+                // than incorrectly concluding that the distribution has no dependencies.
+                if matches!(
+                    distribution.kind,
+                    InstalledDistKind::EggInfoFile(_)
+                        | InstalledDistKind::EggInfoDirectory(_)
+                        | InstalledDistKind::LegacyEditable(_)
+                ) {
+                    incomplete.insert(package.clone());
+                    continue;
+                }
+
+                let Ok(metadata) = distribution.read_metadata() else {
+                    incomplete.insert(package.clone());
+                    continue;
+                };
+
+                for dependency in &metadata.requires_dist {
+                    let applies_to_base = dependency.evaluate_markers(markers, &[]);
+                    let applies = match extra.as_ref() {
+                        None => applies_to_base,
+                        Some(extra) => {
+                            !applies_to_base
+                                && dependency.evaluate_markers(markers, std::slice::from_ref(extra))
+                        }
+                    };
+                    if !applies || self.get_packages(&dependency.name).is_empty() {
+                        continue;
+                    }
+
+                    queue.push_back((dependency.name.clone(), None));
+                    queue.extend(
+                        dependency
+                            .extras
+                            .iter()
+                            .cloned()
+                            .map(|extra| (dependency.name.clone(), Some(extra))),
+                    );
+                }
+            }
+        }
+
+        DependencyGraph {
+            packages,
+            incomplete,
+        }
     }
 
     /// Remove the given packages from the index, returning all installed versions, if any.
