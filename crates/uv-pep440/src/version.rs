@@ -3595,40 +3595,6 @@ mod tests {
     // They are meant to be additional (but in some cases likely redundant)
     // with some of the above tests.
     #[test]
-    fn parse_version_single_digit_release() {
-        for major in 0u8..=9 {
-            for minor in 0u8..=9 {
-                for patch in 0u8..=9 {
-                    let input = format!("{major}.{minor}.{patch}");
-                    assert_eq!(
-                        input.parse(),
-                        Ok(Version::new([
-                            u64::from(major),
-                            u64::from(minor),
-                            u64::from(patch),
-                        ])),
-                        "{input}"
-                    );
-                }
-            }
-        }
-
-        assert!("a.1.2".parse::<Version>().is_err());
-        assert_eq!(
-            "1.a.2"
-                .parse::<Version>()
-                .map(|version| version.to_string()),
-            Ok("1a2".to_string())
-        );
-        assert_eq!(
-            "1.2.a"
-                .parse::<Version>()
-                .map(|version| version.to_string()),
-            Ok("1.2a0".to_string())
-        );
-    }
-
-    #[test]
     fn parse_version_valid() {
         let p = |s: &str| match Parser::new(s.as_bytes()).parse() {
             Ok(v) => v,
@@ -4013,6 +3979,42 @@ mod tests {
                 remaining: "-".to_string()
             }
             .into()
+        );
+    }
+
+    // Exercise every version accepted by the specialized five-byte fast path.
+    // The non-digit cases ensure that it falls back to the general parser.
+    #[test]
+    fn parse_version_single_digit_release() {
+        for major in 0u8..=9 {
+            for minor in 0u8..=9 {
+                for patch in 0u8..=9 {
+                    let input = format!("{major}.{minor}.{patch}");
+                    assert_eq!(
+                        input.parse(),
+                        Ok(Version::new([
+                            u64::from(major),
+                            u64::from(minor),
+                            u64::from(patch),
+                        ])),
+                        "{input}"
+                    );
+                }
+            }
+        }
+
+        assert!("a.1.2".parse::<Version>().is_err());
+        assert_eq!(
+            "1.a.2"
+                .parse::<Version>()
+                .map(|version| version.to_string()),
+            Ok("1a2".to_string())
+        );
+        assert_eq!(
+            "1.2.a"
+                .parse::<Version>()
+                .map(|version| version.to_string()),
+            Ok("1.2a0".to_string())
         );
     }
 
