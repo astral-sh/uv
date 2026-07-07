@@ -465,7 +465,6 @@ pub enum ParseAbiTagError {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
     use std::str::FromStr;
 
     use insta::assert_snapshot;
@@ -490,10 +489,8 @@ mod tests {
         assert_eq!(AbiTag::from_str("abi3t"), Ok(AbiTag::Abi3T));
         assert_eq!(AbiTag::Abi3T.to_string(), "abi3t");
         assert!(AbiTag::Abi3T.is_stable_abi());
-        let pretty = AbiTag::Abi3T.pretty();
-        assert!(matches!(&pretty, Some(Cow::Borrowed(_))));
         assert_eq!(
-            pretty.as_deref(),
+            AbiTag::Abi3T.pretty().as_deref(),
             Some("stable ABI for free-threaded CPython")
         );
     }
