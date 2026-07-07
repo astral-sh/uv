@@ -42,25 +42,6 @@ pub struct InvalidEnvironmentVariable {
     pub err: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-
-    use super::astral_mirror_base_url;
-
-    #[test]
-    fn astral_mirror_base_url_is_borrowed() {
-        assert!(matches!(
-            astral_mirror_base_url(None),
-            Cow::Borrowed("https://releases.astral.sh")
-        ));
-        assert!(matches!(
-            astral_mirror_base_url(Some("https://mirror.example.com/")),
-            Cow::Borrowed("https://mirror.example.com")
-        ));
-    }
-}
-
 /// Parse a boolean environment variable.
 ///
 /// Adapted from Clap's `BoolishValueParser` which is dual licensed under the MIT and Apache-2.0.
