@@ -16,7 +16,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.4
+  HAWK_VERSION: 0.1.5
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
