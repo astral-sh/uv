@@ -634,8 +634,8 @@ fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
     let mut config = Vec::new();
 
     if remote_url.as_str() != original_remote_url.as_str() {
-        let safe_root = remote_url_root(remote_url.as_ref());
-        let credentialed_root = remote_url_root(original_remote_url);
+        let safe_root = remote_url_root(remote_url.into_owned());
+        let credentialed_root = remote_url_root((**original_remote_url).clone());
 
         if safe_root.as_str() != credentialed_root.as_str() {
             config.push(format!(
@@ -654,12 +654,11 @@ fn submodule_auth_config(original_remote_url: &DisplaySafeUrl) -> Vec<String> {
 /// This is used as the rewrite prefix for `url.*.insteadOf`, so a credentialed parent URL can
 /// authenticate sibling submodule URLs without making the credentials part of any persisted
 /// submodule URL.
-fn remote_url_root(url: &Url) -> Url {
-    let mut root = url.clone();
-    root.set_path("/");
-    root.set_query(None);
-    root.set_fragment(None);
-    root
+fn remote_url_root(mut url: Url) -> Url {
+    url.set_path("/");
+    url.set_query(None);
+    url.set_fragment(None);
+    url
 }
 
 /// Attempts to fetch the given git `reference` for a Git repository.
