@@ -5973,6 +5973,7 @@ dependencies = [
  "uv-distribution-types",
  "uv-extract",
  "uv-install-wheel",
+ "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-performance-memory-allocator",

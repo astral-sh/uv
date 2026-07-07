@@ -20,10 +20,13 @@ use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
+use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
+use uv_types::HashStrategy;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
@@ -305,6 +308,16 @@ fn resolve_warm_numpy_many_wheels(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_numpy_many_wheels", |b| b.iter(&run));
 }
 
+fn hash_strategy_get_package_default(c: &mut Criterion<WallTime>) {
+    let strategy = HashStrategy::default();
+    let package = PackageName::from_str("numpy").expect("package name should be valid");
+    let version = Version::from_str("2.1.0").expect("version should be valid");
+
+    c.bench_function("hash_strategy_get_package_default", |b| {
+        b.iter(|| strategy.get_package(black_box(&package), black_box(&version)));
+    });
+}
+
 fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     let manifest = Manifest::simple(vec![
         Requirement::from(uv_pep508::Requirement::from_str("apache-airflow[all]==2.9.3").unwrap()),
@@ -337,6 +350,7 @@ criterion_group!(
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
     resolve_warm_numpy_many_wheels,
+    hash_strategy_get_package_default,
     resolve_warm_airflow
 );
 criterion_main!(uv);

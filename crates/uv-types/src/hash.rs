@@ -55,11 +55,11 @@ impl HashStrategy {
 
     /// Return the [`HashPolicy`] for the given registry-based package.
     pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy<'_> {
-        let id = VersionId::from_registry(name.clone(), version.clone());
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
+                let id = VersionId::from_registry(name.clone(), version.clone());
                 if let Some(hashes) = hashes.get(&id) {
                     HashPolicy::Any(hashes.as_slice())
                 } else {
@@ -67,6 +67,7 @@ impl HashStrategy {
                 }
             }
             Self::Require(hashes) => {
+                let id = VersionId::from_registry(name.clone(), version.clone());
                 HashPolicy::Any(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
             }
         }
@@ -76,11 +77,11 @@ impl HashStrategy {
     ///
     /// A direct URL identifies a single concrete artifact, so every provided digest must match.
     pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy<'_> {
-        let id = VersionId::from_url(url);
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
+                let id = VersionId::from_url(url);
                 if let Some(hashes) = hashes.get(&id) {
                     HashPolicy::All(hashes.as_slice())
                 } else {
@@ -88,6 +89,7 @@ impl HashStrategy {
                 }
             }
             Self::Require(hashes) => {
+                let id = VersionId::from_url(url);
                 HashPolicy::All(hashes.get(&id).map(Vec::as_slice).unwrap_or_default())
             }
         }
