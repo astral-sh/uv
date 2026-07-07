@@ -164,11 +164,6 @@ async fn wait_for_workers(
 /// All compilation errors are muted (like pip). By default, each file has a 60-second timeout to
 /// handle a broken `python`. Set `UV_COMPILE_BYTECODE_TIMEOUT` to a number of seconds to override
 /// the timeout, or to `0` to disable it.
-///
-/// We only compile all files, but we don't update the RECORD, relying on PEP 491:
-/// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
-///
-/// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
 #[instrument(skip(python_executable))]
 pub async fn compile_tree(
     dir: &Path,

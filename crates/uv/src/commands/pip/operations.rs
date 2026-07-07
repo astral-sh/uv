@@ -712,6 +712,10 @@ pub(crate) async fn install(
     }
 
     if let Some(compile) = compile {
+        // Bytecode is not added to RECORD, relying on PEP 491:
+        // > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
+        //
+        // Both uv and pip (as of 24.0.0) remove the `__pycache__` directory during uninstallation.
         match compile {
             BytecodeCompilation::All => {
                 compile_bytecode(venv, concurrency, cache, printer).await?;
