@@ -1024,7 +1024,7 @@ impl DistributionMetadata for DirectUrlBuiltDist {
     }
 
     fn version_id(&self) -> VersionId {
-        VersionId::from_archive(self.location.as_ref(), None)
+        VersionId::from_archive(self.location.as_ref().clone(), None)
     }
 }
 
@@ -1056,7 +1056,7 @@ impl DistributionMetadata for DirectUrlSourceDist {
     }
 
     fn version_id(&self) -> VersionId {
-        VersionId::from_archive(self.location.as_ref(), self.subdirectory.as_deref())
+        VersionId::from_archive(self.location.as_ref().clone(), self.subdirectory.as_deref())
     }
 }
 

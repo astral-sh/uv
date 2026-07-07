@@ -216,7 +216,7 @@ impl HashStrategy {
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
-                    VersionId::from_parsed_url(&requirement.url.parsed_url)
+                    VersionId::from_parsed_url(requirement.url.parsed_url.clone())
                 }
             };
 
@@ -378,7 +378,10 @@ impl HashStrategy {
                 location,
                 subdirectory,
                 ..
-            } => Some(VersionId::from_archive(location, subdirectory.as_deref())),
+            } => Some(VersionId::from_archive(
+                location.clone(),
+                subdirectory.as_deref(),
+            )),
             RequirementSource::GitDirectory {
                 git, subdirectory, ..
             } => Some(VersionId::from_git(git, subdirectory.as_deref())),

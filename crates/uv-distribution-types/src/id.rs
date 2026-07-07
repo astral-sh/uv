@@ -6,10 +6,7 @@ use uv_git_types::GitUrl;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{
-    HashDigest, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl,
-    ParsedPathUrl, ParsedUrl,
-};
+use uv_pypi_types::{HashDigest, ParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
@@ -29,8 +26,8 @@ impl PackageId {
     }
 
     /// Create a new [`PackageId`] from a URL.
-    pub(crate) fn from_url(url: &DisplaySafeUrl) -> Self {
-        Self::Url(CanonicalUrl::new(url.clone()))
+    pub(crate) fn from_url(url: DisplaySafeUrl) -> Self {
+        Self::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -80,28 +77,38 @@ impl VersionId {
     }
 
     /// Create a new [`VersionId`] from a parsed URL.
-    pub fn from_parsed_url(url: &ParsedUrl) -> Self {
+    pub fn from_parsed_url(url: ParsedUrl) -> Self {
         match url {
-            ParsedUrl::Path(path) => Self::from_path_url(path),
-            ParsedUrl::Directory(directory) => Self::from_directory_url(directory),
-            ParsedUrl::GitDirectory(git) => Self::from_git_directory_url(git),
-            ParsedUrl::GitPath(git) => Self::from_git_path_url(git),
-            ParsedUrl::Archive(archive) => Self::from_archive_url(archive),
+            ParsedUrl::Path(path) => Self::Path(path.install_path.into_path_buf()),
+            ParsedUrl::Directory(directory) => {
+                Self::Directory(directory.install_path.into_path_buf())
+            }
+            ParsedUrl::GitDirectory(git) => Self::Git {
+                url: git.url,
+                subdirectory: git.subdirectory.map(|path| path.into_path_buf()),
+            },
+            ParsedUrl::GitPath(git) => Self::Git {
+                url: git.url,
+                subdirectory: Some(git.install_path),
+            },
+            ParsedUrl::Archive(archive) => {
+                Self::from_archive(archive.url, archive.subdirectory.as_deref())
+            }
         }
     }
 
     /// Create a new [`VersionId`] from a URL.
     pub fn from_url(url: &DisplaySafeUrl) -> Self {
         match ParsedUrl::try_from(url.clone()) {
-            Ok(parsed) => Self::from_parsed_url(&parsed),
+            Ok(parsed) => Self::from_parsed_url(parsed),
             Err(_) => Self::Unknown(url.clone()),
         }
     }
 
     /// Create a new [`VersionId`] from an archive URL.
-    pub fn from_archive(location: &DisplaySafeUrl, subdirectory: Option<&Path>) -> Self {
+    pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<&Path>) -> Self {
         Self::ArchiveUrl {
-            location: CanonicalUrl::new(location.clone()),
+            location: CanonicalUrl::new(location),
             subdirectory: subdirectory.map(Path::to_path_buf),
         }
     }
@@ -122,26 +129,6 @@ impl VersionId {
     /// Create a new [`VersionId`] from a local directory path.
     pub fn from_directory(path: &Path) -> Self {
         Self::Directory(path.to_path_buf())
-    }
-
-    fn from_archive_url(archive: &ParsedArchiveUrl) -> Self {
-        Self::from_archive(&archive.url, archive.subdirectory.as_deref())
-    }
-
-    fn from_path_url(path: &ParsedPathUrl) -> Self {
-        Self::from_path(path.install_path.as_ref())
-    }
-
-    fn from_directory_url(directory: &ParsedDirectoryUrl) -> Self {
-        Self::from_directory(directory.install_path.as_ref())
-    }
-
-    fn from_git_directory_url(git: &ParsedGitDirectoryUrl) -> Self {
-        Self::from_git(&git.url, git.subdirectory.as_deref())
-    }
-
-    fn from_git_path_url(git: &ParsedGitPathUrl) -> Self {
-        Self::from_git(&git.url, Some(&git.install_path))
     }
 }
 
