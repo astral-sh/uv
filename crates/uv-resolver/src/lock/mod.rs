@@ -498,7 +498,7 @@ impl Lock {
             resolution_mode: resolution.options.resolution_mode,
             prerelease_mode: resolution.options.prerelease_mode,
             fork_strategy: resolution.options.fork_strategy,
-            exclude_newer: resolution.options.exclude_newer.clone().into(),
+            exclude_newer: resolution.options.exclude_newer.clone(),
         };
         // Canonicalize the top-level fork markers to match what is persisted in
         // `uv.lock`. In particular, conflict-only fork markers can serialize to
@@ -773,10 +773,8 @@ impl Lock {
     }
 
     /// Returns the exclude newer setting used to generate this lock.
-    pub fn exclude_newer(&self) -> ExcludeNewer {
-        // TODO(zanieb): It'd be nice not to hide this clone here, but I am hesitant to introduce
-        // a whole new `ExcludeNewerRef` type just for this
-        self.options.exclude_newer.clone().into()
+    pub fn exclude_newer(&self) -> &ExcludeNewer {
+        &self.options.exclude_newer
     }
 
     /// Returns the conflicting groups that were used to generate this lock.
@@ -1379,7 +1377,7 @@ impl Lock {
                     value(self.options.fork_strategy.to_string()),
                 );
             }
-            let exclude_newer = ExcludeNewer::from(self.options.exclude_newer.clone());
+            let exclude_newer = &self.options.exclude_newer;
             if !exclude_newer.is_empty() {
                 // Always serialize global exclude-newer as a string
                 if let Some(global) = &exclude_newer.global {
@@ -2704,9 +2702,22 @@ pub enum SatisfiesResult<'lock> {
 }
 
 /// We discard the lockfile if these options match.
-#[derive(Clone, Debug, Default, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct ResolverOptions {
+    /// The [`ResolutionMode`] used to generate this lock.
+    resolution_mode: ResolutionMode,
+    /// The [`PrereleaseMode`] used to generate this lock.
+    prerelease_mode: PrereleaseMode,
+    /// The [`ForkStrategy`] used to generate this lock.
+    fork_strategy: ForkStrategy,
+    /// The [`ExcludeNewer`] setting used to generate this lock.
+    exclude_newer: ExcludeNewer,
+}
+
+/// The serialized resolver options in the lockfile.
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct ResolverOptionsWire {
     /// The [`ResolutionMode`] used to generate this lock.
     #[serde(default)]
     resolution_mode: ResolutionMode,
@@ -2904,7 +2915,7 @@ struct LockWire {
     conflicts: Option<Conflicts>,
     /// We discard the lockfile if these options match.
     #[serde(default)]
-    options: ResolverOptions,
+    options: ResolverOptionsWire,
     #[serde(default)]
     manifest: ResolverManifest,
     #[serde(rename = "package", alias = "distribution", default)]
@@ -2968,10 +2979,16 @@ impl TryFrom<LockWire> for Lock {
             .into_iter()
             .map(|simplified_marker| simplified_marker.into_marker(&wire.requires_python))
             .collect();
-        let mut options = wire.options;
-        if options.exclude_newer.exclude_newer_span.is_some() {
-            options.exclude_newer.exclude_newer = None;
+        let mut options_wire = wire.options;
+        if options_wire.exclude_newer.exclude_newer_span.is_some() {
+            options_wire.exclude_newer.exclude_newer = None;
         }
+        let options = ResolverOptions {
+            resolution_mode: options_wire.resolution_mode,
+            prerelease_mode: options_wire.prerelease_mode,
+            fork_strategy: options_wire.fork_strategy,
+            exclude_newer: options_wire.exclude_newer.into(),
+        };
         let lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
