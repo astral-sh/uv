@@ -1,5 +1,6 @@
 //! Create a virtual environment.
 
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
 use std::io;
 use std::io::{BufWriter, Write};
@@ -469,20 +470,18 @@ pub(crate) fn create(
         .join(path_sep);
 
         let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
-            }
-            (true, "activate.bat") => r"%~dp0..".to_string(),
+            (true, "activate") => Cow::Borrowed(
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
+            ),
+            (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
             (true, "activate.fish") => {
-                r"'(dirname -- (dirname -- (realpath -- (status -f))))'".to_string()
+                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
             }
-            (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
-            (false, "activate.nu") => {
-                format!(
-                    "'{}'",
-                    escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
-                )
-            }
+            (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
+            (false, "activate.nu") => Cow::Owned(format!(
+                "'{}'",
+                escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
+            )),
             // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };

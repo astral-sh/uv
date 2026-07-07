@@ -1,4 +1,5 @@
 use crate::{Shell, Simplified};
+use std::borrow::Cow;
 use std::path::Path;
 
 /// Quote a path, if necessary, for safe use in a POSIX-compatible shell command.
@@ -28,8 +29,12 @@ pub fn shlex_posix(executable: impl AsRef<Path>) -> String {
 ///
 /// As a solution, use implicit string concatenations, by putting the single quote into double
 /// quotes.
-pub fn escape_posix_for_single_quotes(string: &str) -> String {
-    string.replace('\'', r#"'"'"'"#)
+pub fn escape_posix_for_single_quotes(string: &str) -> Cow<'_, str> {
+    if string.contains('\'') {
+        Cow::Owned(string.replace('\'', r#"'"'"'"#))
+    } else {
+        Cow::Borrowed(string)
+    }
 }
 
 /// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
@@ -53,7 +58,9 @@ pub fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::shlex_posix;
+    use std::borrow::Cow;
+
+    use super::{escape_posix_for_single_quotes, shlex_posix};
 
     #[test]
     fn posix_safe_path() {
@@ -71,5 +78,17 @@ mod tests {
             shlex_posix("Testing's/$venv;activate"),
             r#"'Testing'"'"'s/$venv;activate'"#
         );
+    }
+
+    #[test]
+    fn escape_posix_borrows_unchanged_strings() {
+        assert!(matches!(
+            escape_posix_for_single_quotes("python"),
+            Cow::Borrowed("python")
+        ));
+        assert!(matches!(
+            escape_posix_for_single_quotes("python's"),
+            Cow::Owned(_)
+        ));
     }
 }
