@@ -18,11 +18,11 @@ use crate::resolution::AnnotatedDist;
 #[derive(Debug, Clone)]
 /// A pinned package with its resolved distribution and all the extras that were pinned for it.
 pub(crate) struct RequirementsTxtDist<'dist> {
-    pub(crate) dist: &'dist ResolvedDist,
-    pub(crate) version: &'dist Version,
-    pub(crate) hashes: &'dist [HashDigest],
-    pub(crate) markers: MarkerTree,
-    pub(crate) extras: Vec<ExtraName>,
+    pub(super) dist: &'dist ResolvedDist,
+    pub(super) version: &'dist Version,
+    pub(super) hashes: &'dist [HashDigest],
+    pub(super) markers: MarkerTree,
+    pub(super) extras: Vec<ExtraName>,
 }
 
 impl<'dist> RequirementsTxtDist<'dist> {

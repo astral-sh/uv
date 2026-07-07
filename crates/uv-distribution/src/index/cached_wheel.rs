@@ -39,15 +39,15 @@ impl ResolvedWheel {
 #[derive(Debug, Clone)]
 pub struct CachedWheel {
     /// The filename of the wheel.
-    pub(crate) filename: WheelFilename,
+    pub(super) filename: WheelFilename,
     /// The [`CacheEntry`] for the wheel.
-    pub(crate) entry: CacheEntry,
+    pub(super) entry: CacheEntry,
     /// The [`HashDigest`]s for the wheel.
-    pub(crate) hashes: HashDigests,
+    pub(super) hashes: HashDigests,
     /// The [`CacheInfo`] for the wheel.
-    pub(crate) cache_info: CacheInfo,
+    pub(super) cache_info: CacheInfo,
     /// The [`BuildInfo`] for the wheel, if it was built.
-    pub(crate) build_info: Option<BuildInfo>,
+    pub(super) build_info: Option<BuildInfo>,
 }
 
 impl CachedWheel {
