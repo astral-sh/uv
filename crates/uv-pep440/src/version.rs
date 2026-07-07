@@ -436,7 +436,7 @@ impl Version {
     /// The version `1.0min0` is smaller than all other `1.0` versions,
     /// like `1.0a1`, `1.0dev0`, etc.
     #[inline]
-    fn min(&self) -> Option<u64> {
+    pub(crate) fn min(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.min(),
             VersionInner::Full { ref full } => full.min,
@@ -449,7 +449,7 @@ impl Version {
     /// The version `1.0max0` is larger than all other `1.0` versions,
     /// like `1.0.post1`, `1.0+local`, etc.
     #[inline]
-    fn max(&self) -> Option<u64> {
+    pub(crate) fn max(&self) -> Option<u64> {
         match self.inner {
             VersionInner::Small { ref small } => small.max(),
             VersionInner::Full { ref full } => full.max,
