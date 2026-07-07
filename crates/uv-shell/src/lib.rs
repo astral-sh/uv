@@ -8,6 +8,7 @@ pub use shlex::{escape_posix_for_single_quotes, shlex_posix, shlex_windows};
 #[cfg(windows)]
 pub use windows::prepend_path;
 
+use std::borrow::Cow;
 use std::env::home_dir;
 use std::path::{Path, PathBuf};
 
@@ -320,7 +321,11 @@ fn parse_shell_from_path(path: &Path) -> Option<Shell> {
 }
 
 /// Escape a string for use in a shell command by inserting backslashes.
-fn backslash_escape(s: &str) -> String {
+fn backslash_escape(s: &str) -> Cow<'_, str> {
+    if !s.chars().any(|c| matches!(c, '\\' | '"')) {
+        return Cow::Borrowed(s);
+    }
+
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -329,11 +334,18 @@ fn backslash_escape(s: &str) -> String {
         }
         escaped.push(c);
     }
-    escaped
+    Cow::Owned(escaped)
 }
 
 /// Escape a string for use in a `PowerShell` command by inserting backticks.
-fn backtick_escape(s: &str) -> String {
+fn backtick_escape(s: &str) -> Cow<'_, str> {
+    if !s
+        .chars()
+        .any(|c| matches!(c, '"' | '`' | '\u{201C}' | '\u{201D}' | '\u{201E}' | '$'))
+    {
+        return Cow::Borrowed(s);
+    }
+
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
@@ -344,7 +356,7 @@ fn backtick_escape(s: &str) -> String {
         }
         escaped.push(c);
     }
-    escaped
+    Cow::Owned(escaped)
 }
 
 #[cfg(test)]
@@ -360,6 +372,17 @@ mod tests {
     } else {
         EnvVars::HOME
     };
+
+    #[test]
+    fn shell_escape_borrows_unchanged_strings() {
+        assert!(matches!(
+            backslash_escape("python"),
+            Cow::Borrowed("python")
+        ));
+        assert!(matches!(backslash_escape(r#"python""#), Cow::Owned(_)));
+        assert!(matches!(backtick_escape("python"), Cow::Borrowed("python")));
+        assert!(matches!(backtick_escape("$python"), Cow::Owned(_)));
+    }
 
     #[test]
     fn configuration_files_zsh_no_existing_zshenv() {
