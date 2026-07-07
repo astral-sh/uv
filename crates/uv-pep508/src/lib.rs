@@ -23,6 +23,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
+use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
@@ -168,32 +169,20 @@ fn fmt_requirement<T: Pep508Url + Display>(
 ) -> std::fmt::Result {
     write!(f, "{}", requirement.name)?;
     if !requirement.extras.is_empty() {
-        write!(
-            f,
-            "[{}]",
-            requirement
-                .extras
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )?;
+        write!(f, "[{}]", requirement.extras.iter().format(","))?;
     }
     if let Some(version_or_url) = &requirement.version_or_url {
         match version_or_url {
             VersionOrUrl::VersionSpecifier(version_specifier) => {
-                let version_specifier: Vec<String> =
-                    version_specifier.iter().map(ToString::to_string).collect();
-                write!(f, "{}", version_specifier.join(","))?;
+                write!(f, "{}", version_specifier.iter().format(","))?;
             }
             VersionOrUrl::Url(url) => {
-                let url_string = if display_credentials {
-                    url.displayable_with_credentials().to_string()
-                } else {
-                    url.to_string()
-                };
                 // We add the space for markers later if necessary
-                write!(f, " @ {url_string}")?;
+                if display_credentials {
+                    write!(f, " @ {}", url.displayable_with_credentials())?;
+                } else {
+                    write!(f, " @ {url}")?;
+                }
             }
         }
     }
