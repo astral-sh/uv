@@ -501,6 +501,7 @@ impl CandidateSelector {
             version_maps.iter().map(VersionMap::len).sum::<usize>(),
         );
         let highest = self.use_highest_version(package_name, env);
+        let candidate_range = range.logical_versions();
 
         if self.index_strategy == IndexStrategy::UnsafeBestMatch {
             if highest {
@@ -510,7 +511,7 @@ impl CandidateSelector {
                         .enumerate()
                         .map(|(map_index, version_map)| {
                             version_map
-                                .iter(range)
+                                .iter(candidate_range)
                                 .rev()
                                 .map(move |item| (map_index, item))
                         })
@@ -535,7 +536,9 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter(range).map(move |item| (map_index, item))
+                            version_map
+                                .iter(candidate_range)
+                                .map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -557,7 +560,7 @@ impl CandidateSelector {
             if highest {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range).rev(),
+                        version_map.iter(candidate_range).rev(),
                         package_name,
                         range,
                         prerelease_candidates,
@@ -567,7 +570,7 @@ impl CandidateSelector {
             } else {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range),
+                        version_map.iter(candidate_range),
                         package_name,
                         range,
                         prerelease_candidates,
@@ -610,7 +613,7 @@ impl CandidateSelector {
         prerelease_candidates: PrereleaseCandidates<'_>,
         highest: bool,
     ) -> Option<Candidate<'a>> {
-        let segments = range.iter();
+        let segments = range.logical_versions().iter();
         let segments = if highest {
             Either::Left(segments.rev())
         } else {
