@@ -275,8 +275,8 @@ impl GitRepository {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: &DisplaySafeUrl) -> Self {
-        Self { url: url.clone() }
+    pub(crate) fn new(url: DisplaySafeUrl) -> Self {
+        Self { url }
     }
 
     /// Gets the remote repository URL.
