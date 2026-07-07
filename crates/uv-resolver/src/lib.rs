@@ -1,5 +1,5 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
+pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::{
     ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
     ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,

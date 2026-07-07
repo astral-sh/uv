@@ -15,6 +15,39 @@ use crate::{
 static PEP440_MIN_VERSION: LazyLock<Version> =
     LazyLock::new(|| Version::new([0]).with_dev(Some(0)));
 
+/// Rewrite internal local-version sentinels into bounds suitable for diagnostics.
+pub fn strip_local_version_sentinels(ranges: &Ranges<Version>) -> Ranges<Version> {
+    ranges
+        .iter()
+        .map(|(lower, upper)| {
+            let lower_is_included = matches!(lower, Bound::Included(_));
+            let lower = match lower.cloned() {
+                Bound::Included(version) | Bound::Excluded(version)
+                    if version.local() == LocalVersionSlice::Max =>
+                {
+                    Bound::Excluded(version.without_local())
+                }
+                lower => lower,
+            };
+            let upper = match upper.cloned() {
+                Bound::Included(version) if version.local() == LocalVersionSlice::Max => {
+                    Bound::Included(version.without_local())
+                }
+                Bound::Excluded(version)
+                    if version.local() == LocalVersionSlice::Max && lower_is_included =>
+                {
+                    Bound::Included(version.without_local())
+                }
+                Bound::Excluded(version) if version.local() == LocalVersionSlice::Max => {
+                    Bound::Excluded(version.without_local())
+                }
+                upper => upper,
+            };
+            (lower, upper)
+        })
+        .collect()
+}
+
 /// Canonicalize the internal sentinel bounds in a version range over the PEP 440 version universe.
 ///
 /// [`Ranges`] treats its coordinate type as continuous, while PEP 440 has known least successors

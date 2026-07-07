@@ -26,7 +26,7 @@
 #[cfg(feature = "version-ranges")]
 pub use version_ranges::{
     LowerBound, UpperBound, canonicalize_version_ranges, release_specifier_to_range,
-    release_specifiers_to_ranges,
+    release_specifiers_to_ranges, strip_local_version_sentinels,
 };
 pub use {
     version::{
