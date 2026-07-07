@@ -211,11 +211,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                                 metadata,
                                 package_name,
-                                index,
-                                self.tags.as_ref(),
-                                &self.requires_python,
-                                &self.allowed_yanks,
-                                &self.hasher,
+                                index.clone(),
+                                self.tags.clone(),
+                                self.requires_python.clone(),
+                                self.allowed_yanks.clone(),
+                                self.hasher.clone(),
                                 included_version_cutoff,
                                 available_version_cutoff,
                                 flat_index
