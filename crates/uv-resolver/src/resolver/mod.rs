@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Range, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -52,7 +52,7 @@ use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
-    PubGrubPython,
+    PubGrubPython, Range,
 };
 use crate::python_requirement::PythonRequirement;
 use crate::resolution::ResolverOutput;
@@ -3292,7 +3292,7 @@ impl ForkState {
         &mut self,
         affected: Id<PubGrubPackage>,
         version: Option<&Version>,
-        incompatibility: IncompId<PubGrubPackage, Ranges<Version>, UnavailableReason>,
+        incompatibility: IncompId<PubGrubPackage, Range<Version>, UnavailableReason>,
     ) {
         let mut culprit_is_real = false;
         for (incompatible, _term) in self.pubgrub.incompatibility_store[incompatibility].iter() {
@@ -3366,7 +3366,10 @@ impl ForkState {
                 .add_incompatibility(Incompatibility::from_dependency(
                     *package,
                     Range::singleton(version.clone()),
-                    (python, release_specifiers_to_ranges(requires_python)),
+                    (
+                        python,
+                        Range::from_versions(release_specifiers_to_ranges(requires_python)),
+                    ),
                 ));
             self.pubgrub
                 .partial_solution
@@ -3439,7 +3442,7 @@ impl ForkState {
                     continue;
                 };
                 let dependency_range =
-                    dependency_range.map_or_else(|| Cow::Owned(Ranges::empty()), Cow::Borrowed);
+                    dependency_range.map_or_else(|| Cow::Owned(Range::empty()), Cow::Borrowed);
                 if *package != self_package {
                     continue;
                 }

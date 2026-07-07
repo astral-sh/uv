@@ -696,14 +696,7 @@ mod tests {
                 .expect("valid version for canonicalization test")
         });
 
-        for specifiers in [
-            "==1.0",
-            "!=1.0",
-            "<1.0",
-            "<=1.0",
-            ">1.0a1",
-            "<1.0.post1",
-        ] {
+        for specifiers in ["==1.0", "!=1.0", "<1.0", "<=1.0", ">1.0a1", "<1.0.post1"] {
             let range = Ranges::from(
                 specifiers
                     .parse::<VersionSpecifiers>()

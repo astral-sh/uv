@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, Ranges, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Ranges, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
@@ -27,7 +27,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{
-    PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter,
+    PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, Range,
     report_derivation_tree,
 };
 use crate::python_requirement::PythonRequirement;
@@ -526,20 +526,26 @@ impl NoSolutionError {
 
                     let versions = SentinelRange::from(&versions).strip();
                     Some(DerivationTree::External(External::NoVersions(
-                        package, versions,
+                        package,
+                        versions.into(),
                     )))
                 }
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
                     let versions1 = SentinelRange::from(&versions1).strip();
                     let versions2 = SentinelRange::from(&versions2).strip();
                     Some(DerivationTree::External(External::FromDependencyOf(
-                        package1, versions1, package2, versions2,
+                        package1,
+                        versions1.into(),
+                        package2,
+                        versions2.into(),
                     )))
                 }
                 External::Custom(package, versions, reason) => {
                     let versions = SentinelRange::from(&versions).strip();
                     Some(DerivationTree::External(External::Custom(
-                        package, versions, reason,
+                        package,
+                        versions.into(),
+                        reason,
                     )))
                 }
             },
@@ -550,10 +556,10 @@ impl NoSolutionError {
                     .map(|(package, term)| {
                         let term = match term {
                             Term::Positive(versions) => {
-                                Term::Positive(SentinelRange::from(&versions).strip())
+                                Term::Positive(SentinelRange::from(&versions).strip().into())
                             }
                             Term::Negative(versions) => {
-                                Term::Negative(SentinelRange::from(&versions).strip())
+                                Term::Negative(SentinelRange::from(&versions).strip().into())
                             }
                         };
                         (package, term)
@@ -1331,10 +1337,16 @@ fn drop_root_dependency_on_project(tree: ErrorTree, project: &PackageName) -> Er
 
 /// A version range that may include local version sentinels (`+[max]`).
 #[derive(Debug)]
-pub struct SentinelRange<'range>(&'range Range<Version>);
+pub struct SentinelRange<'range>(&'range Ranges<Version>);
 
 impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
     fn from(range: &'range Range<Version>) -> Self {
+        Self(range.versions())
+    }
+}
+
+impl<'range> From<&'range Ranges<Version>> for SentinelRange<'range> {
+    fn from(range: &'range Ranges<Version>) -> Self {
         Self(range)
     }
 }
@@ -1670,7 +1682,7 @@ fn simplify_range(
     let versions = included_versions.get(name)?;
 
     // If this is a full range, there's nothing to simplify
-    if range == &Range::full() {
+    if range.versions() == &Ranges::full() {
         return None;
     }
 
@@ -1702,20 +1714,22 @@ fn simplify_range(
     });
 
     // Simplify the range, as implemented in PubGrub
-    Some(range.simplify(versions.iter().filter(|version| {
-        // If there are pre-releases in the range segments, we need to include pre-releases
-        if any_prerelease {
-            return true;
-        }
+    Some(Range::from_versions(range.simplify(
+        versions.iter().filter(|version| {
+            // If there are pre-releases in the range segments, we need to include pre-releases
+            if any_prerelease {
+                return true;
+            }
 
-        // If pre-releases are not allowed, filter out pre-releases
-        if prereleases_not_allowed && version.any_prerelease() {
-            return false;
-        }
+            // If pre-releases are not allowed, filter out pre-releases
+            if prereleases_not_allowed && version.any_prerelease() {
+                return false;
+            }
 
-        // Otherwise, include the version
-        true
-    })))
+            // Otherwise, include the version
+            true
+        }),
+    )))
 }
 
 #[cfg(test)]
