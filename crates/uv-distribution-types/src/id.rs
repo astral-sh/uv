@@ -91,9 +91,10 @@ impl VersionId {
                 url: git.url,
                 subdirectory: Some(git.install_path),
             },
-            ParsedUrl::Archive(archive) => {
-                Self::from_archive(archive.url, archive.subdirectory.as_deref())
-            }
+            ParsedUrl::Archive(archive) => Self::from_archive(
+                archive.url,
+                archive.subdirectory.map(|path| path.into_path_buf()),
+            ),
         }
     }
 
@@ -106,10 +107,10 @@ impl VersionId {
     }
 
     /// Create a new [`VersionId`] from an archive URL.
-    pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<&Path>) -> Self {
+    pub fn from_archive(location: DisplaySafeUrl, subdirectory: Option<PathBuf>) -> Self {
         Self::ArchiveUrl {
             location: CanonicalUrl::new(location),
-            subdirectory: subdirectory.map(Path::to_path_buf),
+            subdirectory,
         }
     }
 

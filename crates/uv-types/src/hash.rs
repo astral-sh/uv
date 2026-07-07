@@ -380,7 +380,7 @@ impl HashStrategy {
                 ..
             } => Some(VersionId::from_archive(
                 location.clone(),
-                subdirectory.as_deref(),
+                subdirectory.clone().map(|path| path.into_path_buf()),
             )),
             RequirementSource::GitDirectory {
                 git, subdirectory, ..

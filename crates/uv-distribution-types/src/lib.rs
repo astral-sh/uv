@@ -1056,7 +1056,10 @@ impl DistributionMetadata for DirectUrlSourceDist {
     }
 
     fn version_id(&self) -> VersionId {
-        VersionId::from_archive(self.location.as_ref().clone(), self.subdirectory.as_deref())
+        VersionId::from_archive(
+            self.location.as_ref().clone(),
+            self.subdirectory.clone().map(|path| path.into_path_buf()),
+        )
     }
 }
 
