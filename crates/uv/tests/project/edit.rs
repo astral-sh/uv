@@ -4196,6 +4196,8 @@ fn remove_registry() -> Result<()> {
 fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
     let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
     let context = uv_test::test_context!("3.12");
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
 
     context
         .temp_dir
@@ -4208,35 +4210,24 @@ fn remove_ignores_extras_of_extraneous_packages() -> Result<()> {
         dependencies = ["candidate==1.0.0"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.sync().arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
-    WARN Range requests not supported for candidate-1.0.0-py3-none-any.whl; streaming wheel
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + candidate==1.0.0
     ");
-    uv_snapshot!(context.filters(), context.pip_install().arg("b[foo]").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.pip_install().arg("b[foo]").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
-    WARN Range requests not supported for b-1.0.0-py3-none-any.whl; streaming wheel
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + b==1.0.0
     ");
-    uv_snapshot!(context.filters(), context.remove().arg("candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4285,11 +4276,8 @@ fn remove_subset_preserves_explicit_extras_on_installed_edges() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4342,11 +4330,8 @@ fn remove_subset_prunes_only_unshared_branches() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4394,11 +4379,8 @@ fn remove_subset_without_previous_lock() -> Result<()> {
         .success();
     fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -4446,11 +4428,8 @@ fn remove_subset_uses_active_environment_markers() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("marker-root").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("marker-root").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -4495,11 +4474,8 @@ fn remove_subset_preserves_unselected_group_overlap() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4544,11 +4520,8 @@ fn remove_subset_preserves_unselected_extra_overlap() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4599,11 +4572,8 @@ fn remove_subset_handles_cycles() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4655,11 +4625,8 @@ fn remove_subset_ignores_inactive_removed_roots() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("marker-candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("marker-candidate").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -4733,11 +4700,8 @@ fn remove_subset_respects_workspace_target_reachability() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("candidate").current_dir(&child1).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("candidate").current_dir(&child1).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4786,11 +4750,8 @@ fn remove_subset_unions_conflicting_project_extras() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -4844,11 +4805,8 @@ fn remove_subset_retains_on_unreadable_external_metadata() -> Result<()> {
         b"invalid metadata",
     )?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Retaining all removal candidates because dependency metadata is incomplete for b
@@ -4898,11 +4856,8 @@ fn remove_subset_preserves_base_dependencies_with_edge_extras() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("base-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("base-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4950,11 +4905,8 @@ fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
         b"invalid metadata",
     )?;
 
-    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     warning: Unable to read complete dependency metadata for bridge; pruning based on available metadata
@@ -5007,11 +4959,8 @@ fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
         b"invalid metadata",
     )?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").args(["--optional", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--optional", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     warning: Unable to read complete dependency metadata for removed; pruning based on available metadata
@@ -5066,11 +5015,8 @@ fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
         b"invalid metadata",
     )?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     warning: Unable to read complete dependency metadata for removed; pruning based on available metadata
@@ -5119,11 +5065,8 @@ fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
         b"invalid metadata",
     )?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").args(["--group", "cleanup", "--index"]).arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
@@ -5178,11 +5121,8 @@ fn remove_subset_ignores_stale_previous_project_root() -> Result<()> {
         dependencies = ["removed==1.0.0"]
     "#})?;
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 4 packages in [TIME]
@@ -5233,11 +5173,8 @@ fn remove_subset_preserves_root_required_by_external_package() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
@@ -5277,11 +5214,8 @@ fn remove_subset_prunes_orphan_cycle() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("cycle-root").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -5325,11 +5259,8 @@ fn remove_subset_preserves_production_overlap() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("removed").arg("--index").arg(server.index_url()).env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 3 packages in [TIME]
@@ -5382,11 +5313,8 @@ fn remove_subset_uses_markers_on_installed_edges() -> Result<()> {
         .assert()
         .success();
 
-    uv_snapshot!(filters, context.remove().arg("marker-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("marker-removed").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5426,11 +5354,8 @@ fn remove_subset_uses_installed_extra_without_previous_lock() -> Result<()> {
         .success();
     fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
 
-    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
+    uv_snapshot!(filters, context.remove().arg("bridge").env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -7713,12 +7638,8 @@ fn add_group_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -7743,7 +7664,8 @@ fn add_group_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -15532,12 +15454,8 @@ fn add_optional_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 5 packages in [TIME]
-     - anyio==3.7.0
-     - idna==3.6
+    Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
-     - sniffio==1.3.1
-     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -15562,7 +15480,8 @@ fn add_optional_normalize() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Checked in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
