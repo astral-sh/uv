@@ -1,11 +1,13 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use crate::validate_archive_member_name;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
     #[error("Invalid zip file structure")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
@@ -91,6 +93,18 @@ pub enum Error {
     EmptyFilename,
     #[error("Archive contains unacceptable filename: {filename}")]
     UnacceptableFilename { filename: String },
+}
+
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        let async_zip::error::ZipError::FileNameContainsNul { filename } = err else {
+            return Self::AsyncZip(err);
+        };
+
+        let filename = String::from_utf8_lossy(&filename);
+        validate_archive_member_name(&filename)
+            .expect_err("a filename containing an embedded NUL must be rejected")
+    }
 }
 
 impl Error {
