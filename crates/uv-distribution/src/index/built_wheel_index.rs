@@ -82,8 +82,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_vars.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -131,8 +134,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_vars.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -182,8 +188,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_vars.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -212,8 +221,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_vars.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -254,8 +266,11 @@ impl<'a> BuiltWheelIndex<'a> {
         let config_settings = self.config_settings_for(&source_dist.name);
         let extra_build_deps = self.extra_build_requires_for(&source_dist.name);
         let extra_build_vars = self.extra_build_variables_for(&source_dist.name);
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_vars);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_vars.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))

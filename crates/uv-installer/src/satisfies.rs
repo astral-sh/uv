@@ -57,9 +57,9 @@ impl RequirementSatisfaction {
             let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
             let extra_build_variables = extra_build_variables_for(name, extra_build_variables);
             let build_info = BuildInfo::from_settings(
-                &config_settings,
-                extra_build_requires,
-                extra_build_variables,
+                config_settings.into_owned(),
+                extra_build_requires.to_vec(),
+                extra_build_variables.cloned(),
             );
             dist_build_info != &build_info
         }) {

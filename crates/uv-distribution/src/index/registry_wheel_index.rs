@@ -317,9 +317,9 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings_package,
                     );
                     let build_info = BuildInfo::from_settings(
-                        &config_settings,
-                        extra_build_deps,
-                        extra_build_vars,
+                        config_settings.into_owned(),
+                        extra_build_deps.to_vec(),
+                        extra_build_vars.cloned(),
                     );
                     let cache_shard = build_info
                         .cache_shard()
