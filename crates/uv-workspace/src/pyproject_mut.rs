@@ -40,7 +40,7 @@ fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -
         return equal;
     }
 
-    CanonicalUrl::new(existing.url()) == CanonicalUrl::new(incoming.url())
+    CanonicalUrl::new(existing.url().clone()) == CanonicalUrl::new(incoming.url().clone())
 }
 
 #[derive(Error, Debug)]

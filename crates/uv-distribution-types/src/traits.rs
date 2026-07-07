@@ -48,7 +48,7 @@ pub trait DistributionMetadata: Name {
     fn package_id(&self) -> PackageId {
         match self.version_or_url() {
             VersionOrUrlRef::Version(_) => PackageId::from_registry(self.name().clone()),
-            VersionOrUrlRef::Url(url) => PackageId::from_url(url),
+            VersionOrUrlRef::Url(url) => PackageId::from_url(url.raw().clone()),
         }
     }
 }

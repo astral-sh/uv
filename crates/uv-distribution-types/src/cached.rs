@@ -235,7 +235,7 @@ impl DistributionMetadata for CachedDirectUrlDist {
     }
 
     fn version_id(&self) -> VersionId {
-        VersionId::from_parsed_url(&self.url.parsed_url)
+        VersionId::from_parsed_url(self.url.parsed_url.clone())
     }
 }
 
