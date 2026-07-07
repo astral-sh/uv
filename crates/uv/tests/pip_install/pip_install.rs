@@ -1,8 +1,8 @@
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
@@ -16585,6 +16585,69 @@ fn handle_record_mismatches() -> Result<()> {
     foo/__init__.py,,49
     foo/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
     ");
+
+    Ok(())
+}
+
+/// Compile installed packages without compiling the Python standard library.
+#[test]
+fn compile_bytecode_excludes_stdlib() -> Result<()> {
+    fn count_python_sources(root: &Path) -> Result<usize> {
+        let mut count = 0;
+        for entry in WalkDir::new(root) {
+            let entry = entry?;
+            if entry.file_type().is_file()
+                && entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "py")
+            {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    let context = uv_test::test_context!("3.12").with_filtered_compiled_file_count();
+
+    let output = uv_snapshot!(context.filters(), context.pip_install()
+        .arg("sniffio==1.3.1")
+        .arg("--compile-bytecode"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled [COUNT] files in [TIME]
+     + sniffio==1.3.1
+    ");
+
+    let stderr = String::from_utf8(output.stderr)?;
+    let compiled = stderr
+        .lines()
+        .find_map(|line| line.strip_prefix("Bytecode compiled "))
+        .and_then(|line| line.split_whitespace().next())
+        .context("Expected a bytecode compilation summary")?
+        .parse::<usize>()?;
+
+    let stdlib = context
+        .python_command()
+        .arg("-c")
+        .arg("import sysconfig; print(sysconfig.get_path('stdlib'))")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdlib = PathBuf::from(String::from_utf8(stdlib)?.trim());
+
+    let site_packages_sources = count_python_sources(&context.site_packages())?;
+    let stdlib_sources = count_python_sources(&stdlib)?;
+    assert!(stdlib_sources > site_packages_sources);
+    assert!(compiled <= site_packages_sources);
 
     Ok(())
 }
