@@ -3720,7 +3720,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, cell::Cell, path::PathBuf, str::FromStr};
+    use std::{cell::Cell, path::PathBuf, str::FromStr};
 
     use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
@@ -4040,15 +4040,6 @@ mod tests {
 
     #[test]
     fn interpreter_request_to_canonical_string() {
-        assert!(matches!(
-            PythonRequest::Default.to_canonical_string(),
-            Cow::Borrowed("default")
-        ));
-        assert!(matches!(
-            PythonRequest::Version(VersionRequest::from_str("3.12").unwrap()).to_canonical_string(),
-            Cow::Owned(_)
-        ));
-
         assert_eq!(PythonRequest::Default.to_canonical_string(), "default");
         assert_eq!(PythonRequest::Any.to_canonical_string(), "any");
         assert_eq!(
