@@ -16,7 +16,7 @@ use uv_platform_tags::{
 
 use crate::splitter::MemchrSplitter;
 use crate::wheel_tag::{TagSet, WheelTag, WheelTagLarge, WheelTagSmall};
-use crate::{BuildTag, BuildTagError};
+use crate::{BuildTag, BuildTagError, normalized_package_name_matches};
 
 #[derive(
     Debug,
@@ -41,13 +41,7 @@ impl FromStr for WheelFilename {
     type Err = WheelFilenameError;
 
     fn from_str(filename: &str) -> Result<Self, Self::Err> {
-        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
-            WheelFilenameError::InvalidWheelFileName(
-                filename.to_string(),
-                "Must end with .whl".to_string(),
-            )
-        })?;
-        Self::parse(stem, filename)
+        Self::parse_filename(filename, None)
     }
 }
 
@@ -64,6 +58,26 @@ impl Display for WheelFilename {
 }
 
 impl WheelFilename {
+    fn parse_filename(
+        filename: &str,
+        hint: Option<&PackageName>,
+    ) -> Result<Self, WheelFilenameError> {
+        let stem = filename.strip_suffix(".whl").ok_or_else(|| {
+            WheelFilenameError::InvalidWheelFileName(
+                filename.to_string(),
+                "Must end with .whl".to_string(),
+            )
+        })?;
+        Self::parse(stem, filename, hint)
+    }
+
+    pub(crate) fn from_hint(
+        filename: &str,
+        hint: &PackageName,
+    ) -> Result<Self, WheelFilenameError> {
+        Self::parse_filename(filename, Some(hint))
+    }
+
     /// Create a [`WheelFilename`] from its components.
     pub fn new(
         name: PackageName,
@@ -161,13 +175,17 @@ impl WheelFilename {
         {
             return Err(WheelFilenameError::UnexpectedExtension(stem.to_string()));
         }
-        Self::parse(stem, stem)
+        Self::parse(stem, stem, None)
     }
 
     /// Parse a wheel filename from the stem (e.g., `foo-1.2.3-py3-none-any`).
     ///
     /// The originating `filename` is used for high-fidelity error messages.
-    fn parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
+    fn parse(
+        stem: &str,
+        filename: &str,
+        hint: Option<&PackageName>,
+    ) -> Result<Self, WheelFilenameError> {
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
@@ -234,8 +252,14 @@ impl WheelFilename {
                 )
             };
 
-        let name = PackageName::from_str(name)
-            .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?;
+        let name = if let Some(hint) = hint
+            && normalized_package_name_matches(name, hint)
+        {
+            hint.clone()
+        } else {
+            PackageName::from_str(name)
+                .map_err(|err| WheelFilenameError::InvalidPackageName(filename.to_string(), err))?
+        };
         let version = Version::from_str(version)
             .map_err(|err| WheelFilenameError::InvalidVersion(filename.to_string(), err))?;
         let build_tag = build_tag

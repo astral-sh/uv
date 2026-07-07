@@ -1,6 +1,6 @@
 [package]
 name = "uv-bench"
-version = "0.0.59"
+version = "0.0.60"
 description = "This is an internal component crate of uv"
 publish = false
 authors = { workspace = true }
@@ -26,6 +26,11 @@ harness = false
 [[bench]]
 name = "workspace_discovery"
 path = "benches/workspace_discovery.rs"
+harness = false
+
+[[bench]]
+name = "uv_pep440"
+path = "benches/uv_pep440.rs"
 harness = false
 
 [dev-dependencies]

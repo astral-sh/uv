@@ -1080,6 +1080,34 @@ async fn retry_read_timeout_index() {
 }
 
 #[tokio::test]
+async fn retry_read_timeout_python_downloads_json() {
+    let context = uv_test::test_context!("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url")
+        .arg(&server)
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/'
+      Caused by: Request failed after 1 retry in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/
+      Caused by: error decoding response body for url (http://[LOCALHOST]/)
+      Caused by: request or response body error
+      Caused by: operation timed out
+    ");
+}
+
+#[tokio::test]
 async fn retry_read_timeout_stream() {
     let context = uv_test::test_context!("3.12");
 

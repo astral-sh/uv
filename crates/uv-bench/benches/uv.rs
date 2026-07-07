@@ -21,7 +21,6 @@ use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
 use uv_normalize::PackageName;
-use uv_pep440::VersionSpecifiers;
 use uv_preview::Preview;
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
@@ -389,19 +388,6 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
     c.bench_function("resolve_warm_airflow", |b| b.iter(&run));
 }
 
-fn parse_version_specifiers(c: &mut Criterion<WallTime>) {
-    let mut group = c.benchmark_group("parse_version_specifiers");
-    for specifiers in [">=3.8", ">=3.8,<4", ">=2.5, !=3.0.*, !=3.1.*, !=3.2.*, <4"] {
-        group.bench_with_input(specifiers, specifiers, |benchmark, specifiers| {
-            benchmark.iter(|| {
-                VersionSpecifiers::from_str(black_box(specifiers))
-                    .expect("benchmark input should be valid")
-            });
-        });
-    }
-    group.finish();
-}
-
 // This takes >5m to run in CodSpeed.
 // fn resolve_warm_airflow_universal(c: &mut Criterion<WallTime>) {
 //     let manifest = Manifest::simple(vec![
@@ -423,8 +409,7 @@ criterion_group!(
     normalize_package_names,
     resolve_warm_jupyter,
     resolve_warm_jupyter_universal,
-    resolve_warm_airflow,
-    parse_version_specifiers
+    resolve_warm_airflow
 );
 criterion_main!(uv);
 

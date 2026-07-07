@@ -48,7 +48,7 @@ jobs:
           cargo run --bin uv -- pip compile test/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
 
       - name: "Build benchmarks"
-        run: cargo codspeed build -m walltime --profile profiling -p uv-bench
+        run: cargo codspeed build -m walltime --profile profiling -p uv-bench --bench uv --bench workspace_discovery
 
       - name: "Create artifact archive"
         run: tar -cvf benchmarks-walltime.tar target/codspeed target/debug/uv .cache
@@ -88,7 +88,7 @@ jobs:
         run: ./target/debug/uv venv --cache-dir .cache
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@63f3e98b61959fe67f146a3ff022e4136fe9bb9c # v4.17.6
+        uses: CodSpeedHQ/action@a4a36bb07c0638b0b4ca52bf1f3dad1b4289e52f # v4.18.1
         with:
           run: cargo codspeed run
           mode: walltime
@@ -129,7 +129,7 @@ jobs:
         run: cargo codspeed build --profile profiling -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@63f3e98b61959fe67f146a3ff022e4136fe9bb9c # v4.17.6
+        uses: CodSpeedHQ/action@a4a36bb07c0638b0b4ca52bf1f3dad1b4289e52f # v4.18.1
         with:
           run: cargo codspeed run
           mode: simulation

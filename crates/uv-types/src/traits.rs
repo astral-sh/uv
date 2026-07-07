@@ -226,10 +226,21 @@ pub trait SourceBuildTrait {
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
-/// A wrapper for [`uv_installer::SitePackages`]
+/// Provides access to installed distributions during resolution.
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+impl<Provider: InstalledPackagesProvider> InstalledPackagesProvider for Option<Provider> {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.as_ref().into_iter().flat_map(Provider::iter)
+    }
+
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.as_ref()
+            .map_or_else(Vec::new, |provider| provider.get_packages(name))
+    }
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.

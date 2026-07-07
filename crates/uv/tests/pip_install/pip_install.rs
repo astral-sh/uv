@@ -4044,6 +4044,12 @@ fn install_no_downgrade() -> Result<()> {
     "
     );
 
+    // An unrelated distribution should not be inspected when all resolved packages will be
+    // reinstalled.
+    let unrelated = context.site_packages().join("unrelated-1.0.0.dist-info");
+    fs::create_dir_all(&unrelated)?;
+    fs::write(unrelated.join("direct_url.json"), "invalid")?;
+
     // Install `anyio` with `--reinstall`, which should downgrade `idna`.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--reinstall")
@@ -4917,6 +4923,7 @@ fn reinstall_duplicate() -> Result<()> {
     // Run `pip install`.
     uv_snapshot!(context1.pip_install()
         .arg("pip")
+        .arg("--no-deps")
         .arg("--reinstall"),
         @"
     success: true
@@ -5594,6 +5601,24 @@ fn path_name_version_change() {
 
     ----- stderr -----
     Checked 1 package in [TIME]
+    "
+    );
+
+    // Reinstalling a direct wheel without dependencies should reinstall the requested package.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(context.workspace_root.join("test/links/ok-1.0.0-py3-none-any.whl"))
+        .arg("--no-deps")
+        .arg("--reinstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ ok==1.0.0 (from file://[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl)
     "
     );
 
@@ -12624,6 +12649,11 @@ fn pep_751_install_registry_wheel() -> Result<()> {
      + iniconfig==2.0.0
     "
     );
+
+    // An unrelated distribution should not be inspected when installing from a `pylock.toml`.
+    let unrelated = context.site_packages().join("unrelated-1.0.0.dist-info");
+    fs::create_dir_all(&unrelated)?;
+    fs::write(unrelated.join("direct_url.json"), "invalid")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--preview")

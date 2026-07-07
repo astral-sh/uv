@@ -26,9 +26,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
-          version: "0.11.25"
+          version: "0.11.26"
       - run: uvx ruff check .
 
   ty:
@@ -39,9 +39,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
-          version: "0.11.25"
+          version: "0.11.26"
       # `uv check` checks the entire repository; keep this scoped to the Python package.
       - run: uvx ty check python/uv
       - name: "Check scrolls"
@@ -50,14 +50,11 @@ jobs:
           TY_CONFIG_FILE: /dev/null
           UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
         run: |
-          mapfile -t scripts < <(uv workspace list --scripts)
-          for script in "${scripts[@]}"; do
-            echo "Checking ${script}"
-            check_args=(--script "${script}")
-            if [[ -f "${script}.lock" ]]; then
-              check_args+=(--locked)
-            fi
-            uv check "${check_args[@]}"
+          set -e -o pipefail
+          uv workspace list --scripts |
+          while IFS= read -r script; do
+            printf 'Checking %s\n' "$script" >&2
+            uv check --script "$script" --locked
           done
 
   shellcheck:
@@ -84,9 +81,9 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
         with:
-          version: "0.11.25"
+          version: "0.11.26"
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:

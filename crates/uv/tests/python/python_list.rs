@@ -680,7 +680,7 @@ async fn python_list_remote_python_downloads_json_url() -> Result<()> {
 
     ----- stderr -----
     error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/404'
-      Caused by: Failed to download http://[LOCALHOST]/404
+      Caused by: Failed to fetch: `http://[LOCALHOST]/404`
       Caused by: HTTP status client error (404 Not Found) for url (http://[LOCALHOST]/404)
     ");
 
