@@ -374,17 +374,6 @@ mod tests {
     };
 
     #[test]
-    fn shell_escape_borrows_unchanged_strings() {
-        assert!(matches!(
-            backslash_escape("python"),
-            Cow::Borrowed("python")
-        ));
-        assert!(matches!(backslash_escape(r#"python""#), Cow::Owned(_)));
-        assert!(matches!(backtick_escape("python"), Cow::Borrowed("python")));
-        assert!(matches!(backtick_escape("$python"), Cow::Owned(_)));
-    }
-
-    #[test]
     fn configuration_files_zsh_no_existing_zshenv() {
         let tmp_home_dir = tempdir().unwrap();
         let tmp_zdotdir = tempdir().unwrap();

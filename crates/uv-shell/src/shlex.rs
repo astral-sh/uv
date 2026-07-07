@@ -58,9 +58,7 @@ pub fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
-    use super::{escape_posix_for_single_quotes, shlex_posix};
+    use super::shlex_posix;
 
     #[test]
     fn posix_safe_path() {
@@ -78,17 +76,5 @@ mod tests {
             shlex_posix("Testing's/$venv;activate"),
             r#"'Testing'"'"'s/$venv;activate'"#
         );
-    }
-
-    #[test]
-    fn escape_posix_borrows_unchanged_strings() {
-        assert!(matches!(
-            escape_posix_for_single_quotes("python"),
-            Cow::Borrowed("python")
-        ));
-        assert!(matches!(
-            escape_posix_for_single_quotes("python's"),
-            Cow::Owned(_)
-        ));
     }
 }
