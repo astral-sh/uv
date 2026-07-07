@@ -25,7 +25,9 @@ use uv_distribution_types::{
     NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
     UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
-use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
+use uv_distribution_types::{
+    DerivationChain, DistributionMetadata, InstalledMetadata, Name, Resolution,
+};
 use uv_fs::{CWD, Simplified, normalize_path_under};
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
 use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
@@ -1744,7 +1746,34 @@ fn is_install_wheel_user_failure(error: &uv_install_wheel::Error) -> bool {
 impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
-            Self::Resolve(resolve_err) => resolve_err.hints(),
+            Self::Resolve(uv_resolver::ResolveError::Dist(_, dist, chain, error)) => {
+                crate::commands::diagnostics::dist_hints(
+                    dist.name(),
+                    dist.version(),
+                    chain,
+                    error.hints(),
+                )
+            }
+            Self::Resolve(uv_resolver::ResolveError::Dependencies(error, name, version, chain)) => {
+                crate::commands::diagnostics::dist_hints(name, Some(version), chain, error.hints())
+            }
+            Self::Resolve(error) => error.hints(),
+            Self::Requirements(uv_requirements::Error::Dist(_, dist, error)) => {
+                crate::commands::diagnostics::dist_hints(
+                    dist.name(),
+                    dist.version(),
+                    &DerivationChain::default(),
+                    error.hints(),
+                )
+            }
+            Self::Prepare(uv_installer::PrepareError::Dist(_, dist, chain, error)) => {
+                crate::commands::diagnostics::dist_hints(
+                    dist.name(),
+                    dist.version(),
+                    chain,
+                    error.hints(),
+                )
+            }
             Self::Anyhow(err) => {
                 for cause in err.chain() {
                     if let Some(extra_err) = cause.downcast_ref::<ExtrasWithoutSourceError>() {
