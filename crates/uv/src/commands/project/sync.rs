@@ -323,16 +323,16 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(operations::Error::OutdatedEnvironment(changelog))
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error(
+                        operations::Error::OutdatedEnvironment(changelog),
+                        None,
+                    )
+                    .into());
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error(err, None).into());
                 }
-                Err(err) => return Err(err.into()),
+                Err(err) => return Err(UvError::from(err).into()),
             }
         }
     }
@@ -375,9 +375,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(diagnostics::operation_error(err, None).into());
         }
         Err(err @ ProjectError::LockFormat(..)) => return Err(UvError::user(err).into()),
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
@@ -457,16 +455,16 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return diagnostics::OperationDiagnostic::default()
-                .report(operations::Error::OutdatedEnvironment(changelog))
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(diagnostics::operation_error(
+                operations::Error::OutdatedEnvironment(changelog),
+                None,
+            )
+            .into());
         }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(diagnostics::operation_error(err, None).into());
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => return Err(UvError::from(err).into()),
     };
 
     write_sync_report(

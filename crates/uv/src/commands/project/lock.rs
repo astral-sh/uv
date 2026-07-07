@@ -270,9 +270,7 @@ pub(crate) async fn lock(
         Err(err @ (ProjectError::LockMismatch(..) | ProjectError::LockFormat(..))) => {
             Err(UvError::user(err).into())
         }
-        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+        Err(ProjectError::Operation(err)) => Err(diagnostics::operation_error(err, None).into()),
         Err(err) => Err(UvError::from(err).into()),
     }
 }

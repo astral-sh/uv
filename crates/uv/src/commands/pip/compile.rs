@@ -594,9 +594,7 @@ pub(crate) async fn pip_compile(
     {
         Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(diagnostics::operation_error(err, None).into());
         }
     };
 

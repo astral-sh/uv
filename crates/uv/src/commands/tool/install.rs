@@ -728,9 +728,7 @@ pub(crate) async fn install(
                 {
                     Ok(resolution) => resolution,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::default()
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return Err(diagnostics::operation_error(err, None).into());
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -864,9 +862,7 @@ pub(crate) async fn install(
             {
                 Ok(update) => update,
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::default()
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return Err(diagnostics::operation_error(err, None).into());
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -955,9 +951,7 @@ pub(crate) async fn install(
                         .await
                         .ok()
                         .flatten() else {
-                            return diagnostics::OperationDiagnostic::default()
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return Err(diagnostics::operation_error(err, None).into());
                         };
 
                         debug!(
@@ -989,9 +983,7 @@ pub(crate) async fn install(
                         {
                             Ok(resolution) => (resolution, interpreter),
                             Err(ProjectError::Operation(err)) => {
-                                return diagnostics::OperationDiagnostic::default()
-                                    .report(err)
-                                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                                return Err(diagnostics::operation_error(err, None).into());
                             }
                             Err(err) => return Err(err.into()),
                         }
@@ -1056,9 +1048,7 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => (environment, tool_lock),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(diagnostics::operation_error(err, None).into());
             }
             Err(err) => return Err(err.into()),
         }

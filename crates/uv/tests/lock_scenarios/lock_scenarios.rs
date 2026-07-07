@@ -813,8 +813,8 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because your project depends on a>=2 and a<2, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because your project depends on a>=2 and a<2, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 
@@ -1469,8 +1469,8 @@ fn fork_marker_disjoint() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because your project depends on a{sys_platform == 'linux'}>=2 and a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies:
+      Caused by: Because your project depends on a{sys_platform == 'linux'}>=2 and a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "
     );
 

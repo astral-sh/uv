@@ -481,9 +481,7 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::default()
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return Err(diagnostics::operation_error(err, None).into());
             }
         };
 
@@ -548,9 +546,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return Err(diagnostics::operation_error(err, None).into());
         }
     }
 

@@ -1782,14 +1782,14 @@ fn check_locked_tool_rejects_invalid_hash() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-      × Failed to download `ty==0.0.17`
-      ╰─▶ Hash mismatch for `ty==0.0.17`
+    error: Failed to download `ty==0.0.17`
+      Caused by: Hash mismatch for `ty==0.0.17`
 
-          Expected:
-            sha256:[HASH]
+        Expected:
+          sha256:[HASH]
 
-          Computed:
-            sha256:[HASH]
+        Computed:
+          sha256:[HASH]
     "
     );
 

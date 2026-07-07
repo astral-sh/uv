@@ -1289,9 +1289,9 @@ fn requirements_txt_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `child`
+      Caused by: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--all-packages").arg("--frozen"), @r"
@@ -1668,8 +1668,8 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
           git@github.com: Permission denied (publickey).
           fatal: Could not read from remote repository.
 
-          Please make sure you have the correct access rights
-          and the repository exists.
+        Please make sure you have the correct access rights
+        and the repository exists.
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
@@ -6950,9 +6950,9 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry: `child`
-      ╰─▶ `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      Caused by: Failed to parse entry: `child`
+      Caused by: `child` references a workspace in `tool.uv.sources` (e.g., `child = { workspace = true }`), but is not a workspace member
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--format").arg("cyclonedx1.5").arg("--all-packages").arg("--frozen").arg("--no-hashes"), @r#"
