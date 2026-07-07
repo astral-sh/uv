@@ -148,7 +148,7 @@ albatross
 ├── uv.lock
 └── src
     └── albatross
-        └── main.py
+        └── __init__.py
 ```
 
 Since `seeds` was excluded in the `pyproject.toml`, the workspace has two members total: `albatross`
