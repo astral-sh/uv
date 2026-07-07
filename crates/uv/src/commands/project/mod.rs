@@ -141,9 +141,7 @@ impl From<FrozenSource> for MissingLockfileSource {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
-    #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `{2}` was provided. To update the lockfile, run `uv lock`."
-    )]
+    #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
 
     #[error(
@@ -152,7 +150,7 @@ pub(crate) enum ProjectError {
     MissingLockfile(MissingLockfileSource, PathBuf),
 
     #[error(
-        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`. To update the lockfile, run `uv lock`."
+        "The lockfile at `uv.lock` needs to be updated, but `--frozen` was provided: Missing workspace member `{0}`."
     )]
     LockWorkspaceMismatch(PackageName),
 
@@ -402,6 +400,9 @@ impl std::fmt::Display for MalwareFindings {
 impl uv_errors::Hint for ProjectError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
+            Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
+                uv_errors::Hints::from("To update the lockfile, run `uv lock`.")
+            }
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 uv_errors::Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
