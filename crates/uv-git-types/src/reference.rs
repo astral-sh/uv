@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::str;
 
@@ -69,13 +70,19 @@ impl GitReference {
     }
 
     /// Converts the [`GitReference`] to a percent-encoded revision string for use in a URL.
-    pub fn as_url_rev(&self) -> Option<String> {
+    pub fn as_url_rev(&self) -> Option<Cow<'_, str>> {
         self.as_str().map(Self::encode_rev)
     }
 
     /// Percent-encode a revision string for use in a URL.
-    pub(crate) fn encode_rev(rev: &str) -> String {
-        utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).to_string()
+    pub(crate) fn encode_rev(rev: &str) -> Cow<'_, str> {
+        if rev.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~')
+        }) {
+            Cow::Borrowed(rev)
+        } else {
+            Cow::Owned(utf8_percent_encode(rev, GIT_REFERENCE_ENCODE_SET).to_string())
+        }
     }
 
     /// Returns the kind of this reference.
@@ -100,4 +107,24 @@ impl Display for GitReference {
 /// Whether a `rev` looks like a commit hash (ASCII hex digits).
 fn looks_like_commit_hash(rev: &str) -> bool {
     rev.len() >= 7 && rev.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cow, GitReference};
+
+    #[test]
+    fn encode_rev_borrows_safe_revisions() {
+        assert!(matches!(
+            GitReference::encode_rev("feature/cow-support"),
+            Cow::Borrowed("feature/cow-support")
+        ));
+    }
+
+    #[test]
+    fn encode_rev_owns_percent_encoded_revisions() {
+        let encoded = GitReference::encode_rev("feature name");
+        assert!(matches!(&encoded, Cow::Owned(_)));
+        assert_eq!(encoded, "feature%20name");
+    }
 }
