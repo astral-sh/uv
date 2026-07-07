@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -540,18 +541,18 @@ impl PubGrubReportFormatter<'_> {
     /// package is the root package.
     ///
     /// If not given the root package, returns `None`.
-    fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_root_requires(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
                 if self.is_single_project_workspace() {
-                    return Some("your project requires".to_string());
+                    return Some(Cow::Borrowed("your project requires"));
                 }
-                return Some("your workspace requires".to_string());
+                return Some(Cow::Borrowed("your workspace requires"));
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(name)) => Some(format!("{name} depends on")),
-            PubGrubPackageInner::Root(None) => Some("you require".to_string()),
+            PubGrubPackageInner::Root(Some(name)) => Some(Cow::Owned(format!("{name} depends on"))),
+            PubGrubPackageInner::Root(None) => Some(Cow::Borrowed("you require")),
             _ => None,
         }
     }
@@ -560,18 +561,17 @@ impl PubGrubReportFormatter<'_> {
     /// package is the root package.
     ///
     /// If not given the root package, returns `None`.
-    fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_root(&self, package: &PubGrubPackage) -> Option<&'static str> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
                 if self.is_single_project_workspace() {
-                    return Some("your project's requirements".to_string());
+                    return Some("your project's requirements");
                 }
-                return Some("your workspace's requirements".to_string());
+                return Some("your workspace's requirements");
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(_)) => Some("your requirements".to_string()),
-            PubGrubPackageInner::Root(None) => Some("your requirements".to_string()),
+            PubGrubPackageInner::Root(_) => Some("your requirements"),
             _ => None,
         }
     }
@@ -587,23 +587,23 @@ impl PubGrubReportFormatter<'_> {
     }
 
     /// Return a display name for the package if it is a workspace member.
-    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
                 name, extra, group, ..
             } if self.workspace_members.contains(name) => {
                 if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
-                    Some("your project".to_string())
+                    Some(Cow::Borrowed("your project"))
                 } else {
-                    Some(format!("{package}"))
+                    Some(Cow::Owned(format!("{package}")))
                 }
             }
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
-                Some(format!("{package}"))
+                Some(Cow::Owned(format!("{package}")))
             }
             PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
-                Some(format!("{package}"))
+                Some(Cow::Owned(format!("{package}")))
             }
             _ => None,
         }
