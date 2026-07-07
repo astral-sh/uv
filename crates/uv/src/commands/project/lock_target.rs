@@ -145,8 +145,8 @@ impl<'lock> LockTarget<'lock> {
                             member.root(),
                             member.pyproject_toml(),
                         )?
-                        .into_inner()
-                        .into_keys(),
+                        .into_iter()
+                        .map(|(group, _)| group),
                     );
                 }
                 known_groups.extend(workspace.workspace_dependency_groups()?.into_keys());
