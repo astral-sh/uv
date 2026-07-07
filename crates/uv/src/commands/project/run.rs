@@ -1597,7 +1597,7 @@ impl ParsedRunCommand {
         mut url: &DisplaySafeUrl,
         client_builder: &BaseClientBuilder<'_>,
     ) -> anyhow::Result<tempfile::NamedTempFile> {
-        let client = client_builder.build()?;
+        let client = client_builder.clone().build()?;
         let mut response = client
             .for_host(url)
             .get(Url::from(url.clone()))
@@ -1921,7 +1921,7 @@ async fn resolve_gist_url(
     // Build the API URL.
     let api_url = format!("https://api.github.com/gists/{gist_id}");
 
-    let client = client_builder.build()?;
+    let client = client_builder.clone().build()?;
 
     // Build the request with appropriate headers.
     let api_url_parsed = DisplaySafeUrl::parse(&api_url)?;

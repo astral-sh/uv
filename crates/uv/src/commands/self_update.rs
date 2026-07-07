@@ -81,7 +81,7 @@ pub(crate) async fn self_update(
     }
 
     let mut updater = AxoUpdater::new_for("uv");
-    let updater_client = client_builder.build()?;
+    let updater_client = client_builder.clone().build()?;
     updater
         .set_client(updater_client.raw_client().clone())
         .disable_installer_output();

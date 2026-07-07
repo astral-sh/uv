@@ -380,7 +380,7 @@ impl<'a> BaseClientBuilder<'a> {
         retry_policy(self.retries, self.no_retry_delay)
     }
 
-    pub fn build(&self) -> Result<BaseClient, ClientBuildError> {
+    pub fn build(mut self) -> Result<BaseClient, ClientBuildError> {
         if let Some(name) = self.client_name {
             debug!(
                 "Using request connect timeout of {}s and read timeout of {}s for {} client",
@@ -397,12 +397,12 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
-            Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
-            None => {
-                self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?
-            }
-        };
+        let (raw_client, raw_dangerous_client, certificate_source) =
+            match self.custom_client.take() {
+                Some(client) => (client.clone(), client, CertificateSource::Unknown),
+                None => self
+                    .create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?,
+            };
 
         // Wrap in any relevant middleware and handle connectivity.
         let client = RedirectClientWithMiddleware {
@@ -418,7 +418,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         Ok(BaseClient {
             connectivity: self.connectivity,
-            allow_insecure_host: self.allow_insecure_host.clone(),
+            allow_insecure_host: self.allow_insecure_host,
             retries: self.retries,
             no_retry_delay: self.no_retry_delay,
             client,
@@ -427,7 +427,7 @@ impl<'a> BaseClientBuilder<'a> {
             raw_dangerous_client,
             read_timeout: self.read_timeout,
             connect_timeout: self.connect_timeout,
-            credentials_cache: self.credentials_cache.clone(),
+            credentials_cache: self.credentials_cache,
             certificate_source,
         })
     }

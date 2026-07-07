@@ -936,7 +936,7 @@ async fn check_malware(
 
     let osv_url = malware_check_url.unwrap_or_else(|| osv::API_BASE.clone());
 
-    let base_client = client_builder.build()?;
+    let base_client = client_builder.clone().build()?;
     let client = CachedClient::new(base_client);
     let service = osv::Osv::new(client, Some(osv_url), concurrency.clone(), cache.clone());
 

@@ -1063,6 +1063,7 @@ impl ManagedPythonDownloadList {
             Source::Http(ref url) => {
                 let client = CachedClient::new(
                     client_builder
+                        .clone()
                         .build()
                         .map_err(|err| Error::ClientBuild(Box::new(err)))?,
                 );

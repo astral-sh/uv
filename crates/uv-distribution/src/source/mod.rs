@@ -111,7 +111,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
                 subdirectory,
                 url,
             } => {
-                let client = self.client_builder.build()?;
+                let client = self.client_builder.clone().build()?;
                 let fetch = fetch_git_source_tree(
                     self.git,
                     git,

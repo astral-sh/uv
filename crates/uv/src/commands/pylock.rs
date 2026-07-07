@@ -29,7 +29,7 @@ pub(crate) async fn read_pylock_toml(
     let (install_path, content) = if pylock.starts_with("http://") || pylock.starts_with("https://")
     {
         let url = uv_redacted::DisplaySafeUrl::parse(&pylock.to_string_lossy())?;
-        let client = client_builder.build()?;
+        let client = client_builder.clone().build()?;
         let response = client
             .for_host(&url)
             .get(url::Url::from(url.clone()))

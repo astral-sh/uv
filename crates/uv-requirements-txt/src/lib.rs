@@ -296,12 +296,17 @@ impl RequirementsTxt {
                         )),
                     });
                 }
-                let client = client_builder
-                    .build()
-                    .map_err(|err| RequirementsTxtFileError {
-                        file: requirements_txt.to_path_buf(),
-                        error: RequirementsTxtParserError::ClientBuild(url.clone(), Box::new(err)),
-                    })?;
+                let client =
+                    client_builder
+                        .clone()
+                        .build()
+                        .map_err(|err| RequirementsTxtFileError {
+                            file: requirements_txt.to_path_buf(),
+                            error: RequirementsTxtParserError::ClientBuild(
+                                url.clone(),
+                                Box::new(err),
+                            ),
+                        })?;
                 let content = read_url_to_string(&requirements_txt, client)
                     .await
                     .map_err(|err| RequirementsTxtFileError {
