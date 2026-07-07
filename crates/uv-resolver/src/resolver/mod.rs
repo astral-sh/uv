@@ -512,8 +512,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .term_intersection_for_package(next_id)
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
-                    let selection_range =
-                        ForkState::selection_range(&state.pubgrub, next_id, range);
+                    let selection_range = ForkState::selection_range(
+                        &state.pubgrub,
+                        &state.packages_with_prerelease_admission,
+                        next_id,
+                        range,
+                    );
 
                     // In a specific environment, an implicit registry candidate is stable for a
                     // given range. Avoid repeating candidate selection when PubGrub revisits an
@@ -2982,6 +2986,12 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    /// Packages that have appeared as the target of a pre-release-admitting dependency.
+    ///
+    /// Entries are retained across backtracking and only provide a fast path for
+    /// [`ForkState::selection_range`], which still checks the active partial solution before
+    /// applying admission metadata.
+    packages_with_prerelease_admission: FxHashSet<Id<PubGrubPackage>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3036,6 +3046,7 @@ impl ForkState {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
+            packages_with_prerelease_admission: FxHashSet::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3054,9 +3065,16 @@ impl ForkState {
     /// relations.
     fn selection_range<'a>(
         pubgrub: &'a State<UvDependencyProvider>,
+        packages_with_prerelease_admission: &FxHashSet<Id<PubGrubPackage>>,
         package: Id<PubGrubPackage>,
         range: &'a Range<Version>,
     ) -> Cow<'a, Range<Version>> {
+        if packages_with_prerelease_admission.is_empty()
+            || !packages_with_prerelease_admission.contains(&package)
+        {
+            return Cow::Borrowed(range);
+        }
+
         let Some(incompatibilities) = pubgrub.incompatibilities.get(&package) else {
             return Cow::Borrowed(range);
         };
@@ -3249,6 +3267,13 @@ impl ForkState {
                     dependency.version =
                         dependency.version.with_prerelease_region(prerelease_region);
                 }
+            }
+        }
+
+        for dependency in &dependencies {
+            if dependency.version.prerelease_region().is_some() {
+                let package = self.pubgrub.package_store.alloc(dependency.package.clone());
+                self.packages_with_prerelease_admission.insert(package);
             }
         }
 
