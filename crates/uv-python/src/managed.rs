@@ -139,7 +139,7 @@ impl ManagedPythonInstallations {
     }
 
     /// Create a temporary Python installation directory.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn temp() -> Result<Self, Error> {
         Ok(Self::from_path(
             StateStore::temp()?.bucket(StateBucket::ManagedPython),

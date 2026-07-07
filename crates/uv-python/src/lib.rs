@@ -4,7 +4,7 @@ use thiserror::Error;
 #[cfg(test)]
 use uv_static::EnvVars;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use crate::discovery::find_python_installations;
 pub use crate::discovery::{
     EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
