@@ -125,8 +125,8 @@ impl PythonVersion {
     ///
     /// The returned [`MarkerEnvironment`] will preserve the base environment's platform markers,
     /// but override its Python version markers.
-    pub fn markers(&self, base: &MarkerEnvironment) -> MarkerEnvironment {
-        let mut markers = base.clone();
+    pub fn markers(&self, base: MarkerEnvironment) -> MarkerEnvironment {
+        let mut markers = base;
 
         // Ex) `implementation_version == "3.12.0"`
         if markers.implementation_name() == "cpython" {

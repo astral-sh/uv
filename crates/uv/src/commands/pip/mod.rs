@@ -25,13 +25,13 @@ pub(crate) fn resolution_markers(
 ) -> ResolverMarkerEnvironment {
     match (python_platform, python_version) {
         (Some(python_platform), Some(python_version)) => ResolverMarkerEnvironment::from(
-            python_version.markers(&python_platform.markers(interpreter.markers())),
+            python_version.markers(python_platform.markers(interpreter.markers().clone())),
         ),
         (Some(python_platform), None) => {
-            ResolverMarkerEnvironment::from(python_platform.markers(interpreter.markers()))
+            ResolverMarkerEnvironment::from(python_platform.markers(interpreter.markers().clone()))
         }
         (None, Some(python_version)) => {
-            ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
+            ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers().clone()))
         }
         (None, None) => interpreter.resolver_marker_environment(),
     }
