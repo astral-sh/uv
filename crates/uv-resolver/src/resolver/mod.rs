@@ -3139,7 +3139,7 @@ impl ForkState {
                 // override URLs to both URL and registry requirements, which we then check for
                 // conflicts using [`ForkUrl`].
                 for url in urls.get_url(&self.env, name, source.verbatim_url(), git)? {
-                    self.fork_urls.insert(name, url, &self.env)?;
+                    self.fork_urls.insert(name.clone(), url, &self.env)?;
                     has_url = true;
                 }
 
