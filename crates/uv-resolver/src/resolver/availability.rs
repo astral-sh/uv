@@ -54,17 +54,17 @@ pub enum UnavailableVersion {
 }
 
 impl UnavailableVersion {
-    fn message(&self) -> String {
+    fn message(&self) -> Cow<'static, str> {
         match self {
-            Self::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
-            Self::InvalidMetadata => "invalid metadata".into(),
-            Self::InconsistentMetadata => "inconsistent metadata".into(),
-            Self::InvalidStructure => "an invalid package format".into(),
-            Self::Offline => "to be downloaded from a registry".into(),
+            Self::IncompatibleDist(invalid_dist) => Cow::Owned(format!("{invalid_dist}")),
+            Self::InvalidMetadata => Cow::Borrowed("invalid metadata"),
+            Self::InconsistentMetadata => Cow::Borrowed("inconsistent metadata"),
+            Self::InvalidStructure => Cow::Borrowed("an invalid package format"),
+            Self::Offline => Cow::Borrowed("to be downloaded from a registry"),
             Self::RequiresPython(requires_python) => {
-                format!("Python {requires_python}")
+                Cow::Owned(format!("Python {requires_python}"))
             }
-            Self::Network(status) => status.to_string(),
+            Self::Network(status) => Cow::Owned(status.to_string()),
         }
     }
 
@@ -113,7 +113,7 @@ impl UnavailableVersion {
 
 impl Display for UnavailableVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message())
+        f.write_str(self.message().as_ref())
     }
 }
 
