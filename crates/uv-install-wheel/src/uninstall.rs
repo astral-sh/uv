@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
@@ -341,11 +342,11 @@ pub fn uninstall_egg(egg_info: &Path, distribution: impl Display) -> Result<Unin
     })
 }
 
-fn normcase(s: &str) -> String {
+fn normcase(s: &str) -> Cow<'_, str> {
     if cfg!(windows) {
-        s.replace('/', "\\").to_lowercase()
+        Cow::Owned(s.replace('/', "\\").to_lowercase())
     } else {
-        s.to_owned()
+        Cow::Borrowed(s)
     }
 }
 
@@ -453,12 +454,21 @@ fn normalize_path(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use assert_fs::prelude::*;
 
     use uv_pypi_types::Scheme;
 
     use crate::Layout;
-    use crate::uninstall::{is_valid_top_level_entry, uninstall_egg, uninstall_wheel};
+    use crate::uninstall::{is_valid_top_level_entry, normcase, uninstall_egg, uninstall_wheel};
+
+    #[test]
+    fn normcase_borrows_on_non_windows() {
+        if !cfg!(windows) {
+            assert!(matches!(normcase("/Path/To/File"), Cow::Borrowed(_)));
+        }
+    }
 
     #[test]
     fn test_top_level_entry_safe_name() {
