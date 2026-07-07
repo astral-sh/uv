@@ -276,20 +276,20 @@ impl SsCredential {
     /// This emulates what keyring v1 did, and can be very handy when you need to
     /// access an old v1 credential that's in your secret service default collection.
     #[cfg(test)]
-    fn new_with_no_target(service: &str, user: &str) -> Result<Self> {
+    fn new_with_no_target(service: &str, user: &str) -> Self {
         let attributes = HashMap::from([
             ("service".to_string(), service.to_string()),
             ("username".to_string(), user.to_string()),
             ("application".to_string(), "uv".to_string()),
         ]);
-        Ok(Self {
+        Self {
             attributes,
             label: format!(
                 "uv v{} for no target, service '{service}', user '{user}'",
                 env!("CARGO_PKG_VERSION"),
             ),
             target: None,
-        })
+        }
     }
 
     /// Create a credential from an underlying item.
@@ -879,8 +879,7 @@ mod tests {
     async fn create_v1_entry(name: &str, password: &str) {
         use secret_service::{EncryptionType, SecretService};
 
-        let cred = SsCredential::new_with_no_target(name, name)
-            .expect("Can't create credential with no target");
+        let cred = SsCredential::new_with_no_target(name, name);
         let ss = SecretService::connect(EncryptionType::Dh)
             .await
             .expect("Can't connect to secret service");
