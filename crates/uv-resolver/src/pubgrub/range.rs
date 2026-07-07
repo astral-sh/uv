@@ -393,6 +393,15 @@ impl VersionSet for Range<Version> {
         self == other && self.selection_region() == other.selection_region()
     }
 
+    fn may_refine_selection(&self) -> bool {
+        self.prerelease_region.is_some()
+    }
+
+    fn selection_refinement(&self, requirement: &Self) -> Option<Self> {
+        let refined = self.intersection(requirement);
+        (self == &refined && !self.selection_eq(&refined)).then_some(refined)
+    }
+
     fn full() -> Self {
         Self::full()
     }
