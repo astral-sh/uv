@@ -109,7 +109,7 @@ async-compression = { version = "0.4.12", features = [
 ] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.11.0", package = "astral_async_http_range_reader" }
-async_zip = { version = "0.0.20", git = "https://github.com/zaniebot/rs-async-zip", rev = "68e5cf81b1d25936c01c9f9436ea9e2823a975a0", package = "astral_async_zip", features = [
+async_zip = { version = "0.0.20", git = "https://github.com/zaniebot/rs-async-zip", rev = "85e890df859a7c8903892e2bcb2d1dc8404d7d3b", package = "astral_async_zip", features = [
   "bzip2",
   "deflate",
   "lzma",
