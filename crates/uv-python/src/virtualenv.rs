@@ -8,7 +8,6 @@ use std::{
 use fs_err as fs;
 use thiserror::Error;
 
-use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -113,17 +112,7 @@ impl CondaEnvironmentKind {
             return Self::Child;
         }
 
-        // If the environment name is "base" or "root", treat it as a base environment
-        //
-        // These are the expected names for the base environment; and is retained for backwards
-        // compatibility, but can be removed with the `special-conda-env-names` preview feature.
-        if !uv_preview::is_enabled(PreviewFeature::SpecialCondaEnvNames)
-            && (current_env == "base" || current_env == "root")
-        {
-            return Self::Base;
-        }
-
-        // For other environment names, use the path-based logic
+        // Use path-based logic for environment names, including `base` and `root`.
         let Some(name) = path.file_name() else {
             return Self::Child;
         };
