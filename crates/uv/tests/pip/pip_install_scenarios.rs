@@ -3410,6 +3410,38 @@ fn single_package() {
     context.assert_installed("a", "2.0.0");
 }
 
+/// A requirement that canonicalizes to the empty PEP 440 set is reported as empty.
+///
+/// ```text
+/// canonical-empty-requirement
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a<0.dev0
+/// │       └── unsatisfied: no matching version
+/// └── a
+///     └── a-0.dev0
+/// ```
+#[test]
+fn canonical_empty_requirement() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("version_ranges/canonical-empty-requirement.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a<0.dev0")
+        , @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ you require a ∅
+    ");
+
+    context.assert_not_installed("a");
+}
+
 /// Two versions of a package use differently spelled but PEP 440-equivalent dependency ranges.
 ///
 /// ```text
