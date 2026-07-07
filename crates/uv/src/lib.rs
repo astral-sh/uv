@@ -192,11 +192,10 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             path
         }
     } else if let Some(run_command) = &parsed_run_command
-        && early_preview.is_enabled(PreviewFeature::TargetWorkspaceDiscovery)
         && let Some(dir) = run_command.script_dir()
     {
-        // When running a target with the preview flag enabled, discover the workspace starting
-        // from the target's directory rather than the current working directory.
+        // When running a target, discover the workspace starting from the target's directory
+        // rather than the current working directory.
         Cow::Owned(std::path::absolute(dir)?)
     } else {
         Cow::Borrowed(&*CWD)
