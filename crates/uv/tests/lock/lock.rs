@@ -10105,10 +10105,9 @@ fn lock_resolution_mode() -> Result<()> {
     Ok(())
 }
 
-/// Accept the removed `explicit` pre-release mode in existing lockfiles, configuration, and CLI
-/// arguments, while treating it as `if-necessary-or-explicit`.
+/// Accept the `explicit` pre-release mode in lockfiles, configuration, and CLI arguments.
 #[test]
-fn lock_legacy_explicit_prerelease_mode() -> Result<()> {
+fn lock_explicit_prerelease_mode() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -10147,6 +10146,7 @@ fn lock_legacy_explicit_prerelease_mode() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead.
     Resolved 1 package in [TIME]
     ");
 
