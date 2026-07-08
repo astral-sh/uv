@@ -348,7 +348,7 @@
       }
     },
     "no-build": {
-      "description": "Don't build source distributions.\n\nWhen enabled, resolving will not run arbitrary Python code. The cached wheels of\nalready-built source distributions will be reused, but operations that require building\ndistributions will exit with an error.",
+      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.",
       "type": ["boolean", "null"]
     },
     "no-build-isolation": {
@@ -1506,7 +1506,7 @@
           }
         },
         "no-build": {
-          "description": "Don't build source distributions.\n\nWhen enabled, resolving will not run arbitrary Python code. The cached wheels of\nalready-built source distributions will be reused, but operations that require building\ndistributions will exit with an error.\n\nAlias for `--only-binary :all:`.",
+          "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.\n\nAlias for `--only-binary :all:`.",
           "type": ["boolean", "null"]
         },
         "no-build-isolation": {
@@ -1566,7 +1566,7 @@
           "type": ["boolean", "null"]
         },
         "only-binary": {
-          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, resolving will not run code from the given packages. The cached wheels of already-built\nsource distributions will be reused, but operations that require building distributions will\nexit with an error.\n\nMultiple packages may be provided. Disable binaries for all packages with `:all:`.\nClear previously specified packages with `:none:`.",
+          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution for the given packages will exit\nwith an error. uv may still build editable requirements, and their build backends may run\narbitrary Python code.\n\nMultiple packages may be provided. Disable binaries for all packages with `:all:`.\nClear previously specified packages with `:none:`.",
           "type": ["array", "null"],
           "items": {
             "$ref": "#/definitions/PackageNameSpecifier"
