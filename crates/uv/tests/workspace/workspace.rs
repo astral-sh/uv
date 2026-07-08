@@ -2547,3 +2547,4 @@ fn workspace_discovery_with_symlinked_root() -> Result<()> {
     ");
 
     Ok(())
+}
