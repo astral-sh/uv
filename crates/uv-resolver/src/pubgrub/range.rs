@@ -107,6 +107,16 @@ impl Range<Version> {
         Self::from_versions(Ranges::strictly_higher_than(version))
     }
 
+    /// Widen this range across gaps in the known versions while preserving canonical identity.
+    pub(crate) fn widen_versions(&self, versions: &[Version]) -> Self {
+        Self::from_versions(self.encoded_versions.widen_versions(versions))
+    }
+
+    /// Narrow this range onto the known versions while preserving canonical identity.
+    pub(crate) fn narrow_versions(&self, versions: &[Version]) -> Self {
+        Self::from_versions(self.encoded_versions.narrow_versions(versions))
+    }
+
     /// Return the internal PEP 440 bounds used for candidate iteration.
     pub(crate) fn encoded_versions(&self) -> &Ranges<Version> {
         &self.encoded_versions
@@ -361,6 +371,26 @@ mod tests {
                 assert_matches_recanonicalized(&left.union(right));
             }
         }
+    }
+
+    #[test]
+    fn known_version_projection_preserves_canonical_identity() {
+        let versions = [version("0.dev0"), version("1.0"), version("2.0")];
+        let encoded = range("<=1.0");
+        let canonical = range("<1.0.post0.dev0");
+
+        assert_eq!(
+            encoded.widen_versions(&versions),
+            canonical.widen_versions(&versions)
+        );
+        assert_eq!(
+            encoded.narrow_versions(&versions),
+            canonical.narrow_versions(&versions)
+        );
+
+        let empty = range("<0.dev0");
+        assert_eq!(empty.widen_versions(&versions), Range::empty());
+        assert_eq!(empty.narrow_versions(&versions), Range::empty());
     }
 
     fn assert_matches_recanonicalized(range: &Range<Version>) {
