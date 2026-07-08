@@ -1666,6 +1666,7 @@ fn simplify_range(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uv_normalize::GroupName;
 
     fn deep_derivation_tree() -> ErrorTree {
         let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
@@ -1739,6 +1740,61 @@ mod tests {
 
         assert!(thread.join().is_ok());
         Ok(())
+    }
+
+    #[test]
+    fn collapse_proxies_preserves_extra_and_group() {
+        // Build a tree with Extra and Group proxies. They should survive
+        // `collapse_proxies` since they carry user-meaningful information.
+        let extra = PubGrubPackage::from(PubGrubPackageInner::Extra {
+            name: PackageName::from_owned("pkg".to_string()).unwrap(),
+            extra: ExtraName::from_owned("my-extra".to_string()).unwrap(),
+            marker: None,
+        });
+        let group = PubGrubPackage::from(PubGrubPackageInner::Group {
+            name: PackageName::from_owned("pkg".to_string()).unwrap(),
+            group: "my-group".parse::<GroupName>().unwrap(),
+            marker: None,
+        });
+        let dep = PubGrubPackage::from(PubGrubPackageInner::Package {
+            name: PackageName::from_owned("dep".to_string()).unwrap(),
+            extra: None,
+            marker: None,
+            group: None,
+        });
+
+        let extra_leaf = ErrorTree::External(External::FromDependencyOf(
+            extra,
+            pubgrub::Range::any(),
+            dep.clone(),
+            pubgrub::Range::any(),
+        ));
+        let group_leaf = ErrorTree::External(External::FromDependencyOf(
+            group,
+            pubgrub::Range::any(),
+            dep,
+            pubgrub::Range::any(),
+        ));
+        // Combine them into a small tree so both survive the transformation.
+        let tree = ErrorTree::Derived(Derived {
+            terms: pubgrub::Map::default(),
+            shared_id: None,
+            cause1: Arc::new(extra_leaf),
+            cause2: Arc::new(group_leaf),
+        });
+
+        let collapsed = NoSolutionError::collapse_proxies(tree);
+
+        // Both the Extra and Group proxies should still be present.
+        let packages: Vec<_> = derivation_tree_packages(&collapsed).collect();
+        assert!(
+            packages.iter().any(|p| matches!(&**p, PubGrubPackageInner::Extra { .. })),
+            "Extra proxy should be preserved after collapse_proxies"
+        );
+        assert!(
+            packages.iter().any(|p| matches!(&**p, PubGrubPackageInner::Group { .. })),
+            "Group proxy should be preserved after collapse_proxies"
+        );
     }
 
     #[test]
