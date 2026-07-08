@@ -13,6 +13,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 use uv_test::{download_to_disk, site_packages_path, uv_snapshot};
 
 #[test]
@@ -3796,16 +3797,19 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
-    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+    let server = PackseServer::new("simple/single-package.toml");
+    let context = uv_test::test_context!("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
+    requirements_txt.write_str(
+        "a==1.0.0 --hash=sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097",
+    )?;
 
     uv_snapshot!(context.pip_sync()
+        .arg("--index-url").arg(server.index_url())
         .arg("requirements.txt")
         .arg("--no-binary")
-        .arg(":all:")
+        .arg("a")
         .arg("--require-hashes"), @"
     success: true
     exit_code: 0
@@ -3815,7 +3819,7 @@ fn require_hashes_source_no_binary() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + source-distribution==0.0.1
+     + a==1.0.0
     "
     );
 
