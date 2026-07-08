@@ -14,6 +14,7 @@ use uv_pypi_types::{
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
+use crate::resolver::UnsatisfiableRequirement;
 
 /// The source constraint carried by a single dependency edge.
 ///
@@ -109,12 +110,39 @@ pub(crate) struct PubGrubDependency {
 }
 
 impl PubGrubDependency {
-    pub(crate) fn from_requirement<'a>(
+    /// Convert flattened requirements into PubGrub dependency edges.
+    ///
+    /// An empty range cannot retain the specifiers that produced it, so return the source
+    /// requirement details instead. The resolver attaches them to the parent package as the
+    /// reason that package cannot be selected.
+    pub(crate) fn from_requirements<'a>(
+        conflicts: &Conflicts,
+        requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
+        group_name: Option<&'a GroupName>,
+        parent_package: Option<&'a PubGrubPackage>,
+    ) -> Result<Vec<Self>, UnsatisfiableRequirement> {
+        let mut dependencies = Vec::new();
+        for requirement in requirements {
+            dependencies.extend(Self::from_requirement(
+                conflicts,
+                requirement,
+                group_name,
+                parent_package,
+            )?);
+        }
+        Ok(dependencies)
+    }
+
+    fn from_requirement<'a>(
         conflicts: &Conflicts,
         requirement: Cow<'a, Requirement>,
         group_name: Option<&'a GroupName>,
         parent_package: Option<&'a PubGrubPackage>,
-    ) -> impl Iterator<Item = Self> + 'a {
+    ) -> Result<impl Iterator<Item = Self> + 'a, UnsatisfiableRequirement> {
+        if let Some(requirement) = UnsatisfiableRequirement::from_requirement(&requirement) {
+            return Err(requirement);
+        }
+
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
             .is_some_and(|parent| parent.extra().is_none() && parent.group().is_none());
@@ -165,7 +193,7 @@ impl PubGrubDependency {
         };
 
         // Add the package, plus any extra variants.
-        iter.map(move |(extra, group)| {
+        Ok(iter.map(move |(extra, group)| {
             let pubgrub_requirement =
                 PubGrubRequirement::from_requirement(&requirement, extra, group);
             let PubGrubRequirement {
@@ -228,7 +256,7 @@ impl PubGrubDependency {
                 }
                 PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
-        })
+        }))
     }
 
     /// Extracts a possible conflicting item from this dependency.

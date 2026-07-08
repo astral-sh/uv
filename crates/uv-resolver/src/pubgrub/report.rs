@@ -304,6 +304,14 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::Custom(package, set, reason) => {
+                if let UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(
+                    requirement,
+                )) = reason
+                    && let Some(root) = self.format_root_requires(package)
+                {
+                    return format!("{root} {requirement}");
+                }
+
                 if let Some(root) = self.format_root(package) {
                     format!("{root} cannot be used because {reason}")
                 } else {
@@ -756,6 +764,13 @@ impl PubGrubReportFormatter<'_> {
         while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
             match derivation_tree {
                 DerivationTree::External(External::Custom(package, set, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(_))
+                    ) {
+                        continue;
+                    }
+
                     if let Some(name) = package.name_no_root() {
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
