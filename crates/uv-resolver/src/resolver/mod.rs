@@ -78,6 +78,7 @@ pub use crate::resolver::reporter::Reporter;
 use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::version_map::PrereleaseCandidates;
 use crate::yanks::AllowedYanks;
 use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
 pub(crate) use provider::MetadataUnavailable;
@@ -2905,7 +2906,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .entry(name.clone())
                             .or_insert_with(BTreeSet::new);
 
-                        for (version, dists) in version_map.iter(&Ranges::full()) {
+                        for (version, dists) in
+                            version_map.iter(&Ranges::full(), PrereleaseCandidates::All)
+                        {
                             // Included versions are those that survive the effective
                             // `exclude-newer` filter used during resolution. Files with
                             // missing upload times are treated as excluded (matching

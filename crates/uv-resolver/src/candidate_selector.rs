@@ -18,7 +18,7 @@ use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{PrereleaseSelection, PrereleaseStrategy};
 use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
-use crate::version_map::{VersionMap, VersionMapDistHandle};
+use crate::version_map::{PrereleaseCandidates, VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
 
 #[derive(Debug, Clone)]
@@ -503,7 +503,7 @@ impl CandidateSelector {
                         .enumerate()
                         .map(|(map_index, version_map)| {
                             version_map
-                                .iter(range)
+                                .iter(range, prerelease_candidates)
                                 .rev()
                                 .map(move |item| (map_index, item))
                         })
@@ -519,7 +519,6 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    prerelease_candidates,
                     highest,
                 )
             } else {
@@ -528,7 +527,9 @@ impl CandidateSelector {
                         .iter()
                         .enumerate()
                         .map(|(map_index, version_map)| {
-                            version_map.iter(range).map(move |item| (map_index, item))
+                            version_map
+                                .iter(range, prerelease_candidates)
+                                .map(move |item| (map_index, item))
                         })
                         .kmerge_by(
                             |(index1, (version1, _)), (index2, (version2, _))| match version1
@@ -542,7 +543,6 @@ impl CandidateSelector {
                         .map(|(_, item)| item),
                     package_name,
                     range,
-                    prerelease_candidates,
                     highest,
                 )
             }
@@ -550,20 +550,18 @@ impl CandidateSelector {
             if highest {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range).rev(),
+                        version_map.iter(range, prerelease_candidates).rev(),
                         package_name,
                         range,
-                        prerelease_candidates,
                         highest,
                     )
                 })
             } else {
                 version_maps.iter().find_map(|version_map| {
                     Self::select_candidate(
-                        version_map.iter(range),
+                        version_map.iter(range, prerelease_candidates),
                         package_name,
                         range,
-                        prerelease_candidates,
                         highest,
                     )
                 })
@@ -600,7 +598,6 @@ impl CandidateSelector {
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
-        prerelease_candidates: PrereleaseCandidates,
         highest: bool,
     ) -> Option<Candidate<'a>> {
         let segments = range.iter();
@@ -630,13 +627,6 @@ impl CandidateSelector {
             }
 
             let candidate = {
-                if match prerelease_candidates {
-                    PrereleaseCandidates::All => false,
-                    PrereleaseCandidates::Stable => version.any_prerelease(),
-                    PrereleaseCandidates::Prerelease => !version.any_prerelease(),
-                } {
-                    continue;
-                }
                 if !cursor.contains(version) {
                     continue;
                 }
@@ -826,20 +816,6 @@ mod tests {
     fn range_cursor_descending() {
         assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
-}
-
-/// Controls which release classes are visible during one candidate-selection pass.
-///
-/// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
-/// an incompatible stable candidate does not prevent falling back to a pre-release.
-#[derive(Debug, Clone, Copy)]
-enum PrereleaseCandidates {
-    /// Consider versions with or without a pre-release component.
-    All,
-    /// Consider only versions without a pre-release component.
-    Stable,
-    /// Consider only versions with a pre-release component.
-    Prerelease,
 }
 
 #[derive(Debug, Clone)]

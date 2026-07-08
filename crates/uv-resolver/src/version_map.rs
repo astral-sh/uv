@@ -83,7 +83,7 @@ impl VersionMap {
                 },
             });
         }
-        let mut map = VersionMapLazyIndex { entries };
+        let mut map = VersionMapLazyIndex::new(entries);
         // If a set of flat distributions have been given, linearly merge the
         // already sorted flat entries with the archive-ordered simple vector.
         if let Some(flat_index) = flat_index {
@@ -192,47 +192,30 @@ impl VersionMap {
     pub(crate) fn iter(
         &self,
         range: &Ranges<Version>,
+        prerelease_candidates: PrereleaseCandidates,
     ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle<'_>)> {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
-                VersionMapInner::Eager(ref eager) => {
-                    either::Either::Left(eager.map.get_key_value(version).into_iter().map(
-                        move |(version, dist)| {
+                VersionMapInner::Eager(ref eager) => either::Either::Left(
+                    eager
+                        .map
+                        .get_key_value(version)
+                        .filter(|(version, _)| prerelease_candidates.contains(version))
+                        .into_iter()
+                        .map(move |(version, dist)| {
                             let version_map_dist = VersionMapDistHandle {
                                 inner: VersionMapDistHandleInner::Eager(dist),
                             };
                             (version, version_map_dist)
-                        },
-                    ))
-                }
-                VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.get(version).into_iter().map(move |entry| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Lazy {
-                                lazy,
-                                dist: &entry.dist,
-                            },
-                        };
-                        (&entry.version, version_map_dist)
-                    }))
-                }
-            })
-        } else {
-            either::Either::Right(match self.inner {
-                VersionMapInner::Eager(ref eager) => {
-                    either::Either::Left(eager.map.range(BoundingRange::from(range)).map(
-                        |(version, dist)| {
-                            let version_map_dist = VersionMapDistHandle {
-                                inner: VersionMapDistHandleInner::Eager(dist),
-                            };
-                            (version, version_map_dist)
-                        },
-                    ))
-                }
-                VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).iter().map(
-                        |entry| {
+                        }),
+                ),
+                VersionMapInner::Lazy(ref lazy) => either::Either::Right(
+                    lazy.map
+                        .get(version)
+                        .filter(|entry| prerelease_candidates.contains(&entry.version))
+                        .into_iter()
+                        .map(move |entry| {
                             let version_map_dist = VersionMapDistHandle {
                                 inner: VersionMapDistHandleInner::Lazy {
                                     lazy,
@@ -240,9 +223,34 @@ impl VersionMap {
                                 },
                             };
                             (&entry.version, version_map_dist)
-                        },
-                    ))
-                }
+                        }),
+                ),
+            })
+        } else {
+            either::Either::Right(match self.inner {
+                VersionMapInner::Eager(ref eager) => either::Either::Left(
+                    eager
+                        .range(BoundingRange::from(range), prerelease_candidates)
+                        .map(|(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Eager(dist),
+                            };
+                            (version, version_map_dist)
+                        }),
+                ),
+                VersionMapInner::Lazy(ref lazy) => either::Either::Right(
+                    lazy.map
+                        .range(BoundingRange::from(range), prerelease_candidates)
+                        .map(|entry| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Lazy {
+                                    lazy,
+                                    dist: &entry.dist,
+                                },
+                            };
+                            (&entry.version, version_map_dist)
+                        }),
+                ),
             })
         }
     }
@@ -347,6 +355,25 @@ struct VersionMapEager {
     local: bool,
 }
 
+impl VersionMapEager {
+    fn range(
+        &self,
+        range: BoundingRange<'_>,
+        prerelease_candidates: PrereleaseCandidates,
+    ) -> impl DoubleEndedIterator<Item = (&Version, &PrioritizedDist)> {
+        match prerelease_candidates {
+            PrereleaseCandidates::All => either::Either::Left(self.map.range(range)),
+            PrereleaseCandidates::Stable | PrereleaseCandidates::Prerelease => {
+                either::Either::Right(
+                    self.map
+                        .range(range)
+                        .filter(move |(version, _)| prerelease_candidates.contains(version)),
+                )
+            }
+        }
+    }
+}
+
 /// An entry in the immutable lazy version index.
 #[derive(Debug)]
 struct VersionMapLazyEntry {
@@ -358,9 +385,32 @@ struct VersionMapLazyEntry {
 #[derive(Debug)]
 struct VersionMapLazyIndex {
     entries: Vec<VersionMapLazyEntry>,
+    /// Ordinals partitioned into stable versions followed by pre-release versions.
+    release_indices: Box<[usize]>,
+    /// The end of the stable partition in `release_indices`.
+    stable_index_count: usize,
 }
 
 impl VersionMapLazyIndex {
+    fn new(entries: Vec<VersionMapLazyEntry>) -> Self {
+        let mut release_indices = Vec::with_capacity(entries.len());
+        let mut prerelease_indices = Vec::new();
+        for (entry_index, entry) in entries.iter().enumerate() {
+            if entry.version.any_prerelease() {
+                prerelease_indices.push(entry_index);
+            } else {
+                release_indices.push(entry_index);
+            }
+        }
+        let stable_index_count = release_indices.len();
+        release_indices.extend(prerelease_indices);
+        Self {
+            entries,
+            release_indices: release_indices.into_boxed_slice(),
+            stable_index_count,
+        }
+    }
+
     /// Merge the sorted flat index into the sorted simple entries in one pass.
     fn merge_flat(self, flat_index: FlatDistributions) -> Self {
         let flat_count = flat_index.iter().size_hint().0;
@@ -397,7 +447,7 @@ impl VersionMapLazyIndex {
         merged.extend(simple);
         merged.extend(flat.map(flat_entry));
 
-        Self { entries: merged }
+        Self::new(merged)
     }
 
     fn get(&self, version: &Version) -> Option<&VersionMapLazyEntry> {
@@ -412,7 +462,30 @@ impl VersionMapLazyIndex {
         self.entries.iter().map(|entry| &entry.version)
     }
 
-    fn range(&self, range: BoundingRange<'_>) -> &[VersionMapLazyEntry] {
+    fn range(
+        &self,
+        range: BoundingRange<'_>,
+        prerelease_candidates: PrereleaseCandidates,
+    ) -> impl DoubleEndedIterator<Item = &VersionMapLazyEntry> {
+        let (stable_indices, prerelease_indices) =
+            self.release_indices.split_at(self.stable_index_count);
+        let indices = match prerelease_candidates {
+            PrereleaseCandidates::All => None,
+            PrereleaseCandidates::Stable => Some(stable_indices),
+            PrereleaseCandidates::Prerelease => Some(prerelease_indices),
+        };
+        if let Some(indices) = indices {
+            either::Either::Left(
+                self.index_range(indices, &range)
+                    .iter()
+                    .map(|&entry_index| &self.entries[entry_index]),
+            )
+        } else {
+            either::Either::Right(self.entry_range(&range).iter())
+        }
+    }
+
+    fn entry_range(&self, range: &BoundingRange<'_>) -> &[VersionMapLazyEntry] {
         let start = match range.min {
             Bound::Included(version) => self
                 .entries
@@ -434,8 +507,52 @@ impl VersionMapLazyIndex {
         self.entries.get(start..end).unwrap_or_default()
     }
 
+    fn index_range<'a>(&self, indices: &'a [usize], range: &BoundingRange<'_>) -> &'a [usize] {
+        let start = match range.min {
+            Bound::Included(version) => {
+                indices.partition_point(|&entry_index| self.entries[entry_index].version < *version)
+            }
+            Bound::Excluded(version) => indices
+                .partition_point(|&entry_index| self.entries[entry_index].version <= *version),
+            Bound::Unbounded => 0,
+        };
+        let end = match range.max {
+            Bound::Included(version) => indices
+                .partition_point(|&entry_index| self.entries[entry_index].version <= *version),
+            Bound::Excluded(version) => {
+                indices.partition_point(|&entry_index| self.entries[entry_index].version < *version)
+            }
+            Bound::Unbounded => indices.len(),
+        };
+        indices.get(start..end).unwrap_or_default()
+    }
+
     fn len(&self) -> usize {
         self.entries.len()
+    }
+}
+
+/// Controls which release classes are visible while iterating a [`VersionMap`].
+///
+/// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
+/// an incompatible stable candidate does not prevent falling back to a pre-release.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum PrereleaseCandidates {
+    /// Consider versions with or without a pre-release component.
+    All,
+    /// Consider only versions without a pre-release component.
+    Stable,
+    /// Consider only versions with a pre-release component.
+    Prerelease,
+}
+
+impl PrereleaseCandidates {
+    fn contains(self, version: &Version) -> bool {
+        match self {
+            Self::All => true,
+            Self::Stable => !version.any_prerelease(),
+            Self::Prerelease => version.any_prerelease(),
+        }
     }
 }
 
@@ -833,5 +950,144 @@ impl<'a> RangeBounds<Version> for BoundingRange<'a> {
 
     fn end_bound(&self) -> Bound<&'a Version> {
         self.max
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version(value: &str) -> Version {
+        value.parse().expect("valid test version")
+    }
+
+    fn lazy_index(values: &[&str]) -> VersionMapLazyIndex {
+        VersionMapLazyIndex::new(
+            values
+                .iter()
+                .map(|value| VersionMapLazyEntry {
+                    version: version(value),
+                    dist: LazyPrioritizedDist {
+                        flat: None,
+                        simple: None,
+                    },
+                })
+                .collect(),
+        )
+    }
+
+    fn range_versions(
+        index: &VersionMapLazyIndex,
+        range: &Ranges<Version>,
+        prerelease_candidates: PrereleaseCandidates,
+    ) -> Vec<String> {
+        index
+            .range(BoundingRange::from(range), prerelease_candidates)
+            .map(|entry| entry.version.to_string())
+            .collect()
+    }
+
+    fn reverse_range_versions(
+        index: &VersionMapLazyIndex,
+        range: &Ranges<Version>,
+        prerelease_candidates: PrereleaseCandidates,
+    ) -> Vec<String> {
+        index
+            .range(BoundingRange::from(range), prerelease_candidates)
+            .rev()
+            .map(|entry| entry.version.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn lazy_index_release_class_indices() {
+        let index = lazy_index(&[
+            "0.9",
+            "1.0.dev1",
+            "1.0a1",
+            "1.0",
+            "1.0.post1",
+            "2.0rc1",
+            "2.0",
+            "2.0+local",
+        ]);
+
+        assert_eq!(index.stable_index_count, 5);
+        assert_eq!(*index.release_indices, [0, 3, 4, 6, 7, 1, 2, 5]);
+    }
+
+    #[test]
+    fn lazy_index_release_class_ranges_are_double_ended() {
+        let index = lazy_index(&[
+            "0.9",
+            "1.0.dev1",
+            "1.0a1",
+            "1.0",
+            "1.0.post1",
+            "2.0rc1",
+            "2.0",
+            "2.0+local",
+        ]);
+        let range = Ranges::from_range_bounds(version("1.0a1")..=version("2.0rc1"));
+
+        assert_eq!(
+            range_versions(&index, &range, PrereleaseCandidates::All),
+            ["1.0a1", "1.0", "1.0.post1", "2.0rc1"]
+        );
+        assert_eq!(
+            range_versions(&index, &range, PrereleaseCandidates::Stable),
+            ["1.0", "1.0.post1"]
+        );
+        assert_eq!(
+            range_versions(&index, &range, PrereleaseCandidates::Prerelease),
+            ["1.0a1", "2.0rc1"]
+        );
+        assert_eq!(
+            reverse_range_versions(&index, &range, PrereleaseCandidates::Stable),
+            ["1.0.post1", "1.0"]
+        );
+        assert_eq!(
+            reverse_range_versions(&index, &range, PrereleaseCandidates::Prerelease),
+            ["2.0rc1", "1.0a1"]
+        );
+
+        let range = Ranges::from_range_bounds((
+            Bound::Excluded(version("1.0a1")),
+            Bound::Excluded(version("2.0")),
+        ));
+        assert_eq!(
+            range_versions(&index, &range, PrereleaseCandidates::All),
+            ["1.0", "1.0.post1", "2.0rc1"]
+        );
+        assert_eq!(
+            range_versions(&index, &range, PrereleaseCandidates::Prerelease),
+            ["2.0rc1"]
+        );
+    }
+
+    #[test]
+    fn singleton_iterator_filters_release_class() {
+        let map = ["1.0a1", "1.0"]
+            .into_iter()
+            .map(|value| (version(value), PrioritizedDist::default()))
+            .collect();
+        let version_map = VersionMap {
+            inner: VersionMapInner::Eager(VersionMapEager { map, local: false }),
+        };
+        let range = Ranges::singleton(version("1.0a1"));
+
+        assert_eq!(
+            version_map
+                .iter(&range, PrereleaseCandidates::Prerelease)
+                .map(|(version, _)| version.to_string())
+                .collect::<Vec<_>>(),
+            ["1.0a1"]
+        );
+        assert_eq!(
+            version_map
+                .iter(&range, PrereleaseCandidates::Stable)
+                .count(),
+            0
+        );
     }
 }
