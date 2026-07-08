@@ -75,6 +75,13 @@ jobs:
       tag: ${{ (inputs.tag != 'dry-run' && inputs.tag) || '' }}
       tag-flag: ${{ inputs.tag && inputs.tag != 'dry-run' && format('--tag={0}', inputs.tag) || '' }}
       publishing: ${{ inputs.tag && inputs.tag != 'dry-run' }}
+      runner-ubuntu-x86_64-1: ${{ steps.runners.outputs.runner_ubuntu_x86_64_1 }}
+      runner-ubuntu-x86_64-4: ${{ steps.runners.outputs.runner_ubuntu_x86_64_4 }}
+      runner-ubuntu-x86_64-8: ${{ steps.runners.outputs.runner_ubuntu_x86_64_8 }}
+      runner-macos-aarch64-8: ${{ steps.runners.outputs.runner_macos_aarch64_8 }}
+      runner-windows-x86_64-8: ${{ steps.runners.outputs.runner_windows_x86_64_8 }}
+      runner-windows-aarch64-8: ${{ steps.runners.outputs.runner_windows_aarch64_8 }}
+      is-fork: ${{ steps.fork-detect.outputs.is_fork }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -82,6 +89,19 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      - name: "Determine runners"
+        id: runners
+        run: |
+          python3 scripts/ci/resolve-ci-runners.py .github/runners.json >> "$GITHUB_OUTPUT"
+      - name: "Detect fork"
+        id: fork-detect
+        shell: bash
+        run: |
+          if [[ "${{ github.repository }}" == "astral-sh/uv" ]]; then
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Install dist
         shell: bash
         run: |
@@ -120,6 +140,13 @@ jobs:
     uses: ./.github/workflows/build-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
+      runner-ubuntu-x86_64-1: ${{ needs.plan.outputs.runner-ubuntu-x86_64-1 }}
+      runner-ubuntu-x86_64-4: ${{ needs.plan.outputs.runner-ubuntu-x86_64-4 }}
+      runner-ubuntu-x86_64-8: ${{ needs.plan.outputs.runner-ubuntu-x86_64-8 }}
+      runner-macos-aarch64-8: ${{ needs.plan.outputs.runner-macos-aarch64-8 }}
+      runner-windows-x86_64-8: ${{ needs.plan.outputs.runner-windows-x86_64-8 }}
+      runner-windows-aarch64-8: ${{ needs.plan.outputs.runner-windows-aarch64-8 }}
+      is-fork: ${{ needs.plan.outputs.is-fork == 'true' }}
     secrets: inherit
 
   custom-build-docker:

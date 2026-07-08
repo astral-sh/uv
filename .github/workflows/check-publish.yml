@@ -1,5 +1,12 @@
 on:
   workflow_call:
+    inputs:
+      runner-ubuntu-x86_64-8:
+        required: true
+        type: string
+      is-fork:
+        required: true
+        type: boolean
 
 permissions: {}
 
@@ -11,8 +18,8 @@ env:
 
 jobs:
   cargo-publish-dry-run:
-    timeout-minutes: 20
-    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: ${{ inputs.is-fork && 40 || 20 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-8 }}
     name: "cargo publish dry-run"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

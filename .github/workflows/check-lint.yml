@@ -8,6 +8,15 @@ on:
         required: false
         type: string
         default: "true"
+      runner-ubuntu-x86_64-1:
+        required: true
+        type: string
+      runner-windows-x86_64-4:
+        required: true
+        type: string
+      is-fork:
+        required: true
+        type: boolean
 
 permissions: {}
 
@@ -21,8 +30,8 @@ env:
 
 jobs:
   ruff:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -32,10 +41,12 @@ jobs:
         with:
           version: "0.11.26"
       - run: uvx ruff check .
+      - name: "Validate runner configuration"
+        run: python3 -m unittest scripts.ci.test_resolve_runners
 
   ty:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -60,8 +71,8 @@ jobs:
           done
 
   shellcheck:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -76,8 +87,8 @@ jobs:
         run: find . -name '*.sh' -type f | xargs shellcheck --shell bash --severity style
 
   validate-pyproject:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -89,8 +100,8 @@ jobs:
       - run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
   readme:
-    timeout-minutes: 10
-    runs-on: ubuntu-slim
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -102,7 +113,7 @@ jobs:
 
   clippy-ubuntu:
     name: "clippy on linux"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
@@ -124,9 +135,9 @@ jobs:
 
   clippy-windows:
     name: "clippy on windows"
-    timeout-minutes: 15
+    timeout-minutes: ${{ inputs.is-fork && 30 || 15 }}
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
-    runs-on: namespace-profile-windows-2022-x86-64-4
+    runs-on: ${{ inputs.runner-windows-x86_64-4 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -171,7 +182,7 @@ jobs:
 
   shear:
     name: "cargo shear"
-    timeout-minutes: 10
+    timeout-minutes: ${{ inputs.is-fork && 20 || 10 }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -184,7 +195,7 @@ jobs:
       - run: cargo shear --deny-warnings
 
   typos:
-    runs-on: ubuntu-slim
+    runs-on: ${{ inputs.runner-ubuntu-x86_64-1 }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
