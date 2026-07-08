@@ -461,23 +461,13 @@ impl CandidateSelector {
                 PrereleaseCandidates::Stable,
                 env,
             ),
-            PrereleaseSelection::PreferStable => self
-                .select_no_preference_from(
-                    package_name,
-                    range,
-                    version_maps,
-                    PrereleaseCandidates::Stable,
-                    env,
-                )
-                .or_else(|| {
-                    self.select_no_preference_from(
-                        package_name,
-                        range,
-                        version_maps,
-                        PrereleaseCandidates::Prerelease,
-                        env,
-                    )
-                }),
+            PrereleaseSelection::PreferStable => self.select_no_preference_from(
+                package_name,
+                range,
+                version_maps,
+                PrereleaseCandidates::PreferStable,
+                env,
+            ),
         }
     }
 
@@ -547,27 +537,39 @@ impl CandidateSelector {
                 )
             }
         } else {
-            if highest {
-                version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
-                        version_map.iter(range).rev(),
-                        package_name,
-                        range,
-                        prerelease_candidates,
-                        highest,
-                    )
-                })
-            } else {
-                version_maps.iter().find_map(|version_map| {
-                    Self::select_candidate(
-                        version_map.iter(range),
-                        package_name,
-                        range,
-                        prerelease_candidates,
-                        highest,
-                    )
-                })
-            }
+            let mut prerelease_fallback = None;
+            let stable = version_maps.iter().find_map(|version_map| {
+                let versions = if highest {
+                    Either::Left(version_map.iter(range).rev())
+                } else {
+                    Either::Right(version_map.iter(range))
+                };
+                let index_prerelease_candidates = if prerelease_fallback.is_some()
+                    && matches!(prerelease_candidates, PrereleaseCandidates::PreferStable)
+                {
+                    PrereleaseCandidates::Stable
+                } else {
+                    prerelease_candidates
+                };
+                let candidate = Self::select_candidate(
+                    versions,
+                    package_name,
+                    range,
+                    index_prerelease_candidates,
+                    highest,
+                )?;
+                if matches!(prerelease_candidates, PrereleaseCandidates::PreferStable)
+                    && candidate.version().any_prerelease()
+                {
+                    if prerelease_fallback.is_none() {
+                        prerelease_fallback = Some(candidate);
+                    }
+                    None
+                } else {
+                    Some(candidate)
+                }
+            });
+            stable.or(prerelease_fallback)
         }
     }
 
@@ -615,8 +617,12 @@ impl CandidateSelector {
         };
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
+        let mut prerelease_fallback: Option<Candidate> = None;
         for (version, maybe_dist) in versions {
             steps += 1;
+            let is_prerelease_fallback =
+                matches!(prerelease_candidates, PrereleaseCandidates::PreferStable)
+                    && version.any_prerelease();
 
             // If we have an incompatible candidate, and we've progressed past it, return it.
             if incompatible
@@ -633,7 +639,13 @@ impl CandidateSelector {
                 if match prerelease_candidates {
                     PrereleaseCandidates::All => false,
                     PrereleaseCandidates::Stable => version.any_prerelease(),
-                    PrereleaseCandidates::Prerelease => !version.any_prerelease(),
+                    PrereleaseCandidates::PreferStable => {
+                        is_prerelease_fallback
+                            && prerelease_fallback.as_ref().is_some_and(|candidate| {
+                                candidate.version() != version
+                                    || matches!(candidate.dist(), CandidateDist::Compatible(_))
+                            })
+                    }
                 } {
                     continue;
                 }
@@ -688,9 +700,21 @@ impl CandidateSelector {
             // return the first _compatible_ candidate across all indexes, if such a candidate
             // exists.
             if matches!(candidate.dist(), CandidateDist::Incompatible { .. }) {
-                if incompatible.is_none() {
+                if is_prerelease_fallback {
+                    if prerelease_fallback.is_none() {
+                        prerelease_fallback = Some(candidate);
+                    }
+                } else if incompatible.is_none() {
                     incompatible = Some(candidate);
                 }
+                continue;
+            }
+
+            // A compatible pre-release is the best pre-release fallback because versions are
+            // ordered by preference. Continue looking for a stable candidate, which takes
+            // precedence even when it appears later in the iterator.
+            if is_prerelease_fallback {
+                prerelease_fallback = Some(candidate);
                 continue;
             }
 
@@ -705,6 +729,13 @@ impl CandidateSelector {
                 "Returning incompatible candidate for package {package_name} with range {range} after {steps} steps",
             );
             return incompatible;
+        }
+
+        if prerelease_fallback.is_some() {
+            trace!(
+                "Returning pre-release candidate for package {package_name} with range {range} after {steps} steps",
+            );
+            return prerelease_fallback;
         }
 
         trace!(
@@ -786,7 +817,10 @@ fn is_after(version: &Version, bound: Bound<&Version>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
+    use crate::flat_index::FlatDistributions;
 
     fn version(value: &str) -> Version {
         value.parse().expect("valid test version")
@@ -817,6 +851,32 @@ mod tests {
         }
     }
 
+    fn assert_prefer_stable(highest: bool, values: &[&str], expected: &str) {
+        let package_name = "package".parse().expect("valid package name");
+        let range = Range::full();
+        let version_map = VersionMap::from(FlatDistributions::from(
+            values
+                .iter()
+                .map(|value| (version(value), PrioritizedDist::default()))
+                .collect::<BTreeMap<_, _>>(),
+        ));
+        let versions = if highest {
+            Either::Left(version_map.iter(&range).rev())
+        } else {
+            Either::Right(version_map.iter(&range))
+        };
+
+        let candidate = CandidateSelector::select_candidate(
+            versions,
+            &package_name,
+            &range,
+            PrereleaseCandidates::PreferStable,
+            highest,
+        )
+        .expect("candidate");
+        assert_eq!(candidate.version(), &version(expected));
+    }
+
     #[test]
     fn range_cursor_ascending() {
         assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
@@ -826,20 +886,28 @@ mod tests {
     fn range_cursor_descending() {
         assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
+
+    #[test]
+    fn prefer_stable_single_pass() {
+        // The stable candidate occurs after the pre-releases in each traversal direction.
+        assert_prefer_stable(true, &["1", "2rc1", "3rc1"], "1");
+        assert_prefer_stable(false, &["1rc1", "2rc1", "3"], "3");
+
+        // Without a stable candidate, retain the best pre-release in traversal order.
+        assert_prefer_stable(true, &["1rc1", "2rc1", "3rc1"], "3rc1");
+        assert_prefer_stable(false, &["1rc1", "2rc1", "3rc1"], "1rc1");
+    }
 }
 
-/// Controls which release classes are visible during one candidate-selection pass.
-///
-/// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
-/// an incompatible stable candidate does not prevent falling back to a pre-release.
+/// Controls which release classes are visible during candidate selection.
 #[derive(Debug, Clone, Copy)]
 enum PrereleaseCandidates {
     /// Consider versions with or without a pre-release component.
     All,
     /// Consider only versions without a pre-release component.
     Stable,
-    /// Consider only versions with a pre-release component.
-    Prerelease,
+    /// Prefer a stable version while remembering the best pre-release fallback.
+    PreferStable,
 }
 
 #[derive(Debug, Clone)]
