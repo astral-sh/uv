@@ -15,6 +15,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+use uv_test::packse::PackseServer;
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
 #[test]
@@ -16917,6 +16918,7 @@ fn only_group_and_extra_conflict() -> Result<()> {
 #[test]
 fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
 
     // Create a local package that will be used as editable dependency.
     let local_dep = context.temp_dir.child("local_dep");
@@ -16926,9 +16928,8 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     local_dep_pyproject.write_str(
         r#"
         [project]
-        name = "anyio"
-        version = "4.3.0"
-        description = "Local test package mimicking anyio"
+        name = "a"
+        version = "2.0.0"
         requires-python = ">=3.8"
 
         [build-system]
@@ -16945,10 +16946,10 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         name = "test_no_sources"
         version = "0.0.1"
         requires-python = ">=3.12"
-        dependencies = ["anyio"]
+        dependencies = ["a"]
 
         [tool.uv.sources]
-        anyio = { path = "./local_dep", editable = true }
+        a = { path = "./local_dep", editable = true }
 
         [build-system]
         requires = ["setuptools>=67"]
@@ -16959,24 +16960,27 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
         "#,
     )?;
 
-    // Step 1: `uv sync --no-sources` should install `anyio` from PyPI.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
+    // Step 1: `uv sync --no-sources` should install `a` from the registry.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-sources")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==2.0.0
      + test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
     // Step 2: `uv sync` should switch to an editable installation.
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16984,28 +16988,27 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
-    Uninstalled 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
-     - anyio==4.3.0
-     + anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
-     - idna==3.6
-     - sniffio==1.3.1
+     - a==2.0.0
+     + a==2.0.0 (from file://[TEMP_DIR]/local_dep)
     ");
 
-    // Step 3: `uv sync --no-sources` again should switch back to PyPI package.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-sources"), @"
+    // Step 3: `uv sync --no-sources` again should switch back to the registry package.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-sources")
+        .arg("--index-url")
+        .arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
-     - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Installed 1 package in [TIME]
+     - a==2.0.0 (from file://[TEMP_DIR]/local_dep)
+     + a==2.0.0
     ");
 
     Ok(())
