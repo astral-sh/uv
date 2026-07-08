@@ -2672,9 +2672,8 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
 /// when re-running `uv pip compile`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18224>
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn pep_751_compile_git_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -17571,9 +17570,8 @@ fn pep_751_compile_directory() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn pep_751_compile_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 

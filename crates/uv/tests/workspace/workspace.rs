@@ -586,9 +586,8 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 }
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -1588,9 +1587,8 @@ fn workspace_inherit_sources() -> Result<()> {
 }
 
 /// Tests error messages when a workspace member's dependencies cannot be resolved.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1645,9 +1643,8 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1714,9 +1711,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// two other member's.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1798,9 +1794,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's optional dependencies.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1869,9 +1864,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's development dependencies.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1941,9 +1935,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 
 /// Tests error messages when a workspace member's name shadows a dependency of
 /// another member.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_member_name_shadows_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2073,9 +2066,8 @@ fn test_path_hopping() -> Result<()> {
 /// `c` is a package in a git workspace, and it has a workspace dependency to `d`. Check that we
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2149,9 +2141,8 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 /// `workspace-member-in-subdir` is a package in a git workspace, and it has a workspace dependency
 /// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
 /// to a git dependency without a subdirectory and not relative to the checkout directory.
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2223,9 +2214,8 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
 /// checkout's root package.
 ///
 /// See: <https://github.com/astral-sh/uv/pull/18311#discussion_r3340828264>
-#[cfg(feature = "test-universal")]
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
