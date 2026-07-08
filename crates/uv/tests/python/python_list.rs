@@ -447,10 +447,6 @@ fn python_list_downloads() {
     cpython-3.10.3-[PLATFORM]     <download available>
     cpython-3.10.2-[PLATFORM]     <download available>
     cpython-3.10.0-[PLATFORM]     <download available>
-    pypy-3.10.16-[PLATFORM]       <download available>
-    pypy-3.10.14-[PLATFORM]       <download available>
-    pypy-3.10.13-[PLATFORM]       <download available>
-    pypy-3.10.12-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
@@ -515,7 +511,6 @@ fn python_list_downloads_installed() {
     exit_code: 0
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    <download available>
-    pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
@@ -536,7 +531,6 @@ fn python_list_downloads_installed() {
     exit_code: 0
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    managed/cpython-3.10-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
-    pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
