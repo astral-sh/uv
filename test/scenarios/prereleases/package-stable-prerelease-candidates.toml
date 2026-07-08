@@ -1,0 +1,23 @@
+name = "package-stable-prerelease-candidates"
+description = "A package graph with stable and pre-release candidates for `a`, and only pre-release candidates for `b`."
+
+[root]
+requires = ["a>=0", "b>=0"]
+
+[expected]
+satisfiable = true
+explanation = "The default resolution strategy selects the latest stable version of `a` and, because `b` has no stable releases, its latest pre-release."
+
+[expected.packages]
+a = "2.0.0"
+b = "1.0.0rc2"
+
+[packages.a.versions."1.0.0rc1"]
+
+[packages.a.versions."1.0.0"]
+
+[packages.a.versions."2.0.0"]
+
+[packages.b.versions."1.0.0rc1"]
+
+[packages.b.versions."1.0.0rc2"]

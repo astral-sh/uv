@@ -56,7 +56,6 @@ impl VersionMap {
         flat_index: Option<FlatDistributions>,
         build_options: &BuildOptions,
     ) -> Self {
-        let mut stable = false;
         let mut local = false;
         let mut entries = Vec::with_capacity(simple_metadata.iter().size_hint().0);
         // Create stubs for each entry in simple metadata. The full conversion
@@ -66,7 +65,6 @@ impl VersionMap {
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
 
-            stable |= version.is_stable();
             local |= version.is_local();
             debug_assert!(
                 entries
@@ -89,13 +87,11 @@ impl VersionMap {
         // If a set of flat distributions have been given, linearly merge the
         // already sorted flat entries with the archive-ordered simple vector.
         if let Some(flat_index) = flat_index {
-            stable |= flat_index.iter().any(|(version, _)| version.is_stable());
             map = map.merge_flat(flat_index);
         }
         Self {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
-                stable,
                 local,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
@@ -118,20 +114,18 @@ impl VersionMap {
         hasher: &HashStrategy,
         build_options: &BuildOptions,
     ) -> Self {
-        let mut stable = false;
         let mut local = false;
         let mut map = BTreeMap::new();
 
         for (version, prioritized_dist) in
             FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
         {
-            stable |= version.is_stable();
             local |= version.is_local();
             map.insert(version, prioritized_dist);
         }
 
         Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
         }
     }
 
@@ -274,14 +268,6 @@ impl VersionMap {
         }
     }
 
-    /// Returns `true` if the map contains at least one stable (non-pre-release) version.
-    pub(crate) fn stable(&self) -> bool {
-        match self.inner {
-            VersionMapInner::Eager(ref map) => map.stable,
-            VersionMapInner::Lazy(ref map) => map.stable,
-        }
-    }
-
     /// Returns `true` if the map contains at least one local version (e.g., `2.6.0+cpu`).
     pub(crate) fn local(&self) -> bool {
         match self.inner {
@@ -293,11 +279,10 @@ impl VersionMap {
 
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
-        let stable = flat_index.iter().any(|(version, _)| version.is_stable());
         let local = flat_index.iter().any(|(version, _)| version.is_local());
         let map = flat_index.into();
         Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+            inner: VersionMapInner::Eager(VersionMapEager { map, local }),
         }
     }
 }
@@ -358,8 +343,6 @@ enum VersionMapInner {
 struct VersionMapEager {
     /// A map from version to distribution.
     map: BTreeMap<Version, PrioritizedDist>,
-    /// Whether the version map contains at least one stable (non-pre-release) version.
-    stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
 }
@@ -468,8 +451,6 @@ impl VersionMapLazyIndex {
 struct VersionMapLazy {
     /// An immutable archive-order index from version to possibly-initialized distribution.
     map: VersionMapLazyIndex,
-    /// Whether the version map contains at least one stable (non-pre-release) version.
-    stable: bool,
     /// Whether the version map contains at least one local version.
     local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
