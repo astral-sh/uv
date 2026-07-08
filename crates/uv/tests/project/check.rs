@@ -2294,7 +2294,8 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     Using ty 0.0.16
     ");
 
-    // Project checks also honor an explicit exemption supplied on the CLI.
+    // An explicit CLI exemption permits a newer ty release without invalidating the existing
+    // lockfile.
     uv_snapshot!(
         context.filters(),
         check().arg("--exclude-newer-package").arg("ty=false"),
@@ -2304,7 +2305,6 @@ fn check_respects_exclude_newer_package_for_ty_selection() -> Result<()> {
     All checks passed!
 
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer exclusion for package `ty`
     Using ty 0.0.17
     "
     );
