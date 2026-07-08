@@ -13654,6 +13654,7 @@ fn sync_build_constraints() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/12434>
 #[test]
 fn sync_workspace_member_build_constraints() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-03-24T19:00:00Z")
         .with_filtered_counts();
@@ -13691,7 +13692,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["json-merge-patch"]
+        dependencies = ["a"]
 
         [build-system]
         requires = ["uv_build>=0.7,<10000"]
@@ -13704,7 +13705,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-binary-package").arg("json-merge-patch"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--no-binary-package").arg("a"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13713,8 +13714,8 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     + a==2.0.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + json-merge-patch==0.2
     ");
 
     let lock = context.read("uv.lock");
@@ -13726,7 +13727,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
     fs_err::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("json-merge-patch"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("a"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13737,8 +13738,8 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     + a==2.0.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + json-merge-patch==0.2
     ");
 
     Ok(())
