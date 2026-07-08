@@ -342,6 +342,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                     }
                 }
 
+                if dependency_set.is_empty()
+                    && let Some(root) = self.format_root(package)
+                {
+                    return format!("{root} for {dependency} cannot be satisfied");
+                }
+
                 if let Some(root) = self.format_root_requires(package) {
                     return format!(
                         "{root} {}",
