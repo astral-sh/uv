@@ -150,6 +150,15 @@ impl UvError {
     pub(crate) fn unexpected(error: anyhow::Error) -> Self {
         Self::Unexpected(error)
     }
+
+    /// Add command-specific context to a user error without changing unexpected errors.
+    pub(crate) fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
+        match self {
+            Self::User(error) => Self::User(context(error)),
+            Self::Argument(error) => Self::Argument(error),
+            Self::Unexpected(error) => Self::Unexpected(error),
+        }
+    }
 }
 
 impl From<project::ProjectError> for UvError {

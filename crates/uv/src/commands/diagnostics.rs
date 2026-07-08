@@ -16,6 +16,7 @@ use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
 use crate::commands::pip::operations::ExtrasWithoutSourceError;
 use crate::commands::project::ProjectError;
+use crate::commands::project::add::AddDependencyError;
 use crate::commands::project::remove::DependencyNotFoundError;
 use crate::commands::project::run::RecursionLimitError;
 use crate::commands::project::version::MissingProjectVersionError;
@@ -280,7 +281,9 @@ pub(crate) fn write_error_chain(err: &anyhow::Error, printer: Printer) -> std::f
 /// that implement [`Hinted`]. All hint rendering logic should be consolidated here.
 pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
     let mut hints = Hints::none();
+    let mut command_hints = Hints::none();
     for cause in err.chain() {
+        collect_hint::<AddDependencyError>(cause, &mut command_hints);
         collect_hint::<Box<uv_resolver::NoSolutionError>>(cause, &mut hints);
         collect_hint::<uv_resolver::NoSolutionError>(cause, &mut hints);
         collect_hint::<uv_resolver::ResolveError>(cause, &mut hints);
@@ -311,6 +314,7 @@ pub(crate) fn hints_for_error(err: &anyhow::Error) -> Hints<'static> {
         #[cfg(not(feature = "self-update"))]
         collect_hint::<crate::ExternallyInstalledError>(cause, &mut hints);
     }
+    hints.extend(command_hints);
     hints
 }
 
