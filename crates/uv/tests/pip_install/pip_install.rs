@@ -8278,26 +8278,19 @@ fn require_hashes() -> Result<()> {
 /// Use `--require-hashes` when there are no hashes for build dependencies.
 #[test]
 fn require_hashes_build_dependencies() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     // Write to a requirements file.
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc::indoc! {r"
-        anyio==4.0.0 \
-            --hash=sha256:cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f \
-            --hash=sha256:f7ed51751b2c2add651e5747c891b47e26d2a21be5d32d9311dfe9692f3e5d7a
-        idna==3.6 \
-            --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
-            --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
-            # via anyio
-        sniffio==1.3.1 \
-            --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
-            --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc
-            # via anyio
+        a==1.0.0 \
+            --hash=sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097
     "})?;
 
     uv_snapshot!(context.pip_install()
-        .arg("--no-binary").arg(":all:")
+        .arg("--index-url").arg(server.index_url())
+        .arg("--no-binary").arg("a")
         .arg("-r")
         .arg("requirements.txt")
         .arg("--require-hashes"), @"
@@ -8306,12 +8299,10 @@ fn require_hashes_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.0.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
     "
     );
 
