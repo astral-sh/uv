@@ -13314,27 +13314,33 @@ fn pep_751_install_url_wheel() -> Result<()> {
 
 #[test]
 fn pep_751_install_url_sdist() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&formatdoc! {
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"]
+        dependencies = ["a @ {sdist_url}"]
         "#,
-    )?;
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    })?;
 
     context
         .export()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("-o")
         .arg("pylock.toml")
         .assert()
         .success();
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
@@ -13343,15 +13349,15 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
-     + idna==3.6
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
     "
     );
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--preview")
         .arg("-r")
         .arg("pylock.toml"), @"
@@ -13360,7 +13366,7 @@ fn pep_751_install_url_sdist() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Checked 3 packages in [TIME]
+    Checked 1 package in [TIME]
     "
     );
 
