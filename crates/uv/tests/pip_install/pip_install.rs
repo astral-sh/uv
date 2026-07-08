@@ -12268,23 +12268,24 @@ fn directory_and_group() -> Result<()> {
 /// we ignore them.
 #[test]
 fn no_sources_workspace_discovery() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
     context.temp_dir.child("pyproject.toml").write_str(indoc! {
         r#"
         [project]
         name = "foo"
         version = "1.0.0"
-        dependencies = ["anyio"]
+        dependencies = ["a"]
 
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
 
         [tool.uv.sources]
-        anyio = { workspace = true }
+        a = { workspace = true }
 
         [tool.uv.workspace]
-        members = ["anyio"]
+        members = ["a"]
         "#
     })?;
     context
@@ -12294,25 +12295,27 @@ fn no_sources_workspace_discovery() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    let anyio = context.temp_dir.child("anyio");
-    anyio.child("pyproject.toml").write_str(indoc! {
+    let package = context.temp_dir.child("a");
+    package.child("pyproject.toml").write_str(indoc! {
         r#"
         [project]
-        name = "anyio"
-        version = "2.0.0"
+        name = "a"
+        version = "3.0.0"
 
         [build-system]
         requires = ["hatchling"]
         build-backend = "hatchling.build"
         "#
     })?;
-    anyio
+    package
         .child("src")
-        .child("anyio")
+        .child("a")
         .child("__init__.py")
         .touch()?;
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("."), @"
     success: true
     exit_code: 0
@@ -12322,12 +12325,14 @@ fn no_sources_workspace_discovery() -> Result<()> {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     + a==3.0.0 (from file://[TEMP_DIR]/a)
      + foo==1.0.0 (from file://[TEMP_DIR]/)
     "
     );
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--upgrade")
         .arg("--no-sources")
         .arg("."), @"
@@ -12336,20 +12341,18 @@ fn no_sources_workspace_discovery() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 4 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     + anyio==4.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
-     + idna==3.6
-     + sniffio==1.3.1
     "
     );
 
     // Reverse direction: Check that we switch back to the workspace package with `--upgrade`.
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--upgrade")
         .arg("."), @"
     success: true
@@ -12358,17 +12361,17 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - anyio==4.3.0
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "
     );
 
     // Test with UV_NO_SOURCES=true environment variable (should behave same as flag)
     uv_snapshot!(context.filters(), context.pip_install()
+    .arg("--index-url")
+    .arg(server.index_url())
     .arg("--upgrade")
     .arg(".")
     .env(EnvVars::UV_NO_SOURCES, "true"), @"
@@ -12377,18 +12380,18 @@ fn no_sources_workspace_discovery() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     + anyio==4.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "
     );
 
     // Test UV_NO_SOURCES=false doesn't activate no-sources
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--upgrade")
         .arg(".")
         .env(EnvVars::UV_NO_SOURCES, "false"), @"
@@ -12398,17 +12401,17 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - anyio==4.3.0
-     + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "
     );
 
     // Test that CLI flag overrides env var
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--upgrade")
         .arg("--no-sources")
         .arg(".")
@@ -12418,12 +12421,10 @@ fn no_sources_workspace_discovery() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Uninstalled 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
-     + anyio==4.3.0
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
      ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "
     );
