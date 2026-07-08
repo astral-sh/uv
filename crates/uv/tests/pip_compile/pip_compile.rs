@@ -13788,7 +13788,7 @@ fn emit_index_annotation_multiple_indexes() -> Result<()> {
     Ok(())
 }
 
-/// Test error message when direct dependency is an empty set.
+/// Test error message when a direct dependency has incompatible version specifiers.
 #[test]
 fn no_version_for_direct_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13806,7 +13806,7 @@ fn no_version_for_direct_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ your requirements for pypyp cannot be satisfied
+      ╰─▶ you require pypyp==1 and pypyp>=1.2, which are incompatible
     "
     );
 

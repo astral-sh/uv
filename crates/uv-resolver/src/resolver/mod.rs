@@ -59,7 +59,7 @@ use crate::resolution::ResolverOutput;
 use crate::resolution_mode::ResolutionStrategy;
 pub(crate) use crate::resolver::availability::{
     ResolverVersion, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion,
+    UnavailableVersion, UnsatisfiableRequirement,
 };
 use crate::resolver::batch_prefetch::BatchPrefetcher;
 use crate::resolver::derivation::DerivationChainBuilder;
@@ -1829,16 +1829,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .flat_map(move |requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            None,
-                            Some(package),
-                        )
-                    })
-                    .collect()
+                PubGrubDependency::from_requirements(
+                    &self.conflicts,
+                    requirements,
+                    None,
+                    Some(package),
+                )
             }
 
             PubGrubPackageInner::Package {
@@ -1960,17 +1956,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     python_requirement,
                 );
 
-                requirements
-                    .flat_map(|requirement| {
-                        PubGrubDependency::from_requirement(
-                            &self.conflicts,
-                            requirement,
-                            group.as_ref(),
-                            Some(package),
-                        )
-                    })
-                    .chain(system_dependencies)
-                    .collect()
+                PubGrubDependency::from_requirements(
+                    &self.conflicts,
+                    requirements,
+                    group.as_ref(),
+                    Some(package),
+                )
+                .map(|mut dependencies| {
+                    dependencies.extend(system_dependencies);
+                    dependencies
+                })
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -2051,7 +2046,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ));
             }
         };
-        Ok(Dependencies::Available(dependencies))
+        Ok(match dependencies {
+            Ok(dependencies) => Dependencies::Available(dependencies),
+            Err(requirement) => {
+                Dependencies::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
+            }
+        })
     }
 
     /// The regular and dev dependencies filtered by Python version and the markers of this fork,
