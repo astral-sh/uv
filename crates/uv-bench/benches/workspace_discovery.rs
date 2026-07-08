@@ -342,7 +342,7 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
     if offline {
         args.push("--offline");
     }
-    args.extend(["python", "-V"]);
+    args.extend(["python", "-c", "pass"]);
 
     Cli::try_parse_from(args).expect("Failed to parse synthetic workspace run benchmark arguments")
 }
