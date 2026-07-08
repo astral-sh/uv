@@ -5,6 +5,7 @@ use std::fmt::Write;
 use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use petgraph::algo::tarjan_scc;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::{Direction, Graph};
@@ -436,8 +437,8 @@ impl<'env> TreeDisplay<'env> {
             } else {
                 let mut roots = if invert {
                     // For inverted trees, find leaf packages (nodes with no incoming
-                    // edges).
-                    graph
+                    // edges after reversal).
+                    let mut roots: Vec<_> = graph
                         .node_indices()
                         .filter(|index| {
                             graph
@@ -445,7 +446,34 @@ impl<'env> TreeDisplay<'env> {
                                 .next()
                                 .is_none()
                         })
-                        .collect::<Vec<_>>()
+                        .collect();
+
+                    // If no node has zero incoming edges (e.g., a leaf cycle), fall
+                    // back to treating each root SCC as a root. A root SCC is one
+                    // whose nodes have no incoming edges from outside the SCC.
+                    if roots.is_empty() {
+                        let sccs = tarjan_scc(&graph);
+                        for scc in &sccs {
+                            let has_external_incoming = scc.iter().any(|node| {
+                                graph
+                                    .edges_directed(*node, Direction::Incoming)
+                                    .any(|edge| !scc.contains(&edge.source()))
+                            });
+                            if !has_external_incoming {
+                                // Pick the best node in the SCC as root: prefer
+                                // packages over Root nodes.
+                                let root = scc
+                                    .iter()
+                                    .find(|n| matches!(graph[**n], Node::Package(_)))
+                                    .or_else(|| scc.first());
+                                if let Some(root) = root {
+                                    roots.push(*root);
+                                }
+                            }
+                        }
+                    }
+
+                    roots
                 } else {
                     // For non-inverted trees, use the root node directly.
                     graph
