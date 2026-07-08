@@ -129,6 +129,44 @@ impl Hint for Error {
                     Hints::none()
                 }
             }
+            Self::Extract(uv_extract::Error::TarCodec(err)) => {
+                let is_virtual_environment_python = |path: &Path| {
+                    path.parent().is_some_and(|parent| parent.ends_with("bin"))
+                        && path
+                            .file_name()
+                            .is_some_and(|name| name.to_string_lossy().starts_with("python"))
+                };
+                let involves_virtual_environment_python = match err {
+                    tar_codec::ExtractError::UnsafePath {
+                        context,
+                        value,
+                        reason,
+                        ..
+                    } => {
+                        *context == "symbolic-link target"
+                            && matches!(*reason, "is absolute" | "escapes the destination root")
+                            && is_virtual_environment_python(Path::new(value))
+                    }
+                    tar_codec::ExtractError::InvalidLink {
+                        path,
+                        target,
+                        reason,
+                        ..
+                    } => {
+                        *reason == "ambient target is not allowed"
+                            && (is_virtual_environment_python(path)
+                                || is_virtual_environment_python(Path::new(target)))
+                    }
+                    _ => false,
+                };
+                if involves_virtual_environment_python {
+                    Hints::from(
+                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
+                    )
+                } else {
+                    Hints::none()
+                }
+            }
             _ => Hints::none(),
         }
     }

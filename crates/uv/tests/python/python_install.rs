@@ -4437,6 +4437,24 @@ fn python_install_armv7() {
     Installed Python 3.12.12 in [TIME]
      + cpython-3.12.12-[PLATFORM] (python3.12)
     ");
+
+    context.python_uninstall().arg("--all").assert().success();
+
+    // Exercise the tar-codec symlink handling against the armv7 archive that contains duplicate
+    // terminfo symlinks.
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("--preview-features")
+        .arg("tar-codec")
+        .arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.12 in [TIME]
+     + cpython-3.12.12-[PLATFORM] (python3.12)
+    ");
 }
 
 #[test]

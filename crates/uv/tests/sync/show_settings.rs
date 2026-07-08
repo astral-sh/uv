@@ -3056,6 +3056,7 @@ fn preview_features() {
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
+    +            TarCodec,
     +        ],
          },
          python_preference: Managed,

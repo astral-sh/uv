@@ -6,10 +6,15 @@ use async_zip::base::read::cd::Entry;
 use async_zip::error::ZipError;
 use futures::{AsyncReadExt, StreamExt};
 use rustc_hash::{FxHashMap, FxHashSet};
+use tar_codec::extract::{ExtractPolicy, LinkPolicy, SymlinkPolicy};
+use tar_codec::{
+    Archive, DecodeError, DecodePolicy, ExtractError, Member, PaxDecodePolicy, TarArchive,
+};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::{debug, warn};
 
 use uv_distribution_filename::SourceDistExtension;
+use uv_preview::PreviewFeature;
 use uv_warnings::warn_user_once;
 
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
@@ -196,7 +201,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                     let mut reader = entry.reader_mut().compat();
                     let bytes_read = tokio::io::copy(&mut reader, &mut writer)
                         .await
-                        .map_err(Error::io_or_compression)?;
+                        .map_err(Error::io_or_zip)?;
                     let reader = reader.into_inner();
 
                     (bytes_read, reader)
@@ -216,7 +221,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                     let bytes_read = entry_reader
                         .read_to_end(&mut expected_contents)
                         .await
-                        .map_err(Error::io_or_compression)?;
+                        .map_err(Error::io_or_zip)?;
 
                     // Verify that the existing file contents match the expected contents.
                     if existing_contents != expected_contents {
@@ -588,10 +593,83 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
 /// Unpack the given tar archive into the destination directory.
 ///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_in_tar_codec<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    dst: &Path,
+) -> Result<Vec<(PathBuf, u64)>, ExtractError<DecodeError>> {
+    // Note: we intentionally allow `VENDOR.name` pax records here,
+    // and we also allow them to contain non-UTF-8. The latter is technically
+    // a violation of the pax spec, but is prevalent in the wild thanks
+    // to both GNU tar and libarchive encoding `SCHILY.xattr` records
+    // as raw binary.
+    let decode_policy = DecodePolicy::default().pax_policy(
+        PaxDecodePolicy::default()
+            .allow_unknown_pax_vendor_records(true)
+            .allow_non_utf8_pax_vendor_values(true),
+    );
+    let archive = TarArchive::new_with_policy(reader, decode_policy);
+
+    let mut files = Vec::new();
+    RecordingArchive::new(archive, &mut files)
+        .extract_in(dst, tar_extract_policy())
+        .await?;
+    Ok(files)
+}
+
+/// An archive adapter that records file metadata as members are extracted.
+///
+/// Keeping this observation inside the lending archive cursor avoids a second filesystem walk and
+/// preserves the paths and declared sizes from the archive itself.
+struct RecordingArchive<'files, A> {
+    archive: A,
+    files: &'files mut Vec<(PathBuf, u64)>,
+}
+
+impl<'files, A> RecordingArchive<'files, A> {
+    fn new(archive: A, files: &'files mut Vec<(PathBuf, u64)>) -> Self {
+        Self { archive, files }
+    }
+}
+
+impl<A: Archive> Archive for RecordingArchive<'_, A> {
+    type Error = A::Error;
+    type Payload<'archive>
+        = A::Payload<'archive>
+    where
+        Self: 'archive;
+
+    async fn next_member(&mut self) -> Result<Option<Member<Self::Payload<'_>>>, Self::Error> {
+        let Self { archive, files } = self;
+        let member = archive.next_member().await?;
+        #[cfg(windows)]
+        if let Some(Member::SymbolicLink { metadata, .. }) = &member {
+            warn!("Skipping symlink in tar archive: {}", metadata.path);
+        }
+        if let Some(Member::File { metadata, size, .. }) = &member {
+            files.push((PathBuf::from(&metadata.path), *size));
+        }
+        Ok(member)
+    }
+}
+
+fn tar_extract_policy() -> ExtractPolicy {
+    // Keep tar-codec's defaults, including name validation, hardlink rejection, and rejection of
+    // pre-existing link targets. uv extracts archives into new temporary directories.
+    if cfg!(windows) {
+        ExtractPolicy::default()
+            .link_policy(LinkPolicy::default().symlink_policy(SymlinkPolicy::Skip))
+    } else {
+        ExtractPolicy::default()
+    }
+}
+
+/// Unpack the given tar archive into the destination directory with `astral-tokio-tar`.
+///
 /// This is equivalent to `archive.unpack_in(dst)`, but it also preserves the executable bit.
 ///
 /// Returns the list of unpacked files and their sizes.
-async fn untar_in(
+async fn untar_in_tokio_tar(
     mut archive: tokio_tar::Archive<&'_ mut (dyn tokio::io::AsyncRead + Unpin)>,
     dst: &Path,
 ) -> std::io::Result<Vec<(PathBuf, u64)>> {
@@ -628,7 +706,7 @@ async fn untar_in(
         }
 
         // Unpack the file into the destination directory.
-        #[cfg_attr(not(unix), allow(unused_variables))]
+        #[cfg_attr(not(unix), expect(unused_variables))]
         let unpacked_at = file.unpack_in_raw(&dst, &mut memo).await?;
 
         // Preserve the executable bit.
@@ -659,6 +737,26 @@ async fn untar_in(
     Ok(files)
 }
 
+/// Select the tar implementation and unpack the archive into the destination directory.
+async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
+    mut reader: R,
+    dst: &Path,
+) -> Result<Vec<(PathBuf, u64)>, Error> {
+    if uv_preview::is_enabled(PreviewFeature::TarCodec) {
+        untar_in_tar_codec(reader, dst).await.map_err(Error::from)
+    } else {
+        let archive =
+            tokio_tar::ArchiveBuilder::new(&mut reader as &mut (dyn tokio::io::AsyncRead + Unpin))
+                .set_preserve_mtime(false)
+                .set_preserve_permissions(false)
+                .set_allow_external_symlinks(false)
+                .build();
+        untar_in_tokio_tar(archive, dst)
+            .await
+            .map_err(Error::io_or_tar)
+    }
+}
+
 /// Unpack a `.tar.gz` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unpacking files as they're being downloaded.
@@ -669,18 +767,8 @@ async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    let decompressed_bytes = async_compression::tokio::bufread::GzipDecoder::new(reader);
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.bz2` archive into the target directory, without requiring `Seek`.
@@ -693,18 +781,8 @@ async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    let decompressed_bytes = async_compression::tokio::bufread::BzDecoder::new(reader);
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.zst` archive into the target directory, without requiring `Seek`.
@@ -717,18 +795,8 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    let decompressed_bytes = async_compression::tokio::bufread::ZstdDecoder::new(reader);
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar.xz` archive into the target directory, without requiring `Seek`.
@@ -741,18 +809,8 @@ async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
     let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-    let mut decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
-
-    let archive = tokio_tar::ArchiveBuilder::new(
-        &mut decompressed_bytes as &mut (dyn tokio::io::AsyncRead + Unpin),
-    )
-    .set_preserve_mtime(false)
-    .set_preserve_permissions(false)
-    .set_allow_external_symlinks(false)
-    .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    let decompressed_bytes = async_compression::tokio::bufread::XzDecoder::new(reader);
+    untar_in(decompressed_bytes, target.as_ref()).await
 }
 
 /// Unpack a `.tar` archive into the target directory, without requiring `Seek`.
@@ -764,17 +822,8 @@ async fn untar<R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
-    let mut reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
-
-    let archive =
-        tokio_tar::ArchiveBuilder::new(&mut reader as &mut (dyn tokio::io::AsyncRead + Unpin))
-            .set_preserve_mtime(false)
-            .set_preserve_permissions(false)
-            .set_allow_external_symlinks(false)
-            .build();
-    untar_in(archive, target.as_ref())
-        .await
-        .map_err(Error::io_or_compression)
+    let reader = tokio::io::BufReader::with_capacity(DEFAULT_BUF_SIZE, reader);
+    untar_in(reader, target.as_ref()).await
 }
 
 /// Unpack a `.zip`, `.tar.gz`, `.tar.bz2`, `.tar.zst`, or `.tar.xz` archive into the target directory,
@@ -801,5 +850,558 @@ pub async fn archive<D: Display, R: tokio::io::AsyncRead + Unpin>(
         | SourceDistExtension::TarLz
         | SourceDistExtension::TarLzma => untar_xz(reader, target).await,
         SourceDistExtension::TarZst => untar_zst(reader, target).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Write as _;
+    use std::io;
+    use std::path::PathBuf;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    use insta::assert_snapshot;
+    use tar_codec::{DecodeError, ExtractError, ExtractPolicyViolation};
+    use tokio::io::{AsyncRead, ReadBuf};
+    use uv_preview::PreviewFeature;
+
+    use super::{untar, untar_in, untar_in_tar_codec};
+
+    const BLOCK_SIZE: usize = 512;
+
+    #[tokio::test]
+    async fn untar_records_files_and_preserves_executable_intent() {
+        let mut archive = Vec::new();
+        append_entry(
+            &mut archive,
+            "pax",
+            b'x',
+            &pax_record("path", "pkg/tool"),
+            "",
+            0o644,
+        );
+        append_entry(&mut archive, "ignored", b'0', b"run", "", 0o755);
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect("tar archive should extract");
+
+        assert_eq!(files, [(PathBuf::from("pkg/tool"), 3)]);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            assert_ne!(
+                fs_err::metadata(temp.path().join("pkg/tool"))
+                    .expect("tool metadata should be readable")
+                    .permissions()
+                    .mode()
+                    & 0o111,
+                0
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn untar_rejects_hardlinks() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "pkg/tool", b'0', b"run", "", 0o644);
+        append_entry(&mut archive, "pkg/tool-copy", b'1', b"", "pkg/tool", 0o644);
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect_err("hardlink should be rejected");
+
+        assert!(matches!(
+            error,
+            ExtractError::PolicyViolation {
+                violation: ExtractPolicyViolation::HardLink,
+                ..
+            }
+        ));
+        assert!(!temp.path().join("pkg/tool-copy").exists());
+    }
+
+    #[tokio::test]
+    async fn untar_selects_backend_from_preview_feature() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "pkg/tool", b'0', b"run", "", 0o644);
+        append_entry(&mut archive, "pkg/tool-copy", b'1', b"", "pkg/tool", 0o644);
+        finish_archive(&mut archive);
+
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let files = untar_in(archive.as_slice(), temp.path())
+                .await
+                .expect("the default tar backend should allow hardlinks");
+
+            assert_eq!(
+                files,
+                [
+                    (PathBuf::from("pkg/tool"), 3),
+                    (PathBuf::from("pkg/tool-copy"), 0),
+                ]
+            );
+            assert_eq!(
+                fs_err::read(temp.path().join("pkg/tool-copy"))
+                    .expect("hardlink should be readable"),
+                b"run"
+            );
+        }
+
+        {
+            let _preview = uv_preview::test::with_features(&[PreviewFeature::TarCodec]);
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let error = untar_in(archive.as_slice(), temp.path())
+                .await
+                .expect_err("the tar-codec backend should reject hardlinks");
+
+            assert!(matches!(
+                error,
+                crate::Error::TarCodec(ExtractError::PolicyViolation {
+                    violation: ExtractPolicyViolation::HardLink,
+                    ..
+                })
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn untar_uses_default_name_validation() {
+        let mut archive = Vec::new();
+        append_entry(
+            &mut archive,
+            "pkg/name:stream",
+            b'0',
+            b"contents",
+            "",
+            0o644,
+        );
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect_err("default name validation should reject colons");
+
+        assert!(matches!(
+            error,
+            ExtractError::PolicyViolation {
+                violation: ExtractPolicyViolation::NameRejected {
+                    context: "member path",
+                    value,
+                },
+                ..
+            } if value == "pkg/name:stream"
+        ));
+    }
+
+    #[tokio::test]
+    async fn untar_reads_gnu_archives() {
+        let mut archive = Vec::new();
+        append_entry_with_format(
+            &mut archive,
+            TestFormat::Gnu,
+            "pkg/file",
+            b'0',
+            b"contents",
+            "",
+            0o644,
+        );
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect("GNU archive should extract");
+
+        assert_eq!(files, [(PathBuf::from("pkg/file"), 8)]);
+        assert_eq!(
+            fs_err::read(temp.path().join("pkg/file")).expect("file should be readable"),
+            b"contents"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn untar_preserves_archive_owned_and_missing_symlink_targets() {
+        let mut archive = Vec::new();
+        append_entry(
+            &mut archive,
+            "pkg/created-link",
+            b'2',
+            b"",
+            "created",
+            0o777,
+        );
+        append_entry(&mut archive, "pkg/created", b'0', b"created", "", 0o644);
+        append_entry(
+            &mut archive,
+            "pkg/missing-link",
+            b'2',
+            b"",
+            "missing",
+            0o777,
+        );
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let files = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect("safe symlinks should extract");
+
+        assert_eq!(files, [(PathBuf::from("pkg/created"), 7)]);
+        for (link, target) in [("created-link", "created"), ("missing-link", "missing")] {
+            assert_eq!(
+                fs_err::read_link(temp.path().join("pkg").join(link))
+                    .expect("symlink should be readable"),
+                PathBuf::from(target)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn untar_rejects_ambient_symlink_targets() {
+        let mut archive = Vec::new();
+        append_entry(
+            &mut archive,
+            "pkg/ambient-link",
+            b'2',
+            b"",
+            "ambient",
+            0o777,
+        );
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+        fs_err::create_dir_all(temp.path().join("pkg"))
+            .expect("ambient directory should be created");
+        fs_err::write(temp.path().join("pkg/ambient"), b"ambient")
+            .expect("ambient target should be created");
+
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect_err("ambient symlink target should be rejected");
+
+        assert!(matches!(
+            error,
+            ExtractError::InvalidLink {
+                path,
+                target,
+                reason: "ambient target is not allowed",
+                ..
+            } if path == *"pkg/ambient-link" && target == "ambient"
+        ));
+        assert!(!temp.path().join("pkg/ambient-link").exists());
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn untar_skips_symlinks_on_windows() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "target", b'0', b"contents", "", 0o644);
+        append_entry(&mut archive, "link", b'2', b"", "target", 0o777);
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect("archive should extract while skipping its symlink");
+
+        assert_eq!(
+            fs_err::read(temp.path().join("target")).expect("target should be readable"),
+            b"contents"
+        );
+        assert!(matches!(
+            fs_err::symlink_metadata(temp.path().join("link")),
+            Err(error) if error.kind() == io::ErrorKind::NotFound
+        ));
+    }
+
+    #[tokio::test]
+    async fn untar_rejects_malformed_archives() {
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+        let error = untar_in_tar_codec(b"not a tar archive".as_slice(), temp.path())
+            .await
+            .expect_err("malformed archive should be rejected");
+
+        assert!(matches!(
+            error,
+            ExtractError::Archive(DecodeError::Framing(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn untar_rejects_member_path_traversal() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "../escape", b'0', b"escape", "", 0o644);
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+        let destination = temp.path().join("out");
+
+        let error = untar_in_tar_codec(archive.as_slice(), &destination)
+            .await
+            .expect_err("parent-directory traversal should be rejected");
+
+        assert!(matches!(
+            error,
+            ExtractError::UnsafePath {
+                context: "member path",
+                value,
+                reason: "contains a parent-directory component",
+                ..
+            } if value == "../escape"
+        ));
+        assert!(!temp.path().join("escape").exists());
+    }
+
+    #[tokio::test]
+    async fn strict_decoder_rejects_excluded_tar_framing() {
+        let mut v7 = Vec::new();
+        append_entry_with_format(&mut v7, TestFormat::V7, "file", b'0', b"", "", 0o644);
+        finish_archive(&mut v7);
+
+        let mut mixed = Vec::new();
+        append_entry_with_format(&mut mixed, TestFormat::Pax, "pax", b'0', b"", "", 0o644);
+        append_entry_with_format(&mut mixed, TestFormat::Gnu, "gnu", b'0', b"", "", 0o644);
+        finish_archive(&mut mixed);
+
+        let mut sparse = Vec::new();
+        append_entry_with_format(&mut sparse, TestFormat::Gnu, "sparse", b'S', b"", "", 0o644);
+        finish_archive(&mut sparse);
+
+        let mut malformed_termination = Vec::new();
+        append_entry(&mut malformed_termination, "file", b'0', b"", "", 0o644);
+        malformed_termination.resize(malformed_termination.len() + BLOCK_SIZE, 0);
+
+        let mut failures = String::new();
+        for (case, archive) in [
+            ("v7", v7),
+            ("mixed GNU/pax", mixed),
+            ("sparse", sparse),
+            ("malformed termination", malformed_termination),
+        ] {
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+            let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+                .await
+                .expect_err(case);
+            assert!(
+                matches!(&error, ExtractError::Archive(DecodeError::Framing(_))),
+                "unexpected error for {case}: {error:?}"
+            );
+            writeln!(failures, "{case}: {error}").expect("writing to a string should succeed");
+        }
+        assert_snapshot!(failures, @r"
+        v7: at byte 0: invalid tar identity: found [0, 0, 0, 0, 0, 0, 0, 0]
+        mixed GNU/pax: at byte 512: archive format changed from Pax to Gnu
+        sparse: at byte 0: unsupported tar typeflag 83
+        malformed termination: at byte 1024: missing two-block end-of-archive marker
+        ");
+    }
+
+    #[tokio::test]
+    async fn strict_decoder_rejects_non_utf8_member_names() {
+        let mut header = test_header(TestFormat::Pax, "file", b'0', 0, "", 0o644);
+        header[0] = 0xff;
+        set_checksum(&mut header);
+        let mut archive = header.to_vec();
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect_err("non-UTF-8 member path should be rejected");
+
+        assert!(matches!(
+            &error,
+            ExtractError::Archive(DecodeError::InvalidUtf8 { field: "path", .. })
+        ));
+        assert_snapshot!(error, @"at byte 0: path is not valid UTF-8");
+    }
+
+    #[tokio::test]
+    async fn tar_http_errors_are_detected_through_the_source_chain() {
+        {
+            let _preview = uv_preview::test::with_features(&[]);
+            let reqwest_error = reqwest::Client::new()
+                .get("://")
+                .build()
+                .expect_err("invalid URL should be rejected");
+            let reader = FailingReader(Some(io::Error::other(reqwest_error)));
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let error = untar(reader, temp.path())
+                .await
+                .expect_err("reader error should fail astral-tokio-tar extraction");
+
+            assert!(matches!(error, crate::Error::Io(_)));
+            assert!(error.is_http_streaming_failed());
+        }
+
+        {
+            let _preview = uv_preview::test::with_features(&[PreviewFeature::TarCodec]);
+            let reqwest_error = reqwest::Client::new()
+                .get("://")
+                .build()
+                .expect_err("invalid URL should be rejected");
+            let reader = FailingReader(Some(io::Error::other(reqwest_error)));
+            let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+            let error = untar(reader, temp.path())
+                .await
+                .expect_err("reader error should fail tar-codec extraction");
+
+            assert!(matches!(error, crate::Error::TarCodec(_)));
+            assert!(error.is_http_streaming_failed());
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn untar_rejects_external_symlink_targets() {
+        let mut archive = Vec::new();
+        append_entry(&mut archive, "python", b'2', b"", "/bin/python", 0o777);
+        finish_archive(&mut archive);
+        let temp = tempfile::tempdir().expect("temporary directory should be created");
+
+        let error = untar_in_tar_codec(archive.as_slice(), temp.path())
+            .await
+            .expect_err("external symlink target should be rejected");
+
+        assert!(matches!(
+            error,
+            ExtractError::UnsafePath {
+                context: "symbolic-link target",
+                value,
+                reason: "is absolute",
+                ..
+            } if value == "/bin/python"
+        ));
+        assert!(!temp.path().join("python").exists());
+    }
+
+    fn append_entry(
+        archive: &mut Vec<u8>,
+        path: &str,
+        typeflag: u8,
+        payload: &[u8],
+        link_name: &str,
+        mode: u32,
+    ) {
+        append_entry_with_format(
+            archive,
+            TestFormat::Pax,
+            path,
+            typeflag,
+            payload,
+            link_name,
+            mode,
+        );
+    }
+
+    fn append_entry_with_format(
+        archive: &mut Vec<u8>,
+        format: TestFormat,
+        path: &str,
+        typeflag: u8,
+        payload: &[u8],
+        link_name: &str,
+        mode: u32,
+    ) {
+        let header = test_header(
+            format,
+            path,
+            typeflag,
+            payload.len() as u64,
+            link_name,
+            mode,
+        );
+        archive.extend_from_slice(&header);
+        archive.extend_from_slice(payload);
+        archive.resize(archive.len().next_multiple_of(BLOCK_SIZE), 0);
+    }
+
+    fn test_header(
+        format: TestFormat,
+        path: &str,
+        typeflag: u8,
+        size: u64,
+        link_name: &str,
+        mode: u32,
+    ) -> [u8; BLOCK_SIZE] {
+        let mut header = [0; BLOCK_SIZE];
+        set_text(&mut header[0..100], path);
+        header[100..108].copy_from_slice(format!("{mode:07o}\0").as_bytes());
+        header[108..116].copy_from_slice(b"0000000\0");
+        header[116..124].copy_from_slice(b"0000000\0");
+        header[124..136].copy_from_slice(format!("{size:011o}\0").as_bytes());
+        header[136..148].copy_from_slice(b"00000000000\0");
+        header[156] = typeflag;
+        set_text(&mut header[157..257], link_name);
+        match format {
+            TestFormat::Pax => header[257..265].copy_from_slice(b"ustar\x0000"),
+            TestFormat::Gnu => header[257..265].copy_from_slice(b"ustar  \0"),
+            TestFormat::V7 => {}
+        }
+        set_checksum(&mut header);
+        header
+    }
+
+    fn set_checksum(header: &mut [u8; BLOCK_SIZE]) {
+        header[148..156].fill(b' ');
+        let checksum: u64 = header.iter().map(|byte| u64::from(*byte)).sum();
+        header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+    }
+
+    fn finish_archive(archive: &mut Vec<u8>) {
+        archive.resize(archive.len() + 2 * BLOCK_SIZE, 0);
+    }
+
+    fn set_text(field: &mut [u8], value: &str) {
+        assert!(value.len() < field.len());
+        field[..value.len()].copy_from_slice(value.as_bytes());
+    }
+
+    fn pax_record(keyword: &str, value: &str) -> Vec<u8> {
+        let mut length = 0;
+        loop {
+            let record = format!("{length} {keyword}={value}\n");
+            if record.len() == length {
+                return record.into_bytes();
+            }
+            length = record.len();
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum TestFormat {
+        Pax,
+        Gnu,
+        V7,
+    }
+
+    struct FailingReader(Option<io::Error>);
+
+    impl AsyncRead for FailingReader {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _context: &mut Context<'_>,
+            _buffer: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let error = self
+                .get_mut()
+                .0
+                .take()
+                .unwrap_or_else(|| io::Error::other("reader was polled after failing"));
+            Poll::Ready(Err(error))
+        }
     }
 }

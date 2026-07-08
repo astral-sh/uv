@@ -23,6 +23,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-preview = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-redacted = { workspace = true }
 uv-static = { workspace = true }
@@ -42,6 +43,7 @@ reqwest-retry = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+tar-codec = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
@@ -49,9 +51,12 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+uv-preview = { workspace = true, features = ["testing"] }
+
 anstream = { workspace = true }
 fastrand = { workspace = true }
 insta = { workspace = true }
+tempfile = { workspace = true }
 wiremock = { workspace = true }
 
 [features]

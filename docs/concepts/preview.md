@@ -90,6 +90,8 @@ The following preview features are available:
 - `target-workspace-discovery`: Uses the directory containing a local `uv run` target, rather than
   the current working directory, as the starting point for project and workspace discovery. This
   feature takes effect before configuration is loaded.
+- `tar-codec`: Uses `tar-codec` for archive extraction, reading `PKG-INFO` from source distributions
+  during publishing, and emitting PAX source distributions with the uv build backend.
 - `project-directory-must-exist`: Rejects an invalid `--project` path instead of warning and
   continuing. Except for `uv init`, the path must already exist as a directory or point to a
   `pyproject.toml` file. This feature takes effect before configuration is loaded.

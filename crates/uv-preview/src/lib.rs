@@ -262,6 +262,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    TarCodec = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -306,6 +307,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::TarCodec => "tar-codec",
         }
     }
 }
@@ -363,6 +365,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "tar-codec" => Self::TarCodec,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -529,6 +532,10 @@ mod tests {
     fn test_preview_feature_from_str() {
         let features = PreviewFeature::from_str("python-install-default").unwrap();
         assert_eq!(features, PreviewFeature::PythonInstallDefault);
+
+        let features = PreviewFeature::from_str("tar-codec").unwrap();
+        assert_eq!(features, PreviewFeature::TarCodec);
+        assert_eq!(features.to_string(), "tar-codec");
     }
 
     #[test]
@@ -536,6 +543,9 @@ mod tests {
         // Test single feature
         let preview = Preview::from_str("python-install-default").unwrap();
         assert_eq!(preview.flags, PreviewFeature::PythonInstallDefault);
+
+        let preview = Preview::from_str("tar-codec").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::TarCodec));
 
         // Test multiple features
         let preview = Preview::from_str("python-upgrade,json-output").unwrap();
@@ -573,6 +583,7 @@ mod tests {
         // Test enabled (all features)
         let preview = Preview::all();
         assert_eq!(preview.to_string(), "enabled");
+        assert!(preview.is_enabled(PreviewFeature::TarCodec));
 
         // Test single feature
         let preview = Preview::new(&[PreviewFeature::PythonInstallDefault]);
@@ -670,6 +681,7 @@ mod tests {
             PreviewFeature::WorkspaceListScripts.as_str(),
             "workspace-list-scripts"
         );
+        assert_eq!(PreviewFeature::TarCodec.as_str(), "tar-codec");
     }
 
     #[test]

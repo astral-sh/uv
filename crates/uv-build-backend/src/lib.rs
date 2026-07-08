@@ -84,8 +84,15 @@ pub enum Error {
     VenvInSourceTree(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: {0}")]
     InconsistentSteps(&'static str),
-    #[error("Failed to write to {}", _0.user_display())]
+    #[error("Failed to write tar archive to {}", _0.user_display())]
     TarWrite(PathBuf, #[source] io::Error),
+    #[error("Failed to write tar archive to {}", _0.user_display())]
+    TarCodecWrite(
+        PathBuf,
+        #[source] tar_codec::BuildError<tar_codec::EncodeError>,
+    ),
+    #[error("Failed to finish gzip stream for {}", _0.user_display())]
+    GzipWrite(PathBuf, #[source] io::Error),
 }
 
 impl uv_errors::Hint for Error {
@@ -475,7 +482,7 @@ mod tests {
     use async_zip::base::read::mem::ZipFileReader;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
-    use futures_lite::{StreamExt, future::block_on};
+    use futures_lite::future::block_on;
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
@@ -483,7 +490,7 @@ mod tests {
     use sha2::Digest;
     use std::io::BufReader;
     use std::iter;
-    use std::pin::Pin;
+    use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_errors::{ErrorWithHints, Hint};
@@ -603,22 +610,12 @@ mod tests {
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
         let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
-        let mut source_dist =
-            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        let source_dist = TarArchive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
         let mut source_dist_contents = block_on(async {
-            let mut entries = source_dist.entries().unwrap();
-            let mut entries = Pin::new(&mut entries);
+            let mut members = source_dist.members();
             let mut contents = Vec::new();
-            while let Some(entry) = entries.next().await {
-                contents.push(
-                    entry
-                        .unwrap()
-                        .path()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .replace('\\', "/"),
-                );
+            while let Some(member) = members.next().await.unwrap() {
+                contents.push(member.metadata().path.replace('\\', "/"));
             }
             contents
         });
@@ -628,12 +625,12 @@ mod tests {
 
     fn unpack_sdist(source_dist_path: &Path, target: &Path) -> Result<(), Error> {
         let sdist_reader = BufReader::new(File::open(source_dist_path)?);
-        let mut source_dist =
-            tokio_tar::Archive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
+        let source_dist = TarArchive::new(SyncReader::new(GzDecoder::new(sdist_reader)));
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
-            .block_on(source_dist.unpack(target))?;
+            .block_on(source_dist.extract_in(target, ExtractPolicy::default()))
+            .map_err(io::Error::other)?;
         Ok(())
     }
 
@@ -716,7 +713,25 @@ mod tests {
     /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
-        let _preview = uv_preview::test::with_features(&[]);
+        built_by_uv_building_with_backend(
+            &[],
+            "8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e",
+        );
+    }
+
+    #[test]
+    fn built_by_uv_building_tar_codec() {
+        built_by_uv_building_with_backend(
+            &[PreviewFeature::TarCodec],
+            "8cb4da783db5873762b0640f83e8d14e317e6bb4edb8934936f8a4ee0d946098",
+        );
+    }
+
+    fn built_by_uv_building_with_backend(
+        preview_features: &[PreviewFeature],
+        expected_source_dist_hash: &str,
+    ) {
+        let _preview = uv_preview::test::with_features(preview_features);
         let built_by_uv = Path::new("../../test/packages/built-by-uv");
         let src = TempDir::new().unwrap();
         for dir in [
@@ -787,9 +802,12 @@ mod tests {
             "built_by_uv-0.1.0.tar.gz"
         );
         // Check that the source dist is reproducible across platforms.
-        assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
-            @"8bed1f7a8059064bcbeedb61a867cca7f63a474306011d0114280de631ac705e"
+        assert_eq!(
+            format!(
+                "{:x}",
+                sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())
+            ),
+            expected_source_dist_hash
         );
         // Check both the files we report and the actual files
         assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @"

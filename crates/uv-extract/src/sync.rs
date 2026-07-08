@@ -100,7 +100,7 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
                     let read = file
                         .read(&mut buffer)
                         .await
-                        .map_err(Error::io_or_compression)?;
+                        .map_err(Error::io_or_zip)?;
                     if read == 0 {
                         break;
                     }

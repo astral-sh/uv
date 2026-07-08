@@ -4,7 +4,6 @@ extern crate uv_performance_memory_allocator;
 
 use std::fmt::Write;
 use std::hint::black_box;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -14,13 +13,14 @@ use criterion::{BatchSize, Criterion, criterion_group, criterion_main, measureme
 use flate2::write::GzEncoder;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
-use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, Connectivity, RegistryClientBuilder};
 use uv_distribution_filename::{SourceDistExtension, WheelFilename};
 use uv_distribution_types::Requirement;
 use uv_install_wheel::{InstallState, Layout, LinkMode};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Scheme;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
@@ -68,9 +68,8 @@ fn create_many_files_wheel() -> tempfile::NamedTempFile {
 
 fn create_many_files_sdist() -> tempfile::NamedTempFile {
     let archive = tempfile::NamedTempFile::new().expect("Failed to create temporary archive");
-    let encoder = GzEncoder::new(archive.as_file(), flate2::Compression::default());
-    let mut writer =
-        tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
+    let mut encoder = GzEncoder::new(archive.as_file(), flate2::Compression::default());
+    let mut writer = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
     for index in 0..MANY_FILES_SDIST_FILE_COUNT {
         write_tar_entry(
             &mut writer,
@@ -88,12 +87,8 @@ fn create_many_files_sdist() -> tempfile::NamedTempFile {
         &format!("{MANY_FILES_SDIST_TOP_LEVEL}/pyproject.toml"),
         b"[project]\nname = \"manyfiles\"\nversion = \"0.0.0\"\n",
     );
-    let writer = block_on(writer.into_inner()).expect("Failed to finish tar archive");
-    writer
-        .into_inner()
-        .into_inner()
-        .finish()
-        .expect("Failed to finish gzip archive");
+    block_on(writer.finish()).expect("Failed to finish tar archive");
+    encoder.finish().expect("Failed to finish gzip archive");
     archive
 }
 
@@ -113,32 +108,41 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
         .build()
         .expect("Failed to create Tokio runtime");
 
-    c.bench_function("unpack_sdist_many_files", |b| {
-        b.iter_batched(
-            || {
-                (
-                    runtime
-                        .block_on(fs_err::tokio::File::open(archive.path()))
-                        .expect("Failed to open temporary archive"),
-                    create_sdist_extraction_directory(),
-                )
-            },
-            |(archive, extracted_sdist)| {
-                let files = runtime
-                    .block_on(uv_extract::stream::archive(
-                        MANY_FILES_SDIST_FILENAME,
-                        archive,
-                        SourceDistExtension::TarGz,
-                        extracted_sdist.path(),
-                    ))
-                    .expect("Failed to unpack sdist");
-                let source_tree = uv_extract::strip_component(extracted_sdist.path())
-                    .expect("Failed to strip top-level sdist directory");
-                black_box((files, extracted_sdist, source_tree))
-            },
-            BatchSize::PerIteration,
-        );
-    });
+    for (name, preview_features) in [
+        ("unpack_sdist_many_files/astral_tokio_tar", &[][..]),
+        (
+            "unpack_sdist_many_files/tar_codec",
+            &[PreviewFeature::TarCodec][..],
+        ),
+    ] {
+        let _preview = uv_preview::test::with_features(preview_features);
+        c.bench_function(name, |b| {
+            b.iter_batched(
+                || {
+                    (
+                        runtime
+                            .block_on(fs_err::tokio::File::open(archive.path()))
+                            .expect("Failed to open temporary archive"),
+                        create_sdist_extraction_directory(),
+                    )
+                },
+                |(archive, extracted_sdist)| {
+                    let files = runtime
+                        .block_on(uv_extract::stream::archive(
+                            MANY_FILES_SDIST_FILENAME,
+                            archive,
+                            SourceDistExtension::TarGz,
+                            extracted_sdist.path(),
+                        ))
+                        .expect("Failed to unpack sdist");
+                    let source_tree = uv_extract::strip_component(extracted_sdist.path())
+                        .expect("Failed to strip top-level sdist directory");
+                    black_box((files, extracted_sdist, source_tree))
+                },
+                BatchSize::PerIteration,
+            );
+        });
+    }
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
@@ -247,22 +251,13 @@ fn write_zip_entry(writer: &mut ZipFileWriter<Vec<u8>>, path: &str, contents: &[
     block_on(writer.write_entry_whole(entry, contents)).expect("Failed to write ZIP entry");
 }
 
-fn write_tar_entry<W: tokio::io::AsyncWrite + Unpin + Send>(
-    writer: &mut tokio_tar::Builder<W>,
+fn write_tar_entry<W: tokio::io::AsyncWrite + Unpin>(
+    writer: &mut tar_codec::Builder<TarEncoder<W>>,
     path: &str,
     contents: &[u8],
 ) {
-    let mut header = tokio_tar::Header::new_gnu();
-    header.set_size(contents.len() as u64);
-    header.set_mode(0o644);
-    header.set_entry_type(tokio_tar::EntryType::Regular);
-    header.set_cksum();
-    block_on(writer.append_data(
-        &mut header,
-        path,
-        AllowStdIo::new(Cursor::new(contents)).compat(),
-    ))
-    .expect("Failed to write tar entry");
+    block_on(writer.add_file(path, contents, EntryMetadata::default()))
+        .expect("Failed to write tar entry");
 }
 
 fn layout(root: &Path) -> Layout {
