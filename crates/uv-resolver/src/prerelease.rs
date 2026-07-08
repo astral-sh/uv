@@ -1,4 +1,6 @@
-use uv_distribution_types::RequirementSource;
+use std::borrow::Cow;
+
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, VersionSpecifiers};
 
@@ -77,33 +79,27 @@ impl PrereleaseStrategy {
             PrereleaseMode::Disallow => Self::Disallow,
             PrereleaseMode::Allow => Self::Allow,
             PrereleaseMode::IfNecessary => Self::IfNecessary,
-            PrereleaseMode::Explicit => {
-                let mut packages = ForkSet::default();
-                for requirement in manifest.candidate_selection_requirements(env, dependencies) {
-                    let RequirementSource::Registry { specifier, .. } = &requirement.source else {
-                        continue;
-                    };
+            PrereleaseMode::Explicit => Self::Explicit(Self::explicit_packages(
+                manifest.candidate_selection_requirements(env, dependencies),
+            )),
+            PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
+                Self::explicit_packages(manifest.requirements(env, dependencies)),
+            ),
+        }
+    }
 
-                    if contains_prerelease(specifier) {
-                        packages.add(&requirement, ());
-                    }
-                }
-                Self::Explicit(packages)
-            }
-            PrereleaseMode::IfNecessaryOrExplicit => {
-                let mut packages = ForkSet::default();
-                for requirement in manifest.requirements(env, dependencies) {
-                    let RequirementSource::Registry { specifier, .. } = &requirement.source else {
-                        continue;
-                    };
+    fn explicit_packages<'a>(requirements: impl Iterator<Item = Cow<'a, Requirement>>) -> ForkSet {
+        let mut packages = ForkSet::default();
+        for requirement in requirements {
+            let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+                continue;
+            };
 
-                    if contains_prerelease(specifier) {
-                        packages.add(&requirement, ());
-                    }
-                }
-                Self::IfNecessaryOrExplicit(packages)
+            if contains_prerelease(specifier) {
+                packages.add(&requirement, ());
             }
         }
+        packages
     }
 
     /// Returns the pre-release candidate selection policy for a package.

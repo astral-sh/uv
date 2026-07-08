@@ -57,15 +57,11 @@ is selected, `c==2.0a1` participates in normal version order and is preferred as
 version. A later requirement that excludes `c==1.0` forces uv to reconsider it. In every case, the
 selected version satisfies all active requirements.
 
-Use `--prerelease if-necessary` to prefer stable candidates even when a requirement contains a
-pre-release identifier, while still falling back to pre-releases when no stable candidate works. Use
-`--prerelease explicit` to consider pre-releases only for first-party requirements that contain a
-pre-release identifier, without falling back for other packages. Use `--prerelease allow` to
+Use `--prerelease explicit` to consider pre-releases only for first-party requirements that contain
+a pre-release identifier, without falling back for other packages. This mode is deprecated and will
+be removed in a future release; use `if-necessary-or-explicit` instead. Use `--prerelease allow` to
 consider pre-releases for every package without preferring stable candidates first, or
 `--prerelease disallow` to exclude them entirely.
-
-The `explicit` mode is deprecated and will be removed in a future release. Use
-`if-necessary-or-explicit` instead.
 
 !!! note
 

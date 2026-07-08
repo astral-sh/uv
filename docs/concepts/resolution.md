@@ -333,15 +333,11 @@ selected according to uv's ordinary [package priorities](../pip/compatibility.md
 If uv selects a compatible stable version before discovering a later requirement that authorizes
 pre-releases, it may retain that stable version even when a newer pre-release becomes eligible.
 
-Use `--prerelease if-necessary` to prefer stable candidates even when a requirement contains a
-pre-release identifier, while still falling back to pre-releases when no stable candidate works. Use
-`--prerelease explicit` to consider pre-releases only for first-party requirements that contain a
-pre-release identifier, without falling back for other packages. Use `--prerelease allow` to
+Use `--prerelease explicit` to consider pre-releases only for first-party requirements that contain
+a pre-release identifier, without falling back for other packages. This mode is deprecated and will
+be removed in a future release; use `if-necessary-or-explicit` instead. Use `--prerelease allow` to
 consider pre-releases for every package without preferring stable candidates first, or
 `--prerelease disallow` to exclude them entirely.
-
-The `explicit` mode is deprecated and will be removed in a future release. Use
-`if-necessary-or-explicit` instead.
 
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).
@@ -440,13 +436,11 @@ including Git sources, and explicit indexes are not supported.
 
 Under the default pre-release policy, an explicit pre-release specifier in a scoped override
 authorizes pre-release candidates only while that scope is selected. If resolution backtracks away
-from the package version to which the override applies, the authorization is removed with it. Under
-`--prerelease explicit`, pre-release permissions are determined before uv knows which scoped
-overrides will apply, so a pre-release specifier in any scoped override opts that package into
-pre-release candidate selection for the entire resolution, even if the scope is not selected.
-Yanked-version permissions are also determined before uv knows which scoped overrides will apply. As
-a result, an exact yanked-version pin in any scoped override opts that package into yanked-version
-candidate selection for the entire resolution, even if the scope is not selected.
+from the package version to which the override applies, the authorization is removed with it. The
+legacy `explicit` mode and yanked-version handling instead determine permissions before uv knows
+which scoped overrides will apply. As a result, a pre-release specifier or exact yanked-version pin
+in any scoped override makes the corresponding candidates eligible for the entire resolution, even
+if the scope is not selected.
 
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced

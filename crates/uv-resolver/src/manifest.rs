@@ -120,12 +120,11 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
-    /// Return all requirements that affect manifest-wide candidate selection policy initialized
-    /// before resolution begins.
+    /// Return all requirements that affect manifest-wide candidate selection policy.
     ///
     /// Scoped overrides are included even when their scope is not selected. Whether a scoped
-    /// override applies is only known during resolution, after explicit pre-release and
-    /// yanked-version policy has already been initialized.
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
     pub(crate) fn candidate_selection_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
