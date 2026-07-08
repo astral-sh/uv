@@ -8422,6 +8422,7 @@ fn no_build() -> Result<()> {
 
 #[test]
 fn no_build_error() -> Result<()> {
+    let server = PackseServer::new("wheels/no-wheels.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -8431,59 +8432,64 @@ fn no_build_error() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["django_allauth==0.51.0"]
+        dependencies = ["a==1.0.0"]
         "#,
     )?;
 
-    context.lock().assert().success();
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build-package").arg("a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'django-allauth' for '--no-build': value was not a boolean
+    error: invalid value 'a' for '--no-build': value was not a boolean
 
     For more information, try '--help'.
     ");
