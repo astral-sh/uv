@@ -60,6 +60,10 @@ selected version satisfies all active requirements.
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
 
+The `explicit` mode is deprecated and will be removed in a future release; use
+`if-necessary-or-explicit` instead. It considers pre-releases only for first-party requirements that
+contain a pre-release identifier, without falling back for other packages.
+
 !!! note
 
     Prior to pip 26.0, this behavior was not consistent.

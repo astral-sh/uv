@@ -336,6 +336,10 @@ pre-releases, it may retain that stable version even when a newer pre-release be
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
 
+The `explicit` mode is deprecated and will be removed in a future release; use
+`if-necessary-or-explicit` instead. It considers pre-releases only for first-party requirements that
+contain a pre-release identifier, without falling back for other packages.
+
 For more details, see
 [Pre-release compatibility](../pip/compatibility.md#pre-release-compatibility).
 
