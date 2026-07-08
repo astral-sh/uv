@@ -57,11 +57,12 @@ is selected, `c==2.0a1` participates in normal version order and is preferred as
 version. A later requirement that excludes `c==1.0` forces uv to reconsider it. In every case, the
 selected version satisfies all active requirements.
 
-Use `--prerelease explicit` to consider pre-releases only for first-party requirements that contain
-a pre-release identifier, without falling back for other packages. This mode is deprecated and will
-be removed in a future release; use `if-necessary-or-explicit` instead. Use `--prerelease allow` to
-consider pre-releases for every package without preferring stable candidates first, or
-`--prerelease disallow` to exclude them entirely.
+Use `--prerelease allow` to consider pre-releases for every package without preferring stable
+candidates first, or `--prerelease disallow` to exclude them entirely.
+
+The `explicit` mode is deprecated and will be removed in a future release; use
+`if-necessary-or-explicit` instead. It considers pre-releases only for first-party requirements that
+contain a pre-release identifier, without falling back for other packages.
 
 !!! note
 
@@ -69,11 +70,9 @@ consider pre-releases for every package without preferring stable candidates fir
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.pages.dev/limitations/prerelease_versions) to model
-because dependency requirements are discovered incrementally during resolution. Under the default
-policy, uv tracks pre-release authorization with the dependencies that introduced it, so the
-authorization is removed if resolution backtracks away from those dependencies. The legacy
-`explicit` policy instead determines authorization from first-party requirements before resolution
-begins.
+because dependency requirements are discovered incrementally during resolution. uv tracks
+pre-release authorization with the dependencies that introduced it, so the authorization is removed
+if resolution backtracks away from those dependencies.
 
 ## Packages that exist on multiple indexes
 
