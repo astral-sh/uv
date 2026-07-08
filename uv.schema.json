@@ -1709,6 +1709,12 @@
           "const": "if-necessary"
         },
         {
+          "description": "Allow pre-release versions for first-party packages with explicit pre-release specifiers in\ntheir version requirements.",
+          "type": "string",
+          "const": "explicit",
+          "deprecated": true
+        },
+        {
           "description": "Allow pre-release versions when no stable candidate satisfies the active constraints, or\nwhen an active direct or transitive requirement contains an explicit pre-release specifier.",
           "type": "string",
           "const": "if-necessary-or-explicit"
