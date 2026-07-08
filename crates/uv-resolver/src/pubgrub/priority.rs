@@ -40,11 +40,10 @@ impl PubGrubPriorities {
         urls: &ForkUrls,
     ) {
         let len = self.virtual_package_tiebreaker.len();
+        let prerelease = matches!(&**package, PubGrubPackageInner::Prerelease { .. });
         self.virtual_package_tiebreaker
             .entry_ref(package)
-            .or_insert_with(|| {
-                PubGrubTiebreaker::from(u32::try_from(len).expect("Less than 2**32 packages"))
-            });
+            .or_insert_with(|| PubGrubTiebreaker::from_package_order(len, prerelease));
 
         // The root package and Python constraints have no explicit priority, the root package is
         // always first and the Python version (range) is fixed.
@@ -157,11 +156,10 @@ impl PubGrubPriorities {
                 if cfg!(debug_assertions) {
                     panic!("Package not registered in prioritization: `{package:?}`")
                 } else {
-                    PubGrubTiebreaker(Reverse(u32::MAX))
+                    PubGrubTiebreaker::from(u32::MAX)
                 }
             }
         };
-
         (package_priority, package_tiebreaker)
     }
 
@@ -272,6 +270,19 @@ pub(crate) enum PubGrubPriority {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct PubGrubTiebreaker(Reverse<u32>);
+
+impl PubGrubTiebreaker {
+    const NORMAL_PACKAGE_START: u32 = 1 << 31;
+
+    /// Create a tiebreaker that prioritizes pre-release proxies, then preserves discovery order.
+    fn from_package_order(index: usize, prerelease: bool) -> Self {
+        let index = u32::try_from(index).expect("Less than 2**32 packages");
+        let normal_order = index
+            .checked_add(Self::NORMAL_PACKAGE_START)
+            .expect("Less than 2**31 packages");
+        Self(Reverse(if prerelease { index } else { normal_order }))
+    }
+}
 
 impl From<u32> for PubGrubTiebreaker {
     fn from(value: u32) -> Self {
