@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -514,18 +514,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
                     let explicit_prerelease =
-                        matches!(&**next_package, PubGrubPackageInner::Prerelease { .. })
-                            || state.has_active_prerelease_proxy(next_package);
+                        matches!(&**next_package, PubGrubPackageInner::Prerelease { .. });
 
                     // Within a fixed resolver environment, an implicit registry candidate is
                     // stable for a given range and pre-release policy. Avoid repeating candidate
                     // selection when PubGrub revisits an identical decision after backtracking.
                     let cache_selected_version = url.is_none() && index.is_none();
                     let decision = if cache_selected_version
-                        && let Some((selected_range, selected_prerelease, version)) =
+                        && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
                         && selected_range == range
-                        && *selected_prerelease == explicit_prerelease
                     {
                         Some(ResolverVersion::Unforked(version.clone()))
                     } else {
@@ -548,10 +546,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if cache_selected_version
                             && let Some(ResolverVersion::Unforked(version)) = &decision
                         {
-                            state.selected_versions.insert(
-                                next_id,
-                                (range.clone(), explicit_prerelease, version.clone()),
-                            );
+                            state
+                                .selected_versions
+                                .insert(next_id, (range.clone(), version.clone()));
                         }
 
                         decision
@@ -3067,9 +3064,8 @@ pub(crate) struct ForkState {
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
     /// The last range scheduled for prefetch for each undecided package.
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
-    /// The last version selected for each package, range, and explicit pre-release authorization
-    /// state in a specific environment.
-    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, bool, Version)>,
+    /// The last version selected for each package and range in a specific environment.
+    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
     /// All known versions for each package, from the version maps and the installed packages,
     /// used to keep the version sets in the partial solution minimal.
     ///
@@ -3108,11 +3104,6 @@ pub(crate) struct ForkState {
     ///
     /// Tracked on the fork state to avoid counting each identical version between forks as new try.
     prefetcher: BatchPrefetcher,
-    /// Reverse index of pre-release proxy package IDs discovered for each package name.
-    ///
-    /// Entries are not removed on backtracking. This map only avoids scanning PubGrub's package
-    /// graph; whether a proxy is active is always derived from the current partial solution.
-    prerelease_by_name: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
 }
 
 impl ForkState {
@@ -3139,30 +3130,7 @@ impl ForkState {
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
-            prerelease_by_name: FxHashMap::default(),
         }
-    }
-
-    /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
-    fn has_active_prerelease_proxy(&self, package: &PubGrubPackage) -> bool {
-        if self.prerelease_by_name.is_empty() {
-            return false;
-        }
-        let Some(name) = package.name_no_root() else {
-            return false;
-        };
-        self.prerelease_by_name
-            .get(name)
-            .into_iter()
-            .flatten()
-            .any(|proxy| {
-                matches!(
-                    self.pubgrub
-                        .partial_solution
-                        .term_intersection_for_package(*proxy),
-                    Some(Term::Positive(_))
-                )
-            })
     }
 
     /// Visit the dependencies for the selected version of the current package, incorporating any
@@ -3286,17 +3254,6 @@ impl ForkState {
                 parent: _,
                 source: _,
             } = dependency;
-
-            if let PubGrubPackageInner::Prerelease { package: wrapped } = &**package {
-                let Some(name) = wrapped.name_no_root() else {
-                    continue;
-                };
-                let proxy = self.pubgrub.package_store.alloc(package.clone());
-                let proxy_ids = self.prerelease_by_name.entry(name.clone()).or_default();
-                if !proxy_ids.contains(&proxy) {
-                    proxy_ids.push(proxy);
-                }
-            }
 
             let Some(base_package) = package.base_package() else {
                 continue;
