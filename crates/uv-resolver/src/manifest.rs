@@ -120,12 +120,12 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
-    /// Return all requirements that affect manifest-wide yanked-version candidate selection.
+    /// Return all requirements that affect manifest-wide candidate selection policy.
     ///
     /// Scoped overrides are included even when their scope is not selected. Whether a scoped
-    /// override applies is only known during resolution, after yanked-version policy has already
-    /// been initialized.
-    pub(crate) fn yanked_version_requirements<'a>(
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
         &'a self,
         env: &'a ResolverEnvironment,
         mode: DependencyMode,
