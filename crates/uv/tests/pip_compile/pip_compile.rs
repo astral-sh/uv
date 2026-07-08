@@ -13806,7 +13806,7 @@ fn no_version_for_direct_dependency() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ you require pypyp ∅
+      ╰─▶ your requirements for pypyp cannot be satisfied
     "
     );
 
