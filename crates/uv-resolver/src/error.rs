@@ -570,6 +570,65 @@ impl NoSolutionError {
         .expect("derivation tree should contain at least one term")
     }
 
+    /// Shrinks widened version sets in the derivation tree back onto the known versions.
+    ///
+    /// The resolver widens the version set on the depending side of a dependency
+    /// incompatibility to the largest interval containing the same known versions
+    /// ([`Ranges::widen_versions`]), keeping version sets small during resolution. The widened
+    /// bounds are misleading in error messages, e.g., `a>1.5.2,<2.0.0` when `a 1.5.3` is the only
+    /// version in that interval. Shrink the depending side and positive terms back: a set
+    /// containing all known versions of a package becomes the full range ("all versions of a");
+    /// otherwise, bounded ends are narrowed to inclusive bounds on the known versions they
+    /// contain while unbounded ends are preserved. Dependency requests (the depended-on side and
+    /// negative terms) are shown as requested.
+    pub(crate) fn narrow_widened_sets(
+        derivation_tree: ErrorTree,
+        known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
+    ) -> ErrorTree {
+        let narrow = |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
+            let Some(versions) = package
+                .name_no_root()
+                .and_then(|name| known_versions.get(name))
+                .filter(|versions| !versions.is_empty())
+            else {
+                return set;
+            };
+            if versions.iter().all(|version| set.contains(version)) {
+                Range::full()
+            } else {
+                set.narrow_versions(versions)
+            }
+        };
+
+        map_derivation_tree(
+            derivation_tree,
+            |external| match external {
+                External::FromDependencyOf(package1, versions1, package2, versions2) => {
+                    let versions1 = narrow(&package1, versions1);
+                    DerivationTree::External(External::FromDependencyOf(
+                        package1, versions1, package2, versions2,
+                    ))
+                }
+                external => DerivationTree::External(external),
+            },
+            |mut metadata, cause1, cause2| {
+                metadata.terms = metadata
+                    .terms
+                    .into_iter()
+                    .map(|(package, term)| {
+                        let term = match term {
+                            Term::Positive(versions) => Term::Positive(narrow(&package, versions)),
+                            term @ Term::Negative(_) => term,
+                        };
+                        (package, term)
+                    })
+                    .collect();
+
+                derived_tree(metadata, cause1, cause2)
+            },
+        )
+    }
+
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
     pub fn find_requires_python(&self) -> LowerBound {
         let mut minimum = LowerBound::default();

@@ -370,6 +370,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     err,
                                     state.fork_urls,
                                     state.fork_indexes,
+                                    &state.known_versions,
                                     state.env,
                                     self.current_environment.clone(),
                                     &visited,
@@ -684,7 +685,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             })?;
 
                         // Add the dependencies to the state.
-                        state.add_package_version_dependencies(next_id, &version, dependencies);
+                        state.add_package_version_dependencies(
+                            next_id,
+                            &version,
+                            dependencies,
+                            &self.index,
+                            &self.installed_packages,
+                        );
                     }
                     ForkedDependencies::Forked {
                         mut forks,
@@ -933,7 +940,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     })?;
 
                 // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(package, version, fork.dependencies);
+                forked_state.add_package_version_dependencies(
+                    package,
+                    version,
+                    fork.dependencies,
+                    &self.index,
+                    &self.installed_packages,
+                );
 
                 Ok(forked_state)
             })
@@ -1094,6 +1107,58 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             ))?;
         }
         Ok(())
+    }
+
+    /// Returns the sorted, deduplicated candidate universe used to widen dependency ranges.
+    ///
+    /// Every selectable version must be present: omitting one could extend a dependency
+    /// incompatibility across it, while including an unselectable version only prevents a
+    /// possible simplification. The result is therefore conservative, including yanked and
+    /// otherwise unavailable versions from every index plus installed versions missing from the
+    /// indexes. Versions past the exclude-newer cutoff are omitted because resolution treats them
+    /// as nonexistent.
+    ///
+    /// Non-blocking: Returns `None` if the version map hasn't been fetched yet, or if the
+    /// package is not a registry package.
+    fn known_versions<'a>(
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
+        fork_urls: &ForkUrls,
+        fork_indexes: &ForkIndexes,
+        known_versions: &'a mut FxHashMap<PackageName, Arc<[Version]>>,
+        package: &PubGrubPackage,
+    ) -> Option<&'a [Version]> {
+        let name = package.name_no_root()?;
+        // Versions of packages from a URL or the workspace are not registry versions.
+        if fork_urls.get(name).is_some() {
+            return None;
+        }
+        if !known_versions.contains_key(name) {
+            let response = if let Some(index_metadata) = fork_indexes.get(name) {
+                index
+                    .explicit()
+                    .get(&(name.clone(), index_metadata.url().clone()))?
+            } else {
+                index.implicit().get(name)?
+            };
+            let VersionsResponse::Found(ref version_maps) = *response else {
+                return None;
+            };
+            let mut versions: Vec<Version> = version_maps
+                .iter()
+                .flat_map(|version_map| version_map.included_versions().cloned())
+                .chain(
+                    installed_packages
+                        .get_packages(name)
+                        .iter()
+                        .map(|dist| dist.version().clone()),
+                )
+                .collect();
+            versions.sort_unstable();
+            versions.dedup();
+            known_versions.insert(name.clone(), versions.into());
+        }
+        Some(&known_versions[name][..])
     }
 
     /// Given a candidate package, choose the next version in range to try.
@@ -2749,6 +2814,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         mut err: pubgrub::NoSolutionError<UvDependencyProvider>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
+        known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
@@ -2756,6 +2822,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
             err,
         ));
+        err = NoSolutionError::narrow_widened_sets(err, known_versions);
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
@@ -2977,6 +3044,11 @@ pub(crate) struct ForkState {
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
     /// The last version selected for each package and range in a specific environment.
     selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    /// All known versions for each package, from the version maps and the installed packages,
+    /// used to keep the version sets in the partial solution minimal.
+    ///
+    /// Per fork, since the index for a package can differ between forks.
+    known_versions: FxHashMap<PackageName, Arc<[Version]>>,
     /// The marker expression that created this state.
     ///
     /// The root state always corresponds to a marker expression that is always
@@ -3031,6 +3103,7 @@ impl ForkState {
             added_dependencies: FxHashMap::default(),
             pre_visited: FxHashMap::default(),
             selected_versions: FxHashMap::default(),
+            known_versions: FxHashMap::default(),
             env,
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
@@ -3139,12 +3212,18 @@ impl ForkState {
         Ok(())
     }
 
-    /// Add the dependencies for the selected version of the current package.
-    fn add_package_version_dependencies(
+    /// Adds the dependencies for the selected version of the current package.
+    ///
+    /// For registry packages, the depending version is widened across gaps containing no other
+    /// known version before its incompatibilities are added. Packages without a complete registry
+    /// version map retain the selected version's singleton range.
+    fn add_package_version_dependencies<InstalledPackages: InstalledPackagesProvider>(
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
+        index: &InMemoryIndex,
+        installed_packages: &InstalledPackages,
     ) {
         for dependency in &dependencies {
             let PubGrubDependency {
@@ -3167,9 +3246,30 @@ impl ForkState {
             );
         }
 
+        // Widen across gaps so rejected adjacent versions merge into contiguous ranges rather
+        // than leaving one hole per version.
+        let versions = Range::singleton(for_version.clone());
+        let versions = if let Some(known_versions) =
+            ResolverState::<InstalledPackages>::known_versions(
+                index,
+                installed_packages,
+                &self.fork_urls,
+                &self.fork_indexes,
+                &mut self.known_versions,
+                &self.pubgrub.package_store[self.next],
+            )
+            .filter(|versions| !versions.is_empty())
+        {
+            versions.widen_versions(known_versions)
+        } else {
+            // A decided version is always selectable and thus in the list, but an empty list
+            // would unsoundly widen to the full range.
+            versions
+        };
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
+            versions,
             dependencies.into_iter().map(|dependency| {
                 let PubGrubDependency {
                     package,
