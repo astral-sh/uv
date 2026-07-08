@@ -2998,3 +2998,92 @@ fn workspace_circular_dependencies() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn invert_leaf_cycle() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a lockfile with a leaf cycle: bar ↔ baz form a cycle where no
+    // node in the reversed graph has zero incoming edges. Without the SCC
+    // fallback, `--invert` would produce no output.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "foo"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+            dependencies = ["bar==1.0.0"]
+        "#})?;
+
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(indoc! {r#"
+            version = 1
+            revision = 3
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = "foo"
+            version = "1.0.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "bar" },
+            ]
+
+            [[package]]
+            name = "bar"
+            version = "1.0.0"
+            source = { registry = "https://pypi.org/simple" }
+            dependencies = [
+                { name = "baz" },
+            ]
+
+            [[package]]
+            name = "baz"
+            version = "1.0.0"
+            source = { registry = "https://pypi.org/simple" }
+            dependencies = [
+                { name = "bar" },
+            ]
+        "#})?;
+
+    // Normal tree — no issue; the cycle is displayed as usual.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo v1.0.0
+    └── bar v1.0.0
+        └── baz v1.0.0
+            └── bar v1.0.0 (*)
+    (*) Package tree already displayed
+
+    ----- stderr -----
+
+    "
+    );
+
+    // Inverted tree — without the SCC fallback every node in the reversed
+    // graph has incoming edges, yielding an empty root set and no output.
+    // With the fix, the SCC {bar, baz} is detected as a root SCC.
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen").arg("--invert"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    bar v1.0.0
+    ├── baz v1.0.0
+    │   └── bar v1.0.0 (*)
+    └── foo v1.0.0
+
+    (*) Package tree already displayed
+
+    ----- stderr -----
+
+    "
+    );
+
+    Ok(())
+}
