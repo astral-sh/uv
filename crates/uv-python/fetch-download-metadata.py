@@ -444,7 +444,7 @@ class PyPyFinder(Finder):
             if not version["stable"]:
                 continue
             python_version = Version.from_str(version["python_version"])
-            if python_version < (3, 7, 0):
+            if python_version < (3, 11, 0):
                 continue
             pypy_version = version["pypy_version"]
             for file in version["files"]:
