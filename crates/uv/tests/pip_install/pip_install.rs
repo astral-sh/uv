@@ -11411,8 +11411,6 @@ fn direct_url_json_direct_url() -> Result<()> {
 
 #[test]
 fn dependency_group() -> Result<()> {
-    let server = PackseServer::new("simple/dependency-groups.toml");
-
     // testing basic `uv pip install --group` functionality
     fn new_context(server: &PackseServer) -> Result<TestContext> {
         let context = uv_test::test_context!("3.12");
@@ -11447,6 +11445,7 @@ fn dependency_group() -> Result<()> {
         command
     }
 
+    let server = PackseServer::new("simple/dependency-groups.toml");
     let mut context;
 
     // 'bar' using path sugar

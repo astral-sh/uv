@@ -16144,8 +16144,6 @@ fn respect_index_preference() -> Result<()> {
 
 #[test]
 fn dependency_group() -> Result<()> {
-    let server = PackseServer::new("simple/dependency-groups.toml");
-
     // uv pip compile --group tests, with a single pyproject.toml
     fn new_context() -> Result<TestContext> {
         let context = uv_test::test_context!("3.12");
@@ -16174,6 +16172,7 @@ fn dependency_group() -> Result<()> {
         command
     }
 
+    let server = PackseServer::new("simple/dependency-groups.toml");
     let mut context;
 
     // Passing --group should add just that group's contents from ./pyproject.toml
