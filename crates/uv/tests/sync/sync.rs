@@ -2232,9 +2232,10 @@ fn sync_build_isolation_extra() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -2256,9 +2257,9 @@ fn sync_extra_build_dependencies() -> Result<()> {
         from hatchling.build import *
 
         try:
-            import anyio
+            import a
         except ModuleNotFoundError:
-            print("Missing `anyio` module", file=sys.stderr)
+            print("Missing `a` module", file=sys.stderr)
             sys.exit(1)
     "#})?;
     child.child("src/child/__init__.py").touch()?;
@@ -2278,7 +2279,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2290,7 +2291,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Missing `anyio` module
+          Missing `a` module
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
@@ -2309,11 +2310,11 @@ fn sync_extra_build_dependencies() -> Result<()> {
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
+        child = ["a"]
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2326,7 +2327,7 @@ fn sync_extra_build_dependencies() -> Result<()> {
     ");
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2350,11 +2351,11 @@ fn sync_extra_build_dependencies() -> Result<()> {
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        wrong_name = ["anyio"]
+        wrong_name = ["a"]
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2366,14 +2367,14 @@ fn sync_extra_build_dependencies() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Missing `anyio` module
+          Missing `a` module
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    // Write a test package that arbitrarily bans `anyio` at build time
+    // Write a test package that arbitrarily bans `a` at build time
     let bad_child = context.temp_dir.child("bad_child");
     bad_child.create_dir_all()?;
     let bad_child_pyproject_toml = bad_child.child("pyproject.toml");
@@ -2395,11 +2396,11 @@ fn sync_extra_build_dependencies() -> Result<()> {
         from hatchling.build import *
 
         try:
-            import anyio
+            import a
         except ModuleNotFoundError:
             pass
         else:
-            print("Found `anyio` module", file=sys.stderr)
+            print("Found `a` module", file=sys.stderr)
             sys.exit(1)
     "#})?;
     bad_child.child("src/bad_child/__init__.py").touch()?;
@@ -2417,13 +2418,13 @@ fn sync_extra_build_dependencies() -> Result<()> {
         bad_child = { path = "bad_child" }
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
-        bad_child = ["anyio"]
+        child = ["a"]
+        bad_child = ["a"]
     "#})?;
 
-    // Confirm that `bad_child` fails if anyio is provided
+    // Confirm that `bad_child` fails if a is provided
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2435,14 +2436,14 @@ fn sync_extra_build_dependencies() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Found `anyio` module
+          Found `a` module
 
 
     hint: `bad-child` was included because `parent` (v0.1.0) depends on `bad-child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    // But `anyio` is not provided to `bad_child` if scoped to `child`
+    // But `a` is not provided to `bad_child` if scoped to `child`
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
@@ -2455,11 +2456,11 @@ fn sync_extra_build_dependencies() -> Result<()> {
         bad_child = { path = "bad_child" }
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
+        child = ["a"]
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2753,9 +2754,12 @@ fn sync_extra_build_dependencies_sources() -> Result<()> {
 
 #[test]
 fn sync_extra_build_dependencies_index() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
+    let test_server =
+        PackseServer::new("prereleases/package-prerelease-specified-only-final-available.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -2763,40 +2767,40 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "anyio"]
+        requires = ["hatchling", "a"]
         backend-path = ["."]
         build-backend = "build_backend"
     "#})?;
 
-    // Create a build backend that checks for a specific version of anyio
+    // Create a build backend that checks for a specific version of a
     let build_backend = child.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import os
         import sys
         from hatchling.build import *
 
-        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        expected_version = os.environ.get("EXPECTED_A_VERSION", "")
         if not expected_version:
-            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            print("`EXPECTED_A_VERSION` not set", file=sys.stderr)
             sys.exit(1)
 
         try:
-            import anyio
+            import a
         except ModuleNotFoundError:
-            print("Missing `anyio` module", file=sys.stderr)
+            print("Missing `a` module", file=sys.stderr)
             sys.exit(1)
 
         from importlib.metadata import version
-        anyio_version = version("anyio")
+        a_version = version("a")
 
-        if not anyio_version.startswith(expected_version):
-            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+        if not a_version.startswith(expected_version):
+            print(f"Expected `a` version {expected_version} but got {a_version}", file=sys.stderr)
             sys.exit(1)
 
-        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+        print(f"Found expected `a` version {a_version}", file=sys.stderr)
     "#})?;
     child.child("src/child/__init__.py").touch()?;
 
@@ -2806,7 +2810,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
         dependencies = ["child"]
 
         [tool.uv.sources]
@@ -2814,7 +2818,7 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "1.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2826,15 +2830,15 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
+          Expected `a` version 1.0 but got 2.0.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    // Ensure that we're resolving to `4.3.0`, the "latest" on PyPI.
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
+    // Ensure that we're resolving to `2.0.0`, the latest version on the default index.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "2.0"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2846,30 +2850,32 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
      + child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
-    // Pin `anyio` to the Test PyPI.
-    pyproject_toml.write_str(indoc! {r#"
+    // Pin `a` to the test index.
+    pyproject_toml.write_str(&formatdoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
         dependencies = ["child"]
 
         [tool.uv.sources]
-        child = { path = "child" }
-        anyio = { index = "test" }
+        child = {{ path = "child" }}
+        a = {{ index = "test" }}
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
+        child = ["a"]
 
         [[tool.uv.index]]
-        url = "https://test.pypi.org/simple"
+        url = "{test_index_url}"
         name = "test"
         explicit = true
-    "#})?;
+    "#,
+        test_index_url = test_server.index_url(),
+    })?;
 
-    // The child should be rebuilt with `3.5` on reinstall, the "latest" on Test PyPI.
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.3"), @"
+    // The child should be rebuilt with `0.3.0`, the latest version on the test index.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "2.0"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2881,15 +2887,15 @@ fn sync_extra_build_dependencies_index() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 4.3 but got 3.5.0
+          Expected `a` version 2.0 but got 0.3.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.5"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.3"), @"
     success: true
     exit_code: 0
     ----- stdout -----
