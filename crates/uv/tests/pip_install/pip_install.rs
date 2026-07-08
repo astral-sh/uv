@@ -3403,10 +3403,15 @@ fn install_git_private_https_interactive() {
 #[test]
 fn reinstall_no_binary() {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
 
     // The first installation should use a pre-built wheel
     let mut command = context.pip_install();
-    command.arg("anyio").arg("--strict");
+    command
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--strict");
     uv_snapshot!(
         command,
         @"
@@ -3415,24 +3420,24 @@ fn reinstall_no_binary() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
     "
     );
 
-    context.assert_command("import anyio").success();
+    context.assert_command("import a").success();
 
     // Running installation again with `--no-binary` should be a no-op
     // The first installation should use a pre-built wheel
     let mut command = context.pip_install();
     command
-        .arg("anyio")
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--no-binary")
-        .arg(":all:")
+        .arg("a")
         .arg("--strict");
     uv_snapshot!(command, @"
     success: true
@@ -3444,17 +3449,19 @@ fn reinstall_no_binary() {
     "
     );
 
-    context.assert_command("import anyio").success();
+    context.assert_command("import a").success();
 
     // With `--reinstall`, `--no-binary` should have an affect
     let context = context.with_filtered_counts();
     let mut command = context.pip_install();
     command
-        .arg("anyio")
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--no-binary")
-        .arg(":all:")
+        .arg("a")
         .arg("--reinstall-package")
-        .arg("anyio")
+        .arg("a")
         .arg("--strict");
     uv_snapshot!(context.filters(), command, @"
     success: true
@@ -3466,11 +3473,11 @@ fn reinstall_no_binary() {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     ~ anyio==4.3.0
+     ~ a==2.0.0
     "
     );
 
-    context.assert_command("import anyio").success();
+    context.assert_command("import a").success();
 }
 
 /// Overlapping usage of `--no-binary` and `--only-binary`
