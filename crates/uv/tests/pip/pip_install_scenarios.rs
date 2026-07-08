@@ -3436,7 +3436,7 @@ fn canonical_empty_requirement() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ you require a ∅
+      ╰─▶ you require a<0.dev0, which does not allow any versions
     ");
 
     context.assert_not_installed("a");

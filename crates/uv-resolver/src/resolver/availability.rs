@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 use std::iter;
 use std::sync::Arc;
 
-use pubgrub::Ranges;
 use reqwest::StatusCode;
 
 use uv_distribution_types::{IncompatibleDist, Requirement, RequirementSource};
@@ -11,6 +10,7 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 
+use crate::pubgrub::Range;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
@@ -48,7 +48,7 @@ impl UnsatisfiableRequirement {
         let RequirementSource::Registry { specifier, .. } = &requirement.source else {
             return None;
         };
-        Ranges::from(specifier.clone()).is_empty().then(|| Self {
+        (Range::from(specifier.clone()) == Range::empty()).then(|| Self {
             name: requirement.name.clone(),
             extras: requirement.extras.clone(),
             version_specifiers: specifier.clone(),
