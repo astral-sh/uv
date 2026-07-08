@@ -13,6 +13,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
+use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
 use uv_test::{download_to_disk, site_packages_path, uv_snapshot};
 
@@ -4752,18 +4753,23 @@ fn require_hashes_at_least_one() -> Result<()> {
 #[test]
 fn require_hashes_find_links_no_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let server = FindLinksServer::new(&context.workspace_root.join("test/links"));
+    let index = PackseServer::empty();
 
     // First, use the correct hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e")?;
+    requirements_txt.write_str(
+        "basic-package==0.1.0 --hash=sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
+        .arg("--index-url")
+        .arg(index.index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @"
+        .arg(server.url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -4772,70 +4778,76 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + example-a-961b4c22==1.0.0
+     + basic-package==0.1.0
     "
     );
 
     // Second, use an incorrect hash.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("example-a-961b4c22==1.0.0 --hash=sha256:123")?;
+    requirements_txt.write_str("basic-package==0.1.0 --hash=sha256:123")?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
+        .arg("--index-url")
+        .arg(index.index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @"
+        .arg(server.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `basic-package==0.1.0`
+      ╰─▶ Hash mismatch for `basic-package==0.1.0`
 
           Expected:
             sha256:123
 
           Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
     // Third, use the hash from the source distribution. This will actually fail, when it _could_
     // succeed, but pip has the same behavior.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
+    requirements_txt.write_str(
+        "basic-package==0.1.0 --hash=sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
         .arg("--reinstall")
         .arg("--require-hashes")
+        .arg("--index-url")
+        .arg(index.index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @"
+        .arg(server.url()), @"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `example-a-961b4c22==1.0.0`
-      ╰─▶ Hash mismatch for `example-a-961b4c22==1.0.0`
+      × Failed to download `basic-package==0.1.0`
+      ╰─▶ Hash mismatch for `basic-package==0.1.0`
 
           Expected:
-            sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3
+            sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4
 
           Computed:
-            sha256:5d69f0b590514103234f0c3526563856f04d044d8d0ea1073a843ae429b3187e
+            sha256:7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82
     "
     );
 
     // Fourth, use the hash from the source distribution, and disable wheels. This should succeed.
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("example-a-961b4c22==1.0.0 --hash=sha256:294e788dbe500fdc39e8b88e82652ab67409a1dc9dd06543d0fe0ae31b713eb3")?;
+    requirements_txt.write_str(
+        "basic-package==0.1.0 --hash=sha256:af478ff91ec60856c99a540b8df13d756513bebb65bc301fb27e0d1f974532b4",
+    )?;
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
@@ -4843,18 +4855,20 @@ fn require_hashes_find_links_no_hash() -> Result<()> {
         .arg(":all:")
         .arg("--reinstall")
         .arg("--require-hashes")
+        .arg("--index-url")
+        .arg(index.index_url())
         .arg("--find-links")
-        .arg("https://raw.githubusercontent.com/astral-test/astral-test-hash/main/no-hash/simple-html/example-a-961b4c22/index.html"), @"
-    success: true
-    exit_code: 0
+        .arg(server.url()), @"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
-     ~ example-a-961b4c22==1.0.0
+      × Failed to download and build `basic-package==0.1.0`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ├─▶ No solution found when resolving: `uv-build>=0.8.3, <0.9.0`
+      ╰─▶ Because uv-build was not found in the package registry and you require uv-build>=0.8.3,<0.9.0, we can conclude that your requirements are unsatisfiable.
     "
     );
 
