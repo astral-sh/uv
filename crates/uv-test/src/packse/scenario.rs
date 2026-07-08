@@ -4,6 +4,7 @@
 //! `[packages.<name>.versions.<version>]` becomes a [`PackageName`] key, then a [`Version`] key.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -209,6 +210,14 @@ impl Default for Environment {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResolverOptions {
+    /// Select the generated test command for this scenario.
+    #[serde(default)]
+    pub test: Option<ScenarioTest>,
+
+    /// Version selection strategy.
+    #[serde(default)]
+    pub resolution: Option<Resolution>,
+
     /// Python version override for resolution.
     #[serde(default)]
     pub python: Option<PythonVersion>,
@@ -236,6 +245,34 @@ pub struct ResolverOptions {
     /// Required environments (platform markers).
     #[serde(default)]
     pub required_environments: Vec<MarkerTree>,
+}
+
+/// The command template used to generate a scenario test.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ScenarioTest {
+    Install,
+    Compile,
+    Lock,
+}
+
+/// The version selection strategy used by the resolver.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Resolution {
+    Highest,
+    Lowest,
+    LowestDirect,
+}
+
+impl fmt::Display for Resolution {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Highest => formatter.write_str("highest"),
+            Self::Lowest => formatter.write_str("lowest"),
+            Self::LowestDirect => formatter.write_str("lowest-direct"),
+        }
+    }
 }
 
 #[expect(clippy::unnecessary_wraps)] // Must return `Option` for serde `default`
@@ -316,6 +353,29 @@ extra_c = ["c"]
         assert_eq!(
             a_meta.extras[&extra_name],
             vec![Requirement::from_str("b").expect("valid requirement")]
+        );
+    }
+
+    #[test]
+    fn parse_test_and_resolution() {
+        let toml = r#"
+name = "lowest-direct"
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+
+[resolver_options]
+test = "compile"
+resolution = "lowest-direct"
+"#;
+        let scenario: Scenario = toml::from_str(toml).expect("scenario should parse");
+        assert_eq!(scenario.resolver_options.test, Some(ScenarioTest::Compile));
+        assert_eq!(
+            scenario.resolver_options.resolution,
+            Some(Resolution::LowestDirect)
         );
     }
 
