@@ -19,20 +19,25 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
+    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
+    /// their version requirements.
+    #[deprecated(note = "use `if-necessary-or-explicit` instead")]
+    Explicit,
+
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active direct or transitive requirement contains an explicit pre-release specifier.
     #[default]
-    #[serde(alias = "explicit")]
-    #[cfg_attr(feature = "clap", value(alias("explicit")))]
     IfNecessaryOrExplicit,
 }
 
+#[allow(deprecated)]
 impl std::fmt::Display for PrereleaseMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disallow => write!(f, "disallow"),
             Self::Allow => write!(f, "allow"),
             Self::IfNecessary => write!(f, "if-necessary"),
+            Self::Explicit => write!(f, "explicit"),
             Self::IfNecessaryOrExplicit => write!(f, "if-necessary-or-explicit"),
         }
     }
@@ -51,12 +56,17 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
+    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
+    /// their version requirements.
+    Explicit(ForkSet),
+
     /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
     /// when an active requirement contains an explicit pre-release specifier.
     IfNecessaryOrExplicit(ForkSet),
 }
 
 impl PrereleaseStrategy {
+    #[allow(deprecated)]
     pub(crate) fn from_mode(
         mode: PrereleaseMode,
         manifest: &Manifest,
@@ -67,6 +77,19 @@ impl PrereleaseStrategy {
             PrereleaseMode::Disallow => Self::Disallow,
             PrereleaseMode::Allow => Self::Allow,
             PrereleaseMode::IfNecessary => Self::IfNecessary,
+            PrereleaseMode::Explicit => {
+                let mut packages = ForkSet::default();
+                for requirement in manifest.candidate_selection_requirements(env, dependencies) {
+                    let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+                        continue;
+                    };
+
+                    if contains_prerelease(specifier) {
+                        packages.add(&requirement, ());
+                    }
+                }
+                Self::Explicit(packages)
+            }
             PrereleaseMode::IfNecessaryOrExplicit => {
                 let mut packages = ForkSet::default();
                 for requirement in manifest.requirements(env, dependencies) {
@@ -100,6 +123,13 @@ impl PrereleaseStrategy {
             Self::Disallow => PrereleaseSelection::Disallow,
             Self::Allow => PrereleaseSelection::Allow,
             Self::IfNecessary => PrereleaseSelection::PreferStable,
+            Self::Explicit(packages) => {
+                if packages.contains(package_name, env) {
+                    PrereleaseSelection::Allow
+                } else {
+                    PrereleaseSelection::Disallow
+                }
+            }
             Self::IfNecessaryOrExplicit(packages) => {
                 if explicit_prerelease || packages.contains(package_name, env) {
                     PrereleaseSelection::Allow
