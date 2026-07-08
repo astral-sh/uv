@@ -1,0 +1,30 @@
+name = "prerelease-base-extra-authorization-after-backtrack"
+description = "A same-distribution dependency batch remains order-independent after rejecting an earlier parent version."
+
+[root]
+requires = ["a", "d==1.0.0"]
+
+[expected]
+satisfiable = true
+explanation = "After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` share pre-release authorization and select `c==2.0.0a1`."
+
+[expected.packages]
+a = "1.0.0"
+c = "2.0.0a1"
+d = "1.0.0"
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=1.0", "c[extra]>=0.5a1"]
+
+[packages.a.versions."2.0.0"]
+requires = ["c>=1.0", "d==2.0.0"]
+
+[packages.c.versions."1.0.0".extras]
+extra = []
+
+[packages.c.versions."2.0.0a1".extras]
+extra = []
+
+[packages.d.versions."1.0.0"]
+
+[packages.d.versions."2.0.0"]

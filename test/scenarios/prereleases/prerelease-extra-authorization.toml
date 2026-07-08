@@ -1,0 +1,18 @@
+name = "prerelease-extra-authorization"
+description = "Requirements on the same extra share pre-release authorization before constraining the base package."
+
+[root]
+requires = ["c[extra]>=1.0", "c[extra]>=0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "The requirements on `c[extra]` share pre-release authorization, and the selected proxy version pins the base package to the same version."
+
+[expected.packages]
+c = "2.0.0a1"
+
+[packages.c.versions."1.0.0".extras]
+extra = []
+
+[packages.c.versions."2.0.0a1".extras]
+extra = []

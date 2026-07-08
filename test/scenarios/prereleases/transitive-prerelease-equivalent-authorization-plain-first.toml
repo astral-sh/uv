@@ -1,0 +1,20 @@
+name = "transitive-prerelease-equivalent-authorization-plain-first"
+description = "Requirements from one parent share pre-release authorization when the plain requirement appears first."
+
+[root]
+requires = ["a"]
+
+[expected]
+satisfiable = true
+explanation = "Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases regardless of order."
+
+[expected.packages]
+a = "1.0.0"
+c = "2.0.0a1"
+
+[packages.a.versions."1.0.0"]
+requires = ["c>=1.0", "c>=1.0,>0.5a1"]
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]

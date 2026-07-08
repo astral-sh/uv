@@ -1,0 +1,16 @@
+name = "prerelease-equivalent-authorization-plain-first"
+description = "Equivalent requirements share pre-release authorization when the plain requirement appears first."
+
+[root]
+requires = ["c>=1.0", "c>=1.0,>0.5a1"]
+
+[expected]
+satisfiable = true
+explanation = "The requirement on `c>=1.0,>0.5a1` authorizes matching pre-releases even though it has the same logical version set as `c>=1.0`."
+
+[expected.packages]
+c = "2.0.0a1"
+
+[packages.c.versions."1.0.0"]
+
+[packages.c.versions."2.0.0a1"]
