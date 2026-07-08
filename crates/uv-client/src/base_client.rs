@@ -115,6 +115,8 @@ pub struct BaseClientBuilder<'a> {
     cross_origin_credential_policy: CrossOriginCredentialsPolicy,
     /// Optional custom reqwest client to use instead of creating a new one.
     custom_client: Option<Client>,
+    /// Whether to automatically decompress response bodies based on `Content-Encoding`.
+    automatic_decompression: bool,
     /// uv subcommand in which this client is being used
     subcommand: Option<Vec<String>>,
     /// Optional name for this client, used in debug logging.
@@ -182,6 +184,7 @@ impl Default for BaseClientBuilder<'_> {
             redirect_policy: RedirectPolicy::default(),
             cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
             custom_client: None,
+            automatic_decompression: true,
             subcommand: None,
             client_name: None,
             no_retry_delay: env::var_os(EnvVars::UV_TEST_NO_HTTP_RETRY_DELAY).is_some(),
@@ -219,6 +222,15 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
+        self
+    }
+
+    /// Enable or disable automatic response body decompression based on `Content-Encoding`.
+    ///
+    /// This setting does not reconfigure a client provided via [`Self::custom_client`].
+    #[must_use]
+    pub fn automatic_decompression(mut self, enabled: bool) -> Self {
+        self.automatic_decompression = enabled;
         self
     }
 
@@ -526,6 +538,12 @@ impl<'a> BaseClientBuilder<'a> {
             .read_timeout(read_timeout)
             .connect_timeout(connect_timeout)
             .redirect(redirect_policy.reqwest_policy());
+
+        let client_builder = if self.automatic_decompression {
+            client_builder
+        } else {
+            client_builder.no_gzip().no_brotli().no_deflate().no_zstd()
+        };
 
         // If necessary, accept invalid certificates.
         let client_builder = match security {

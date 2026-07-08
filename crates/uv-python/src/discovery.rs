@@ -1507,7 +1507,11 @@ pub(crate) async fn find_best_python_installation(
 
                     // Python downloads are performing their own retries to catch stream errors, disable
                     // the default retries to avoid the middleware performing uncontrolled retries.
-                    let client = client_builder.clone().retries(0).build()?;
+                    let client = client_builder
+                        .clone()
+                        .retries(0)
+                        .automatic_decompression(false)
+                        .build()?;
                     download_state.insert((client, retry_policy, download_list))
                 };
 

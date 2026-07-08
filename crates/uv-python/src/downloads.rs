@@ -12,6 +12,7 @@ use futures::TryStreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use reqwest::Response;
+use reqwest::header::{ACCEPT_ENCODING, HeaderValue};
 use reqwest_retry::RetryError;
 use reqwest_retry::policies::ExponentialBackoff;
 use serde::{Deserialize, Serialize};
@@ -1830,6 +1831,7 @@ async fn read_url(
         let response = client
             .for_host(url)
             .get(Url::from(url.clone()))
+            .header(ACCEPT_ENCODING, HeaderValue::from_static("identity"))
             .send()
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;

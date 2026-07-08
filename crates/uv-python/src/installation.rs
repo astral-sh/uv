@@ -296,7 +296,11 @@ impl PythonInstallation {
         // Python downloads are performing their own retries to catch stream errors, disable the
         // default retries to avoid the middleware performing uncontrolled retries.
         let retry_policy = client_builder.retry_policy();
-        let download_client = client_builder.clone().retries(0).build()?;
+        let download_client = client_builder
+            .clone()
+            .retries(0)
+            .automatic_decompression(false)
+            .build()?;
 
         let installation = Self::fetch(
             download,

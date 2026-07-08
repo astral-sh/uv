@@ -479,7 +479,6 @@ fn python_list_downloads_installed() {
     exit_code: 0
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM]    <download available>
-    pypy-3.10.16-[PLATFORM]       <download available>
     graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
@@ -755,14 +754,14 @@ fn python_list_with_mirrors() {
 
     // Test with UV_PYPY_INSTALL_MIRROR environment variable - verify PyPy mirror URL is used
     uv_snapshot!(context.filters(), context.python_list()
-        .arg("pypy@3.10")
+        .arg("pypy@3.11")
         .arg("--show-urls")
         .env(EnvVars::UV_PYPY_INSTALL_MIRROR, "https://pypy-mirror.example.com")
         .env_remove(EnvVars::UV_PYTHON_DOWNLOADS), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
+    pypy-3.11.[LATEST]-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
 
     ----- stderr -----
     ");
@@ -778,7 +777,6 @@ fn python_list_with_mirrors() {
     exit_code: 0
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM] https://python-mirror.example.com/[FILE-PATH]
-    pypy-3.10.16-[PLATFORM] https://pypy-mirror.example.com/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 
     ----- stderr -----
@@ -793,7 +791,6 @@ fn python_list_with_mirrors() {
     exit_code: 0
     ----- stdout -----
     cpython-3.10.[LATEST]-[PLATFORM] https://releases.astral.sh/github/python-build-standalone/releases/download/[FILE-PATH]
-    pypy-3.10.16-[PLATFORM] https://downloads.python.org/pypy/[FILE-PATH]
     graalpy-3.10.0-[PLATFORM] https://github.com/oracle/graalpython/releases/download/[FILE-PATH]
 
     ----- stderr -----

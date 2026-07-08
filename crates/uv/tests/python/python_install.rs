@@ -4173,60 +4173,60 @@ fn python_install_build_version_pypy() {
         .with_filtered_exe_suffix();
 
     uv_snapshot!(context.filters(), context.python_install()
-        .arg("pypy3.10")
-        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
+        .arg("pypy3.11")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.23"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.16 in [TIME]
-     + pypy-3.10.16-[PLATFORM] (pypy3.10)
+    Installed Python 3.11.15 in [TIME]
+     + pypy-3.11.15-[PLATFORM] (pypy3.11)
     ");
 
     // A BUILD file should be present with the version
     let pypy_dir = context
         .temp_dir
         .child("managed")
-        .child(format!("pypy-3.10.16-{}", platform_key_from_env().unwrap()));
+        .child(format!("pypy-3.11.15-{}", platform_key_from_env().unwrap()));
     let build_file_path = pypy_dir.join("BUILD");
     let build_content = fs_err::read_to_string(&build_file_path).unwrap();
-    assert_eq!(build_content, "7.3.19");
+    assert_eq!(build_content, "7.3.23");
 
     // We should find the build
     uv_snapshot!(context.filters(), context.python_find()
-        .arg("pypy3.10")
-        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.19"), @"
+        .arg("pypy3.11")
+        .env(EnvVars::UV_PYTHON_PYPY_BUILD, "7.3.23"), @"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/pypy-3.10.16-[PLATFORM]/[INSTALL-BIN]/[PYPY]
+    [TEMP_DIR]/managed/pypy-3.11.15-[PLATFORM]/[INSTALL-BIN]/[PYPY]
 
     ----- stderr -----
     ");
 
     // If the build number does not match, we should ignore the installation
     uv_snapshot!(context.filters(), context.python_find()
-        .arg("pypy3.10")
+        .arg("pypy3.11")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for PyPy 3.10 in [PYTHON SOURCES]
+    error: No interpreter found for PyPy 3.11 in [PYTHON SOURCES]
     ");
 
     // If there's no install for a build number, we should fail
     uv_snapshot!(context.filters(), context.python_install()
-        .arg("pypy3.10")
+        .arg("pypy3.11")
         .env(EnvVars::UV_PYTHON_PYPY_BUILD, "99.99.99"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No download found for request: pypy-3.10-[PLATFORM]
+    error: No download found for request: pypy-3.11-[PLATFORM]
     ");
 }
 

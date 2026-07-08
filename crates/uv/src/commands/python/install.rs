@@ -347,7 +347,10 @@ async fn perform_install(
     .await?;
     // Python downloads are performing their own retries to catch stream errors, disable the
     // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build()?;
+    let client = client_builder
+        .retries(0)
+        .automatic_decompression(false)
+        .build()?;
     // TODO(zanieb): We use this variable to special-case .python-version files, but it'd be nice to
     // have generalized request source tracking instead
     let mut is_from_python_version_file = false;
