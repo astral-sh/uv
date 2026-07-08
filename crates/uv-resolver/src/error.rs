@@ -481,13 +481,20 @@ impl NoSolutionError {
     }
 
     /// Given a [`DerivationTree`], collapse any [`External::FromDependencyOf`] incompatibilities
-    /// wrap an [`PubGrubPackageInner::Extra`] package.
+    /// that wrap a [`PubGrubPackageInner::Marker`] proxy. Extra and group proxies are preserved
+    /// since they carry user-meaningful information about which optional dependencies are involved.
     pub(crate) fn collapse_proxies(derivation_tree: ErrorTree) -> ErrorTree {
         fn is_proxy(tree: &ErrorTree) -> bool {
+            // Returns `true` if the package is a marker-only proxy (not extra or
+            // group, which carry user-meaningful information).
+            fn is_proxy_package(package: &PubGrubPackage) -> bool {
+                matches!(&**package, PubGrubPackageInner::Marker { .. })
+            }
+
             matches!(
                 tree,
                 DerivationTree::External(External::FromDependencyOf(package, ..))
-                    if package.is_proxy()
+                    if is_proxy_package(package)
             )
         }
 
