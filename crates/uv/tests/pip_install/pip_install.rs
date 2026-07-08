@@ -16038,6 +16038,13 @@ fn install_missing_python_version_with_target() {
 /// runs on the host, not the target, we accept wheel platforms for the host.
 #[test]
 fn build_backend_wrong_wheel_platform() -> Result<()> {
+    fn command(context: &TestContext, server: &PackseServer) -> Command {
+        let mut command = context.pip_install();
+        command.arg("--index-url").arg(server.index_url());
+        command
+    }
+
+    let server = PackseServer::empty();
     let context = uv_test::test_context_with_versions!(&["3.12", "3.13"])
         .with_filter((r" on [^ ]+ [^ ]+\.", " on [ARCH] [OS]."))
         .with_filter((r" on [^ ]+ [^ ]+$", " on [ARCH] [OS]"));
@@ -16093,7 +16100,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("./child"), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("./child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16113,7 +16120,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("--python-version").arg("3.12").arg("./child"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -16132,7 +16139,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.13").arg("./child"), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("--python-version").arg("3.13").arg("./child"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16152,7 +16159,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("./child"), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("--python-version").arg("3.12").arg("./child"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -16193,7 +16200,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.13")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("--python-version").arg("3.12").arg("."), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -16213,7 +16220,7 @@ fn build_backend_wrong_wheel_platform() -> Result<()> {
         .arg("3.12")
         .assert()
         .success();
-    uv_snapshot!(context.filters(), context.pip_install().arg("--python-version").arg("3.12").arg("."), @"
+    uv_snapshot!(context.filters(), command(&context, &server).arg("--python-version").arg("3.12").arg("."), @"
     success: false
     exit_code: 1
     ----- stdout -----
