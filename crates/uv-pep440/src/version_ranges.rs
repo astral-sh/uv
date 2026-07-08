@@ -3,12 +3,180 @@
 use std::cmp::Ordering;
 use std::collections::Bound;
 use std::ops::Deref;
+use std::sync::LazyLock;
 use version_ranges::Ranges;
 
 use crate::{
     LocalVersion, LocalVersionSlice, Operator, Prerelease, Version, VersionSpecifier,
     VersionSpecifiers,
 };
+
+/// The smallest valid PEP 440 version.
+static PEP440_MIN_VERSION: LazyLock<Version> =
+    LazyLock::new(|| Version::new([0]).with_dev(Some(0)));
+
+/// Rewrite internal local-version sentinels into bounds suitable for diagnostics.
+pub fn strip_local_version_sentinels(ranges: &Ranges<Version>) -> Ranges<Version> {
+    ranges
+        .iter()
+        .map(|(lower, upper)| {
+            let lower_is_included = matches!(lower, Bound::Included(_));
+            let lower = match lower.cloned() {
+                Bound::Included(version) | Bound::Excluded(version)
+                    if version.local() == LocalVersionSlice::Max =>
+                {
+                    Bound::Excluded(version.without_local())
+                }
+                lower => lower,
+            };
+            let upper = match upper.cloned() {
+                Bound::Included(version) if version.local() == LocalVersionSlice::Max => {
+                    Bound::Included(version.without_local())
+                }
+                Bound::Excluded(version)
+                    if version.local() == LocalVersionSlice::Max && lower_is_included =>
+                {
+                    Bound::Included(version.without_local())
+                }
+                Bound::Excluded(version) if version.local() == LocalVersionSlice::Max => {
+                    Bound::Excluded(version.without_local())
+                }
+                upper => upper,
+            };
+            (lower, upper)
+        })
+        .collect()
+}
+
+/// Canonicalize the internal sentinel bounds in a version range over the PEP 440 version universe.
+///
+/// [`Ranges`] treats its coordinate type as continuous, while PEP 440 has known least successors
+/// for some otherwise-impossible internal boundary versions. Folding those boundaries onto their
+/// successor gives membership-equivalent ranges the same equality and hash representation.
+///
+/// Returns `None` when the range is already canonical.
+pub fn canonicalize_version_ranges(ranges: &Ranges<Version>) -> Option<Ranges<Version>> {
+    if !ranges.iter().any(|(lower, upper)| {
+        lower_bound_needs_canonicalization(lower) || upper_bound_needs_canonicalization(upper)
+    }) {
+        return None;
+    }
+
+    Some(
+        ranges
+            .clone()
+            .into_iter()
+            .filter_map(|(lower, upper)| {
+                let mut lower = canonicalize_lower_bound(lower);
+                let upper = canonicalize_upper_bound(upper);
+
+                match &lower {
+                    Bound::Included(version) if version <= &*PEP440_MIN_VERSION => {
+                        lower = Bound::Unbounded;
+                    }
+                    Bound::Excluded(version) if version < &*PEP440_MIN_VERSION => {
+                        lower = Bound::Unbounded;
+                    }
+                    Bound::Included(_) | Bound::Excluded(_) | Bound::Unbounded => {}
+                }
+
+                let below_floor = match &upper {
+                    Bound::Included(version) => version < &*PEP440_MIN_VERSION,
+                    Bound::Excluded(version) => version <= &*PEP440_MIN_VERSION,
+                    Bound::Unbounded => false,
+                };
+                (!below_floor).then_some((lower, upper))
+            })
+            .collect(),
+    )
+}
+
+fn lower_bound_needs_canonicalization(bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(version) => {
+            version <= &*PEP440_MIN_VERSION || sentinel_successor(version).is_some()
+        }
+        Bound::Excluded(version) => {
+            version < &*PEP440_MIN_VERSION || sentinel_successor(version).is_some()
+        }
+        Bound::Unbounded => false,
+    }
+}
+
+fn upper_bound_needs_canonicalization(bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(version) => {
+            version < &*PEP440_MIN_VERSION || sentinel_successor(version).is_some()
+        }
+        Bound::Excluded(version) => {
+            version <= &*PEP440_MIN_VERSION || sentinel_successor(version).is_some()
+        }
+        Bound::Unbounded => false,
+    }
+}
+
+fn canonicalize_lower_bound(bound: Bound<Version>) -> Bound<Version> {
+    match bound {
+        Bound::Included(version) => {
+            sentinel_successor(&version).map_or(Bound::Included(version), Bound::Included)
+        }
+        Bound::Excluded(version) => {
+            sentinel_successor(&version).map_or(Bound::Excluded(version), Bound::Included)
+        }
+        Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+fn canonicalize_upper_bound(bound: Bound<Version>) -> Bound<Version> {
+    match bound {
+        Bound::Included(version) => {
+            sentinel_successor(&version).map_or(Bound::Included(version), Bound::Excluded)
+        }
+        Bound::Excluded(version) => {
+            sentinel_successor(&version).map_or(Bound::Excluded(version), Bound::Excluded)
+        }
+        Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+/// Return the least real PEP 440 version above an internal sentinel boundary.
+fn sentinel_successor(version: &Version) -> Option<Version> {
+    if version.local() == LocalVersionSlice::Max {
+        let version = version.clone().without_local();
+        return if let Some(dev) = version.dev() {
+            Some(version.with_dev(Some(dev.checked_add(1)?)))
+        } else if let Some(post) = version.post() {
+            Some(
+                version
+                    .with_post(Some(post.checked_add(1)?))
+                    .with_dev(Some(0)),
+            )
+        } else {
+            Some(version.with_post(Some(0)).with_dev(Some(0)))
+        };
+    }
+
+    if version.min().is_some() {
+        return Some(version.clone().with_min(None).with_dev(Some(0)));
+    }
+
+    if version.max().is_some()
+        && let Some(prerelease) = version.pre()
+    {
+        return Some(
+            version
+                .clone()
+                .with_max(None)
+                .with_pre(Some(Prerelease {
+                    kind: prerelease.kind,
+                    number: prerelease.number.checked_add(1)?,
+                }))
+                .with_dev(Some(0)),
+        );
+    }
+
+    None
+}
 
 impl From<VersionSpecifiers> for Ranges<Version> {
     /// Convert [`VersionSpecifiers`] to a PubGrub-compatible version range, using PEP 440
@@ -498,6 +666,86 @@ impl From<UpperBound> for Bound<Version> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn range(specifiers: &str) -> Ranges<Version> {
+        Ranges::from(specifiers.parse::<VersionSpecifiers>().unwrap())
+    }
+
+    fn version(version: &str) -> Version {
+        version.parse().unwrap()
+    }
+
+    #[test]
+    fn canonicalizes_known_pep440_successor_boundaries() {
+        let range = |specifiers| {
+            let range = range(specifiers);
+            canonicalize_version_ranges(&range).unwrap_or(range)
+        };
+
+        assert_eq!(range(">1.0a1"), range(">=1.0a2.dev0"));
+        assert_eq!(range("<=1.0"), range("<1.0.post0.dev0"));
+        assert_eq!(range("==1.0"), range(">=1.0,<1.0.post0.dev0"));
+        assert_eq!(range(">=0.dev0"), Ranges::full());
+        assert_eq!(range("<0.dev0"), Ranges::empty());
+    }
+
+    #[test]
+    fn canonicalization_preserves_pep440_floor_membership() {
+        let versions = ["0.dev0", "0a0.dev0"].map(version);
+
+        for specifiers in ["==0.dev0", "!=0.dev0", ">=0a0.dev0", "<0a0.dev0"] {
+            let range = range(specifiers);
+            let canonical = canonicalize_version_ranges(&range).unwrap_or_else(|| range.clone());
+
+            for version in &versions {
+                assert_eq!(
+                    range.contains(version),
+                    canonical.contains(version),
+                    "canonicalizing `{specifiers}` changed membership for `{version}`"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn canonicalization_preserves_real_version_membership() {
+        let versions = [
+            "0.dev0",
+            "0a0.dev0",
+            "0.9",
+            "1.0.dev0",
+            "1.0a1.dev0",
+            "1.0a1",
+            "1.0a2.dev0",
+            "1.0",
+            "1.0+local",
+            "1.0.post0.dev0",
+            "1.0.post1.dev0",
+            "2.0",
+        ]
+        .map(version);
+
+        for specifiers in ["==1.0", "!=1.0", "<1.0", "<=1.0", ">1.0a1", "<1.0.post1"] {
+            let range = range(specifiers);
+            let canonical = canonicalize_version_ranges(&range)
+                .expect("the specifier should contain an internal sentinel");
+
+            for version in &versions {
+                assert_eq!(
+                    range.contains(version),
+                    canonical.contains(version),
+                    "canonicalizing `{specifiers}` changed membership for `{version}`"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn skips_ranges_without_internal_sentinels() {
+        let range = Ranges::singleton(version("1.0"));
+
+        assert!(canonicalize_version_ranges(&range).is_none());
+    }
 
     /// Test that `<V.postN` excludes pre-releases of the base version but includes
     /// earlier post-releases and the final release.

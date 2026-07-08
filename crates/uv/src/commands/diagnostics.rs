@@ -10,8 +10,7 @@ use uv_distribution_types::{
 };
 use uv_errors::{Hint, Hints};
 use uv_normalize::PackageName;
-use uv_pep440::Version;
-use uv_resolver::SentinelRange;
+use uv_pep440::{Version, strip_local_version_sentinels};
 
 use crate::commands::pip;
 use crate::commands::pip::install::ExternallyManagedError;
@@ -413,7 +412,7 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
         } else {
             message = format!("{message} {} depends on", format_step(step, range));
         }
-        range = Some(SentinelRange::from(&step.range).strip());
+        range = Some(strip_local_version_sentinels(&step.range));
     }
     if let Some(range) = range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
     {
