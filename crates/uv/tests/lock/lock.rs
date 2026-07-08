@@ -16218,10 +16218,10 @@ fn lock_reuses_newer_exclude_newer_timestamp() -> Result<()> {
     Ok(())
 }
 
-/// Checks that compatible global and package-specific cutoffs do not mask a more restrictive
-/// package-specific `exclude-newer` cutoff.
+/// Checks that compatible global and package-specific cutoffs and disabling a package cutoff do
+/// not mask a more restrictive package-specific `exclude-newer` cutoff.
 #[test]
-fn lock_check_allows_newer_exclude_newer_package_timestamp() -> Result<()> {
+fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-03-25T00:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -16238,6 +16238,32 @@ fn lock_check_allows_newer_exclude_newer_package_timestamp() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .arg("--exclude-newer-package")
         .arg("idna=2024-03-25T00:00:00Z"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("idna=false")
+        .arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("idna=2024-03-25T00:00:00Z")
+        .arg("--exclude-newer-package")
+        .arg("iniconfig=false")
+        .arg("--check"), @"
     success: true
     exit_code: 0
     ----- stdout -----
