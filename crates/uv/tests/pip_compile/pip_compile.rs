@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::env::current_dir;
 use std::fs;
 use std::io::Cursor;
+use std::process::Command;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -16143,6 +16144,8 @@ fn respect_index_preference() -> Result<()> {
 
 #[test]
 fn dependency_group() -> Result<()> {
+    let server = PackseServer::new("simple/dependency-groups.toml");
+
     // uv pip compile --group tests, with a single pyproject.toml
     fn new_context() -> Result<TestContext> {
         let context = uv_test::test_context!("3.12");
@@ -16165,11 +16168,17 @@ fn dependency_group() -> Result<()> {
         Ok(context)
     }
 
+    fn command(context: &TestContext, server: &PackseServer) -> Command {
+        let mut command = context.pip_compile();
+        command.arg("--index-url").arg(server.index_url());
+        command
+    }
+
     let mut context;
 
     // Passing --group should add just that group's contents from ./pyproject.toml
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
@@ -16187,7 +16196,7 @@ fn dependency_group() -> Result<()> {
     // (This is a "try to confuse the internals" test, as this file is logically
     // imported twice, but with two different semantics.)
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("bar"), @"
     success: true
@@ -16206,7 +16215,7 @@ fn dependency_group() -> Result<()> {
 
     // Another "try to confuse the internals" test with an absolute path
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg(context.temp_dir.child("pyproject.toml").path())
         .arg("--group").arg("bar"), @"
     success: true
@@ -16225,7 +16234,7 @@ fn dependency_group() -> Result<()> {
 
     // An explicit use of `<path>:<group>` syntax, here using what the default is anyway
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
     exit_code: 0
@@ -16241,7 +16250,7 @@ fn dependency_group() -> Result<()> {
 
     // "try to confuse the internals" with an explicit path for the group
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
@@ -16260,7 +16269,7 @@ fn dependency_group() -> Result<()> {
 
     // Let's check that the other group works fine individually
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
@@ -16276,7 +16285,7 @@ fn dependency_group() -> Result<()> {
 
     // Now let's do both of the groups together
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
     success: true
@@ -16295,7 +16304,7 @@ fn dependency_group() -> Result<()> {
 
     // And finally put it all together
     context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_compile()
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("pyproject.toml")
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
