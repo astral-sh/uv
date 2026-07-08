@@ -5,8 +5,13 @@ description = "A transitive dependency has both a prerelease and a stable select
 requires = ["a", "b"]
 
 [expected]
-satisfiable = false
-explanation = "Since the user did not explicitly opt-in to a prerelease, it cannot be selected."
+satisfiable = true
+explanation = "The selected version of `a` explicitly authorizes the highest matching pre-release of `c`."
+
+[expected.packages]
+a = "1.0.0"
+b = "1.0.0"
+c = "2.0.0b4"
 
 [packages.a.versions."1.0.0"]
 requires = ["c>1.0.0,!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5"]
