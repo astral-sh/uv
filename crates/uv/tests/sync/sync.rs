@@ -8593,7 +8593,12 @@ fn sync_wheel_path_source_error() -> Result<()> {
 
 #[test]
 fn sync_override_package() -> Result<()> {
+    let server = PackseServer::empty();
     let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&format!("index-url = \"{}\"", server.index_url()))?;
 
     // Create a dependency.
     let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
