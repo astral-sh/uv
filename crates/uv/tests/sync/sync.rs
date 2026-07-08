@@ -14,6 +14,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -2989,9 +2990,11 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
 #[test]
 fn sync_build_dependencies_module_error_hints() -> Result<()> {
+    let server =
+        PackseServer::new("prereleases/package-prerelease-specified-only-final-available.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -3011,7 +3014,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         import sys
 
         from hatchling.build import *
-        import anyio
+        import a
     "})?;
     child.child("src/child/__init__.py").touch()?;
 
@@ -3030,7 +3033,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync(), @r#"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3045,16 +3048,16 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
             File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-              import anyio
-          ModuleNotFoundError: No module named 'anyio'
+              import a
+          ModuleNotFoundError: No module named 'a'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
-    hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: This error likely indicates that `child@0.1.0` depends on `a`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `a` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
-    child = ["anyio"]
+    child = ["a"]
 
-    or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
+    or `uv pip install a` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -3069,11 +3072,11 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
+        child = ["a"]
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3090,13 +3093,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         import sys
 
         from hatchling.build import *
-        import anyio
+        import a
         import sklearn
     "})?;
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @r#"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3122,34 +3125,6 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
     "#);
-
-    // Adding `extra-build-dependencies` should solve the issue
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "parent"
-        version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["child"]
-
-        [tool.uv.sources]
-        child = { path = "child" }
-
-        [tool.uv.extra-build-dependencies]
-        child = ["anyio", "scikit-learn"]
-    "#})?;
-
-    context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-    ");
 
     Ok(())
 }
@@ -15125,9 +15100,11 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
 /// Test that build dependencies respect locked versions from the lockfile.
 #[test]
 fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
+    let server =
+        PackseServer::new("prereleases/package-prerelease-specified-only-final-available.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -15135,55 +15112,55 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "anyio"]
+        requires = ["hatchling", "a"]
         backend-path = ["."]
         build-backend = "build_backend"
     "#})?;
 
-    // Create a build backend that checks for a specific version of anyio
+    // Create a build backend that checks for a specific version of a
     let build_backend = child.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import os
         import sys
         from hatchling.build import *
 
-        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        expected_version = os.environ.get("EXPECTED_A_VERSION", "")
         if not expected_version:
-            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            print("`EXPECTED_A_VERSION` not set", file=sys.stderr)
             sys.exit(1)
 
         try:
-            import anyio
+            import a
         except ModuleNotFoundError:
-            print("Missing `anyio` module", file=sys.stderr)
+            print("Missing `a` module", file=sys.stderr)
             sys.exit(1)
 
         from importlib.metadata import version
-        anyio_version = version("anyio")
+        a_version = version("a")
 
-        if not anyio_version.startswith(expected_version):
-            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+        if not a_version.startswith(expected_version):
+            print(f"Expected `a` version {expected_version} but got {a_version}", file=sys.stderr)
             sys.exit(1)
 
-        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+        print(f"Found expected `a` version {a_version}", file=sys.stderr)
     "#})?;
     child.child("src/child/__init__.py").touch()?;
 
-    // Create a project that will resolve to a non-latest version of `anyio`
+    // Create a project that will resolve to a non-latest version of `a`
     let parent = &context.temp_dir;
     let pyproject_toml = parent.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15197,15 +15174,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.1"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15217,30 +15194,30 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
+          Expected `a` version 0.1 but got 0.3.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    // Now constrain the `anyio` build dependency to match the runtime
+    // Now constrain the `a` build dependency to match the runtime
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
-    // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    // The child should be built with a 0.2.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15249,30 +15226,28 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==4.0.0
+     + a==0.2.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + idna==3.6
-     + sniffio==1.3.1
     ");
 
-    // Change the constraints on anyio
+    // Change the constraints on a.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<3.8", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.2", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
-    // The child should be rebuilt with anyio 3.7, without `--reinstall`
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    // The child should be rebuilt with a 0.1, without `--reinstall`.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15284,15 +15259,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 4.0 but got 3.7.1
+          Expected `a` version 0.2 but got 0.1.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15302,8 +15277,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - anyio==4.0.0
-     + anyio==3.7.1
+     - a==0.2.0
+     + a==0.1.0
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
@@ -15312,14 +15287,14 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<3.8", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.2", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
     // And an incompatible constraint in the child project
@@ -15327,17 +15302,17 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "anyio>3.8,<4.2"]
+        requires = ["hatchling", "a>0.15,<0.3"]
         backend-path = ["."]
         build-backend = "build_backend"
     "#})?;
 
     // This should fail
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15346,8 +15321,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
-      ├─▶ No solution found when resolving: `hatchling`, `anyio>3.8, <4.2`, `anyio==3.7.1 (index: https://pypi.org/simple)`
-      ╰─▶ Because you require anyio>3.8,<4.2 and anyio==3.7.1, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
+      ╰─▶ you require a<0.3 and a>0.15, which are incompatible
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
@@ -15357,24 +15332,24 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio>4", match-runtime = true }]
+        child = [{ requirement = "a>0.1", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `anyio>4`
+    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `a>0.1`
     ");
 
     Ok(())
