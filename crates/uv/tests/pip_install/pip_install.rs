@@ -3619,15 +3619,18 @@ fn install_no_binary_env() {
 #[test]
 fn install_only_binary_overrides_no_binary_all() {
     let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/single-package.toml");
 
     // The specific `--only-binary` should override the less specific `--no-binary`
     let mut command = context.pip_install();
     command
-        .arg("anyio")
+        .arg("a")
+        .arg("--index-url")
+        .arg(server.index_url())
         .arg("--no-binary")
         .arg(":all:")
         .arg("--only-binary")
-        .arg("idna")
+        .arg("a")
         .arg("--strict");
     uv_snapshot!(
         command,
@@ -3637,16 +3640,14 @@ fn install_only_binary_overrides_no_binary_all() {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
     "
     );
 
-    context.assert_command("import anyio").success();
+    context.assert_command("import a").success();
 }
 
 /// Accept comma-separated values for `--only-binary` (pip compatibility)
