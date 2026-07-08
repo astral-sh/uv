@@ -1749,31 +1749,31 @@ mod tests {
         let extra = PubGrubPackage::from(PubGrubPackageInner::Extra {
             name: PackageName::from_owned("pkg".to_string()).unwrap(),
             extra: ExtraName::from_owned("my-extra".to_string()).unwrap(),
-            marker: None,
+            marker: None.into(),
         });
         let group = PubGrubPackage::from(PubGrubPackageInner::Group {
             name: PackageName::from_owned("pkg".to_string()).unwrap(),
             group: "my-group".parse::<GroupName>().unwrap(),
-            marker: None,
+            marker: None.into(),
         });
         let dep = PubGrubPackage::from(PubGrubPackageInner::Package {
             name: PackageName::from_owned("dep".to_string()).unwrap(),
             extra: None,
-            marker: None,
+            marker: None.into(),
             group: None,
         });
 
         let extra_leaf = ErrorTree::External(External::FromDependencyOf(
             extra,
-            pubgrub::Range::any(),
+            pubgrub::Range::full(),
             dep.clone(),
-            pubgrub::Range::any(),
+            pubgrub::Range::full(),
         ));
         let group_leaf = ErrorTree::External(External::FromDependencyOf(
             group,
-            pubgrub::Range::any(),
+            pubgrub::Range::full(),
             dep,
-            pubgrub::Range::any(),
+            pubgrub::Range::full(),
         ));
         // Combine them into a small tree so both survive the transformation.
         let tree = ErrorTree::Derived(Derived {
@@ -1788,11 +1788,11 @@ mod tests {
         // Both the Extra and Group proxies should still be present.
         let packages: Vec<_> = derivation_tree_packages(&collapsed).collect();
         assert!(
-            packages.iter().any(|p| matches!(&**p, PubGrubPackageInner::Extra { .. })),
+            packages.iter().any(|p| matches!(&***p, PubGrubPackageInner::Extra { .. })),
             "Extra proxy should be preserved after collapse_proxies"
         );
         assert!(
-            packages.iter().any(|p| matches!(&**p, PubGrubPackageInner::Group { .. })),
+            packages.iter().any(|p| matches!(&***p, PubGrubPackageInner::Group { .. })),
             "Group proxy should be preserved after collapse_proxies"
         );
     }
