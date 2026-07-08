@@ -269,6 +269,7 @@ nav:
       - Benchmarks: reference/benchmarks.md
       - Policies:
           - reference/policies/index.md
+          - Threat model: reference/policies/threat-model.md
           - Versioning: reference/policies/versioning.md
           - Platform support: reference/policies/platforms.md
           - Python support: reference/policies/python.md
