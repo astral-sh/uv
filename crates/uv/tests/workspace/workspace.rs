@@ -10,6 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
+use uv_fs::create_symlink;
 use uv_test::{copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
@@ -2518,3 +2519,31 @@ fn workspace_unmanaged_member_no_project() -> Result<()> {
 
     Ok(())
 }
+
+/// Verify that workspace discovery works when the project root is reached through
+/// a symlink. `Workspace::discover` canonicalizes the path early, so symlinked
+/// paths resolve to the real project root.
+#[test]
+fn workspace_discovery_with_symlinked_root() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Create a project at a real directory.
+    let real = context.temp_dir.join("real");
+    make_project(&real, "project", "dependencies = []")?;
+
+    // Create a symlink pointing to the real project.
+    let link = context.temp_dir.join("link");
+    create_symlink(&real, &link)?;
+
+    // Run `uv lock` from the symlinked path — the canonicalize fix ensures
+    // workspace discovery resolves symlinks and finds the project root.
+    uv_snapshot!(context.filters(), context.lock().current_dir(&link), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
