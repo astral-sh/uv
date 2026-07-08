@@ -1,0 +1,31 @@
+name = "prerelease-capped-union-backtrack"
+description = "A rejected pre-release opt-in below 3 does not authorize a pre-release in a disjoint active range above 3."
+
+[root]
+requires = ["e!=2.5", "a>=2.5"]
+
+[expected]
+satisfiable = true
+explanation = "The failed `e==4.0` branch cannot authorize `c==3.6b1`; the active unmarked range selects the final `c==3.5`."
+
+[expected.packages]
+a = "3.6b1"
+c = "3.5"
+e = "1.0"
+
+[packages.a.versions."2.5"]
+requires = ["c==2.5"]
+
+[packages.a.versions."3.6b1"]
+
+[packages.c.versions."2.5"]
+
+[packages.c.versions."3.5"]
+
+[packages.c.versions."3.6b1"]
+
+[packages.e.versions."1.0"]
+requires = ["c!=2.5"]
+
+[packages.e.versions."4.0"]
+requires = ["c==2.0b1"]

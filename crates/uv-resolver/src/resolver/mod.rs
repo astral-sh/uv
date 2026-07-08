@@ -13,7 +13,7 @@ use either::Either;
 use futures::{FutureExt, StreamExt};
 use itertools::Itertools;
 use papaya::{HashMap, ResizeMode};
-use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State};
+use pubgrub::{Id, IncompId, Incompatibility, Kind, Ranges, State, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::oneshot;
@@ -513,17 +513,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .term_intersection_for_package(next_id)
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
+                    let explicit_prerelease =
+                        matches!(&**next_package, PubGrubPackageInner::Prerelease { .. })
+                            || state.has_active_prerelease_proxy(next_package);
 
-                    // In a specific environment, an implicit registry candidate is stable for a
-                    // given range. Avoid repeating candidate selection when PubGrub revisits an
-                    // identical decision after backtracking.
-                    let cache_selected_version = state.env.marker_environment().is_some()
-                        && url.is_none()
-                        && index.is_none();
+                    // Within a fixed resolver environment, an implicit registry candidate is
+                    // stable for a given range and pre-release policy. Avoid repeating candidate
+                    // selection when PubGrub revisits an identical decision after backtracking.
+                    let cache_selected_version = url.is_none() && index.is_none();
                     let decision = if cache_selected_version
-                        && let Some((selected_range, version)) =
+                        && let Some((selected_range, selected_prerelease, version)) =
                             state.selected_versions.get(&next_id)
                         && selected_range == range
+                        && *selected_prerelease == explicit_prerelease
                     {
                         Some(ResolverVersion::Unforked(version.clone()))
                     } else {
@@ -538,6 +540,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             &state.env,
                             &state.python_requirement,
                             &state.pubgrub,
+                            explicit_prerelease,
                             &mut visited,
                             request_sink,
                         )?;
@@ -545,9 +548,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         if cache_selected_version
                             && let Some(ResolverVersion::Unforked(version)) = &decision
                         {
-                            state
-                                .selected_versions
-                                .insert(next_id, (range.clone(), version.clone()));
+                            state.selected_versions.insert(
+                                next_id,
+                                (range.clone(), explicit_prerelease, version.clone()),
+                            );
                         }
 
                         decision
@@ -563,18 +567,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             .term_intersection_for_package(next_id)
                             .expect("a package was chosen but we don't have a term");
 
-                        if let PubGrubPackageInner::Package { name, .. } = &**next_package {
-                            // Check if the decision was due to the package being unavailable
-                            if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                                state
-                                    .pubgrub
-                                    .add_incompatibility(Incompatibility::custom_term(
-                                        next_id,
-                                        term_intersection.clone(),
-                                        UnavailableReason::Package(reason.clone()),
-                                    ));
-                                continue;
-                            }
+                        // Check if the decision was due to the package being unavailable.
+                        if let Some(name) = next_package.diagnostic_name()
+                            && let Some(reason) = self.unavailable_packages.pin().get(name)
+                        {
+                            state
+                                .pubgrub
+                                .add_incompatibility(Incompatibility::custom_term(
+                                    next_id,
+                                    term_intersection.clone(),
+                                    UnavailableReason::Package(reason.clone()),
+                                ));
+                            continue;
                         }
 
                         state
@@ -1181,6 +1185,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        explicit_prerelease: bool,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -1204,10 +1209,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(Some(ResolverVersion::Unforked(version.clone())))
             }
 
-            PubGrubPackageInner::Marker { name, .. }
-            | PubGrubPackageInner::Extra { name, .. }
-            | PubGrubPackageInner::Group { name, .. }
-            | PubGrubPackageInner::Package { name, .. } => {
+            PubGrubPackageInner::Prerelease { .. }
+            | PubGrubPackageInner::Marker { .. }
+            | PubGrubPackageInner::Extra { .. }
+            | PubGrubPackageInner::Group { .. }
+            | PubGrubPackageInner::Package { .. } => {
+                let name = package
+                    .name_no_root()
+                    .expect("registry package should have a name");
                 if let Some(url) = package.name().and_then(|name| fork_urls.get(name)) {
                     self.choose_version_url(id, name, range, url, env, python_requirement, pubgrub)
                 } else {
@@ -1221,6 +1230,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         env,
                         python_requirement,
                         pubgrub,
+                        explicit_prerelease,
                         pins,
                         visited,
                         request_sink,
@@ -1362,6 +1372,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
+        explicit_prerelease: bool,
         pins: &mut FilePins,
         visited: &mut FxHashSet<PackageName>,
         request_sink: &Sender<Request>,
@@ -1413,6 +1424,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.installed_packages,
             &self.exclusions,
             index,
+            explicit_prerelease,
             env,
             self.tags.as_ref(),
         ) else {
@@ -1492,6 +1504,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             preferences,
             env,
             pubgrub,
+            explicit_prerelease,
             pins,
             request_sink,
         )? {
@@ -1546,6 +1559,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         preferences: &Preferences,
         env: &ResolverEnvironment,
         pubgrub: &State<UvDependencyProvider>,
+        explicit_prerelease: bool,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<Option<ResolverVersion>, ResolveError> {
@@ -1631,6 +1645,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             &self.installed_packages,
             &self.exclusions,
             index,
+            explicit_prerelease,
             env,
             self.tags.as_ref(),
         ) else {
@@ -2036,6 +2051,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
 
             PubGrubPackageInner::System(_) => return Ok(Dependencies::Unforkable(Vec::default())),
+
+            PubGrubPackageInner::Prerelease { package } => {
+                return Ok(Dependencies::Unforkable(vec![PubGrubDependency {
+                    package: package.clone(),
+                    version: Range::singleton(version.clone()),
+                    parent: None,
+                    source: DependencySource::Unspecified,
+                }]));
+            }
 
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
@@ -2665,8 +2689,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // We don't have access to the fork state when prefetching, so assume that
-                // pre-release versions are allowed.
+                // We don't have access to the fork state when prefetching.
                 let env = ResolverEnvironment::universal(vec![]);
 
                 // Try to find a compatible version. If there aren't any compatible versions,
@@ -2679,6 +2702,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     &self.installed_packages,
                     &self.exclusions,
                     None,
+                    false,
                     &env,
                     self.tags.as_ref(),
                 ) else {
@@ -2826,17 +2850,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
         let mut unavailable_packages = FxHashMap::default();
         for package in derivation_tree_packages(&err) {
-            if let PubGrubPackageInner::Package { name, .. } = &**package {
-                if let Some(reason) = self.unavailable_packages.pin().get(name) {
-                    unavailable_packages.insert(name.clone(), reason.clone());
-                }
+            if let Some(name) = package.diagnostic_name()
+                && let Some(reason) = self.unavailable_packages.pin().get(name)
+            {
+                unavailable_packages.insert(name.clone(), reason.clone());
             }
         }
 
         let mut incomplete_packages = FxHashMap::default();
         let incomplete_packages_cache = self.incomplete_packages.pin();
         for package in derivation_tree_packages(&err) {
-            if let PubGrubPackageInner::Package { name, .. } = &**package
+            if let Some(name) = package.diagnostic_name()
                 && let Some(versions) = incomplete_packages_cache.get(name)
             {
                 for (version, reason) in &versions.pin() {
@@ -2975,6 +2999,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 PubGrubPackageInner::Root(_) => {}
                 PubGrubPackageInner::Python(_) => {}
                 PubGrubPackageInner::System(_) => {}
+                PubGrubPackageInner::Prerelease { .. } => {}
                 PubGrubPackageInner::Marker { .. } => {}
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Group { .. } => {}
@@ -3042,8 +3067,9 @@ pub(crate) struct ForkState {
     added_dependencies: FxHashMap<Id<PubGrubPackage>, FxHashSet<Version>>,
     /// The last range scheduled for prefetch for each undecided package.
     pre_visited: FxHashMap<Id<PubGrubPackage>, Range<Version>>,
-    /// The last version selected for each package and range in a specific environment.
-    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, Version)>,
+    /// The last version selected for each package, range, and explicit pre-release authorization
+    /// state in a specific environment.
+    selected_versions: FxHashMap<Id<PubGrubPackage>, (Range<Version>, bool, Version)>,
     /// All known versions for each package, from the version maps and the installed packages,
     /// used to keep the version sets in the partial solution minimal.
     ///
@@ -3082,6 +3108,11 @@ pub(crate) struct ForkState {
     ///
     /// Tracked on the fork state to avoid counting each identical version between forks as new try.
     prefetcher: BatchPrefetcher,
+    /// Reverse index of pre-release proxy package IDs discovered for each package name.
+    ///
+    /// Entries are not removed on backtracking. This map only avoids scanning PubGrub's package
+    /// graph; whether a proxy is active is always derived from the current partial solution.
+    prerelease_by_name: FxHashMap<PackageName, Vec<Id<PubGrubPackage>>>,
 }
 
 impl ForkState {
@@ -3108,7 +3139,30 @@ impl ForkState {
             python_requirement,
             conflict_tracker: ConflictTracker::default(),
             prefetcher,
+            prerelease_by_name: FxHashMap::default(),
         }
+    }
+
+    /// Returns `true` if an active pre-release proxy authorizes this package in the current fork.
+    fn has_active_prerelease_proxy(&self, package: &PubGrubPackage) -> bool {
+        if self.prerelease_by_name.is_empty() {
+            return false;
+        }
+        let Some(name) = package.name_no_root() else {
+            return false;
+        };
+        self.prerelease_by_name
+            .get(name)
+            .into_iter()
+            .flatten()
+            .any(|proxy| {
+                matches!(
+                    self.pubgrub
+                        .partial_solution
+                        .term_intersection_for_package(*proxy),
+                    Some(Term::Positive(_))
+                )
+            })
     }
 
     /// Visit the dependencies for the selected version of the current package, incorporating any
@@ -3232,6 +3286,17 @@ impl ForkState {
                 parent: _,
                 source: _,
             } = dependency;
+
+            if let PubGrubPackageInner::Prerelease { package: wrapped } = &**package {
+                let Some(name) = wrapped.name_no_root() else {
+                    continue;
+                };
+                let proxy = self.pubgrub.package_store.alloc(package.clone());
+                let proxy_ids = self.prerelease_by_name.entry(name.clone()).or_default();
+                if !proxy_ids.contains(&proxy) {
+                    proxy_ids.push(proxy);
+                }
+            }
 
             let Some(base_package) = package.base_package() else {
                 continue;
@@ -3390,6 +3455,7 @@ impl ForkState {
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        self.selected_versions.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {
@@ -3458,6 +3524,10 @@ impl ForkState {
 
                 let self_package = &self.pubgrub.package_store[self_package];
                 let dependency_package = &self.pubgrub.package_store[dependency_package];
+                let dependency_package = match &**dependency_package {
+                    PubGrubPackageInner::Prerelease { package } => package,
+                    _ => dependency_package,
+                };
 
                 let (self_name, self_extra, self_group) = match &**self_package {
                     PubGrubPackageInner::Package {
