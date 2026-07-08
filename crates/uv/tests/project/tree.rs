@@ -3017,10 +3017,7 @@ fn invert_leaf_cycle() -> Result<()> {
             dependencies = ["bar==1.0.0"]
         "#})?;
 
-    context
-        .temp_dir
-        .child("uv.lock")
-        .write_str(indoc! {r#"
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
             version = 1
             revision = 3
             requires-python = ">=3.12"
