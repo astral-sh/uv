@@ -4,6 +4,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
+use flate2::{Compression, GzBuilder};
+
 use uv_static::EnvVars;
 
 fn process_json(data: &serde_json::Value) -> serde_json::Value {
@@ -26,7 +28,7 @@ fn main() {
 
     let version_metadata_minified = PathBuf::from_iter([
         env::var(EnvVars::OUT_DIR).unwrap(),
-        "download-metadata-minified.json".into(),
+        "download-metadata-minified.json.gz".into(),
     ]);
 
     println!(
@@ -48,16 +50,22 @@ fn main() {
     let filtered_data = process_json(&json_data);
 
     #[expect(clippy::disallowed_types)]
-    let mut out_file = File::create(version_metadata_minified)
-        .expect("failed to open download-metadata-minified.json");
+    let out_file = File::create(version_metadata_minified)
+        .expect("failed to open download-metadata-minified.json.gz");
+    let mut encoder = GzBuilder::new()
+        .mtime(0)
+        .write(out_file, Compression::best());
 
-    out_file
+    encoder
         .write_all(
             serde_json::to_string(&filtered_data)
                 .expect("Failed to serialize JSON")
                 .as_bytes(),
         )
-        .expect("Failed to write minified JSON");
+        .expect("Failed to compress minified JSON");
+    let out_file = encoder
+        .finish()
+        .expect("Failed to finish compressing minified JSON");
 
     // Cargo uses the modified times of the paths specified in
     // `rerun-if-changed`, so fetch the current file times and set them the same
@@ -72,5 +80,5 @@ fn main() {
                 .set_accessed(meta.accessed().unwrap())
                 .set_modified(meta.modified().unwrap()),
         )
-        .expect("failed to write file times to download-metadata-minified.json");
+        .expect("failed to write file times to download-metadata-minified.json.gz");
 }

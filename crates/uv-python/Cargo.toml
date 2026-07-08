@@ -44,6 +44,7 @@ clap = { workspace = true, optional = true }
 configparser = { workspace = true }
 dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
+flate2 = { workspace = true }
 futures = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }
@@ -88,4 +89,5 @@ test-log = { workspace = true }
 [build-dependencies]
 uv-static = { workspace = true }
 
+flate2 = { workspace = true }
 serde_json = { workspace = true }

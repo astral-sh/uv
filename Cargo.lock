@@ -7032,6 +7032,7 @@ dependencies = [
  "clap",
  "configparser",
  "dunce",
+ "flate2",
  "fs-err",
  "futures",
  "indexmap",
