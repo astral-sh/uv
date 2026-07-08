@@ -316,6 +316,11 @@ impl Workspace {
             .clone();
         let path = normalize_path(&path);
 
+        // Canonicalize to resolve symlinks, ensuring the workspace root path is
+        // consistent regardless of how it's accessed (e.g. via `/symlink/to/project`
+        // vs `/real/path/to/project`).
+        let path = fs_err::canonicalize(&path).map_err(WorkspaceErrorKind::Normalize)?;
+
         let project_path = path
             .ancestors()
             .find(|path| path.join("pyproject.toml").is_file())
