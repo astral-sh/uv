@@ -11412,7 +11412,7 @@ fn direct_url_json_direct_url() -> Result<()> {
 #[test]
 fn dependency_group() -> Result<()> {
     // testing basic `uv pip install --group` functionality
-    fn new_context() -> Result<TestContext> {
+    fn new_context(server: &PackseServer) -> Result<TestContext> {
         let context = uv_test::test_context!("3.12");
 
         let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -11430,15 +11430,27 @@ fn dependency_group() -> Result<()> {
             "#,
         )?;
 
-        context.lock().assert().success();
+        context
+            .lock()
+            .arg("--index-url")
+            .arg(server.index_url())
+            .assert()
+            .success();
         Ok(context)
     }
 
+    fn command(context: &TestContext, server: &PackseServer) -> Command {
+        let mut command = context.pip_install();
+        command.arg("--index-url").arg(server.index_url());
+        command
+    }
+
+    let server = PackseServer::new("simple/dependency-groups.toml");
     let mut context;
 
     // 'bar' using path sugar
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("bar"), @"
     success: true
     exit_code: 0
@@ -11453,8 +11465,8 @@ fn dependency_group() -> Result<()> {
 
     // 'bar' using path sugar
     // and also pulling in the same pyproject.toml with -r
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("bar"), @"
     success: true
@@ -11470,8 +11482,8 @@ fn dependency_group() -> Result<()> {
     ");
 
     // 'bar' with an explicit path
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
     exit_code: 0
@@ -11486,8 +11498,8 @@ fn dependency_group() -> Result<()> {
 
     // 'bar' using explicit path
     // and also pulling in the same pyproject.toml with -r
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("pyproject.toml:bar"), @"
     success: true
@@ -11503,8 +11515,8 @@ fn dependency_group() -> Result<()> {
     ");
 
     // 'bar' using path sugar
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo"), @"
     success: true
     exit_code: 0
@@ -11519,8 +11531,8 @@ fn dependency_group() -> Result<()> {
 
     // 'foo' using path sugar
     // 'bar' using path sugar
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"
     success: true
@@ -11536,8 +11548,8 @@ fn dependency_group() -> Result<()> {
     ");
 
     // all together now!
-    context = new_context()?;
-    uv_snapshot!(context.filters(), context.pip_install()
+    context = new_context(&server)?;
+    uv_snapshot!(context.filters(), command(&context, &server)
         .arg("-r").arg("pyproject.toml")
         .arg("--group").arg("foo")
         .arg("--group").arg("bar"), @"

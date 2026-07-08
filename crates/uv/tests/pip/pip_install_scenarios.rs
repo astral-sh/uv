@@ -3373,6 +3373,61 @@ fn python_version_does_not_exist() {
     context.assert_not_installed("a");
 }
 
+/// Three independent packages used to test dependency-group selection.
+///
+/// ```text
+/// dependency-groups
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires iniconfig==2.0.0
+/// │   │   └── satisfied by iniconfig-2.0.0
+/// │   ├── requires sniffio==1.3.1
+/// │   │   └── satisfied by sniffio-1.3.1
+/// │   ├── requires sortedcontainers==2.4.0
+/// │   │   └── satisfied by sortedcontainers-2.4.0
+/// │   └── requires typing-extensions==4.10.0
+/// │       └── satisfied by typing-extensions-4.10.0
+/// ├── iniconfig
+/// │   └── iniconfig-2.0.0
+/// ├── sniffio
+/// │   └── sniffio-1.3.1
+/// ├── sortedcontainers
+/// │   └── sortedcontainers-2.4.0
+/// └── typing-extensions
+///     └── typing-extensions-4.10.0
+/// ```
+#[test]
+fn dependency_groups() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("simple/dependency-groups.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("iniconfig==2.0.0")
+        .arg("sniffio==1.3.1")
+        .arg("sortedcontainers==2.4.0")
+        .arg("typing-extensions==4.10.0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    context.assert_installed("iniconfig", "2.0.0");
+    context.assert_installed("sniffio", "1.3.1");
+    context.assert_installed("sortedcontainers", "2.4.0");
+    context.assert_installed("typing_extensions", "4.10.0");
+}
+
 /// A single package with two stable versions.
 ///
 /// ```text
