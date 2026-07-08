@@ -10305,7 +10305,12 @@ fn sync_extra_comma_separated() -> Result<()> {
 /// Sync all members in a workspace with dynamic extras.
 #[test]
 fn sync_all_extras_dynamic() -> Result<()> {
+    let server = PackseServer::new("simple/dependency-groups.toml");
     let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&format!("index-url = \"{}\"", server.index_url()))?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -10318,7 +10323,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
         [project.optional-dependencies]
         types = ["sniffio>1"]
-        async = ["anyio>3"]
+        async = ["sortedcontainers"]
 
         [build-system]
         requires = ["hatchling"]
@@ -10379,7 +10384,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + child==0.1.0 (from file://[TEMP_DIR]/child)
@@ -10394,7 +10399,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -10409,7 +10414,7 @@ fn sync_all_extras_dynamic() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     error: Extra `foo` is not defined in any project's `optional-dependencies` table
     ");
 
