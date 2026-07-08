@@ -5,6 +5,7 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
+#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
@@ -42,6 +43,7 @@ fn tree_centralized_environment_no_cache() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn nested_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -83,6 +85,7 @@ fn nested_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -212,6 +215,7 @@ fn invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -274,6 +278,7 @@ fn frozen() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -312,6 +317,7 @@ fn outdated() -> Result<()> {
 /// Uses idna which has releases at:
 /// - 3.6: 2023-11-25
 /// - 3.7: 2024-04-11
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated_exclude_newer_relative() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -451,6 +457,7 @@ fn scoped_exclude_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -576,6 +583,7 @@ fn platform_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -622,6 +630,7 @@ fn repeated_dependencies() -> Result<()> {
 
 /// In this case, a package is included twice at the same version, but pointing to different direct
 /// URLs.
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -748,6 +757,7 @@ fn dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn dev_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -805,6 +815,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -855,6 +866,7 @@ fn optional_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -920,6 +932,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 /// When a package is required both as a plain dep and as a dep with extras (e.g., from a
 /// dependency group), `uv tree` should not display extra-conditional dependencies for the plain
 /// occurrence.
+#[cfg(feature = "test-universal")]
 #[test]
 fn dep_and_group_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1334,6 +1347,7 @@ fn group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1420,6 +1434,7 @@ fn cycle() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_orphaned_roots() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1452,6 +1467,7 @@ fn cycle_no_orphaned_roots() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_infinite_loop() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1495,6 +1511,7 @@ fn cycle_no_infinite_loop() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1539,6 +1556,7 @@ fn cycle_invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1585,6 +1603,7 @@ fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert_deep() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1637,6 +1656,7 @@ fn cycle_invert_deep() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_no_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1679,6 +1699,7 @@ fn cycle_depth_no_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1759,6 +1780,7 @@ fn workspace_dev() -> Result<()> {
 }
 
 /// An inverted tree should only follow consumers that activate the extra required by the path.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_extra_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1840,6 +1862,7 @@ fn invert_preserves_extra_attribution() -> Result<()> {
 }
 
 /// Member dependency groups describe the root member, not consumers of that member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_dependency_group_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1906,6 +1929,7 @@ fn invert_preserves_dependency_group_attribution() -> Result<()> {
 }
 
 /// Universal inverted trees should not join edges from mutually exclusive environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1986,6 +2010,7 @@ fn invert_preserves_marker_attribution() -> Result<()> {
 
 /// Universal inverted trees should include every version that directly depends on a package in a
 /// satisfiable marker environment.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_split_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2069,6 +2094,7 @@ fn invert_preserves_marker_split_versions() -> Result<()> {
 }
 
 /// Declared conflicts are world knowledge for the encoded extra and group markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2190,6 +2216,7 @@ fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2228,6 +2255,7 @@ fn non_project() -> Result<()> {
 
 /// A pyproject.toml with only `[dependency-groups]` (no `[project]`, no `[tool.uv.workspace]`)
 /// is valid per PEP 735, and `uv tree` must handle it.
+#[cfg(feature = "test-universal")]
 #[test]
 fn dependency_groups_only() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2353,6 +2381,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2826,6 +2855,7 @@ fn script() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn only_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2908,6 +2938,7 @@ fn only_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn show_sizes() -> Result<()> {
     let context = uv_test::test_context!("3.12");

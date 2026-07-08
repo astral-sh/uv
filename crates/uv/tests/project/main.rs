@@ -9,7 +9,11 @@ mod check;
 #[cfg(all(feature = "test-python", feature = "test-pypi"))]
 mod edit;
 
-#[cfg(all(feature = "test-python", feature = "test-pypi"))]
+#[cfg(all(
+    feature = "test-python",
+    feature = "test-pypi",
+    feature = "test-universal"
+))]
 mod export;
 
 #[cfg(all(feature = "test-python", feature = "test-r2"))]

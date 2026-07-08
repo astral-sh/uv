@@ -589,6 +589,7 @@ fn compile_constraint_extra() -> Result<()> {
 /// to false (for example, `python_version < '0'`).
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8676>
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_constraints_omit_impossible_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2671,6 +2672,7 @@ fn compile_git_subdirectory_static_metadata() -> Result<()> {
 /// when re-running `uv pip compile`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18224>
+#[cfg(feature = "test-universal")]
 #[test]
 #[cfg(feature = "test-git")]
 fn pep_751_compile_git_preferences() -> Result<()> {
@@ -8324,6 +8326,7 @@ fn no_strip_markers_transitive_marker() -> Result<()> {
 }
 
 /// Perform a universal resolution with a package that has a marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8369,6 +8372,7 @@ fn universal() -> Result<()> {
 }
 
 /// Perform a universal resolution with conflicting versions and markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_conflicting() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8418,6 +8422,7 @@ fn universal_conflicting() -> Result<()> {
 }
 
 /// Perform a universal resolution with a package that contains cycles in its dependency graph.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_cycles() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8476,6 +8481,7 @@ fn universal_cycles() -> Result<()> {
 }
 
 /// Perform a universal resolution with a constraint.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constraint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8517,6 +8523,7 @@ fn universal_constraint() -> Result<()> {
 }
 
 /// Perform a universal resolution with a constraint, where the constraint itself has a marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constraint_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8563,6 +8570,7 @@ fn universal_constraint_marker() -> Result<()> {
 /// This currently fails, but should succeed.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4640>
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_multi_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8601,6 +8609,7 @@ fn universal_multi_version() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_platform_fork() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8663,6 +8672,7 @@ fn universal_platform_fork() -> Result<()> {
 }
 
 /// Requested distinct local versions with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_locals() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8721,6 +8731,7 @@ fn universal_disjoint_locals() -> Result<()> {
 
 /// Requested distinct local versions with disjoint markers of a package
 /// that is also present as a transitive dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_transitive_disjoint_locals() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8802,6 +8813,7 @@ fn universal_transitive_disjoint_locals() -> Result<()> {
 }
 
 /// Prefer local versions for dependencies of path requirements.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_local_path_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8873,6 +8885,7 @@ fn universal_local_path_requirement() -> Result<()> {
 
 /// If a dependency requests a local version with an overlapping marker expression,
 /// we should prefer the local in both forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlapping_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -8944,6 +8957,7 @@ fn universal_overlapping_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions with disjoint marker expressions,
 /// we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9022,6 +9036,7 @@ fn universal_disjoint_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions and non-local versions with disjoint marker
 /// expressions, we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_base_or_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.10").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9106,6 +9121,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
 /// If a dependency requests a local version with an overlapping marker expression
 /// that form a nested fork, we should prefer the local in both children of the outer
 /// fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_nested_overlapping_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9267,6 +9283,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
 
 /// If a dependency requests distinct local versions with disjoint marker expressions
 /// that form a nested fork, we should create a nested fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_nested_disjoint_local_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -9397,6 +9414,7 @@ fn existing_prerelease_preference() -> Result<()> {
 }
 
 /// Requested distinct pre-release strategies with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9428,6 +9446,7 @@ fn universal_disjoint_prereleases() -> Result<()> {
 }
 
 /// Requested distinct pre-release strategies with disjoint markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9469,6 +9488,7 @@ fn universal_disjoint_prereleases_preference() -> Result<()> {
 /// Requested distinct pre-release strategies with disjoint markers.
 ///
 /// TODO(charlie): This should resolve to two different `cffi` versions, one for each fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9510,6 +9530,7 @@ fn universal_disjoint_prereleases_preference_marker() -> Result<()> {
 
 /// Resolve to a single version as `--prerelease=allow` is provided, even though the first branch
 /// doesn't include a pre-release marker.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prereleases_allow() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9546,6 +9567,7 @@ fn universal_disjoint_prereleases_allow() -> Result<()> {
 
 /// Requested distinct pre-release strategies with disjoint markers for a package
 /// that is also present as a transitive dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9586,6 +9608,7 @@ fn universal_transitive_disjoint_prerelease_requirement() -> Result<()> {
 }
 
 /// Ensure that the global pre-release mode is respected across forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_prerelease_mode() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9619,6 +9642,7 @@ fn universal_prerelease_mode() -> Result<()> {
 
 /// If a dependency requests a pre-release version with an overlapping marker expression,
 /// we should prefer the pre-release version in both forks.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlapping_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9667,6 +9691,7 @@ fn universal_overlapping_prerelease_requirement() -> Result<()> {
 
 /// If a dependency requests distinct pre-release strategies with disjoint marker expressions,
 /// we should fork the root requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_prerelease_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-07-17T00:00:00Z");
@@ -9722,6 +9747,7 @@ fn universal_disjoint_prerelease_requirement() -> Result<()> {
 
 /// Perform a universal resolution that requires narrowing the supported Python range in one of the
 /// fork branches.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9756,6 +9782,7 @@ fn universal_requires_python() -> Result<()> {
 }
 
 /// Perform a universal resolution that requires narrowing the supported Python range in a non-fork.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_requires_python_incomplete() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9792,6 +9819,7 @@ fn universal_requires_python_incomplete() -> Result<()> {
 /// [1]: https://github.com/astral-sh/uv/issues/4885
 /// [2]: https://github.com/astral-sh/uv/pull/4707
 /// [3]: https://github.com/astral-sh/uv/pull/5597
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9910,6 +9938,7 @@ fn universal_no_repeated_unconditional_distributions_1() -> Result<()> {
 /// This test captures a case[1] that was broken by marker normalization.
 ///
 /// [1]: https://github.com/astral-sh/uv/issues/6064
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9963,6 +9992,7 @@ fn universal_no_repeated_unconditional_distributions_2() -> Result<()> {
 
 /// Solve for upper bounds before solving for lower bounds. A solution that satisfies `pylint < 3`
 /// can also work for `pylint > 2`, but the inverse isn't true (due to maximum version selection).
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_prefer_upper_bounds() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10019,6 +10049,7 @@ fn universal_prefer_upper_bounds() -> Result<()> {
 }
 
 /// Remove `python_version` markers that are always true.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_unnecessary_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10060,6 +10091,7 @@ fn universal_unnecessary_python() -> Result<()> {
 /// versions of `torch`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/5086>
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_marker_propagation() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10159,6 +10191,7 @@ fn universal_marker_propagation() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10205,6 +10238,7 @@ fn universal_disjoint_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_extra_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10256,6 +10290,7 @@ fn universal_disjoint_extra_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extra_base() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10302,6 +10337,7 @@ fn universal_overlap_extra_base() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extra_base_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10351,6 +10387,7 @@ fn universal_overlap_extra_base_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10397,6 +10434,7 @@ fn universal_overlap_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_overlap_extras_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10446,6 +10484,7 @@ fn universal_overlap_extras_no_strip() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_identical_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10492,6 +10531,7 @@ fn universal_identical_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_identical_extras_no_strip() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11090,6 +11130,7 @@ dev = [
 }
 
 /// Resolve from a `pyproject.toml` file with a recursive extra, with a marker attached.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_pyproject_toml_recursive_extra_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11141,6 +11182,7 @@ dev = [
 }
 
 /// Resolve from a `pyproject.toml` file with multiple recursive extras.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_pyproject_toml_deeply_recursive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13374,6 +13416,7 @@ fn compile_index_url_first_match_base() -> Result<()> {
 ///
 /// If the package exists on the "extra" index, but at an incompatible version, the resolution
 /// should fail by default (even though a compatible version exists on the "primary" index).
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_index_url_first_match_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -14953,6 +14996,7 @@ fn symlink() -> Result<()> {
 
 /// Resolve with `--universal`, applying user-provided constraints to the space of supported
 /// environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_constrained_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15001,6 +15045,7 @@ fn universal_constrained_environment() -> Result<()> {
 }
 
 /// Resolve with `--universal`, requiring artifact coverage for user-provided environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_required_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15117,6 +15162,7 @@ fn compile_requires_txt() -> Result<()> {
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6269>
+#[cfg(feature = "test-universal")]
 #[test]
 fn astroid_not_repeated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15254,6 +15300,7 @@ exceptiongroup==1.0.0rc8
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6412>
+#[cfg(feature = "test-universal")]
 #[test]
 fn tomli_less_than_python311() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15364,6 +15411,7 @@ matplotlib
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6836>
+#[cfg(feature = "test-universal")]
 #[test]
 fn importlib_metadata_not_repeated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15426,6 +15474,7 @@ fn importlib_metadata_not_repeated() -> Result<()> {
 }
 
 /// Regression test for: <https://github.com/astral-sh/uv/issues/6836>
+#[cfg(feature = "test-universal")]
 #[test]
 fn prune_unreachable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15472,6 +15521,7 @@ fn prune_unreachable() -> Result<()> {
 /// includes static metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
+#[cfg(feature = "test-universal")]
 #[test]
 fn unsupported_requires_python_static_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -15502,6 +15552,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -15718,6 +15769,7 @@ fn invalid_platform() -> Result<()> {
 }
 
 /// Treat `sys_platform` and `sys.platform` as equivalent markers in the marker algebra.
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_deprecated_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15750,6 +15802,7 @@ fn universal_disjoint_deprecated_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_disjoint_override_urls() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15795,6 +15848,7 @@ fn universal_disjoint_override_urls() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn universal_conflicting_override_urls() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15874,6 +15928,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
 }
 
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -15968,6 +16023,7 @@ fn dynamic_version_source_dist() -> Result<()> {
 }
 
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -17011,6 +17067,7 @@ fn group_target_does_not_exist() -> Result<()> {
 
 /// See: <https://github.com/astral-sh/uv/issues/10957>
 #[cfg(feature = "test-python-eol")]
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = uv_test::test_context!("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -17066,6 +17123,7 @@ fn compile_preserve_requires_python_split() -> Result<()> {
 }
 
 /// Regression test for <https://github.com/astral-sh/uv/issues/11279#issuecomment-2640270189>
+#[cfg(feature = "test-universal")]
 #[test]
 fn markers_on_extra_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17100,6 +17158,7 @@ fn markers_on_extra_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn respect_non_local_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -17152,6 +17211,7 @@ fn respect_non_local_preference() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn omit_wheels_exclude_newer() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
@@ -17217,6 +17277,7 @@ fn omit_wheels_exclude_newer() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/12260>
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_quotes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17279,6 +17340,7 @@ fn compile_invalid_output_file() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_filename() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17305,6 +17367,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_registry_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17354,6 +17417,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_registry_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -17402,6 +17466,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17506,6 +17571,7 @@ fn pep_751_compile_directory() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 #[cfg(feature = "test-git")]
 fn pep_751_compile_git() -> Result<()> {
@@ -17557,6 +17623,7 @@ fn pep_751_compile_git() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_url_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17621,6 +17688,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_url_sdist() -> Result<()> {
     let server = PackseServer::new("simple/single-package.toml");
@@ -17675,6 +17743,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_path_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17754,6 +17823,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_path_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17834,6 +17904,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18004,6 +18075,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_warn() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18179,6 +18251,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
 }
 
 /// Test that `--only-binary` excludes source distributions from pylock.toml output.
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_only_binary() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18217,6 +18290,7 @@ fn pep_751_compile_only_binary() -> Result<()> {
 }
 
 /// Test that `--no-binary` excludes wheels from pylock.toml output.
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_no_binary() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18254,6 +18328,7 @@ fn pep_751_compile_no_binary() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_compile_no_emit_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18572,6 +18647,7 @@ fn git_path_transitive_dependency() -> Result<()> {
 }
 
 /// Ensure that `--emit-index-annotation` plays nicely with `--annotation-style=line`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn omit_python_patch_universal() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -18723,6 +18799,7 @@ fn post_release_less_than() -> Result<()> {
 /// The main test (first snapshot) builds a Windows wheel, and targets macOS. If we run this test on
 /// Linux, the wheel tag is neither host nor target, but we don't have a reason to reject the
 /// Windows tag either.
+#[cfg(feature = "test-universal")]
 #[test]
 fn compile_with_python_platform_and_built_wheel_for_different_platform() -> Result<()> {
     let context = uv_test::test_context!("3.12");
