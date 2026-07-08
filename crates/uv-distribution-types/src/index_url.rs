@@ -97,7 +97,11 @@ impl IndexUrl {
 
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
-        self.inner().to_url()
+        match self {
+            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => {
+                Arc::unwrap_or_clone(url).into_url()
+            }
+        }
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
@@ -237,7 +241,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
-        index.inner().to_url()
+        index.into_url()
     }
 }
 

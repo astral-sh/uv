@@ -3,10 +3,7 @@ use std::path::Path;
 use uv_cache::{Cache, CacheBucket, CacheEntry};
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::{
-    BuildInfo, CachedDirectUrlDist, CachedRegistryDist, DirectUrlSourceDist, DirectorySourceDist,
-    GitDirectorySourceDist, GitPathSourceDist, Hashed, PathSourceDist,
-};
+use uv_distribution_types::{BuildInfo, CachedDirectUrlDist, CachedRegistryDist, Hashed};
 use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::archive::Archive;
@@ -139,79 +136,11 @@ impl CachedWheel {
         }
     }
 
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`DirectUrlSourceDist`].
-    pub fn into_url_dist(self, dist: &DirectUrlSourceDist) -> CachedDirectUrlDist {
+    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] with the given URL.
+    pub fn into_url_dist(self, url: VerbatimParsedUrl) -> CachedDirectUrlDist {
         CachedDirectUrlDist {
             filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`PathSourceDist`].
-    pub fn into_path_dist(self, dist: &PathSourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`DirectorySourceDist`].
-    pub fn into_directory_dist(self, dist: &DirectorySourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`GitDirectorySourceDist`].
-    pub fn into_git_dist(self, dist: &GitDirectorySourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
-            path: self.entry.into_path_buf().into_boxed_path(),
-            hashes: self.hashes,
-            cache_info: self.cache_info,
-            build_info: self.build_info,
-        }
-    }
-
-    /// Convert a [`CachedWheel`] into a [`CachedDirectUrlDist`] by merging in the given
-    /// [`GitPathSourceDist`].
-    pub fn into_git_path_dist(self, dist: &GitPathSourceDist) -> CachedDirectUrlDist {
-        CachedDirectUrlDist {
-            filename: self.filename,
-            url: VerbatimParsedUrl {
-                parsed_url: dist.parsed_url(),
-                verbatim: dist.url.clone(),
-            },
+            url,
             path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
