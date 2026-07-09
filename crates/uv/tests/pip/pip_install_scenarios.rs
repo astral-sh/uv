@@ -1911,10 +1911,47 @@ fn post_greater_than_post_not_available() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>=1.2.3.post3, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post2, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
+}
+
+/// A greater-than post-release constraint should exclude locals of the specified release but include development releases of later post-releases.
+///
+/// ```text
+/// post-greater-than-post-prerelease-ordering
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a>1.2.3.post0
+/// │       └── satisfied by a-1.2.3.post1.dev0
+/// └── a
+///     ├── a-1.2.3.post0+local
+///     └── a-1.2.3.post1.dev0
+/// ```
+#[test]
+fn post_greater_than_post_prerelease_ordering() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("post/post-greater-than-post-prerelease-ordering.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("--prerelease=allow")
+        .arg("a>1.2.3.post0")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3.post1.dev0
+    ");
+
+    // The local version has the same public version as the lower bound, while the development release belongs to a later post-release.
+    context.assert_installed("a", "1.2.3.post1.dev0");
 }
 
 /// A greater-than version constraint should match a post-release version if the constraint is itself a post-release version.
@@ -2017,6 +2054,42 @@ fn post_less_than_or_equal() {
     context.assert_not_installed("a");
 }
 
+/// A less-than post-release constraint should include pre-releases of the base release but exclude development releases of the specified post-release.
+///
+/// ```text
+/// post-less-than-post-prerelease-ordering
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a<1.2.3.post1
+/// │       └── satisfied by a-1.2.3a1
+/// └── a
+///     ├── a-1.2.3a1
+///     └── a-1.2.3.post1.dev0
+/// ```
+#[test]
+fn post_less_than_post_prerelease_ordering() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("post/post-less-than-post-prerelease-ordering.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a<1.2.3.post1")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.2.3a1
+    ");
+
+    // The base pre-release is before the post-release boundary, while the development release belongs to the specified post-release and is excluded.
+    context.assert_installed("a", "1.2.3a1");
+}
+
 /// A less-than version constraint should not match a post-release version.
 ///
 /// ```text
@@ -2076,7 +2149,7 @@ fn post_local_greater_than_post() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only a<=1.2.3.post1+local is available and you require a>=1.2.3.post2, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because only a<=1.2.3.post1 is available and you require a>1.2.3.post1, we can conclude that your requirements are unsatisfiable.
     ");
 
     context.assert_not_installed("a");
@@ -2145,6 +2218,48 @@ fn post_simple() {
     ");
 
     context.assert_not_installed("a");
+}
+
+/// A transitive less-than post-release constraint should include pre-releases of the base release but exclude development releases of the specified post-release.
+///
+/// ```text
+/// post-transitive-less-than-post-prerelease-ordering
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       └── requires b<1.2.3.post1
+/// │           └── satisfied by b-1.2.3a1
+/// └── b
+///     ├── b-1.2.3a1
+///     └── b-1.2.3.post1.dev0
+/// ```
+#[test]
+fn post_transitive_less_than_post_prerelease_ordering() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("post/post-transitive-less-than-post-prerelease-ordering.toml");
+
+    uv_snapshot!(context.filters(), command(&context, &server)
+        .arg("a")
+        , @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + a==1.0.0
+     + b==1.2.3a1
+    ");
+
+    // The transitive dependency can use the base pre-release because it is before the post-release boundary.
+    context.assert_installed("a", "1.0.0");
+    context.assert_installed("b", "1.2.3a1");
 }
 
 /// The user requires `a` which has multiple prereleases available with different labels.

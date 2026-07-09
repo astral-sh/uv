@@ -231,20 +231,9 @@ impl From<VersionSpecifier> for Ranges<Version> {
                 if version.any_prerelease() {
                     // If V is a pre-release, we allow pre-releases of the same version.
                     Self::strictly_lower_than(version)
-                } else if let Some(post) = version.post() {
-                    // If V is a post-release (e.g., `<0.12.0.post2`), we want to:
-                    // - Exclude pre-releases of the base version (e.g., `0.12.0a1`)
-                    // - Include the final release (e.g., `0.12.0`)
-                    // - Include earlier post-releases (e.g., `0.12.0.post1`)
-                    //
-                    // The range is: `(-∞, base.min0) ∪ [base, V.post)`
-                    // where `base` is the version without the post-release component.
-                    let base = version.clone().with_post(None);
-                    // Everything below the base version's pre-releases
-                    let lower = Self::strictly_lower_than(base.clone().with_min(Some(0)));
-                    // From base (inclusive) up to but not including V
-                    let upper = Self::from_range_bounds(base..version.with_post(Some(post)));
-                    lower.union(&upper)
+                } else if version.is_post() {
+                    // Exclude pre-releases of V by ending before its earliest pre-release.
+                    Self::strictly_lower_than(version.with_dev(Some(0)))
                 } else {
                     // V is not a pre-release or post-release, so exclude pre-releases of the
                     // specified version by using a "min" sentinel that sorts before all
@@ -259,8 +248,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
 
                 if let Some(dev) = version.dev() {
                     Self::higher_than(version.with_dev(Some(dev + 1)))
-                } else if let Some(post) = version.post() {
-                    Self::higher_than(version.with_post(Some(post + 1)))
+                } else if version.is_post() {
+                    Self::strictly_higher_than(version.with_local(LocalVersion::Max))
                 } else {
                     Self::strictly_higher_than(version.with_max(Some(0)))
                 }
@@ -675,6 +664,32 @@ mod tests {
         version.parse().unwrap()
     }
 
+    fn assert_less_than_is_monotonic(
+        specifier: &VersionSpecifier,
+        range: &Ranges<Version>,
+        versions: &[Version],
+    ) {
+        for accepted_version in versions {
+            for extended_version in versions
+                .iter()
+                .filter(|version| *version < accepted_version)
+            {
+                if specifier.contains(accepted_version) {
+                    assert!(
+                        specifier.contains(extended_version),
+                        "specifier `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
+                    );
+                }
+                if range.contains(accepted_version) {
+                    assert!(
+                        range.contains(extended_version),
+                        "range for `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn canonicalizes_known_pep440_successor_boundaries() {
         let range = |specifiers| {
@@ -683,6 +698,7 @@ mod tests {
         };
 
         assert_eq!(range(">1.0a1"), range(">=1.0a2.dev0"));
+        assert_eq!(range(">1.0.post0"), range(">=1.0.post1.dev0"));
         assert_eq!(range("<=1.0"), range("<1.0.post0.dev0"));
         assert_eq!(range("==1.0"), range(">=1.0,<1.0.post0.dev0"));
         assert_eq!(range(">=0.dev0"), Ranges::full());
@@ -725,7 +741,7 @@ mod tests {
         ]
         .map(version);
 
-        for specifiers in ["==1.0", "!=1.0", "<1.0", "<=1.0", ">1.0a1", "<1.0.post1"] {
+        for specifiers in ["==1.0", "!=1.0", "<1.0", "<=1.0", ">1.0a1", ">1.0.post0"] {
             let range = range(specifiers);
             let canonical = canonicalize_version_ranges(&range)
                 .expect("the specifier should contain an internal sentinel");
@@ -742,59 +758,138 @@ mod tests {
 
     #[test]
     fn skips_ranges_without_internal_sentinels() {
-        let range = Ranges::singleton(version("1.0"));
-
-        assert!(canonicalize_version_ranges(&range).is_none());
+        for range in [Ranges::singleton(version("1.0")), range("<1.0.post1")] {
+            assert!(canonicalize_version_ranges(&range).is_none());
+        }
     }
 
-    /// Test that `<V.postN` excludes pre-releases of the base version but includes
-    /// earlier post-releases and the final release.
+    /// Test exclusive post-release range conversion.
     ///
-    /// See: <https://github.com/astral-sh/uv/issues/16868>
+    /// See: <https://github.com/pypa/packaging/pull/1140>
+    /// See: <https://github.com/astral-sh/uv/issues/20229>
+    /// See: <https://github.com/astral-sh/uv/pull/19778>
     #[test]
-    fn less_than_post_release() {
-        let specifier: VersionSpecifier = "<0.12.0.post2".parse().unwrap();
-        let range = Ranges::<Version>::from(specifier);
+    fn exclusive_post_release_ordering() {
+        for (specifier, candidate, expected) in [
+            // Pre-releases of the specified post-release are excluded.
+            ("<1.0.post1", "1.0.post1.dev0", false),
+            ("<1.0.post0", "1.0.post0.dev0", false),
+            // Pre-releases of the base release are included.
+            ("<1.0.post1", "1.0.dev0", true),
+            ("<1.0.post1", "1.0a1", true),
+            ("<1.0.post1", "1.0rc1", true),
+            ("<1.0.post0", "1.0.dev0", true),
+            ("<1.0.post0", "1.0a1", true),
+            ("<1.0.post0", "1.0b1", true),
+            ("<1.0.post0", "1.0rc2", true),
+            // Development releases of an earlier post-release are included.
+            ("<1.0.post1", "1.0.post0.dev0", true),
+            ("<1.0.post2", "1.0.post1.dev0", true),
+            ("<1.0.post10", "1.0.post9.dev0", true),
+            // Final, post, local, and earlier-base releases preserve their ordering.
+            ("<1.0.post1", "1.0", true),
+            ("<1.0.post1", "1.0.post0", true),
+            ("<1.0.post1", "0.9", true),
+            ("<1.0.post0", "1.0", true),
+            ("<1.0.post10", "1.0.post9", true),
+            ("<1.0.post1", "1.0+local", true),
+            ("<1.0.post1", "1.0.post0+local", true),
+            ("<1.0.post1", "0.9.dev0", true),
+            ("<1.0.post1", "1.0.post1", false),
+            ("<1.0.post1", "1.1", false),
+            // Epochs and pre-release post-releases preserve all components of the bound.
+            ("<1!1.0.post1", "1!1.0a1", true),
+            ("<1!1.0.post1", "1!1.0.post1.dev0", false),
+            ("<1.0a1.post1", "1.0a1.post1.dev0", true),
+            // A post-release lower bound admits every later public version, but not locals of
+            // the specified version.
+            (">1.0.post0", "1.0.post0+local", false),
+            (">1.0.post0", "1.0.post1.dev0", true),
+            (">1.0.post0", "1.0.post1.dev1", true),
+        ] {
+            let specifier = specifier.parse::<VersionSpecifier>().unwrap();
+            let candidate = version(candidate);
+            assert_eq!(
+                Ranges::<Version>::from(specifier.clone()).contains(&candidate),
+                expected,
+                "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+        }
+    }
 
-        // Should include versions less than base release.
-        let v = "0.11.0".parse::<Version>().unwrap();
-        assert!(range.contains(&v), "should include 0.11.0");
+    /// Test the compound `<V.postN` cases covered by `packaging`.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1140>
+    #[test]
+    fn less_than_post_release_intersections() {
+        for (specifiers, candidate, expected) in [
+            ("==1.0.dev0,<1.0.post1", "1.0.dev0", true),
+            ("==1.0a1,<1.0.post0", "1.0a1", true),
+            ("==1.0.post0.dev0,<1.0.post1", "1.0.post0.dev0", true),
+            (">=1.0,<1.0.post1", "1.0", true),
+            (">=1.0,<1.0.post1", "1.0.post0", true),
+            (">=1.0,<1.0.post1", "1.0.dev0", false),
+            (">=1.0.dev0,<1.0.post1", "1.0.dev0", true),
+            (">=1.0.dev0,<1.0.post1", "1.0a1", true),
+            (">=1.0.dev0,<1.0.post1", "1.0.post0.dev0", true),
+            (">=1.0.dev0,<1.0.post1,!=1.0,!=1.0.post0", "1.0.dev0", true),
+            (
+                ">=1.0.dev0,<1.0.post1,!=1.0,!=1.0.post0",
+                "1.0.post0.dev0",
+                true,
+            ),
+        ] {
+            assert_eq!(
+                range(specifiers).contains(&version(candidate)),
+                expected,
+                "expected `{specifiers}` to contain `{candidate}`: {expected}"
+            );
+        }
+    }
 
-        // Should exclude pre-releases of the base release.
-        let v = "0.12.0a1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1");
+    /// Test the monotonicity properties covered by `packaging`'s property tests.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1144>
+    #[test]
+    fn less_than_ordering_is_monotonic() {
+        let versions = [
+            "0.dev0",
+            "0",
+            "0.1",
+            "1.0.dev0",
+            "1.0.dev1",
+            "1.0a0.dev0",
+            "1.0a0",
+            "1.0a1.dev0",
+            "1.0a1",
+            "1.0a1.post0.dev0",
+            "1.0a1.post0",
+            "1.0a2",
+            "1.0b1",
+            "1.0rc1",
+            "1.0",
+            "1.0.post0.dev0",
+            "1.0.post0",
+            "1.0.post1.dev0",
+            "1.0.post1",
+            "1.1",
+            "2.0",
+            "1!0.dev0",
+            "1!0",
+            "1!1.0a1",
+            "1!1.0",
+            "1!1.0.post0.dev0",
+            "1!1.0.post0",
+        ]
+        .map(version);
 
-        let v = "0.12.0b1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0b1");
-
-        let v = "0.12.0rc1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0rc1");
-
-        let v = "0.12.0.dev0".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0.dev0");
-
-        // Should also exclude post-releases of pre-releases.
-        let v = "0.12.0a1.post1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1.post1");
-
-        let v = "0.12.0b1.post1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0b1.post1");
-
-        // Should include the final release.
-        let v = "0.12.0".parse::<Version>().unwrap();
-        assert!(range.contains(&v), "should include 0.12.0");
-
-        // Should include earlier post-releases.
-        let v = "0.12.0.post1".parse::<Version>().unwrap();
-        assert!(range.contains(&v), "should include 0.12.0.post1");
-
-        // Should exclude the specified post-release.
-        let v = "0.12.0.post2".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0.post2");
-
-        // Should exclude later versions.
-        let v = "0.13.0".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.13.0");
+        for specified_version in &versions {
+            let less_than_specifier = format!("<{specified_version}")
+                .parse::<VersionSpecifier>()
+                .unwrap();
+            let less_than_range = Ranges::from(less_than_specifier.clone());
+            assert_less_than_is_monotonic(&less_than_specifier, &less_than_range, &versions);
+        }
     }
 
     /// Test that `<V` (non-post-release) correctly excludes pre-releases.
@@ -842,32 +937,6 @@ mod tests {
 
         let v = "0.12.0".parse::<Version>().unwrap();
         assert!(!range.contains(&v), "should exclude 0.12.0");
-    }
-
-    /// Test the edge case where `<V.post0` still includes the final release.
-    #[test]
-    fn less_than_post_zero() {
-        let specifier: VersionSpecifier = "<0.12.0.post0".parse().unwrap();
-        let range = Ranges::<Version>::from(specifier);
-
-        // Should include versions less than base release.
-        let v = "0.11.0".parse::<Version>().unwrap();
-        assert!(range.contains(&v), "should include 0.11.0");
-
-        // Should exclude pre-releases of the base release.
-        let v = "0.12.0a1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0a1");
-
-        // Should include the final release (0.12.0 < 0.12.0.post0).
-        let v = "0.12.0".parse::<Version>().unwrap();
-        assert!(range.contains(&v), "should include 0.12.0");
-
-        // Should exclude post0 and later.
-        let v = "0.12.0.post0".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0.post0");
-
-        let v = "0.12.0.post1".parse::<Version>().unwrap();
-        assert!(!range.contains(&v), "should exclude 0.12.0.post1");
     }
 
     /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
