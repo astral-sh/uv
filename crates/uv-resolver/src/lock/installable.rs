@@ -739,8 +739,8 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
                 let mut marker = dependency.complexified_marker;
                 for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
-                    if !subgraph_packages.contains(item.package())
-                        && selection_context_package != Some(item.package())
+                    if selection_context_package != Some(item.package())
+                        && !subgraph_packages.contains(item.package())
                     {
                         continue;
                     }
