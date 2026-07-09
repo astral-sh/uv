@@ -1752,18 +1752,15 @@ impl Source {
             RequirementSource::Registry { index: Some(_), .. } => {
                 return Ok(None);
             }
-            RequirementSource::Registry { index: None, .. } => {
-                if let Some(index) = index {
-                    Self::Registry {
-                        index,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
-                    }
-                } else {
-                    return Ok(None);
+            RequirementSource::Registry { index: None, .. } if let Some(index) = index => {
+                Self::Registry {
+                    index,
+                    marker: MarkerTree::TRUE,
+                    extra: None,
+                    group: None,
                 }
             }
+            RequirementSource::Registry { index: None, .. } => return Ok(None),
             RequirementSource::Path { install_path, .. } => Self::Path {
                 editable: None,
                 package: None,

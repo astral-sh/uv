@@ -305,64 +305,61 @@ impl Error {
 
             // The server returned a "Method Not Allowed" error, indicating it doesn't support
             // HEAD requests, so we can't check for range requests.
-            ErrorKind::WrappedReqwestError(_, err) => {
-                if let Some(status) = err.status() {
-                    // If the server doesn't support HEAD requests, we can't check for range
-                    // requests.
-                    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
-                        return true;
-                    }
+            ErrorKind::WrappedReqwestError(_, err) if let Some(status) = err.status() => {
+                // If the server doesn't support HEAD requests, we can't check for range
+                // requests.
+                if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+                    return true;
+                }
 
-                    // In some cases, registries return a 404 for HEAD requests when they're not
-                    // supported. In the worst case, we'll now just proceed to attempt to stream the
-                    // entire file, so it's fine to be somewhat lenient here.
-                    if status == reqwest::StatusCode::NOT_FOUND {
-                        return true;
-                    }
+                // In some cases, registries return a 404 for HEAD requests when they're not
+                // supported. In the worst case, we'll now just proceed to attempt to stream the
+                // entire file, so it's fine to be somewhat lenient here.
+                if status == reqwest::StatusCode::NOT_FOUND {
+                    return true;
+                }
 
-                    // In some cases, registries (like PyPICloud) return a 403 for HEAD requests
-                    // when they're not supported. Again, it's better to be lenient here.
-                    if status == reqwest::StatusCode::FORBIDDEN {
-                        return true;
-                    }
+                // In some cases, registries (like PyPICloud) return a 403 for HEAD requests
+                // when they're not supported. Again, it's better to be lenient here.
+                if status == reqwest::StatusCode::FORBIDDEN {
+                    return true;
+                }
 
-                    // In some cases, registries (like Alibaba Cloud) return a 400 for HEAD requests
-                    // when they're not supported. Again, it's better to be lenient here.
-                    if status == reqwest::StatusCode::BAD_REQUEST {
-                        return true;
-                    }
+                // In some cases, registries (like Alibaba Cloud) return a 400 for HEAD requests
+                // when they're not supported. Again, it's better to be lenient here.
+                if status == reqwest::StatusCode::BAD_REQUEST {
+                    return true;
                 }
             }
 
             // The server doesn't support range requests, but we only discovered this while
             // unzipping due to erroneous server behavior.
-            ErrorKind::Zip(_, ZipError::UpstreamReadError(err)) => {
+            ErrorKind::Zip(_, ZipError::UpstreamReadError(err))
                 if let Some(inner) = err.get_ref()
                     && let Some(range_reader_error) =
-                        inner.downcast_ref::<AsyncHttpRangeReaderError>()
-                {
-                    match range_reader_error {
-                        AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
-                        | AsyncHttpRangeReaderError::ContentLengthMissing
-                        | AsyncHttpRangeReaderError::ContentRangeMissing => {
-                            return true;
-                        }
-                        AsyncHttpRangeReaderError::RangeMismatch { .. }
-                        | AsyncHttpRangeReaderError::ResponseTooShort { .. }
-                        | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
-                            let url = if let Some(index) = index {
-                                index.url()
-                            } else {
-                                url
-                            };
-                            warn!(
-                                "Invalid range request response from server that declares HTTP \
-                                range request support, falling back to streaming: {url}"
-                            );
-                            return true;
-                        }
-                        _ => {}
+                        inner.downcast_ref::<AsyncHttpRangeReaderError>() =>
+            {
+                match range_reader_error {
+                    AsyncHttpRangeReaderError::HttpRangeRequestUnsupported
+                    | AsyncHttpRangeReaderError::ContentLengthMissing
+                    | AsyncHttpRangeReaderError::ContentRangeMissing => {
+                        return true;
                     }
+                    AsyncHttpRangeReaderError::RangeMismatch { .. }
+                    | AsyncHttpRangeReaderError::ResponseTooShort { .. }
+                    | AsyncHttpRangeReaderError::ResponseTooLong { .. } => {
+                        let url = if let Some(index) = index {
+                            index.url()
+                        } else {
+                            url
+                        };
+                        warn!(
+                            "Invalid range request response from server that declares HTTP \
+                            range request support, falling back to streaming: {url}"
+                        );
+                        return true;
+                    }
+                    _ => {}
                 }
             }
 

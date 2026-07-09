@@ -526,17 +526,16 @@ impl RegistryClient {
             format!("{package_name}.rkyv"),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => {
-                if let Some(header) = self.indexes.simple_api_cache_control_for(index) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.cache
-                            .freshness(&cache_entry, Some(package_name), None)
-                            .map_err(ErrorKind::Io)?,
-                    )
-                }
+            Connectivity::Online
+                if let Some(header) = self.indexes.simple_api_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(package_name), None)
+                    .map_err(ErrorKind::Io)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -800,17 +799,16 @@ impl RegistryClient {
             "index.html.rkyv",
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => {
-                if let Some(header) = self.indexes.simple_api_cache_control_for(index) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.cache
-                            .freshness(&cache_entry, None, None)
-                            .map_err(ErrorKind::Io)?,
-                    )
-                }
+            Connectivity::Online
+                if let Some(header) = self.indexes.simple_api_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, None, None)
+                    .map_err(ErrorKind::Io)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -1104,17 +1102,16 @@ impl RegistryClient {
                 format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
-                Connectivity::Online => {
-                    if let Some(header) = self.indexes.artifact_cache_control_for(index) {
-                        CacheControl::Override(header)
-                    } else {
-                        CacheControl::from(
-                            self.cache
-                                .freshness(&cache_entry, Some(&filename.name), None)
-                                .map_err(ErrorKind::Io)?,
-                        )
-                    }
+                Connectivity::Online
+                    if let Some(header) = self.indexes.artifact_cache_control_for(index) =>
+                {
+                    CacheControl::Override(header)
                 }
+                Connectivity::Online => CacheControl::from(
+                    self.cache
+                        .freshness(&cache_entry, Some(&filename.name), None)
+                        .map_err(ErrorKind::Io)?,
+                ),
                 Connectivity::Offline => CacheControl::AllowStale,
             };
 
@@ -1181,25 +1178,17 @@ impl RegistryClient {
             format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
-            Connectivity::Online => {
-                if let Some(index) = index {
-                    if let Some(header) = self.indexes.artifact_cache_control_for(index) {
-                        CacheControl::Override(header)
-                    } else {
-                        CacheControl::from(
-                            self.cache
-                                .freshness(&cache_entry, Some(&filename.name), None)
-                                .map_err(ErrorKind::Io)?,
-                        )
-                    }
-                } else {
-                    CacheControl::from(
-                        self.cache
-                            .freshness(&cache_entry, Some(&filename.name), None)
-                            .map_err(ErrorKind::Io)?,
-                    )
-                }
+            Connectivity::Online
+                if let Some(index) = index
+                    && let Some(header) = self.indexes.artifact_cache_control_for(index) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.cache
+                    .freshness(&cache_entry, Some(&filename.name), None)
+                    .map_err(ErrorKind::Io)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 

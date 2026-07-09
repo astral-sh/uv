@@ -104,15 +104,14 @@ impl OperationDiagnostic {
                 dist_error(kind, dist, &chain, Arc::new(*err));
                 None
             }
+            pip::operations::Error::Requirements(err) if let Some(context) = self.context => {
+                let err = miette::Report::msg(format!("{err}"))
+                    .context(format!("Failed to resolve {context} requirement"));
+                anstream::eprint!("{err:?}");
+                None
+            }
             pip::operations::Error::Requirements(err) => {
-                if let Some(context) = self.context {
-                    let err = miette::Report::msg(format!("{err}"))
-                        .context(format!("Failed to resolve {context} requirement"));
-                    anstream::eprint!("{err:?}");
-                    None
-                } else {
-                    Some(pip::operations::Error::Requirements(err))
-                }
+                Some(pip::operations::Error::Requirements(err))
             }
             err @ pip::operations::Error::OutdatedEnvironment(..) => {
                 anstream::eprintln!("{}", err);
