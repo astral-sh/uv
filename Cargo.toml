@@ -385,6 +385,30 @@ use_self = "warn"
 # Diagnostics are not actionable: Enable once https://github.com/rust-lang/rust-clippy/issues/13774 is resolved.
 large_stack_arrays = "allow"
 
+# Default local iteration profile: skip debug info generation and apply
+# light optimization. In the local touched-file rebuild loop, this was only
+# about 1.05x slower than unoptimized `dev`; the clean-build comparison was
+# about 1.64x slower.
+[profile.dev]
+opt-level = 1
+debug = 0
+strip = "debuginfo"
+
+[profile.dev-debug]
+inherits = "dev"
+opt-level = 0
+debug = "full"
+strip = false
+
+# Profile for faster artifact builds: keep optimizations off while also
+# skipping debuginfo generation. In CI, optimized `dev` artifact builds
+# measured about 2x slower than this profile.
+[profile.no-opt]
+inherits = "dev"
+opt-level = 0
+debug = 0
+strip = "debuginfo"
+
 [profile.release]
 strip = true
 lto = "fat"
@@ -430,21 +454,6 @@ inherits = "release"
 strip = false
 debug = "full"
 lto = false
-
-# Profile for fast test execution: Skip debug info generation, and
-# apply basic optimization, which speed up build and running tests.
-[profile.fast-build]
-inherits = "dev"
-opt-level = 1
-debug = 0
-strip = "debuginfo"
-
-# Profile for faster builds: Skip debug info generation, for faster
-# builds of smaller binaries.
-[profile.no-debug]
-inherits = "dev"
-debug = 0
-strip = "debuginfo"
 
 # Profile to build a minimally sized binary for uv-build
 [profile.minimal-size]

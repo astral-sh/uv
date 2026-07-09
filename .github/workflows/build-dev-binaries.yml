@@ -17,7 +17,7 @@ env:
 jobs:
   build-binary-linux-libc:
     name: "linux libc"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: github-ubuntu-24.04-x86_64-8
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -29,23 +29,24 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug
+        run: cargo build --profile no-opt
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-opt/uv
+            ./target/no-opt/uvx
           retention-days: 1
 
   build-binary-linux-aarch64:
     name: "linux aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: github-ubuntu-24.04-aarch64-4
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -57,18 +58,19 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug
+        run: cargo build --profile no-opt
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-opt/uv
+            ./target/no-opt/uvx
           retention-days: 1
 
   build-binary-linux-armv7-gnueabihf:
@@ -91,25 +93,26 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         env:
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo build --profile no-debug --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
+        run: cargo build --profile no-opt --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-armv7-gnueabihf-${{ github.sha }}
           path: |
-            ./target/armv7-unknown-linux-gnueabihf/no-debug/uv
-            ./target/armv7-unknown-linux-gnueabihf/no-debug/uvx
+            ./target/armv7-unknown-linux-gnueabihf/no-opt/uv
+            ./target/armv7-unknown-linux-gnueabihf/no-opt/uvx
           retention-days: 1
 
   build-binary-linux-musl:
     name: "linux musl"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: github-ubuntu-24.04-x86_64-8
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -126,23 +129,24 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug --target x86_64-unknown-linux-musl --bin uv --bin uvx
+        run: cargo build --profile no-opt --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
-            ./target/x86_64-unknown-linux-musl/no-debug/uv
-            ./target/x86_64-unknown-linux-musl/no-debug/uvx
+            ./target/x86_64-unknown-linux-musl/no-opt/uv
+            ./target/x86_64-unknown-linux-musl/no-opt/uvx
           retention-days: 1
 
   build-binary-macos-aarch64:
     name: "macos aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -151,23 +155,24 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-opt --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-opt/uv
+            ./target/no-opt/uvx
           retention-days: 1
 
   build-binary-macos-x86_64:
     name: "macos x86_64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: macos-latest-large # github-macos-14-x86_64-12
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -176,23 +181,24 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
           cache-bin: false
       - name: "Build"
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-opt --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
-            ./target/no-debug/uv
-            ./target/no-debug/uvx
+            ./target/no-opt/uv
+            ./target/no-opt/uvx
           retention-days: 1
 
   build-binary-windows-x86_64:
     name: "windows x86_64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -209,25 +215,26 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-opt --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-opt/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-opt/uvx.exe
           retention-days: 1
 
   build-binary-windows-aarch64:
     name: "windows aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -244,26 +251,27 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           workspaces: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --profile no-debug --bin uv --bin uvx
+        run: cargo build --profile no-opt --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uv.exe
-            ${{ env.UV_WORKSPACE }}/target/no-debug/uvx.exe
+            ${{ env.UV_WORKSPACE }}/target/no-opt/uv.exe
+            ${{ env.UV_WORKSPACE }}/target/no-opt/uvx.exe
           retention-days: 1
 
   build-binary-msrv:
     name: "msrv"
     runs-on: github-ubuntu-24.04-x86_64-8
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -281,15 +289,16 @@ jobs:
         run: ./scripts/install-mold.sh
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - run: cargo +${MSRV} build --profile no-debug
+      - run: cargo +${MSRV} build --profile no-opt
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - run: ./target/no-debug/uv --version
+      - run: ./target/no-opt/uv --version
 
   build-binary-android-aarch64:
     name: "android aarch64"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: github-ubuntu-24.04-x86_64-8
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -323,23 +332,24 @@ jobs:
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
 
       - name: "Build"
-        run: cargo build --profile no-debug --target aarch64-linux-android --bin uv --bin uvx
+        run: cargo build --profile no-opt --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: uv-android-aarch64-${{ github.sha }}
           path: |
-            ./target/aarch64-linux-android/no-debug/uv
-            ./target/aarch64-linux-android/no-debug/uvx
+            ./target/aarch64-linux-android/no-opt/uv
+            ./target/aarch64-linux-android/no-opt/uvx
           retention-days: 1
 
   build-binary-freebsd:
     name: "freebsd"
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -347,6 +357,7 @@ jobs:
           persist-credentials: false
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
+          prefix-key: v1-rust
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
         run: |
@@ -355,7 +366,7 @@ jobs:
           chmod +x cross
           mv cross /usr/local/bin/cross
 
-          cross build --target x86_64-unknown-freebsd --profile no-debug
+          cross build --target x86_64-unknown-freebsd --profile no-opt
 
       - name: Test in Firecracker VM
         uses: acj/freebsd-firecracker-action@da029f050a7a2535fce96385727cf3d5768bd8bf # v0.10.1
@@ -369,8 +380,8 @@ jobs:
             cat <<EOF > $include_path
             target
             target/x86_64-unknown-freebsd
-            target/x86_64-unknown-freebsd/no-debug
-            target/x86_64-unknown-freebsd/no-debug/uv
+            target/x86_64-unknown-freebsd/no-opt
+            target/x86_64-unknown-freebsd/no-opt/uv
             EOF
 
             rsync -r -e "ssh" \
@@ -380,6 +391,6 @@ jobs:
               --exclude "*" \
               . firecracker:
           run-in-vm: |
-            mv target/x86_64-unknown-freebsd/no-debug/uv uv
+            mv target/x86_64-unknown-freebsd/no-opt/uv uv
             chmod +x uv
             ./uv --version
