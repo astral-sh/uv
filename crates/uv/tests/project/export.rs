@@ -3,18 +3,24 @@
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
+#[cfg(feature = "test-universal")]
 use indoc::{formatdoc, indoc};
+#[cfg(feature = "test-universal")]
 use insta::assert_snapshot;
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use std::path::Path;
 use std::process::Stdio;
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_fs::Simplified;
+#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
-#[cfg(feature = "test-git")]
+#[cfg(feature = "test-universal")]
+use uv_test::copy_dir_ignore;
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, decode_token};
-use uv_test::{apply_filters, copy_dir_ignore, uv_snapshot};
+use uv_test::{apply_filters, uv_snapshot};
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -63,6 +69,7 @@ fn requirements_txt_dependency() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_export_no_header() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -109,6 +116,7 @@ fn requirements_txt_export_no_header() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -195,6 +203,7 @@ fn requirements_txt_dependency_extra() -> Result<()> {
 /// An optional dependency's marker can be omitted from the lockfile when the extra is only active
 /// in environments that satisfy the same marker. Ensure export restores the extra's activation
 /// marker instead of making the dependency unconditional.
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_conditional_transitive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2026-05-12T00:00:00Z");
@@ -233,6 +242,7 @@ fn requirements_txt_conditional_transitive_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_project_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -385,6 +395,7 @@ fn requirements_txt_project_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -460,6 +471,7 @@ fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_prune() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -525,6 +537,7 @@ fn requirements_txt_prune() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -577,6 +590,7 @@ fn requirements_txt_dependency_marker() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency_multiple_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -660,6 +674,7 @@ fn requirements_txt_dependency_multiple_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -904,6 +919,7 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_non_root() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -965,6 +981,7 @@ fn requirements_txt_non_root() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn allrequirements_txt_() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1040,6 +1057,7 @@ fn allrequirements_txt_() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1128,6 +1146,7 @@ fn requirements_txt_frozen() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_create_missing_dir() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1206,6 +1225,7 @@ fn requirements_txt_create_missing_dir() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1261,6 +1281,7 @@ fn requirements_txt_non_project() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn virtual_empty() -> Result<()> {
     // testing how `uv export` reacts to a pyproject with no `[project]` and nothing useful to it
@@ -1287,6 +1308,7 @@ fn virtual_empty() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn virtual_dependency_group() -> Result<()> {
     // testing basic `uv export --group` functionality
@@ -1357,7 +1379,7 @@ fn virtual_dependency_group() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn requirements_txt_https_git_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1393,7 +1415,7 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 
 /// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
 /// user.
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
@@ -1422,7 +1444,7 @@ fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
 }
 
 /// Don't redact the username `git` in SSH URLs.
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1511,6 +1533,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn requirements_txt_https_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1546,6 +1569,7 @@ async fn requirements_txt_https_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_non_project_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1601,6 +1625,7 @@ fn requirements_txt_non_project_marker() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_non_project_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1679,6 +1704,7 @@ fn requirements_txt_non_project_workspace() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_non_project_fork() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2003,6 +2029,7 @@ fn requirements_txt_relative_path() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn devrequirements_txt_() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2098,6 +2125,7 @@ fn devrequirements_txt_() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_no_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2140,6 +2168,7 @@ fn requirements_txt_no_hashes() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_output_file() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2207,6 +2236,7 @@ fn requirements_txt_output_file() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_no_emit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2420,6 +2450,7 @@ fn requirements_txt_no_emit() -> Result<()> {
 /// even if the workspace has a single member (i.e., no additional packages).
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18070>
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_no_emit_workspace_all_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2466,6 +2497,7 @@ fn requirements_txt_no_emit_workspace_all_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_only_emit() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2552,6 +2584,7 @@ fn requirements_txt_only_emit() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_no_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2657,6 +2690,7 @@ fn requirements_txt_no_editable() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_export_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2834,6 +2868,7 @@ fn requirements_txt_export_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3097,6 +3132,7 @@ fn requirements_txt_script() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3199,6 +3235,7 @@ fn requirements_txt_conflicts() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_simple_conflict_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3284,6 +3321,7 @@ fn requirements_txt_simple_conflict_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_complex_conflict_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -3659,6 +3697,7 @@ fn requirements_txt_complex_conflict_markers() -> Result<()> {
 }
 
 /// Export requirements in the presence of a cycle.
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_cyclic_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3744,6 +3783,7 @@ fn requirements_txt_cyclic_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pylock_workspace_member_conflict_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -3953,6 +3993,7 @@ fn pylock_workspace_member_conflict_markers() -> Result<()> {
 }
 
 /// Export requirements in the presence of a cycle, with conflicts enabled.
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_cyclic_dependencies_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4052,6 +4093,7 @@ fn requirements_txt_cyclic_dependencies_conflict() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4116,6 +4158,7 @@ fn pep_751_dependency() -> Result<()> {
 }
 
 /// `packages` is a required key in PEP 751, even when there are no packages to export.
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_no_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4150,6 +4193,7 @@ fn pep_751_no_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_export_no_header() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4211,6 +4255,7 @@ fn pep_751_export_no_header() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_export_no_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4274,6 +4319,7 @@ fn pep_751_export_no_editable() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_dependency_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4391,6 +4437,7 @@ fn pep_751_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_project_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4621,8 +4668,8 @@ fn pep_751_project_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn pep_751_git_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -4664,6 +4711,7 @@ fn pep_751_git_dependency() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_wheel_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4717,6 +4765,7 @@ fn pep_751_wheel_url() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_sdist_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4770,6 +4819,7 @@ fn pep_751_sdist_url() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_sdist_url_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4833,6 +4883,7 @@ fn pep_751_sdist_url_subdirectory() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_infer_output_format() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4969,6 +5020,7 @@ fn pep_751_infer_output_format() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_filename() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5003,7 +5055,7 @@ fn pep_751_filename() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn pep_751_https_git_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5043,6 +5095,7 @@ fn pep_751_https_git_credentials() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn pep_751_https_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5086,6 +5139,7 @@ async fn pep_751_https_credentials() -> Result<()> {
 /// Check that relative and absolute paths are preserved in pylock.toml export.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16514>
+#[cfg(feature = "test-universal")]
 #[test]
 fn pep_751_relative_and_absolute_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5176,6 +5230,7 @@ fn pep_751_relative_and_absolute_paths() -> Result<()> {
 /// Support `UV_NO_EDITABLE=1 uv export`.
 ///
 /// <https://github.com/astral-sh/uv/issues/15103>
+#[cfg(feature = "test-universal")]
 #[test]
 fn no_editable_env_var() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5216,6 +5271,7 @@ fn no_editable_env_var() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn export_only_group_and_extra_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5269,6 +5325,7 @@ fn export_only_group_and_extra_conflict() -> Result<()> {
 }
 
 /// The members in the workspace (`foo`) and in the lockfile (`bar`) mismatch.
+#[cfg(feature = "test-universal")]
 #[test]
 fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5313,6 +5370,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
 }
 
 /// Export multiple packages within a workspace.
+#[cfg(feature = "test-universal")]
 #[test]
 fn multiple_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5456,6 +5514,7 @@ fn multiple_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_basic() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5536,6 +5595,7 @@ fn cyclonedx_export_basic() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_direct_url() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5617,7 +5677,7 @@ fn cyclonedx_export_direct_url() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn cyclonedx_export_git_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5699,6 +5759,7 @@ fn cyclonedx_export_git_dependency() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_no_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5766,7 +5827,7 @@ fn cyclonedx_export_no_dependencies() -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-git")]
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
 fn cyclonedx_export_mixed_source_types() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5874,6 +5935,7 @@ fn cyclonedx_export_mixed_source_types() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_project_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -5959,6 +6021,7 @@ fn cyclonedx_export_project_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6066,6 +6129,7 @@ fn cyclonedx_export_project_extra_with_optional_flag() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_with_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6229,6 +6293,7 @@ fn cyclonedx_export_with_workspace_member() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_workspace_non_root() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6331,6 +6396,7 @@ fn cyclonedx_export_workspace_non_root() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_workspace_with_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6552,6 +6618,7 @@ fn cyclonedx_export_workspace_with_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_workspace_frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6714,6 +6781,7 @@ fn cyclonedx_export_workspace_frozen() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_workspace_all_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -6903,6 +6971,7 @@ fn cyclonedx_export_workspace_all_packages() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7002,6 +7071,7 @@ fn cyclonedx_export_all_packages_non_workspace_root_dependency() -> Result<()> {
 }
 
 // Contains a combination of combination of workspace and registry deps, with another workspace dep not depended on by the root
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7180,6 +7250,7 @@ fn cyclonedx_export_workspace_mixed_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_dependency_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7281,6 +7352,7 @@ fn cyclonedx_export_dependency_marker() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7409,6 +7481,7 @@ fn cyclonedx_export_multiple_dependency_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_dependency_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7539,6 +7612,7 @@ fn cyclonedx_export_dependency_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_prune() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7723,6 +7797,7 @@ fn cyclonedx_export_prune() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -7955,6 +8030,7 @@ fn cyclonedx_export_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8074,6 +8150,7 @@ fn cyclonedx_export_non_project() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_no_emit() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8275,6 +8352,7 @@ fn cyclonedx_export_no_emit() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_relative_path() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8387,6 +8465,7 @@ fn cyclonedx_export_relative_path() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8580,6 +8659,7 @@ fn cyclonedx_export_cyclic_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_dev_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8789,6 +8869,7 @@ fn cyclonedx_export_dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -8967,6 +9048,7 @@ fn cyclonedx_export_all_packages_conflicting_workspace_members() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/18608>
+#[cfg(feature = "test-universal")]
 #[test]
 fn export_package_conflicting_workspace_members() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9109,6 +9191,7 @@ fn export_package_conflicting_workspace_members() -> Result<()> {
 /// should include its dependencies (not produce empty output).
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18608>
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_conflicting_workspace_member_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9282,6 +9365,7 @@ fn requirements_txt_conflicting_workspace_member_package() -> Result<()> {
 
 /// Exporting the workspace root package should continue to include its dependencies
 /// even when it conflicts with another workspace member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_conflicting_workspace_root_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9375,6 +9459,7 @@ fn requirements_txt_conflicting_workspace_root_package() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_alternative_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12")
@@ -9600,6 +9685,7 @@ fn cyclonedx_export_alternative_registry() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_cyclonedx_filters();
@@ -9769,6 +9855,7 @@ fn cyclonedx_export_virtual_workspace_fixture() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn pylock_toml_filter_by_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9827,6 +9914,7 @@ fn pylock_toml_filter_by_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn requirements_txt_emit_indexes() -> Result<()> {
     let context = uv_test::test_context!("3.12");

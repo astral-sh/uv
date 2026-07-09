@@ -416,6 +416,9 @@ fn render_compile_case(output: &mut String, case: &ScenarioCase) -> Result<()> {
     if case.scenario.name.contains("patch") {
         output.push_str("#[cfg(feature = \"test-python-patch\")]\n");
     }
+    if case.scenario.resolver_options.universal {
+        output.push_str("#[cfg(feature = \"test-universal\")]\n");
+    }
     output.push_str("#[test]\n");
     writeln!(
         output,
@@ -923,7 +926,7 @@ fn requirement_specifiers(requirement: &Requirement) -> Option<&uv_pep440::Versi
 mod tests {
     use super::{
         TemplateKind, check_generated_file, compile_requirements, load_scenarios,
-        load_scenarios_from, render,
+        load_scenarios_from, module_name, render, scenarios_for_template,
     };
 
     #[test]
@@ -958,6 +961,26 @@ mod tests {
                 .find(|line| line.starts_with("#![cfg"))
                 .expect("scenario suite should contain a feature gate");
             assert_eq!(gate, expected_gate);
+        }
+    }
+
+    #[test]
+    fn universal_compile_scenarios_are_feature_gated() {
+        let scenarios = load_scenarios().expect("vendored scenarios should parse");
+        let cases = scenarios_for_template(TemplateKind::Compile, &scenarios);
+        let output =
+            render(TemplateKind::Compile, &cases).expect("compile scenario suite should render");
+        let mut universal_cases = cases
+            .into_iter()
+            .filter(|case| case.scenario.resolver_options.universal)
+            .peekable();
+
+        assert!(universal_cases.peek().is_some());
+        for case in universal_cases {
+            assert!(output.contains(&format!(
+                "#[cfg(feature = \"test-universal\")]\n#[test]\nfn {}()",
+                module_name(&case.scenario.name)
+            )));
         }
     }
 

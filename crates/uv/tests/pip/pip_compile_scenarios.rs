@@ -67,6 +67,7 @@ fn command(context: &TestContext, python_versions: &[&str], server: &PackseServe
 ///         │   └── satisfied by forkleaf-1.1.0
 ///         └── requires python>=0
 /// ```
+#[cfg(feature = "test-universal")]
 #[test]
 fn lowest_direct_fork_max_python() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -140,6 +141,7 @@ fn lowest_direct_fork_max_python() -> Result<()> {
 ///         │   └── satisfied by forkleaf-1.1.0
 ///         └── requires python>=0
 /// ```
+#[cfg(feature = "test-universal")]
 #[test]
 fn lowest_direct_fork_min_python() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -218,6 +220,7 @@ fn lowest_direct_fork_min_python() -> Result<()> {
 ///         │   └── satisfied by forkleaf-1.1.0
 ///         └── requires python>=0
 /// ```
+#[cfg(feature = "test-universal")]
 #[test]
 fn lowest_fork_max_python() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -291,6 +294,7 @@ fn lowest_fork_max_python() -> Result<()> {
 ///         │   └── satisfied by forkleaf-1.1.0
 ///         └── requires python>=0
 /// ```
+#[cfg(feature = "test-universal")]
 #[test]
 fn lowest_fork_min_python() -> Result<()> {
     let context = uv_test::test_context!("3.11");
