@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use async_zip::base::read::cd::Entry;
@@ -12,34 +12,20 @@ use tracing::{debug, warn};
 use uv_distribution_filename::SourceDistExtension;
 use uv_warnings::warn_user_once;
 
+use crate::archive_path::SanitizedArchivePath;
+use crate::dirhash::{
+    DirectoryDigest, ExtractedFile, directory_digest_from_extracted, empty_directory_paths,
+};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 
 const DEFAULT_BUF_SIZE: usize = 128 * 1024;
 
-/// Ensure the file path is safe to use as a [`Path`].
-///
-/// See: <https://docs.rs/zip/latest/zip/read/struct.ZipFile.html#method.enclosed_name>
-pub(crate) fn enclosed_name(file_name: &str) -> Option<PathBuf> {
-    if file_name.contains('\0') {
-        return None;
-    }
-    let path = PathBuf::from(file_name);
-    let mut depth = 0usize;
-    for component in path.components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir => return None,
-            Component::ParentDir => depth = depth.checked_sub(1)?,
-            Component::Normal(_) => depth += 1,
-            Component::CurDir => (),
-        }
-    }
-    Some(path)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LocalHeaderEntry {
     /// The relative path of the entry, as computed from the local file header.
-    relpath: PathBuf,
+    relpath: SanitizedArchivePath,
+    /// Whether the local file header identifies the entry as a directory.
+    is_dir: bool,
     /// The computed CRC32 checksum of the entry.
     crc32: u32,
     /// The computed compressed size of the entry.
@@ -48,6 +34,8 @@ struct LocalHeaderEntry {
     uncompressed_size: u64,
     /// Whether the entry has a data descriptor.
     data_descriptor: bool,
+    /// The digest of the extracted file contents.
+    digest: Option<blake3::Hash>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,12 +46,19 @@ struct ComputedEntry {
     uncompressed_size: u64,
     /// The computed compressed size of the entry.
     compressed_size: u64,
+    /// The digest of the extracted file contents.
+    digest: Option<blake3::Hash>,
+}
+
+struct UnzipOutput {
+    files: Vec<(PathBuf, u64)>,
+    digest: Option<DirectoryDigest>,
 }
 
 /// Unpack a `.zip` archive into the target directory, without requiring `Seek`.
 ///
 /// This is useful for unzipping files as they're being downloaded. If the archive
-/// is already fully on disk, consider using `unzip_archive`, which can use multiple
+/// is already fully on disk, consider using [`crate::unzip`], which can use multiple
 /// threads to work faster in that case.
 ///
 /// `source_hint` is used for warning messages, to identify the source of the ZIP archive
@@ -75,6 +70,39 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
     reader: R,
     target: impl AsRef<Path>,
 ) -> Result<Vec<(PathBuf, u64)>, Error> {
+    Ok(Box::pin(unzip_inner(source_hint, reader, target, false))
+        .await?
+        .files)
+}
+
+/// Unpack a `.zip` archive into the target directory while computing a digest of the extracted
+/// files.
+///
+/// The digest includes regular-file paths, executable bits, sizes, contents, and empty leaf
+/// directories. ZIP entries are never followed as symlinks; non-directory entries are materialized
+/// and hashed as regular files.
+///
+/// See [`unzip`] for details.
+pub async fn unzip_and_hash<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    source_hint: D,
+    reader: R,
+    target: impl AsRef<Path>,
+) -> Result<(Vec<(PathBuf, u64)>, DirectoryDigest), Error> {
+    let output = Box::pin(unzip_inner(source_hint, reader, target, true)).await?;
+    let Some(digest) = output.digest else {
+        return Err(Error::Io(std::io::Error::other(
+            "streaming ZIP digest was not computed",
+        )));
+    };
+    Ok((output.files, digest))
+}
+
+async fn unzip_inner<D: Display, R: tokio::io::AsyncRead + Unpin>(
+    source_hint: D,
+    reader: R,
+    target: impl AsRef<Path>,
+    hash_contents: bool,
+) -> Result<UnzipOutput, Error> {
     // Determine whether ZIP validation is disabled.
     let skip_validation = insecure_no_validate();
 
@@ -84,7 +112,10 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
     let mut directories = FxHashSet::default();
     let mut local_headers = FxHashMap::default();
+    let mut output_paths = FxHashSet::default();
     let mut files = Vec::new();
+    let mut extracted_files = Vec::new();
+    let mut digest_directories = FxHashSet::default();
     let mut offset = 0;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
@@ -117,7 +148,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
 
         // Sanitize the file name to prevent directory traversal attacks.
-        let Some(relpath) = enclosed_name(path) else {
+        let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
             warn!("Skipping unsafe file name: {path}");
 
             // Close current file prior to proceeding, as per:
@@ -129,6 +160,11 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
 
             continue;
         };
+        if hash_contents && !output_paths.insert(relpath.clone()) {
+            return Err(Error::DuplicateOutputPath {
+                path: relpath.into_path_buf(),
+            });
+        }
 
         let file_offset = zip_entry.file_offset();
         let expected_compressed_size = zip_entry.compressed_size();
@@ -136,7 +172,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
         let expected_data_descriptor = zip_entry.data_descriptor();
 
         // Either create the directory or write the file to disk.
-        let path = target.join(&relpath);
+        let path = target.join(relpath.as_path());
         let is_dir = zip_entry.dir()?;
         let computed = if is_dir {
             if directories.insert(path.clone()) {
@@ -149,7 +185,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             if zip_entry.crc32() != 0 {
                 if !skip_validation {
                     return Err(Error::BadCrc32 {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                         computed: 0,
                         expected: zip_entry.crc32(),
                     });
@@ -160,7 +196,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             if zip_entry.uncompressed_size() != 0 {
                 if !skip_validation {
                     return Err(Error::BadUncompressedSize {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                         computed: 0,
                         expected: zip_entry.uncompressed_size(),
                     });
@@ -171,6 +207,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 crc32: 0,
                 uncompressed_size: 0,
                 compressed_size: 0,
+                digest: None,
             }
         } else {
             if let Some(parent) = path.parent() {
@@ -182,62 +219,84 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             }
 
             // We don't know the file permissions here, because we haven't seen the central directory yet.
-            let (actual_uncompressed_size, reader) = match fs_err::tokio::File::create_new(&path)
-                .await
-            {
-                Ok(file) => {
-                    // Write the file to disk.
-                    let size = zip_entry.uncompressed_size();
-                    let mut writer = if let Ok(size) = usize::try_from(size) {
-                        tokio::io::BufWriter::with_capacity(std::cmp::min(size, 1024 * 1024), file)
-                    } else {
-                        tokio::io::BufWriter::new(file)
-                    };
-                    let mut reader = entry.reader_mut().compat();
-                    let bytes_read = tokio::io::copy(&mut reader, &mut writer)
-                        .await
-                        .map_err(Error::io_or_compression)?;
-                    let reader = reader.into_inner();
-
-                    (bytes_read, reader)
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-                    debug!(
-                        "Found duplicate local file header for: {}",
-                        relpath.display()
-                    );
-
-                    // Read the existing file into memory.
-                    let existing_contents = fs_err::tokio::read(&path).await.map_err(Error::Io)?;
-
-                    // Read the entry into memory.
-                    let mut expected_contents = Vec::with_capacity(existing_contents.len());
-                    let entry_reader = entry.reader_mut();
-                    let bytes_read = entry_reader
-                        .read_to_end(&mut expected_contents)
-                        .await
-                        .map_err(Error::io_or_compression)?;
-
-                    // Verify that the existing file contents match the expected contents.
-                    if existing_contents != expected_contents {
-                        if !skip_validation {
-                            return Err(Error::DuplicateLocalFileHeader {
-                                path: relpath.clone(),
-                            });
+            let (actual_uncompressed_size, digest, reader) =
+                match fs_err::tokio::File::create_new(&path).await {
+                    Ok(file) => {
+                        // Write the file to disk.
+                        let size = zip_entry.uncompressed_size();
+                        let mut writer = if let Ok(size) = usize::try_from(size) {
+                            tokio::io::BufWriter::with_capacity(
+                                std::cmp::min(size, 1024 * 1024),
+                                file,
+                            )
+                        } else {
+                            tokio::io::BufWriter::new(file)
+                        };
+                        let mut reader = entry.reader_mut().compat();
+                        let mut hasher = hash_contents.then(blake3::Hasher::new);
+                        let mut bytes_read = 0;
+                        let mut buffer = vec![0; DEFAULT_BUF_SIZE];
+                        loop {
+                            let read = tokio::io::AsyncReadExt::read(&mut reader, &mut buffer)
+                                .await
+                                .map_err(Error::io_or_compression)?;
+                            if read == 0 {
+                                break;
+                            }
+                            if let Some(hasher) = hasher.as_mut() {
+                                hasher.update(&buffer[..read]);
+                            }
+                            tokio::io::AsyncWriteExt::write_all(&mut writer, &buffer[..read])
+                                .await
+                                .map_err(Error::Io)?;
+                            bytes_read += read as u64;
                         }
-                    }
+                        tokio::io::AsyncWriteExt::flush(&mut writer)
+                            .await
+                            .map_err(Error::Io)?;
+                        let reader = reader.into_inner();
 
-                    (bytes_read as u64, entry_reader)
-                }
-                Err(err) => return Err(Error::Io(err)),
-            };
+                        (bytes_read, hasher.map(|hasher| hasher.finalize()), reader)
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                        debug!(
+                            "Found duplicate local file header for: {}",
+                            relpath.as_path().display()
+                        );
+
+                        // Read the existing file into memory.
+                        let existing_contents =
+                            fs_err::tokio::read(&path).await.map_err(Error::Io)?;
+
+                        // Read the entry into memory.
+                        let mut expected_contents = Vec::with_capacity(existing_contents.len());
+                        let entry_reader = entry.reader_mut();
+                        let bytes_read = entry_reader
+                            .read_to_end(&mut expected_contents)
+                            .await
+                            .map_err(Error::io_or_compression)?;
+
+                        // Verify that the existing file contents match the expected contents.
+                        if existing_contents != expected_contents {
+                            if !skip_validation {
+                                return Err(Error::DuplicateLocalFileHeader {
+                                    path: relpath.to_path_buf(),
+                                });
+                            }
+                        }
+
+                        let digest = hash_contents.then(|| blake3::hash(&expected_contents));
+                        (bytes_read as u64, digest, entry_reader)
+                    }
+                    Err(err) => return Err(Error::Io(err)),
+                };
 
             // Validate the uncompressed size.
             if actual_uncompressed_size != expected_uncompressed_size {
                 if !(expected_compressed_size == 0 && expected_data_descriptor) {
                     if !skip_validation {
                         return Err(Error::BadUncompressedSize {
-                            path: relpath.clone(),
+                            path: relpath.to_path_buf(),
                             computed: actual_uncompressed_size,
                             expected: expected_uncompressed_size,
                         });
@@ -251,7 +310,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 if !(expected_compressed_size == 0 && expected_data_descriptor) {
                     if !skip_validation {
                         return Err(Error::BadCompressedSize {
-                            path: relpath.clone(),
+                            path: relpath.to_path_buf(),
                             computed: actual_compressed_size,
                             expected: expected_compressed_size,
                         });
@@ -267,7 +326,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 if !(expected_crc32 == 0 && expected_data_descriptor) {
                     if !skip_validation {
                         return Err(Error::BadCrc32 {
-                            path: relpath.clone(),
+                            path: relpath.to_path_buf(),
                             computed: actual_crc32,
                             expected: expected_crc32,
                         });
@@ -275,13 +334,11 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 }
             }
 
-            // Collect file paths (excluding directories).
-            files.push((relpath.clone(), actual_uncompressed_size));
-
             ComputedEntry {
                 crc32: actual_crc32,
                 uncompressed_size: actual_uncompressed_size,
                 compressed_size: actual_compressed_size,
+                digest,
             }
         };
 
@@ -294,14 +351,14 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
         if expected_data_descriptor && descriptor.is_none() {
             if !skip_validation {
                 return Err(Error::MissingDataDescriptor {
-                    path: relpath.clone(),
+                    path: relpath.to_path_buf(),
                 });
             }
         }
         if !expected_data_descriptor && descriptor.is_some() {
             if !skip_validation {
                 return Err(Error::UnexpectedDataDescriptor {
-                    path: relpath.clone(),
+                    path: relpath.to_path_buf(),
                 });
             }
         }
@@ -311,7 +368,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             if descriptor.crc != computed.crc32 {
                 if !skip_validation {
                     return Err(Error::BadCrc32 {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                         computed: computed.crc32,
                         expected: descriptor.crc,
                     });
@@ -320,7 +377,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             if descriptor.uncompressed_size != computed.uncompressed_size {
                 if !skip_validation {
                     return Err(Error::BadUncompressedSize {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                         computed: computed.uncompressed_size,
                         expected: descriptor.uncompressed_size,
                     });
@@ -329,7 +386,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             if descriptor.compressed_size != computed.compressed_size {
                 if !skip_validation {
                     return Err(Error::BadCompressedSize {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                         computed: computed.compressed_size,
                         expected: descriptor.compressed_size,
                     });
@@ -342,16 +399,18 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
             std::collections::hash_map::Entry::Vacant(entry) => {
                 entry.insert(LocalHeaderEntry {
                     relpath,
+                    is_dir,
                     crc32: computed.crc32,
                     uncompressed_size: computed.uncompressed_size,
                     compressed_size: expected_compressed_size,
                     data_descriptor: expected_data_descriptor,
+                    digest: computed.digest,
                 });
             }
             std::collections::hash_map::Entry::Occupied(..) => {
                 if !skip_validation {
                     return Err(Error::DuplicateLocalFileHeader {
-                        path: relpath.clone(),
+                        path: relpath.to_path_buf(),
                     });
                 }
             }
@@ -398,9 +457,10 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                 }
 
                 // Sanitize the file name to prevent directory traversal attacks.
-                let Some(relpath) = enclosed_name(path) else {
+                let Some(relpath) = SanitizedArchivePath::from_archive_member(path) else {
                     continue;
                 };
+                let is_dir = entry.dir()?;
 
                 // Validate that various fields are consistent between the local file header and the
                 // central directory entry.
@@ -410,15 +470,23 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                             if !skip_validation {
                                 return Err(Error::ConflictingPaths {
                                     offset: entry.file_offset(),
-                                    local_path: local_header.relpath.clone(),
-                                    central_directory_path: relpath.clone(),
+                                    local_path: local_header.relpath.to_path_buf(),
+                                    central_directory_path: relpath.to_path_buf(),
+                                });
+                            }
+                        }
+                        if local_header.is_dir != is_dir {
+                            if !skip_validation {
+                                return Err(Error::ConflictingEntryTypes {
+                                    path: relpath.to_path_buf(),
+                                    offset: entry.file_offset(),
                                 });
                             }
                         }
                         if local_header.crc32 != entry.crc32() {
                             if !skip_validation {
                                 return Err(Error::ConflictingChecksums {
-                                    path: relpath.clone(),
+                                    path: relpath.to_path_buf(),
                                     offset: entry.file_offset(),
                                     local_crc32: local_header.crc32,
                                     central_directory_crc32: entry.crc32(),
@@ -428,7 +496,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                         if local_header.uncompressed_size != entry.uncompressed_size() {
                             if !skip_validation {
                                 return Err(Error::ConflictingUncompressedSizes {
-                                    path: relpath.clone(),
+                                    path: relpath.to_path_buf(),
                                     offset: entry.file_offset(),
                                     local_uncompressed_size: local_header.uncompressed_size,
                                     central_directory_uncompressed_size: entry.uncompressed_size(),
@@ -439,7 +507,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                             if !local_header.data_descriptor {
                                 if !skip_validation {
                                     return Err(Error::ConflictingCompressedSizes {
-                                        path: relpath.clone(),
+                                        path: relpath.to_path_buf(),
                                         offset: entry.file_offset(),
                                         local_compressed_size: local_header.compressed_size,
                                         central_directory_compressed_size: entry.compressed_size(),
@@ -447,11 +515,29 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                                 }
                             }
                         }
+                        if is_dir {
+                            if hash_contents {
+                                digest_directories.insert(relpath.clone());
+                            }
+                        } else {
+                            files.push((relpath.to_path_buf(), local_header.uncompressed_size));
+                            if let Some(digest) = local_header.digest {
+                                let executable = entry
+                                    .unix_permissions()
+                                    .is_some_and(|mode| mode & 0o111 != 0);
+                                extracted_files.push(ExtractedFile::new(
+                                    relpath.clone(),
+                                    local_header.uncompressed_size,
+                                    executable,
+                                    digest,
+                                ));
+                            }
+                        }
                     }
                     None => {
                         if !skip_validation {
                             return Err(Error::MissingLocalFileHeader {
-                                path: relpath.clone(),
+                                path: relpath.to_path_buf(),
                                 offset: entry.file_offset(),
                             });
                         }
@@ -466,7 +552,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                     use std::fs::Permissions;
                     use std::os::unix::fs::PermissionsExt;
 
-                    if entry.dir()? {
+                    if is_dir {
                         continue;
                     }
 
@@ -483,7 +569,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                             if mode != *entry.get() {
                                 if !skip_validation {
                                     return Err(Error::DuplicateExecutableFileHeader {
-                                        path: relpath.clone(),
+                                        path: relpath.to_path_buf(),
                                     });
                                 }
                             }
@@ -494,7 +580,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
                     // https://github.com/pypa/pip/blob/3898741e29b7279e7bffe044ecfbe20f6a438b1e/src/pip/_internal/utils/unpacking.py#L88-L100
                     let has_any_executable_bit = mode & 0o111;
                     if has_any_executable_bit != 0 {
-                        let path = target.join(relpath);
+                        let path = target.join(relpath.as_path());
                         let permissions = fs_err::tokio::metadata(&path)
                             .await
                             .map_err(Error::Io)?
@@ -555,7 +641,7 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
         if let Some((key, value)) = local_headers.iter().next() {
             return Err(Error::MissingCentralDirectoryEntry {
                 offset: *key,
-                path: value.relpath.clone(),
+                path: value.relpath.to_path_buf(),
             });
         }
     }
@@ -583,7 +669,15 @@ pub async fn unzip<D: Display, R: tokio::io::AsyncRead + Unpin>(
         }
     }
 
-    Ok(files)
+    let digest = hash_contents.then(|| {
+        let hash_directories = empty_directory_paths(
+            &digest_directories,
+            extracted_files.iter().map(ExtractedFile::path),
+        );
+        directory_digest_from_extracted(&extracted_files, hash_directories)
+    });
+
+    Ok(UnzipOutput { files, digest })
 }
 
 /// Unpack the given tar archive into the destination directory.
