@@ -7387,7 +7387,7 @@ mod tests {
     #[test]
     fn dependency_marker_preserves_parent_conflicts() {
         let requires_python = RequiresPython::from_specifiers(
-            &VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
+            VersionSpecifiers::from_str(">=3.12").expect("valid version specifier"),
         );
         let parent = UniversalMarker::from_combined(
             MarkerTree::from_str(

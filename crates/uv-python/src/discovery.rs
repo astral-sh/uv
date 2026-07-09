@@ -4646,7 +4646,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_exact() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(PythonRequest::parse("3.12").intersects_requires_python(&requires_python));
         assert!(!PythonRequest::parse("3.11").intersects_requires_python(&requires_python));
@@ -4655,7 +4655,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_major() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         // `3` overlaps with `>=3.12` (e.g., 3.12, 3.13, ... are all Python 3)
         assert!(PythonRequest::parse("3").intersects_requires_python(&requires_python));
@@ -4666,7 +4666,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_range() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(PythonRequest::parse(">=3.12,<3.13").intersects_requires_python(&requires_python));
         assert!(!PythonRequest::parse(">=3.10,<3.12").intersects_requires_python(&requires_python));
@@ -4675,7 +4675,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_implementation_range() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         assert!(
             PythonRequest::parse("cpython@>=3.12,<3.13")
@@ -4690,7 +4690,7 @@ mod tests {
     #[test]
     fn intersects_requires_python_no_version() {
         let requires_python =
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap());
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap());
 
         // Requests without version constraints are always compatible
         assert!(PythonRequest::Any.intersects_requires_python(&requires_python));

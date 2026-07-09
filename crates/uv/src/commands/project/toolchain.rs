@@ -38,7 +38,7 @@ pub(crate) fn find_locked_tool<'lock>(
     dependency_group: &GroupName,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<LockedTool<'lock>>> {
-    let marker_environment = interpreter.resolver_marker_environment();
+    let marker_environment = interpreter.to_resolver_marker_environment();
     let selection = lock
         .dependency_selection(
             project.project_name(),

@@ -47,13 +47,13 @@ impl RequiresPython {
     }
 
     /// Returns a [`RequiresPython`] from a version specifier.
-    pub fn from_specifiers(specifiers: &VersionSpecifiers) -> Self {
+    pub fn from_specifiers(specifiers: VersionSpecifiers) -> Self {
         let (lower_bound, upper_bound) = release_specifiers_to_ranges(specifiers.clone())
             .bounding_range()
             .map(|(lower_bound, upper_bound)| (lower_bound.cloned(), upper_bound.cloned()))
             .unwrap_or((Bound::Unbounded, Bound::Unbounded));
         Self {
-            specifiers: specifiers.clone(),
+            specifiers,
             range: RequiresPythonRange(LowerBound::new(lower_bound), UpperBound::new(upper_bound)),
         }
     }
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn requires_python_included() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &[
             "bcrypt-4.1.3-cp37-abi3-macosx_10_12_universal2.whl",
             "black-24.4.2-cp310-cp310-win_amd64.whl",
@@ -652,7 +652,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &["dearpygui-1.11.1-cp312-cp312-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -662,7 +662,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str("==3.12.6").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_aarch64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -672,7 +672,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str("==3.12").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &["lxml-5.3.0-cp312-cp312-musllinux_1_2_x86_64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -685,7 +685,7 @@ mod tests {
     #[test]
     fn requires_python_dropped() {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &[
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
@@ -705,7 +705,7 @@ mod tests {
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &["dearpygui-1.11.1-cp310-cp310-win_amd64.whl"];
         for wheel_name in wheel_names {
             assert!(
@@ -774,7 +774,7 @@ mod tests {
         ];
         for (version, expected) in test_cases {
             let version_specifiers = VersionSpecifiers::from_str(version).unwrap();
-            let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+            let requires_python = RequiresPython::from_specifiers(version_specifiers);
             assert_eq!(requires_python.is_exact_without_patch(), expected);
         }
     }
@@ -783,39 +783,37 @@ mod tests {
     fn split_version() {
         // Splitting `>=3.10` on `>3.12` should result in `>=3.10, <=3.12` and `>3.12`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let (lower, upper) = requires_python
             .split(Bound::Excluded(Version::new([3, 12])))
             .unwrap();
         assert_eq!(
             lower,
-            RequiresPython::from_specifiers(
-                &VersionSpecifiers::from_str(">=3.10, <=3.12").unwrap()
-            )
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.10, <=3.12").unwrap())
         );
         assert_eq!(
             upper,
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">3.12").unwrap())
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">3.12").unwrap())
         );
 
         // Splitting `>=3.10` on `>=3.12` should result in `>=3.10, <3.12` and `>=3.12`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let (lower, upper) = requires_python
             .split(Bound::Included(Version::new([3, 12])))
             .unwrap();
         assert_eq!(
             lower,
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.10, <3.12").unwrap())
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.10, <3.12").unwrap())
         );
         assert_eq!(
             upper,
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.12").unwrap())
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.12").unwrap())
         );
 
         // Splitting `>=3.10` on `>=3.9` should return `None`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         assert!(
             requires_python
                 .split(Bound::Included(Version::new([3, 9])))
@@ -824,7 +822,7 @@ mod tests {
 
         // Splitting `>=3.10` on `>=3.10` should return `None`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         assert!(
             requires_python
                 .split(Bound::Included(Version::new([3, 10])))
@@ -833,17 +831,17 @@ mod tests {
 
         // Splitting `>=3.9, <3.13` on `>=3.11` should result in `>=3.9, <3.11` and `>=3.11, <3.13`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.9, <3.13").unwrap();
-        let requires_python = RequiresPython::from_specifiers(&version_specifiers);
+        let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let (lower, upper) = requires_python
             .split(Bound::Included(Version::new([3, 11])))
             .unwrap();
         assert_eq!(
             lower,
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.9, <3.11").unwrap())
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.9, <3.11").unwrap())
         );
         assert_eq!(
             upper,
-            RequiresPython::from_specifiers(&VersionSpecifiers::from_str(">=3.11, <3.13").unwrap())
+            RequiresPython::from_specifiers(VersionSpecifiers::from_str(">=3.11, <3.13").unwrap())
         );
     }
 }

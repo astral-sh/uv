@@ -192,11 +192,11 @@ impl InternerGuard<'_> {
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
@@ -1409,15 +1409,10 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
+    fn from_versions(versions: Vec<Version>, operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
-            .iter()
-            .map(|version| {
-                (
-                    Bound::Included(version.clone()),
-                    Bound::Included(version.clone()),
-                )
-            })
+            .into_iter()
+            .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect();
 
         if operator == ContainerOperator::NotIn {

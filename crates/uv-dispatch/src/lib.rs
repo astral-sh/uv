@@ -279,7 +279,7 @@ impl BuildContext for BuildDispatch<'_> {
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
-        let marker_env = self.interpreter.resolver_marker_environment();
+        let marker_env = self.interpreter.to_resolver_marker_environment();
         let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
