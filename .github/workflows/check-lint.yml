@@ -16,7 +16,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.5
+  HAWK_VERSION: 0.1.6
   RUSTUP_MAX_RETRIES: 10
 
 jobs:
@@ -161,13 +161,13 @@ jobs:
         with:
           persist-credentials: false
       - name: "Install Rust toolchain"
-        run: rustup toolchain install 1.96.1
+        run: rustup toolchain install 1.97.0
       - name: "Install Hawk"
         run: |
           curl --proto '=https' --tlsv1.2 -LsSf \
             "https://github.com/astral-sh/hawk/releases/download/${HAWK_VERSION}/cargo-hawk-installer.sh" | sh
       - name: "Hawk"
-        run: cargo +1.96.1 hawk -D warnings
+        run: cargo +1.97.0 hawk -D warnings
 
   shear:
     name: "cargo shear"
