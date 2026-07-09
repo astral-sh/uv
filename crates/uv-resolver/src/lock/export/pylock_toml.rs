@@ -4,15 +4,18 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use futures::{StreamExt, TryStreamExt};
 use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
 use petgraph::graph::NodeIndex;
 use serde::Deserialize;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
+use uv_client::{RegistryClient, WrappedReqwestError};
 use uv_configuration::{
     BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
     InstallOptions,
@@ -27,6 +30,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, RequiresPython,
     Resolution, ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{PortablePathBuf, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitLfs, GitOid, GitReference, GitUrl, GitUrlParseError};
@@ -34,7 +38,9 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
-use uv_pypi_types::{HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind};
+use uv_pypi_types::{
+    HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedGitDirectoryUrl, VcsKind,
+};
 use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
@@ -98,6 +104,16 @@ pub enum PylockTomlErrorKind {
     ArchiveMissingPathUrl(PackageName),
     #[error("`packages.vcs` entry for `{0}` must have a `url` or `path`")]
     VcsMissingPathUrl(PackageName),
+    #[error(
+        "Package `{0}` includes `{1}` without hashes and without a URL or path to compute them, but pylock.toml requires at least one hash"
+    )]
+    MissingHashes(PackageName, &'static str),
+    #[error("Failed to download `{0}` to compute missing hashes")]
+    DownloadFile(Box<DisplaySafeUrl>, #[source] WrappedReqwestError),
+    #[error("Failed to stream `{0}` to compute missing hashes")]
+    StreamFile(Box<DisplaySafeUrl>, #[source] std::io::Error),
+    #[error("Failed to read `{0}` to compute missing hashes")]
+    ReadFile(Box<Path>, #[source] std::io::Error),
     #[error("URL must end in a valid wheel filename: `{0}`")]
     UrlMissingFilename(DisplaySafeUrl),
     #[error("Path must end in a valid wheel filename: `{0}`")]
@@ -222,6 +238,94 @@ where
     }
 
     Ok(version)
+}
+
+/// A distribution file in a `pylock.toml` package that carries hashes.
+enum PylockTomlFile {
+    Archive,
+    Sdist,
+    Wheel(usize),
+}
+
+/// The location of a distribution file with missing hashes.
+enum HashSource {
+    Url(DisplaySafeUrl),
+    Path(PathBuf),
+}
+
+impl HashSource {
+    fn new(
+        name: &PackageName,
+        field: &'static str,
+        url: Option<&DisplaySafeUrl>,
+        path: Option<&PortablePathBuf>,
+        install_path: &Path,
+    ) -> Result<Self, PylockTomlErrorKind> {
+        if let Some(url) = url {
+            Ok(Self::Url(url.clone()))
+        } else if let Some(path) = path {
+            Ok(Self::Path(install_path.join(path)))
+        } else {
+            Err(PylockTomlErrorKind::MissingHashes(name.clone(), field))
+        }
+    }
+
+    /// Download or read the file and compute its hashes.
+    async fn hash(self, client: &RegistryClient) -> Result<Hashes, PylockTomlErrorKind> {
+        let mut hashers = vec![Hasher::from(HashAlgorithm::Sha256)];
+        match self {
+            Self::Url(url) => {
+                let response = client
+                    .uncached_client(&url)
+                    .get(Url::from(url.clone()))
+                    .header(
+                        // `reqwest` defaults to accepting compressed responses.
+                        // Specify identity encoding to get consistent .whl downloading
+                        // behavior from servers. ref: https://github.com/pypa/pip/pull/1688
+                        "accept-encoding",
+                        reqwest::header::HeaderValue::from_static("identity"),
+                    )
+                    .send()
+                    .await
+                    .map_err(|err| {
+                        PylockTomlErrorKind::DownloadFile(
+                            Box::new(url.clone()),
+                            WrappedReqwestError::from(err),
+                        )
+                    })?
+                    .error_for_status()
+                    .map_err(|err| {
+                        PylockTomlErrorKind::DownloadFile(
+                            Box::new(url.clone()),
+                            WrappedReqwestError::from(err),
+                        )
+                    })?;
+                let reader = response
+                    .bytes_stream()
+                    .map_err(std::io::Error::other)
+                    .into_async_read();
+                HashReader::new(reader.compat(), &mut hashers)
+                    .finish()
+                    .await
+                    .map_err(|err| PylockTomlErrorKind::StreamFile(Box::new(url), err))?;
+            }
+            Self::Path(path) => {
+                let file = fs_err::tokio::File::open(&path).await.map_err(|err| {
+                    PylockTomlErrorKind::ReadFile(path.clone().into_boxed_path(), err)
+                })?;
+                HashReader::new(file, &mut hashers)
+                    .finish()
+                    .await
+                    .map_err(|err| PylockTomlErrorKind::ReadFile(path.into_boxed_path(), err))?;
+            }
+        }
+        Ok(Hashes::from(HashDigests::from(
+            hashers
+                .into_iter()
+                .map(HashDigest::from)
+                .collect::<Vec<_>>(),
+        )))
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -964,6 +1068,116 @@ impl<'lock> PylockToml {
             packages,
             attestation_identities,
         })
+    }
+
+    /// Returns `true` if any distribution file is missing the hashes required by PEP 751.
+    pub fn has_missing_hashes(&self) -> bool {
+        self.packages.iter().any(|package| {
+            package
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.hashes.is_empty())
+                || package
+                    .sdist
+                    .as_ref()
+                    .is_some_and(|sdist| sdist.hashes.is_empty())
+                || package
+                    .wheels
+                    .iter()
+                    .flatten()
+                    .any(|wheel| wheel.hashes.is_empty())
+        })
+    }
+
+    /// Download and hash all distribution files that are missing hashes, e.g., because the
+    /// registry didn't provide them, since `packages.*.hashes` is a required key in PEP 751.
+    ///
+    /// Local files are read from disk, with relative paths resolved against `install_path`.
+    pub async fn generate_missing_hashes(
+        &mut self,
+        client: &RegistryClient,
+        concurrency: usize,
+        install_path: &Path,
+    ) -> Result<(), PylockTomlErrorKind> {
+        // Collect the files that are missing hashes.
+        let mut jobs = Vec::new();
+        for (package_index, package) in self.packages.iter().enumerate() {
+            if let Some(archive) = &package.archive
+                && archive.hashes.is_empty()
+            {
+                let source = HashSource::new(
+                    &package.name,
+                    "packages.archive",
+                    archive.url.as_ref(),
+                    archive.path.as_ref(),
+                    install_path,
+                )?;
+                jobs.push((package_index, PylockTomlFile::Archive, source));
+            }
+            if let Some(sdist) = &package.sdist
+                && sdist.hashes.is_empty()
+            {
+                let source = HashSource::new(
+                    &package.name,
+                    "packages.sdist",
+                    sdist.url.as_ref(),
+                    sdist.path.as_ref(),
+                    install_path,
+                )?;
+                jobs.push((package_index, PylockTomlFile::Sdist, source));
+            }
+            for (wheel_index, wheel) in package.wheels.iter().flatten().enumerate() {
+                if wheel.hashes.is_empty() {
+                    let source = HashSource::new(
+                        &package.name,
+                        "packages.wheels",
+                        wheel.url.as_ref(),
+                        wheel.path.as_ref(),
+                        install_path,
+                    )?;
+                    jobs.push((package_index, PylockTomlFile::Wheel(wheel_index), source));
+                }
+            }
+        }
+
+        // Fetch and hash the files.
+        let hashed = futures::stream::iter(jobs)
+            .map(|(package_index, file, source)| async move {
+                let hashes = source.hash(client).await?;
+                Ok::<_, PylockTomlErrorKind>((package_index, file, hashes))
+            })
+            .buffer_unordered(concurrency)
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        for (package_index, file, hashes) in hashed {
+            let Some(package) = self.packages.get_mut(package_index) else {
+                continue;
+            };
+            match file {
+                PylockTomlFile::Archive => {
+                    if let Some(archive) = &mut package.archive {
+                        archive.hashes = hashes;
+                    }
+                }
+                PylockTomlFile::Sdist => {
+                    if let Some(sdist) = &mut package.sdist {
+                        sdist.hashes = hashes;
+                    }
+                }
+                PylockTomlFile::Wheel(wheel_index) => {
+                    if let Some(wheel) = package
+                        .wheels
+                        .as_mut()
+                        .and_then(|wheels| wheels.get_mut(wheel_index))
+                    {
+                        wheel.hashes = hashes;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Returns the TOML representation of this lockfile.

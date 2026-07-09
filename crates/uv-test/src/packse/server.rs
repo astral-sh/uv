@@ -91,9 +91,19 @@ impl PackseServer {
 
     /// Start a mock server for the given scenario.
     pub fn from_scenario(scenario: &Scenario) -> Self {
+        Self::start(scenario, true)
+    }
+
+    /// Start a mock server that omits hashes from the Simple API, mimicking indexes that don't
+    /// provide hashes, such as HTML-only indexes.
+    pub fn from_scenario_without_hashes(scenario: &Scenario) -> Self {
+        Self::start(scenario, false)
+    }
+
+    fn start(scenario: &Scenario, hashes: bool) -> Self {
         let index = Arc::new(build_server_index(scenario));
         let server = HttpServer::start(move |request, server_uri| {
-            handle_request(request, server_uri, &index)
+            handle_request(request, server_uri, &index, hashes)
         });
 
         Self { server }
@@ -198,7 +208,12 @@ fn build_server_index(scenario: &Scenario) -> ServerIndex {
     ServerIndex { packages, files }
 }
 
-fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> ResponseTemplate {
+fn handle_request(
+    req: &Request,
+    server_uri: &str,
+    index: &ServerIndex,
+    hashes: bool,
+) -> ResponseTemplate {
     let path = req.url.path();
 
     if let Some(pkg) = extract_package_name(path) {
@@ -207,7 +222,7 @@ fn handle_request(req: &Request, server_uri: &str, index: &ServerIndex) -> Respo
         };
 
         if let Some(entry) = index.packages.get(&package_name) {
-            return build_simple_api_response(pkg, entry, server_uri);
+            return build_simple_api_response(pkg, entry, server_uri, hashes);
         }
         return ResponseTemplate::new(404);
     }
@@ -231,6 +246,7 @@ fn build_simple_api_response(
     package_name: &str,
     entry: &PackageEntry,
     server_uri: &str,
+    hashes: bool,
 ) -> ResponseTemplate {
     let files: Vec<serde_json::Value> = entry
         .dists
@@ -240,11 +256,12 @@ fn build_simple_api_response(
             let mut file_obj = json!({
                 "filename": dist.filename,
                 "url": url,
-                "hashes": {
-                    "sha256": dist.sha256,
-                },
+                "hashes": {},
                 "upload-time": dist.upload_time,
             });
+            if hashes {
+                file_obj["hashes"] = json!({ "sha256": dist.sha256 });
+            }
             if let Some(rp) = &dist.requires_python {
                 file_obj["requires-python"] = json!(rp);
             }
