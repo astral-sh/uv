@@ -118,26 +118,26 @@ pub struct ToolEntrypoint {
 
 impl Display for ToolEntrypoint {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        #[cfg(windows)]
-        {
-            write!(
-                f,
-                "{} ({})",
-                self.name,
-                self.install_path
-                    .simplified_display()
-                    .to_string()
-                    .replace('/', "\\")
-            )
-        }
-        #[cfg(unix)]
-        {
-            write!(
-                f,
-                "{} ({})",
-                self.name,
-                self.install_path.simplified_display()
-            )
+        cfg_select! {
+            windows => {
+                write!(
+                    f,
+                    "{} ({})",
+                    self.name,
+                    self.install_path
+                        .simplified_display()
+                        .to_string()
+                        .replace('/', "\\")
+                )
+            },
+            unix => {
+                write!(
+                    f,
+                    "{} ({})",
+                    self.name,
+                    self.install_path.simplified_display()
+                )
+            },
         }
     }
 }

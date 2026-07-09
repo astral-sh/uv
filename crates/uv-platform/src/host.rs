@@ -20,23 +20,15 @@ impl OsType {
     ///
     /// Returns `None` on unsupported platforms.
     pub fn from_env() -> Option<Self> {
-        #[cfg(target_os = "linux")]
-        {
-            fs_err::read_to_string("/proc/sys/kernel/ostype")
-                .ok()
-                .map(|s| Self::Linux(s.trim().to_string()))
-        }
-        #[cfg(target_os = "macos")]
-        {
-            Some(Self::Darwin)
-        }
-        #[cfg(target_os = "windows")]
-        {
-            Some(Self::Windows)
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-        {
-            None
+        cfg_select! {
+            target_os = "linux" => {
+                fs_err::read_to_string("/proc/sys/kernel/ostype")
+                    .ok()
+                    .map(|s| Self::Linux(s.trim().to_string()))
+            },
+            target_os = "macos" => Some(Self::Darwin),
+            target_os = "windows" => Some(Self::Windows),
+            _ => None,
         }
     }
 }
@@ -70,25 +62,22 @@ impl OsRelease {
     ///
     /// Returns `None` on unsupported platforms or if the release cannot be read.
     pub fn from_env() -> Option<Self> {
-        #[cfg(unix)]
-        {
-            let uname = rustix::system::uname();
-            let release = uname.release().to_str().ok()?;
-            Some(Self::Unix(release.to_string()))
-        }
-        #[cfg(windows)]
-        {
-            let os_version = windows_version::OsVersion::current();
-            Some(Self::Windows {
-                major: os_version.major,
-                minor: os_version.minor,
-                build: os_version.build,
-                revision: windows_version::revision(),
-            })
-        }
-        #[cfg(not(any(unix, windows)))]
-        {
-            None
+        cfg_select! {
+            unix => {
+                let uname = rustix::system::uname();
+                let release = uname.release().to_str().ok()?;
+                Some(Self::Unix(release.to_string()))
+            },
+            windows => {
+                let os_version = windows_version::OsVersion::current();
+                Some(Self::Windows {
+                    major: os_version.major,
+                    minor: os_version.minor,
+                    build: os_version.build,
+                    revision: windows_version::revision(),
+                })
+            },
+            _ => None,
         }
     }
 }
@@ -125,16 +114,14 @@ impl LinuxOsRelease {
     ///
     /// Returns `None` on non-Linux platforms or if the file cannot be read.
     pub fn from_env() -> Option<Self> {
-        #[cfg(target_os = "linux")]
-        {
-            let content = fs_err::read_to_string("/etc/os-release")
-                .or_else(|_| fs_err::read_to_string("/usr/lib/os-release"))
-                .ok()?;
-            Some(content.parse().unwrap())
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            None
+        cfg_select! {
+            target_os = "linux" => {
+                let content = fs_err::read_to_string("/etc/os-release")
+                    .or_else(|_| fs_err::read_to_string("/usr/lib/os-release"))
+                    .ok()?;
+                Some(content.parse().unwrap())
+            },
+            _ => None,
         }
     }
 }
@@ -240,21 +227,22 @@ VERSION_ID=40
     fn test_os_type_returns_value() {
         let os_type =
             OsType::from_env().expect("OsType should be available on supported platforms");
-        #[cfg(target_os = "linux")]
-        assert!(matches!(os_type, OsType::Linux(_)));
-        #[cfg(target_os = "macos")]
-        assert_eq!(os_type, OsType::Darwin);
-        #[cfg(target_os = "windows")]
-        assert_eq!(os_type, OsType::Windows);
+        cfg_select! {
+            target_os = "linux" => { assert!(matches!(os_type, OsType::Linux(_))); },
+            target_os = "macos" => { assert_eq!(os_type, OsType::Darwin); },
+            target_os = "windows" => { assert_eq!(os_type, OsType::Windows); },
+            _ => {},
+        }
     }
 
     #[test]
     fn test_os_release_returns_value() {
         let os_release =
             OsRelease::from_env().expect("OsRelease should be available on supported platforms");
-        #[cfg(unix)]
-        assert!(matches!(os_release, OsRelease::Unix(_)));
-        #[cfg(windows)]
-        assert!(matches!(os_release, OsRelease::Windows { .. }));
+        cfg_select! {
+            unix => { assert!(matches!(os_release, OsRelease::Unix(_))); },
+            windows => { assert!(matches!(os_release, OsRelease::Windows { .. })); },
+            _ => {},
+        }
     }
 }

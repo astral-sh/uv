@@ -76,20 +76,19 @@ impl Removal {
             // Remove the file.
             self.total_bytes += metadata.len();
             if metadata.is_symlink() {
-                #[cfg(windows)]
-                {
-                    use std::os::windows::fs::FileTypeExt;
+                cfg_select! {
+                    windows => {
+                        use std::os::windows::fs::FileTypeExt;
 
-                    if metadata.file_type().is_symlink_dir() {
-                        remove_dir(&path)?;
-                    } else {
+                        if metadata.file_type().is_symlink_dir() {
+                            remove_dir(&path)?;
+                        } else {
+                            remove_file(&path)?;
+                        }
+                    },
+                    _ => {
                         remove_file(&path)?;
-                    }
-                }
-
-                #[cfg(not(windows))]
-                {
-                    remove_file(&path)?;
+                    },
                 }
             } else {
                 remove_file(&path)?;
