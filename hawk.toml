@@ -110,14 +110,6 @@ kind = "inherent_method"
 level = "expect"
 reason = "used by Pixi to distinguish packages installed through its uv integration"
 
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv"
-item = "run"
-kind = "function"
-level = "expect"
-reason = "used as a benchmark entrypoint"
-
 # Keep APIs that are consumed by another platform or by non-Rust components.
 
 [[override]]
