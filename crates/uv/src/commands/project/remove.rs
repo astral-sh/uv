@@ -20,7 +20,9 @@ use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_preview::Preview;
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{DirectDependencyKind, ReachabilityRoots, reachable_package_names};
+use uv_resolver::{
+    DirectDependencyKind, reachable_declared_package_names, reachable_direct_dependency_names,
+};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
@@ -441,13 +443,7 @@ pub(crate) async fn remove(
             lock: lock_result.lock(),
         },
     };
-    let retained = reachable_package_names(
-        &current_target,
-        &marker_environment,
-        ReachabilityRoots::AllDeclared {
-            include_manifest: true,
-        },
-    )?;
+    let retained = reachable_declared_package_names(&current_target, &marker_environment)?;
 
     // Scope lock-derived candidates to the exact removed declaration edges. Installed metadata is
     // also walked during planning, both to reflect the actual environment and to support missing
@@ -464,17 +460,15 @@ pub(crate) async fn remove(
                 lock: previous,
             },
         };
-        match reachable_package_names(
+        match reachable_direct_dependency_names(
             &previous_target,
             &marker_environment,
-            ReachabilityRoots::Direct {
-                project: match &project {
-                    VirtualProject::Project(project) => Some(project.project_name()),
-                    VirtualProject::NonProject(_) => None,
-                },
-                kind: direct_kind,
-                names: &removed_names,
+            match &project {
+                VirtualProject::Project(project) => Some(project.project_name()),
+                VirtualProject::NonProject(_) => None,
             },
+            direct_kind,
+            &removed_names,
         ) {
             Ok(candidates) => candidates,
             Err(error) => {
