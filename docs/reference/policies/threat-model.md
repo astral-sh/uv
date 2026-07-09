@@ -13,11 +13,12 @@ issues.
 
 # 2. Trust boundaries and assumptions
 
-TLS roots, configured secure indexes and registries, vendor endpoints, secure operator-selected
-mirrors, configured runners, and their intended protocol behavior are **trust roots**; their
-compromise or misconfiguration alone is not a `uv` flaw. An untrusted publisher controls its
-uploaded artifact and embedded metadata. It does not thereby control metadata or alternate
-representations that a trusted registry creates or authenticates.
+TLS roots, secure operator-selected mirrors, configured runners, and their intended protocol
+behavior are **trust roots**; their compromise or misconfiguration alone is not a `uv` flaw.
+
+Packages and their sources (indexes, Git repositories, and files) are trusted during initial
+resolution or explicit lock updates. When using an existing lockfile, its sources, object IDs, and
+hashes are authoritative; upstream changes cannot replace them without updating the lock.
 
 - **Attacker-controlled:** files and metadata from an untrusted publisher; public package-name
   registrations; remote Git repositories or refs controlled by an untrusted owner; unauthenticated
@@ -57,15 +58,19 @@ integrity, credentials, execution, and filesystem destinations while handling th
 - **Sources and locks:** `uv` must follow its documented rules for choosing dependency sources and
   deciding whether CLI or configuration settings take precedence. Requirements files describe
   dependencies, not administrative policy, so explicit CLI options may override them. An unsupported
-  option that warns and points to a supported replacement sets no policy. Silently ignored
-  requirements data is not a security issue.
+  option that warns and points to a supported replacement sets no policy.
 - **Hashes and file identity:** A hash protects a file only when its expected value comes from a
   trusted source and covers the exact bytes `uv` uses, including separately downloaded compressed
   metadata. Active rules may come from requirements, constraints, lockfiles, CLI options, or
   metadata. When hash verification is active, selected bytes must match an allowed trusted hash for
-  the requirement, even if the requirement does not pin a version. Trusted operator runtime
-  manifests may omit SHA-256. A missing hash matters only in uv-owned built-in metadata or under an
-  explicit required-hash policy.
+  the requirement, even if the requirement does not pin a version. An existing lockfile or output
+  format that requires hashes keeps that guarantee when index metadata omits them: `uv` must obtain
+  and verify the hashes or fail. During initial resolution, missing index hashes matter only under
+  an explicit required-hash policy or a format that requires them. Trusted operator runtime
+  manifests may omit SHA-256 unless such a rule applies.
+- **Metadata consistency:** `uv` may use registry-generated, embedded, cached, compressed, or
+  fast-path metadata. Security-relevant fields in representations of the same package must agree;
+  `uv` must reject mismatches before selecting, locking, building, or installing it.
 - **Caches:** Same-user caches and installed programs belong to the trusted machine. Cached data
   crosses a security boundary when data accepted for one independently controlled package or source
   is reused for another without that request's required checks. Mutable-source reuse breaks no
@@ -82,10 +87,11 @@ integrity, credentials, execution, and filesystem destinations while handling th
   source unless a stronger policy applies. Build-backend execution crosses a security boundary only
   if it happens before package selection, bypasses the rules that actually apply, escapes build
   isolation, or runs with greater privilege.
-- **Archives, installation, and cleanup:** Untrusted archive or package metadata must not write or
-  delete outside the chosen root and any intentionally followed symlink or junction targets. Trusted
-  `.venv`, cache, configuration, symlink, or junction state does not create an escape by itself.
-  Platform-specific rejection and containment rules define the boundary.
+- **Archives, installation, and cleanup:** Selecting an artifact authorizes its files and build
+  code. Its metadata must not cause writes or deletions outside the chosen root and any
+  intentionally followed symlink or junction targets. Trusted `.venv`, cache, configuration,
+  symlink, or junction state does not create an escape by itself. Platform-specific rejection and
+  containment rules define the boundary.
 - **Generated shell code:** Generated shell code quotes untrusted values for its target shell.
   Output that requires later execution or sourcing has a limited, multi-step impact. Automatic or
   privileged use, or a comparable increase in authority, raises the impact.
@@ -110,10 +116,13 @@ integrity, credentials, execution, and filesystem destinations while handling th
   impact includes private-data access, writes, publication, trusted execution, lateral movement, or
   privilege escalation. A credential has negligible impact only if it is single-purpose and its
   effective authority is read-only and limited to inert test infrastructure.
-- **Availability:** Malformed remote input crosses the availability boundary when it reliably causes
-  excessive recursion, stack growth, or decompression, or exhausts memory, CPU, disk, or network
-  resources. A one-shot parser panic without such exhaustion is a correctness defect. Local input
-  belongs to the trusted machine and does not cross this boundary.
+- **Availability:** Local input and authenticated metadata accepted during initial resolution or a
+  lock update are trusted for that operation. Resource exhaustion from them is a performance bug,
+  not a security issue. Under an existing lockfile, changed remote state has no authority;
+  processing it is a security issue if it reliably causes excessive recursion, stack growth, or
+  decompression, or exhausts memory, CPU, disk, or network resources. Unauthenticated remote
+  protocol data remains attacker-controlled. A one-shot parser panic is a correctness bug, not a
+  security issue.
 
 ## 3.2 Repository threat model: GitHub
 
@@ -146,11 +155,12 @@ downstream users.
   documented full 40-hex immutable Git pin, or automatically run mutable third-party code in a
   scheduled workflow with repository-write, publishing, or equivalent credentials.
 - **Medium:** A real but limited boundary crossing, an uncommon realistic setup, limited credential
-  or filesystem effect, reliable remote resource exhaustion, or premature execution that violates an
-  effective explicit policy. Examples: loss of a trusted required hash in an explicitly run tool
-  environment; collision between an abbreviated or undocumented legacy Git pin and a mutable ref; or
-  shell injection that waits for explicit activation-script sourcing. These become High only when a
-  separate privileged consumer, credential, or authoritative output materially increases impact.
+  or filesystem effect, reliable resource exhaustion from remote data that has no authority under a
+  locked operation, or premature execution that violates an effective explicit policy. Examples:
+  loss of a trusted required hash in an explicitly run tool environment; collision between an
+  abbreviated or undocumented legacy Git pin and a mutable ref; or shell injection that waits for
+  explicit activation-script sourcing. These become High only when a separate privileged consumer,
+  credential, or authoritative output materially increases impact.
 - **Low:** A narrow safety gap, rare reuse of one cache entry across independently authorized
   identities, limited disclosure, or a robustness problem across a real but weak boundary.
 - **Informational:** A genuine `SECURITY` observation with negligible impact.
