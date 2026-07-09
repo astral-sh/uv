@@ -1001,7 +1001,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of dependencies with the given name.
-    pub fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
+    fn remove_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `project.dependencies`.
         let Some(dependencies) = self
             .project_mut()?
@@ -1048,7 +1048,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of development dependencies with the given name.
-    pub fn remove_dev_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
+    fn remove_dev_dependency(&mut self, name: &PackageName) -> Result<Vec<Requirement>, Error> {
         // Try to get `tool.uv.dev-dependencies`.
         let Some(dev_dependencies) = self
             .doc
@@ -1076,7 +1076,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of optional dependencies in the group with the given name.
-    pub fn remove_optional_dependency(
+    fn remove_optional_dependency(
         &mut self,
         name: &PackageName,
         group: &ExtraName,
@@ -1117,7 +1117,7 @@ impl PyProjectTomlMut {
     }
 
     /// Removes all occurrences of the dependency in the group with the given name.
-    pub fn remove_dependency_group_requirement(
+    fn remove_dependency_group_requirement(
         &mut self,
         name: &PackageName,
         group: &GroupName,
