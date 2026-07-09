@@ -303,31 +303,99 @@ pub struct Lock {
     manifest: ResolverManifest,
 }
 
-/// Package selections from a [`Lock`] for a named direct dependency.
+/// A direct dependency selected from a [`Lock`].
+#[derive(Clone, Debug)]
+pub struct SelectedDependency<'lock> {
+    package: &'lock Package,
+    extras: BTreeSet<&'lock ExtraName>,
+    context: DependencySelectionContext<'lock>,
+}
+
+impl<'lock> SelectedDependency<'lock> {
+    fn from_dependency(
+        package: &'lock Package,
+        dependency: &'lock Dependency,
+        context: DependencySelectionContext<'lock>,
+    ) -> Self {
+        Self {
+            package,
+            extras: dependency.extra.iter().collect(),
+            context,
+        }
+    }
+
+    fn from_requirement(package: &'lock Package, requirement: &'lock Requirement) -> Self {
+        Self {
+            package,
+            extras: requirement.extras.iter().collect(),
+            context: DependencySelectionContext::None,
+        }
+    }
+
+    fn extend_dependency(&mut self, dependency: &'lock Dependency) {
+        self.extras.extend(&dependency.extra);
+    }
+
+    fn extend_requirement(&mut self, requirement: &'lock Requirement) {
+        self.extras.extend(&requirement.extras);
+    }
+
+    /// Returns the selected package.
+    fn package(&self) -> &'lock Package {
+        self.package
+    }
+
+    /// Returns the extras activated by the direct dependency edge.
+    fn extras(&self) -> impl Iterator<Item = &'lock ExtraName> + '_ {
+        self.extras.iter().copied()
+    }
+
+    fn context(&self) -> DependencySelectionContext<'lock> {
+        self.context
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) enum DependencySelectionContext<'lock> {
+    None,
+    Production(&'lock PackageName),
+    Group(&'lock PackageName, &'lock GroupName),
+}
+
+impl<'lock> DependencySelectionContext<'lock> {
+    fn package(self) -> Option<&'lock PackageName> {
+        match self {
+            Self::None => None,
+            Self::Production(package) | Self::Group(package, _) => Some(package),
+        }
+    }
+}
+
+/// Direct dependency selections from a [`Lock`] for a named package.
 ///
 /// The dependency can come from the lock manifest, a dependency group, the production packages,
 /// or a combination thereof.
 #[derive(Debug)]
 pub struct DependencySelection<'lock> {
-    root: Option<&'lock Package>,
-    production: Option<&'lock Package>,
-    groups: BTreeMap<&'lock GroupName, &'lock Package>,
+    root: Option<SelectedDependency<'lock>>,
+    production: Option<SelectedDependency<'lock>>,
+    groups: BTreeMap<&'lock GroupName, SelectedDependency<'lock>>,
 }
 
 impl<'lock> DependencySelection<'lock> {
-    /// Returns the package selected by a direct requirement on the lock manifest.
-    pub fn root(&self) -> Option<&'lock Package> {
-        self.root
+    /// Returns the direct requirement selection from the lock manifest.
+    pub fn root(&self) -> Option<&SelectedDependency<'lock>> {
+        self.root.as_ref()
     }
 
-    /// Returns the package selected by the production dependency.
-    pub fn production(&self) -> Option<&'lock Package> {
-        self.production
+    /// Returns the production dependency selection.
+    pub fn production(&self) -> Option<&SelectedDependency<'lock>> {
+        self.production.as_ref()
     }
 
-    /// Returns the package selected by the given dependency group.
-    pub fn group(&self, group: &GroupName) -> Option<&'lock Package> {
-        self.groups.get(group).copied()
+    /// Returns the dependency selection for the given dependency group.
+    pub fn group(&self, group: &GroupName) -> Option<&SelectedDependency<'lock>> {
+        self.groups.get(group)
     }
 }
 
@@ -849,16 +917,16 @@ impl Lock {
                 });
             };
             let production =
-                self.find_project_dependency_package(project, dependency_name, marker_environment)?;
+                self.find_project_dependency(project, dependency_name, marker_environment)?;
             let mut groups = BTreeMap::new();
             for group in project.resolved_dependency_groups().keys() {
-                if let Some(package) = self.find_project_dependency_group_package(
+                if let Some(dependency) = self.find_project_dependency_group(
                     project,
                     group,
                     dependency_name,
                     marker_environment,
                 )? {
-                    groups.insert(group, package);
+                    groups.insert(group, dependency);
                 }
             }
             (None, production, groups)
@@ -867,33 +935,53 @@ impl Lock {
                 &requirement.name == dependency_name
                     && requirement.marker.evaluate(marker_environment, &[])
             });
+            let group_applies =
+                self.manifest
+                    .dependency_groups
+                    .values()
+                    .flatten()
+                    .any(|requirement| {
+                        &requirement.name == dependency_name
+                            && requirement.marker.evaluate(marker_environment, &[])
+                    });
 
             // Lock-manifest requirements and dependency groups only record requirements, not
-            // resolved package IDs. Select the environment-specific package once, then associate
-            // it with every applicable direct requirement.
-            let mut applicable_groups = self
-                .manifest
-                .dependency_groups
-                .iter()
-                .filter_map(|(group, requirements)| {
-                    requirements
-                        .iter()
-                        .any(|requirement| {
-                            &requirement.name == dependency_name
-                                && requirement.marker.evaluate(marker_environment, &[])
-                        })
-                        .then_some(group)
-                })
-                .peekable();
-            let package = if root_applies || applicable_groups.peek().is_some() {
+            // resolved package IDs. Select the environment-specific package once, then preserve
+            // every applicable direct edge that selected it.
+            let package = if root_applies || group_applies {
                 self.find_by_markers(dependency_name, marker_environment)?
             } else {
                 None
             };
-            let root = root_applies.then_some(package).flatten();
-            let groups = package.map_or_else(BTreeMap::new, |package| {
-                applicable_groups.map(|group| (group, package)).collect()
+            let root = package.and_then(|package| {
+                let mut applicable = self.manifest.requirements.iter().filter(|requirement| {
+                    &requirement.name == dependency_name
+                        && requirement.marker.evaluate(marker_environment, &[])
+                });
+                let requirement = applicable.next()?;
+                let mut selection = SelectedDependency::from_requirement(package, requirement);
+                for requirement in applicable {
+                    selection.extend_requirement(requirement);
+                }
+                Some(selection)
             });
+            let mut groups = BTreeMap::new();
+            if let Some(package) = package {
+                for (group, requirements) in &self.manifest.dependency_groups {
+                    let mut applicable = requirements.iter().filter(|requirement| {
+                        &requirement.name == dependency_name
+                            && requirement.marker.evaluate(marker_environment, &[])
+                    });
+                    let Some(requirement) = applicable.next() else {
+                        continue;
+                    };
+                    let mut selection = SelectedDependency::from_requirement(package, requirement);
+                    for requirement in applicable {
+                        selection.extend_requirement(requirement);
+                    }
+                    groups.insert(group, selection);
+                }
+            }
             (root, None, groups)
         };
         Ok(DependencySelection {
@@ -903,20 +991,20 @@ impl Lock {
         })
     }
 
-    /// Returns the package selected by a dependency group on a non-virtual project.
-    fn find_project_dependency_group_package(
-        &self,
-        project: &Package,
-        group: &GroupName,
+    /// Returns the direct dependency selected by a dependency group on a non-virtual project.
+    fn find_project_dependency_group<'lock>(
+        &'lock self,
+        project: &'lock Package,
+        group: &'lock GroupName,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
+    ) -> Result<Option<SelectedDependency<'lock>>, String> {
         let Some(dependencies) = project.resolved_dependency_groups().get(group) else {
             return Ok(None);
         };
         let project_name = project.name();
 
-        let mut selected = None;
+        let mut selected: Option<SelectedDependency<'lock>> = None;
         for dependency in dependencies
             .iter()
             .filter(|dependency| &dependency.package_id.name == dependency_name)
@@ -939,26 +1027,37 @@ impl Lock {
             }
 
             let package = self.find_by_id(&dependency.package_id);
-            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+            if selected
+                .as_ref()
+                .is_some_and(|selected| selected.package.id != package.id)
+            {
                 return Err(format!(
                     "found multiple packages matching `{dependency_name}` in dependency group `{group}` for `{project_name}`"
                 ));
             }
-            selected = Some(package);
+            if let Some(selected) = selected.as_mut() {
+                selected.extend_dependency(dependency);
+            } else {
+                selected = Some(SelectedDependency::from_dependency(
+                    package,
+                    dependency,
+                    DependencySelectionContext::Group(project_name, group),
+                ));
+            }
         }
         Ok(selected)
     }
 
-    /// Returns the package selected by a production dependency on a non-virtual project.
-    fn find_project_dependency_package(
-        &self,
-        project: &Package,
+    /// Returns the direct production dependency selected on a non-virtual project.
+    fn find_project_dependency<'lock>(
+        &'lock self,
+        project: &'lock Package,
         dependency_name: &PackageName,
         marker_environment: &MarkerEnvironment,
-    ) -> Result<Option<&Package>, String> {
+    ) -> Result<Option<SelectedDependency<'lock>>, String> {
         let project_name = project.name();
 
-        let mut selected = None;
+        let mut selected: Option<SelectedDependency<'lock>> = None;
         for dependency in project
             .dependencies()
             .iter()
@@ -977,12 +1076,23 @@ impl Lock {
             }
 
             let package = self.find_by_id(&dependency.package_id);
-            if selected.is_some_and(|selected: &Package| selected.id != package.id) {
+            if selected
+                .as_ref()
+                .is_some_and(|selected| selected.package.id != package.id)
+            {
                 return Err(format!(
                     "found multiple packages matching production dependency `{dependency_name}` for `{project_name}`"
                 ));
             }
-            selected = Some(package);
+            if let Some(selected) = selected.as_mut() {
+                selected.extend_dependency(dependency);
+            } else {
+                selected = Some(SelectedDependency::from_dependency(
+                    package,
+                    dependency,
+                    DependencySelectionContext::Production(project_name),
+                ));
+            }
         }
         Ok(selected)
     }
@@ -7439,9 +7549,15 @@ source = { registry = "https://example.com/simple" }
         let selection = lock
             .dependency_selection(Some(&project_name), &dependency_name, &marker_environment)
             .expect("unique project package");
-        let preferred = selection.group(&dev).expect("dev dependency");
-        let included = selection.group(&typing).expect("typing dependency");
-        let production = selection.production().expect("production dependency");
+        let preferred = selection.group(&dev).expect("dev dependency").package();
+        let included = selection
+            .group(&typing)
+            .expect("typing dependency")
+            .package();
+        let production = selection
+            .production()
+            .expect("production dependency")
+            .package();
 
         assert!(std::ptr::eq(preferred, included));
         assert!(std::ptr::eq(preferred, production));
@@ -7473,7 +7589,7 @@ source = { registry = "https://example.com/simple" }
             .expect("unique root package");
         let root = selection.root().expect("root dependency");
 
-        assert_eq!(root.name(), &dependency_name);
+        assert_eq!(root.package().name(), &dependency_name);
         assert!(selection.production().is_none());
     }
 
