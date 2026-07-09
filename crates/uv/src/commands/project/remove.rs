@@ -3,8 +3,6 @@ use std::fmt::Write;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
 use owo_colors::OwoColorize;
@@ -20,9 +18,7 @@ use uv_normalize::PackageName;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups};
 use uv_preview::Preview;
 use uv_python::{ConfigDiscovery, PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::{
-    DirectDependencyKind, reachable_declared_package_names, reachable_direct_dependency_names,
-};
+use uv_resolver::{reachable_declared_package_names, reachable_direct_dependency_names};
 use uv_scripts::{Pep723Metadata, Pep723Script};
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_warnings::warn_user_once;
@@ -229,18 +225,14 @@ pub(crate) async fn remove(
 
     let content = toml.to_string();
 
-    // `--frozen` edits only the declaration and must not read or validate the lockfile.
-    if frozen.is_some() {
-        target.write(&content)?;
-        return Ok(ExitStatus::Success);
-    }
-
-    // Preserve both edited files so failures and interrupts can restore a retryable state.
-    let snapshot = target.snapshot().await?;
-    let mut rollback = RemoveRollback::new(snapshot.clone());
-
     // Save the modified `pyproject.toml` or script.
     target.write(&content)?;
+
+    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
+    // to exist at all.
+    if frozen.is_some() {
+        return Ok(ExitStatus::Success);
+    }
 
     // If we're modifying a script, and lockfile doesn't exist, don't create it.
     if let RemoveTarget::Script(ref script) = target {
@@ -250,25 +242,9 @@ pub(crate) async fn remove(
                 "Updated `{}`",
                 script.path.user_display().cyan()
             )?;
-            rollback.commit();
             return Ok(ExitStatus::Success);
         }
     }
-
-    // Revert both the declaration and lockfile when interrupted after the edit is written.
-    let rollback_armed = Arc::clone(&rollback.armed);
-    let _ = ctrlc::set_handler(move || {
-        if rollback_armed.swap(false, Ordering::SeqCst) {
-            let _ = snapshot.revert();
-        }
-
-        #[expect(clippy::exit, clippy::cast_possible_wrap)]
-        std::process::exit(if cfg!(windows) {
-            0xC000_013A_u32 as i32
-        } else {
-            130
-        });
-    });
 
     // Update the `pypackage.toml` in-memory.
     let target = target.update(&content, &WorkspaceCache::default())?;
@@ -403,22 +379,14 @@ pub(crate) async fn remove(
 
     let AddTarget::Project(project, environment) = target else {
         // If we're not adding to a project, exit early.
-        rollback.commit();
         return Ok(ExitStatus::Success);
     };
 
     let PythonTarget::Environment(venv) = &*environment else {
         // If we're not syncing, exit early.
-        rollback.commit();
         return Ok(ExitStatus::Success);
     };
 
-    let direct_kind = match &dependency_type {
-        DependencyType::Production => DirectDependencyKind::Production,
-        DependencyType::Dev => DirectDependencyKind::Group(&DEV_DEPENDENCIES),
-        DependencyType::Optional(extra) => DirectDependencyKind::Optional(extra),
-        DependencyType::Group(group) => DirectDependencyKind::Group(group),
-    };
     let marker_environment = venv.interpreter().to_resolver_marker_environment();
     let removed_names = removed_roots
         .iter()
@@ -467,7 +435,7 @@ pub(crate) async fn remove(
                 VirtualProject::Project(project) => Some(project.project_name()),
                 VirtualProject::NonProject(_) => None,
             },
-            direct_kind,
+            &dependency_type,
             &removed_names,
         ) {
             Ok(candidates) => candidates,
@@ -536,7 +504,6 @@ pub(crate) async fn remove(
         Err(err) => return Err(err.into()),
     }
 
-    rollback.commit();
     Ok(ExitStatus::Success)
 }
 
@@ -597,93 +564,6 @@ impl RemoveTarget {
                     .ok_or(ProjectError::PyprojectTomlUpdate)?;
                 Ok(Self::Project(project))
             }
-        }
-    }
-
-    /// Take a detached snapshot of the declaration and lockfile for rollback.
-    async fn snapshot(&self) -> Result<RemoveTargetSnapshot, io::Error> {
-        let target = match self {
-            Self::Script(script) => LockTarget::from(script),
-            Self::Project(project) => LockTarget::Workspace(project.workspace()),
-        };
-        let lock = target.read_bytes().await?;
-
-        match self {
-            Self::Script(script) => Ok(RemoveTargetSnapshot::Script(script.clone(), lock)),
-            Self::Project(project) => {
-                Ok(RemoveTargetSnapshot::Project(project.clone_detach(), lock))
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-#[expect(clippy::large_enum_variant)]
-enum RemoveTargetSnapshot {
-    Script(Pep723Script, Option<Vec<u8>>),
-    Project(VirtualProject, Option<Vec<u8>>),
-}
-
-impl RemoveTargetSnapshot {
-    /// Restore the declaration and lockfile captured before removal.
-    fn revert(&self) -> Result<(), io::Error> {
-        match self {
-            Self::Script(script, lock) => {
-                debug!("Reverting changes to PEP 723 script block");
-                script.write(&script.metadata.raw)?;
-                Self::revert_lock(LockTarget::from(script), lock.as_deref())
-            }
-            Self::Project(project, lock) => {
-                let workspace = project.workspace();
-                debug!("Reverting changes to `pyproject.toml`");
-                fs_err::write(
-                    project.root().join("pyproject.toml"),
-                    project.pyproject_toml().as_ref(),
-                )?;
-                Self::revert_lock(LockTarget::from(workspace), lock.as_deref())
-            }
-        }
-    }
-
-    fn revert_lock(target: LockTarget<'_>, lock: Option<&[u8]>) -> Result<(), io::Error> {
-        if let Some(lock) = lock {
-            debug!("Reverting changes to `uv.lock`");
-            fs_err::write(target.lock_path(), lock)
-        } else {
-            debug!("Removing `uv.lock`");
-            match fs_err::remove_file(target.lock_path()) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error),
-            }
-        }
-    }
-}
-
-struct RemoveRollback {
-    snapshot: RemoveTargetSnapshot,
-    armed: Arc<AtomicBool>,
-}
-
-impl RemoveRollback {
-    fn new(snapshot: RemoveTargetSnapshot) -> Self {
-        Self {
-            snapshot,
-            armed: Arc::new(AtomicBool::new(true)),
-        }
-    }
-
-    fn commit(&mut self) {
-        self.armed.store(false, Ordering::SeqCst);
-    }
-}
-
-impl Drop for RemoveRollback {
-    fn drop(&mut self) {
-        if self.armed.swap(false, Ordering::SeqCst)
-            && let Err(error) = self.snapshot.revert()
-        {
-            warn!(%error, "Failed to revert changes after removal failed");
         }
     }
 }
