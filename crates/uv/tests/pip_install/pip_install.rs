@@ -1,5 +1,7 @@
 use std::fmt::Write;
 use std::io::Cursor;
+#[cfg(all(feature = "test-git", unix))]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -3397,6 +3399,59 @@ fn install_git_private_https_interactive() {
           --- stderr
           fatal: could not read Username for 'https://github.com': terminal prompts disabled
     ");
+}
+
+/// Ensure that SSH cannot prompt for credentials during a Git fetch.
+#[test]
+#[cfg(all(feature = "test-git", unix))]
+fn install_git_ssh_disables_interactive_authentication() -> Result<()> {
+    let context = uv_test::test_context!(DEFAULT_PYTHON_VERSION);
+
+    let ssh = context.temp_dir.child("ssh");
+    ssh.write_str(indoc! {r#"
+        #!/bin/sh
+        for argument in "$@"; do
+            if [ "$argument" = "BatchMode=yes" ]; then
+                echo "Batch mode is enabled" >&2
+                exit 1
+            fi
+        done
+        echo "Batch mode is disabled" >&2
+        exit 1
+    "#})?;
+    let mut permissions = fs::metadata(&ssh)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&ssh, permissions)?;
+
+    let package =
+        "uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage";
+    let mut filters = context.filters();
+    filters.push((
+        "process didn't exit successfully: .*",
+        "process didn't exit successfully: [GIT_COMMAND_ERROR]",
+    ));
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg(package)
+        .env(EnvVars::GIT_SSH_COMMAND, ssh.path()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `uv-private-pypackage @ git+ssh://git@github.com/astral-test/uv-private-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/ebb6fc30ccd658f6
+      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
+          --- stderr
+          Batch mode is enabled
+          fatal: Could not read from remote repository.
+
+          Please make sure you have the correct access rights
+          and the repository exists.
+    ");
+
+    Ok(())
 }
 
 /// Install a package without using pre-built wheels.

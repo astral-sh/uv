@@ -824,10 +824,13 @@ fn fetch_with_cli(
     offline: bool,
 ) -> Result<()> {
     let mut cmd = GIT.as_ref().cloned()?;
-    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
-    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
-    // are still usable.
+    // Disable interactive prompts from Git and SSH, as they'll be erased by the progress bar
+    // animation and the process will "hang".
     cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+    let mut git_ssh_command =
+        std::env::var_os(EnvVars::GIT_SSH_COMMAND).unwrap_or_else(|| "ssh".into());
+    git_ssh_command.push(" -o BatchMode=yes");
+    cmd.env(EnvVars::GIT_SSH_COMMAND, git_ssh_command);
 
     cmd.arg("fetch");
     if tags {
