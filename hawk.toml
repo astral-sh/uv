@@ -12,6 +12,17 @@ package = "uv-dev"
 bin = "uv-dev"
 reason = "developer binary shipped from this workspace"
 
+# Keep this list in sync with workspace packages that define doctests.
+
+[[doctest]]
+package = "uv-pep440"
+
+[[doctest]]
+package = "uv-pep508"
+
+[[doctest]]
+package = "uv-redacted"
+
 # Keep public APIs that are consumed by downstream Rust integrations.
 
 [[override]]
