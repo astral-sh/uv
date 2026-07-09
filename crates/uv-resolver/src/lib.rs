@@ -11,9 +11,10 @@ pub use fork_strategy::ForkStrategy;
 pub use lock::{
     CanonicalLockError, DependencySelection, DirectDependencyKind, Installable,
     InstallableRootKind, Lock, LockError, LockParseError, Metadata, Package, PackageMap, PylockToml,
-    PylockTomlError, PylockTomlErrorKind, PythonReport, ReachabilityRoots, RequirementsTxtExport,
-    ResolverManifest, SatisfiesResult, SelectedDependency, TreeDisplay, TreeJsonTarget,
-    cyclonedx_json, implicit_constraints_marker, reachable_package_names,
+    PylockTomlError, PylockTomlErrorKind, PythonReport, RequirementsTxtExport, ResolverManifest,
+    SatisfiesResult, SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json,
+    implicit_constraints_marker, reachable_declared_package_names,
+    reachable_direct_dependency_names,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
