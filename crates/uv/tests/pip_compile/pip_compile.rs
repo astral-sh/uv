@@ -14,7 +14,9 @@ use fs_err::File;
 use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use http::StatusCode;
-use indoc::{formatdoc, indoc};
+#[cfg(feature = "test-universal")]
+use indoc::formatdoc;
+use indoc::indoc;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 use url::Url;
 use wiremock::matchers::{method, path};
