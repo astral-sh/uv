@@ -64,36 +64,30 @@ pub enum Libc {
 impl Libc {
     pub(crate) fn from_env() -> Result<Self, crate::Error> {
         match env::consts::OS {
-            "linux" => {
-                if let Ok(libc) = env::var(EnvVars::UV_LIBC) {
-                    if !libc.is_empty() {
-                        return Self::from_str(&libc);
-                    }
-                }
-
-                Ok(Self::Some(match detect_linux_libc()? {
-                    LibcVersion::Manylinux { .. } => match env::consts::ARCH {
-                        "arm" | "armv5te" | "armv7" => {
-                            match detect_hardware_floating_point_support() {
-                                Ok(true) => target_lexicon::Environment::Gnueabihf,
-                                Ok(false) => target_lexicon::Environment::Gnueabi,
-                                Err(_) => target_lexicon::Environment::Gnu,
-                            }
-                        }
-                        _ => target_lexicon::Environment::Gnu,
-                    },
-                    LibcVersion::Musllinux { .. } => match env::consts::ARCH {
-                        "arm" | "armv5te" | "armv7" => {
-                            match detect_hardware_floating_point_support() {
-                                Ok(true) => target_lexicon::Environment::Musleabihf,
-                                Ok(false) => target_lexicon::Environment::Musleabi,
-                                Err(_) => target_lexicon::Environment::Musl,
-                            }
-                        }
-                        _ => target_lexicon::Environment::Musl,
-                    },
-                }))
+            "linux"
+                if let Ok(libc) = env::var(EnvVars::UV_LIBC)
+                    && !libc.is_empty() =>
+            {
+                Self::from_str(&libc)
             }
+            "linux" => Ok(Self::Some(match detect_linux_libc()? {
+                LibcVersion::Manylinux { .. } => match env::consts::ARCH {
+                    "arm" | "armv5te" | "armv7" => match detect_hardware_floating_point_support() {
+                        Ok(true) => target_lexicon::Environment::Gnueabihf,
+                        Ok(false) => target_lexicon::Environment::Gnueabi,
+                        Err(_) => target_lexicon::Environment::Gnu,
+                    },
+                    _ => target_lexicon::Environment::Gnu,
+                },
+                LibcVersion::Musllinux { .. } => match env::consts::ARCH {
+                    "arm" | "armv5te" | "armv7" => match detect_hardware_floating_point_support() {
+                        Ok(true) => target_lexicon::Environment::Musleabihf,
+                        Ok(false) => target_lexicon::Environment::Musleabi,
+                        Err(_) => target_lexicon::Environment::Musl,
+                    },
+                    _ => target_lexicon::Environment::Musl,
+                },
+            })),
             "windows" | "macos" => Ok(Self::None),
             // Use `None` on platforms without explicit support.
             _ => Ok(Self::None),

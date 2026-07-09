@@ -675,13 +675,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
@@ -714,13 +713,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
