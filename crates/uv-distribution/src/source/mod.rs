@@ -663,8 +663,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -884,8 +887,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1066,8 +1072,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1237,8 +1246,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1382,8 +1394,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1597,8 +1612,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1856,8 +1874,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2024,8 +2045,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2123,8 +2147,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2432,8 +2459,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
