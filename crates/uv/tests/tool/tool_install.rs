@@ -6376,33 +6376,32 @@ fn tool_install_removed_python() {
 
     // Simulate the tool's interpreter disappearing without copying an arbitrary system prefix
     // like `/usr` into the test directory.
-    #[cfg(unix)]
-    {
-        let tool_python = tool_root.child("bin").child("python");
-        fs_err::remove_file(&tool_python).unwrap();
-        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
-            .unwrap();
-    }
+    cfg_select! {
+        unix => {
+            let tool_python = tool_root.child("bin").child("python");
+            fs_err::remove_file(&tool_python).unwrap();
+            fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+                .unwrap();
+        },
+        windows => {
+            use uv_fs::Simplified;
 
-    #[cfg(windows)]
-    {
-        use uv_fs::Simplified;
-
-        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
-        let broken_home = context.temp_dir.join("missing-python");
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
-        let contents = contents
-            .lines()
-            .map(|line| {
-                if line.starts_with("home = ") {
-                    format!("home = {}", broken_home.simplified_display())
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+            let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+            let broken_home = context.temp_dir.join("missing-python");
+            let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+            let contents = contents
+                .lines()
+                .map(|line| {
+                    if line.starts_with("home = ") {
+                        format!("home = {}", broken_home.simplified_display())
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+        },
     }
 
     // Reinstalling should skip the broken Python install.

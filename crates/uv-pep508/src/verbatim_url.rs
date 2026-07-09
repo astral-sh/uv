@@ -390,33 +390,34 @@ impl Pep508Url for VerbatimUrl {
                 // Ex) `file:///home/ferris/project/scripts/...`, `file://localhost/home/ferris/project/scripts/...`, or `file:../ferris/`
                 Some(Scheme::File) => {
                     // Strip the leading slashes, along with the `localhost` host, if present.
+                    cfg_select! {
+                        feature = "non-pep508-extensions" => {
+                            // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
+                            let (path, fragment) = path
+                                .split_once('#')
+                                .map_or((path, None), |(path, fragment)| (path, Some(fragment)));
+                            let path = strip_host(path);
 
-                    // Transform, e.g., `/C:/Users/ferris/wheel-0.42.0.tar.gz` to `C:\Users\ferris\wheel-0.42.0.tar.gz`.
-                    #[cfg(feature = "non-pep508-extensions")]
-                    {
-                        let (path, fragment) = path
-                            .split_once('#')
-                            .map_or((path, None), |(path, fragment)| (path, Some(fragment)));
-                        let path = strip_host(path);
+                            let path = normalize_url_path(path);
 
-                        let path = normalize_url_path(path);
+                            if let Some(working_dir) = working_dir {
+                                return Ok(Self::from_path(path.as_ref(), working_dir)?
+                                    .with_url_fragment(fragment)
+                                    .with_given(url)
+                                    .with_expanded(vars_expanded));
+                            }
 
-                        if let Some(working_dir) = working_dir {
-                            return Ok(Self::from_path(path.as_ref(), working_dir)?
+                            Ok(Self::from_absolute_path(path.as_ref())?
                                 .with_url_fragment(fragment)
                                 .with_given(url)
-                                .with_expanded(vars_expanded));
-                        }
-
-                        Ok(Self::from_absolute_path(path.as_ref())?
-                            .with_url_fragment(fragment)
-                            .with_given(url)
-                            .with_expanded(vars_expanded))
+                                .with_expanded(vars_expanded))
+                        },
+                        _ => {
+                            Ok(Self::parse_url(expanded)?
+                                .with_given(url)
+                                .with_expanded(vars_expanded))
+                        },
                     }
-                    #[cfg(not(feature = "non-pep508-extensions"))]
-                    Ok(Self::parse_url(expanded)?
-                        .with_given(url)
-                        .with_expanded(vars_expanded))
                 }
 
                 // Ex) `https://download.pytorch.org/whl/torch_stable.html`
@@ -427,31 +428,30 @@ impl Pep508Url for VerbatimUrl {
 
                 // Ex) `C:\Users\ferris\wheel-0.42.0.tar.gz`
                 _ => {
-                    #[cfg(feature = "non-pep508-extensions")]
-                    {
-                        Ok(
-                            Self::from_path_with_fragment(expanded.as_ref(), working_dir)?
-                                .with_given(url)
-                                .with_expanded(vars_expanded),
-                        )
+                    cfg_select! {
+                        feature = "non-pep508-extensions" => {
+                            Ok(
+                                Self::from_path_with_fragment(expanded.as_ref(), working_dir)?
+                                    .with_given(url)
+                                    .with_expanded(vars_expanded),
+                            )
+                        },
+                        _ => Err(Self::Err::NotAUrl(expanded.to_string())),
                     }
-                    #[cfg(not(feature = "non-pep508-extensions"))]
-                    Err(Self::Err::NotAUrl(expanded.to_string()))
                 }
             }
         } else {
             // Ex) `../editable/`
-            #[cfg(feature = "non-pep508-extensions")]
-            {
-                Ok(
-                    Self::from_path_with_fragment(expanded.as_ref(), working_dir)?
-                        .with_given(url)
-                        .with_expanded(vars_expanded),
-                )
+            cfg_select! {
+                feature = "non-pep508-extensions" => {
+                    Ok(
+                        Self::from_path_with_fragment(expanded.as_ref(), working_dir)?
+                            .with_given(url)
+                            .with_expanded(vars_expanded),
+                    )
+                },
+                _ => Err(Self::Err::NotAUrl(expanded.to_string())),
             }
-
-            #[cfg(not(feature = "non-pep508-extensions"))]
-            Err(Self::Err::NotAUrl(expanded.to_string()))
         }
     }
 
