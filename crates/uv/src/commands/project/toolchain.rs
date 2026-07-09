@@ -16,7 +16,7 @@ pub(crate) struct LockedTool<'lock> {
 }
 
 impl<'lock> LockedTool<'lock> {
-    pub(crate) fn dependency(&self) -> &SelectedDependency<'lock> {
+    fn dependency(&self) -> &SelectedDependency<'lock> {
         &self.dependency
     }
 

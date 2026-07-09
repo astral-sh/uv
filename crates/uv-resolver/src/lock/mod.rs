@@ -341,16 +341,16 @@ impl<'lock> SelectedDependency<'lock> {
     }
 
     /// Returns the selected package.
-    pub fn package(&self) -> &'lock Package {
+    fn package(&self) -> &'lock Package {
         self.package
     }
 
     /// Returns the extras activated by the direct dependency edge.
-    pub fn extras(&self) -> impl Iterator<Item = &'lock ExtraName> + '_ {
+    fn extras(&self) -> impl Iterator<Item = &'lock ExtraName> + '_ {
         self.extras.iter().copied()
     }
 
-    pub(super) fn context(&self) -> DependencySelectionContext<'lock> {
+    fn context(&self) -> DependencySelectionContext<'lock> {
         self.context
     }
 }
@@ -363,7 +363,7 @@ pub(super) enum DependencySelectionContext<'lock> {
 }
 
 impl<'lock> DependencySelectionContext<'lock> {
-    pub(super) fn package(self) -> Option<&'lock PackageName> {
+    fn package(self) -> Option<&'lock PackageName> {
         match self {
             Self::None => None,
             Self::Production(package) | Self::Group(package, _) => Some(package),
