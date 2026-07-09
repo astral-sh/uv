@@ -765,13 +765,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         }
         ResolverOutput::from_state(
             &resolutions,
-            &self.requirements,
-            &self.constraints,
-            &self.overrides,
+            self.requirements.clone(),
+            self.constraints.clone(),
+            self.overrides.clone(),
             &self.preferences,
             &self.index,
             &self.git,
-            &self.python_requirement,
+            self.python_requirement.target().clone(),
             &self.conflicts,
             self.selector.resolution_strategy(),
             self.options.clone(),
