@@ -61,6 +61,8 @@ pub enum TorchMode {
     Auto,
     /// Use the CPU-only PyTorch index.
     Cpu,
+    /// Use the PyTorch index for CUDA 13.2.
+    Cu132,
     /// Use the PyTorch index for CUDA 13.0.
     Cu130,
     /// Use the PyTorch index for CUDA 12.9.
@@ -270,6 +272,7 @@ impl TorchStrategy {
                 }
             }
             TorchMode::Cpu => TorchBackend::Cpu,
+            TorchMode::Cu132 => TorchBackend::Cu132,
             TorchMode::Cu130 => TorchBackend::Cu130,
             TorchMode::Cu129 => TorchBackend::Cu129,
             TorchMode::Cu128 => TorchBackend::Cu128,
@@ -545,6 +548,7 @@ impl TorchStrategy {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TorchBackend {
     Cpu,
+    Cu132,
     Cu130,
     Cu129,
     Cu128,
@@ -601,6 +605,10 @@ impl TorchBackend {
             Self::Cpu => match source {
                 TorchSource::PyTorch => &PYTORCH_CPU_INDEX_URL,
                 TorchSource::Pyx => &PYX_CPU_INDEX_URL,
+            },
+            Self::Cu132 => match source {
+                TorchSource::PyTorch => &PYTORCH_CU132_INDEX_URL,
+                TorchSource::Pyx => &PYX_CU132_INDEX_URL,
             },
             Self::Cu130 => match source {
                 TorchSource::PyTorch => &PYTORCH_CU130_INDEX_URL,
@@ -823,6 +831,7 @@ impl TorchBackend {
     pub fn cuda_version(&self) -> Option<Version> {
         match self {
             Self::Cpu => None,
+            Self::Cu132 => Some(Version::new([13, 2])),
             Self::Cu130 => Some(Version::new([13, 0])),
             Self::Cu129 => Some(Version::new([12, 9])),
             Self::Cu128 => Some(Version::new([12, 8])),
@@ -877,6 +886,7 @@ impl TorchBackend {
     pub fn rocm_version(&self) -> Option<Version> {
         match self {
             Self::Cpu => None,
+            Self::Cu132 => None,
             Self::Cu130 => None,
             Self::Cu129 => None,
             Self::Cu128 => None,
@@ -934,6 +944,7 @@ impl FromStr for TorchBackend {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "cpu" => Ok(Self::Cpu),
+            "cu132" => Ok(Self::Cu132),
             "cu130" => Ok(Self::Cu130),
             "cu129" => Ok(Self::Cu129),
             "cu128" => Ok(Self::Cu128),
@@ -989,10 +1000,11 @@ impl FromStr for TorchBackend {
 /// Linux CUDA driver versions and the corresponding CUDA versions.
 ///
 /// See: <https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_cb.py#L150-L213>
-static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 26]> = LazyLock::new(|| {
+static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 27]> = LazyLock::new(|| {
     [
         // Table 2 from
         // https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+        (TorchBackend::Cu132, Version::new([580])),
         (TorchBackend::Cu130, Version::new([580])),
         (TorchBackend::Cu129, Version::new([525, 60, 13])),
         (TorchBackend::Cu128, Version::new([525, 60, 13])),
@@ -1029,10 +1041,11 @@ static LINUX_CUDA_DRIVERS: LazyLock<[(TorchBackend, Version); 26]> = LazyLock::n
 /// Windows CUDA driver versions and the corresponding CUDA versions.
 ///
 /// See: <https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_cb.py#L150-L213>
-static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 26]> = LazyLock::new(|| {
+static WINDOWS_CUDA_VERSIONS: LazyLock<[(TorchBackend, Version); 27]> = LazyLock::new(|| {
     [
         // Table 2 from
         // https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
+        (TorchBackend::Cu132, Version::new([580])),
         (TorchBackend::Cu130, Version::new([580])),
         (TorchBackend::Cu129, Version::new([528, 33])),
         (TorchBackend::Cu128, Version::new([528, 33])),
@@ -1188,6 +1201,8 @@ static LINUX_AMD_GPU_DRIVERS: LazyLock<[(TorchBackend, AmdGpuArchitecture); 93]>
 
 static PYTORCH_CPU_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cpu").unwrap());
+static PYTORCH_CU132_INDEX_URL: LazyLock<IndexUrl> =
+    LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu132").unwrap());
 static PYTORCH_CU130_INDEX_URL: LazyLock<IndexUrl> =
     LazyLock::new(|| IndexUrl::from_str("https://download.pytorch.org/whl/cu130").unwrap());
 static PYTORCH_CU129_INDEX_URL: LazyLock<IndexUrl> =
@@ -1291,6 +1306,10 @@ static PYX_API_BASE_URL: LazyLock<Cow<'static, str>> = LazyLock::new(|| {
 static PYX_CPU_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
     let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cpu")).unwrap()
+});
+static PYX_CU132_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
+    let api_base_url = &*PYX_API_BASE_URL;
+    IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/cu132")).unwrap()
 });
 static PYX_CU130_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
     let api_base_url = &*PYX_API_BASE_URL;
@@ -1480,3 +1499,47 @@ static PYX_XPU_INDEX_URL: LazyLock<IndexUrl> = LazyLock::new(|| {
     let api_base_url = &*PYX_API_BASE_URL;
     IndexUrl::from_str(&format!("{api_base_url}/simple/astral-sh/xpu")).unwrap()
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cu132_backend() {
+        assert_eq!(
+            TorchStrategy::from_mode(
+                TorchMode::Cu132,
+                TorchSource::PyTorch,
+                &Os::Windows,
+                None,
+                None,
+            )
+            .expect("explicit backends do not require accelerator detection"),
+            TorchStrategy::Backend {
+                backend: TorchBackend::Cu132,
+                source: TorchSource::PyTorch,
+            }
+        );
+        assert_eq!(
+            TorchStrategy::Cuda {
+                os: Os::Windows,
+                driver_version: Version::new([580]),
+                source: TorchSource::PyTorch,
+            }
+            .index_urls()
+            .next()
+            .map(|index| index.url().as_str()),
+            Some("https://download.pytorch.org/whl/cu132")
+        );
+        assert_eq!(
+            TorchBackend::Cu132.cuda_version(),
+            Some(Version::new([13, 2]))
+        );
+        assert_eq!(
+            TorchBackend::from_index(
+                &Url::parse("https://download.pytorch.org/whl/cu132").expect("valid index URL")
+            ),
+            Some(TorchBackend::Cu132)
+        );
+    }
+}
