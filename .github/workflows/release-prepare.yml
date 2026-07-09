@@ -16,9 +16,29 @@ on:
 permissions: {}
 
 jobs:
-  release:
+  authorize:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Verify maintainer access"
+        run: |
+          role="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/collaborators/${GITHUB_ACTOR}/permission" \
+            --jq '.role_name')"
+          if [[ "$role" != "admin" && "$role" != "maintain" ]]; then
+            echo "${GITHUB_ACTOR} must have the maintain repository role to prepare a release." >&2
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    if: github.repository == 'astral-sh/uv'
+    needs: authorize
+    runs-on: ubuntu-latest
+    environment: automations
     permissions:
       contents: write
       pull-requests: write
@@ -55,6 +75,38 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_BUMP: ${{ inputs.bump }}
+
+      - name: "Rewrite changelog"
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":workspace"
+          safety-strategy: drop-sudo
+          prompt: |
+            Rewrite the changelog entry for the release prepared in the previous step.
+
+            Edit only `CHANGELOG.md`, and only the newest release section added by
+            the release commit at `HEAD`. Compare it with the release sections that
+            precede it and match their style. Inspect the included changes in the
+            local Git history when the generated title is not enough to write an
+            accurate, user-facing entry.
+
+            Preserve the release version, date, every included pull request, and
+            every pull request link. Improve the wording, categorization, and order
+            of entries. Use concise imperative descriptions, the established
+            section names, and Markdown formatting consistent with prior releases.
+            Put the most significant user-facing changes first within each section
+            and remove any empty sections. Do not edit historical release sections
+            or modify any other file.
+
+      - name: "Commit changelog rewrite"
+        run: |
+          git diff --check -- CHANGELOG.md
+          if git diff --quiet -- CHANGELOG.md && git diff --cached --quiet -- CHANGELOG.md; then
+            echo "Codex left the generated changelog unchanged."
+          else
+            git -c core.hooksPath=/dev/null commit --only --message "Rewrite changelog" -- CHANGELOG.md
+          fi
 
       - name: "Create Pull Request"
         run: |
