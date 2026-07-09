@@ -46,23 +46,14 @@ pub struct SitePackages {
     by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
 }
 
-/// A root in the installed dependency graph.
-#[derive(Debug, Clone)]
-pub struct DependencyGraphRoot {
-    /// The installed package that seeds the traversal.
-    pub name: PackageName,
-    /// Extras explicitly requested on the root edge.
-    pub extras: Box<[ExtraName]>,
-}
-
-/// Packages reachable in the installed dependency graph.
+/// Packages reachable from installed package metadata.
 #[derive(Debug)]
-pub struct DependencyGraph {
+pub struct InstalledReachability {
     packages: BTreeSet<PackageName>,
     incomplete: BTreeSet<PackageName>,
 }
 
-impl DependencyGraph {
+impl InstalledReachability {
     /// Return all installed package names reached by the traversal.
     pub fn packages(&self) -> &BTreeSet<PackageName> {
         &self.packages
@@ -208,23 +199,23 @@ impl SitePackages {
     /// requested extra. Root extras are supplied by the caller; extras on transitive dependency
     /// edges are read from installed metadata. Dependencies selected only by the historical
     /// command that installed a root package are therefore intentionally not inferred.
-    pub fn dependency_graph(
+    pub fn reachable_packages<'root>(
         &self,
-        roots: impl IntoIterator<Item = DependencyGraphRoot>,
+        roots: impl IntoIterator<Item = (&'root PackageName, &'root [ExtraName])>,
         markers: &ResolverMarkerEnvironment,
-    ) -> DependencyGraph {
+    ) -> InstalledReachability {
         let mut packages = BTreeSet::new();
         let mut incomplete = BTreeSet::new();
         let mut seen = FxHashSet::default();
         let mut queue = VecDeque::new();
 
-        for root in roots {
-            queue.push_back((root.name.clone(), None));
+        for (name, extras) in roots {
+            queue.push_back((name.clone(), None));
             queue.extend(
-                root.extras
-                    .into_vec()
-                    .into_iter()
-                    .map(|extra| (root.name.clone(), Some(extra))),
+                extras
+                    .iter()
+                    .cloned()
+                    .map(|extra| (name.clone(), Some(extra))),
             );
         }
 
@@ -283,7 +274,7 @@ impl SitePackages {
             }
         }
 
-        DependencyGraph {
+        InstalledReachability {
             packages,
             incomplete,
         }
