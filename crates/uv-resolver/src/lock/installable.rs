@@ -329,7 +329,6 @@ pub fn reachable_declared_package_names<'lock>(
 pub fn reachable_direct_dependency_names<'lock>(
     target: &impl Installable<'lock>,
     marker_environment: &ResolverMarkerEnvironment,
-    project: Option<&PackageName>,
     dependency_type: &DependencyType,
     names: &BTreeSet<PackageName>,
 ) -> Result<BTreeSet<PackageName>, LockError> {
@@ -337,7 +336,7 @@ pub fn reachable_direct_dependency_names<'lock>(
     let mut queue = VecDeque::new();
     let mut seen = FxHashSet::default();
 
-    if let Some(project_name) = project {
+    if let Some(project_name) = target.project_name() {
         let project = lock
             .find_by_name(project_name)
             .map_err(|_| LockErrorKind::MultipleRootPackages {

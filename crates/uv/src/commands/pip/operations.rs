@@ -28,12 +28,10 @@ use uv_distribution_types::{
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
 use uv_install_wheel::{LinkMode, installed_dist_info_path, read_record_into_iter};
-use uv_installer::{
-    DependencyGraphRoot, InstallationStrategy, Plan, Planner, Preparer, SitePackages,
-};
+use uv_installer::{InstallationStrategy, Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl};
+use uv_pep508::{MarkerEnvironment, RequirementOrigin, VerbatimUrl};
 use uv_platform_tags::Tags;
 use uv_preview::Preview;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
@@ -429,9 +427,6 @@ pub(crate) enum Modifications {
 pub(crate) struct RemovalRoot {
     pub(crate) name: PackageName,
     pub(crate) extras: Box<[ExtraName]>,
-    pub(crate) marker: MarkerTree,
-    /// The project extra under which the direct requirement marker is evaluated, if any.
-    pub(crate) marker_extras: Box<[ExtraName]>,
 }
 
 /// A distribution which was or would be modified
@@ -718,20 +713,14 @@ pub(crate) async fn install(
             retained,
         } => {
             let markers = venv.interpreter().to_resolver_marker_environment();
-            let removed_graph = site_packages.dependency_graph(
-                roots
-                    .iter()
-                    .filter(|root| root.marker.evaluate(&markers, &root.marker_extras))
-                    .map(|root| DependencyGraphRoot {
-                        name: root.name.clone(),
-                        extras: root.extras.clone(),
-                    }),
+            let removed_reachability = site_packages.reachable_packages(
+                roots.iter().map(|root| (&root.name, root.extras.as_ref())),
                 &markers,
             );
-            candidates.extend(removed_graph.packages().iter().cloned());
-            if !removed_graph.incomplete().is_empty() {
+            candidates.extend(removed_reachability.packages().iter().cloned());
+            if !removed_reachability.incomplete().is_empty() {
                 debug!(
-                    packages = %removed_graph.incomplete().iter().join(", "),
+                    packages = %removed_reachability.incomplete().iter().join(", "),
                     "Unable to read complete dependency metadata; pruning based on available metadata"
                 );
             }
@@ -741,25 +730,23 @@ pub(crate) async fn install(
                 .chain(&retained)
                 .cloned()
                 .collect::<BTreeSet<_>>();
-            let external_graph = site_packages.dependency_graph(
+            let external_reachability = site_packages.reachable_packages(
                 site_packages
                     .iter()
                     .filter(|distribution| !managed.contains(distribution.name()))
-                    .map(|distribution| DependencyGraphRoot {
-                        name: distribution.name().clone(),
-                        extras: Box::default(),
-                    }),
+                    .map(|distribution| (distribution.name(), &[] as &[ExtraName])),
                 &markers,
             );
 
-            if !external_graph.incomplete().is_empty() {
+            if !external_reachability.incomplete().is_empty() {
                 debug!(
-                    packages = %external_graph.incomplete().iter().join(", "),
+                    packages = %external_reachability.incomplete().iter().join(", "),
                     "Unable to read complete dependency metadata; pruning based on available metadata"
                 );
             }
             candidates.retain(|candidate| {
-                !retained.contains(candidate) && !external_graph.packages().contains(candidate)
+                !retained.contains(candidate)
+                    && !external_reachability.packages().contains(candidate)
             });
 
             Modifications::Prune {

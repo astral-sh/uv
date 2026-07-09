@@ -13,7 +13,7 @@ use toml_edit::{
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::{Index, IndexFormat, IndexUrl};
 use uv_fs::{PortablePath, is_same_file_allow_missing};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
 
@@ -1020,6 +1020,31 @@ impl PyProjectTomlMut {
         self.remove_source(name)?;
 
         Ok(requirements)
+    }
+
+    /// Removes all occurrences of a dependency from the selected [`DependencyType`].
+    pub fn remove_dependencies(
+        &mut self,
+        name: &PackageName,
+        dependency_type: &DependencyType,
+    ) -> Result<Vec<Requirement>, Error> {
+        match dependency_type {
+            DependencyType::Production => self.remove_dependency(name),
+            DependencyType::Dev => {
+                let mut requirements = self.remove_dev_dependency(name)?;
+                requirements
+                    .extend(self.remove_dependency_group_requirement(name, &DEV_DEPENDENCIES)?);
+                Ok(requirements)
+            }
+            DependencyType::Optional(extra) => self.remove_optional_dependency(name, extra),
+            DependencyType::Group(group) if group == &*DEV_DEPENDENCIES => {
+                let mut requirements = self.remove_dev_dependency(name)?;
+                requirements
+                    .extend(self.remove_dependency_group_requirement(name, &DEV_DEPENDENCIES)?);
+                Ok(requirements)
+            }
+            DependencyType::Group(group) => self.remove_dependency_group_requirement(name, group),
+        }
     }
 
     /// Removes all occurrences of development dependencies with the given name.
