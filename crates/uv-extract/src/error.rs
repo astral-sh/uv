@@ -142,12 +142,8 @@ impl Error {
     pub fn is_http_streaming_failed(&self) -> bool {
         match self {
             Self::AsyncZip(async_zip::error::ZipError::UpstreamReadError(_)) => true,
-            Self::Io(err) => {
-                if let Some(inner) = err.get_ref() {
-                    inner.downcast_ref::<reqwest::Error>().is_some()
-                } else {
-                    false
-                }
+            Self::Io(err) if let Some(inner) = err.get_ref() => {
+                inner.downcast_ref::<reqwest::Error>().is_some()
             }
             _ => false,
         }

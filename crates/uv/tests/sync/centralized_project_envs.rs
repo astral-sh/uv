@@ -595,19 +595,18 @@ fn sync_centralized_env_with_existing_file() -> Result<()> {
         .assert()
         .success();
 
-    #[cfg(unix)]
-    {
-        let target = fs_err::read_link(environment.path())?;
-        insta::with_settings!({ filters => context.filters() }, {
-            assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
-        });
-    }
-
-    #[cfg(windows)]
-    {
-        // TODO(tk): This changes once `.venv` can store an environment path.
-        assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
-        assert!(context.cache_dir.child("environments-v2").is_dir());
+    cfg_select! {
+        unix => {
+            let target = fs_err::read_link(environment.path())?;
+            insta::with_settings!({ filters => context.filters() }, {
+                assert_snapshot!(target.portable_display(), @"[CACHE_DIR]/environments-v2/project-cp3.12.[X]-[HASH]");
+            });
+        },
+        windows => {
+            // TODO(tk): This changes once `.venv` can store an environment path.
+            assert_eq!(fs_err::read_to_string(environment.path())?, "user-data");
+            assert!(context.cache_dir.child("environments-v2").is_dir());
+        },
     }
     Ok(())
 }

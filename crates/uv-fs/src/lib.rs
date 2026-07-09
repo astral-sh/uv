@@ -350,13 +350,13 @@ mod windows_tests {
 /// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
 /// instead; it will use a junction on Windows, which is more performant.
 pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    #[cfg(windows)]
-    {
-        fs_err::copy(src.as_ref(), dst.as_ref())?;
-    }
-    #[cfg(unix)]
-    {
-        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    cfg_select! {
+        windows => {
+            fs_err::copy(src.as_ref(), dst.as_ref())?;
+        },
+        unix => {
+            fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+        },
     }
 
     Ok(())

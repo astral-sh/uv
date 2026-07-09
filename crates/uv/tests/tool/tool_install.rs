@@ -15,6 +15,8 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+#[cfg(windows)]
+use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
@@ -6376,33 +6378,30 @@ fn tool_install_removed_python() {
 
     // Simulate the tool's interpreter disappearing without copying an arbitrary system prefix
     // like `/usr` into the test directory.
-    #[cfg(unix)]
-    {
-        let tool_python = tool_root.child("bin").child("python");
-        fs_err::remove_file(&tool_python).unwrap();
-        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
-            .unwrap();
-    }
-
-    #[cfg(windows)]
-    {
-        use uv_fs::Simplified;
-
-        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
-        let broken_home = context.temp_dir.join("missing-python");
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
-        let contents = contents
-            .lines()
-            .map(|line| {
-                if line.starts_with("home = ") {
-                    format!("home = {}", broken_home.simplified_display())
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+    cfg_select! {
+        unix => {
+            let tool_python = tool_root.child("bin").child("python");
+            fs_err::remove_file(&tool_python).unwrap();
+            fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+                .unwrap();
+        },
+        windows => {
+            let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+            let broken_home = context.temp_dir.join("missing-python");
+            let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+            let contents = contents
+                .lines()
+                .map(|line| {
+                    if line.starts_with("home = ") {
+                        format!("home = {}", broken_home.simplified_display())
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+        },
     }
 
     // Reinstalling should skip the broken Python install.
