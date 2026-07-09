@@ -15,6 +15,8 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+#[cfg(windows)]
+use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
@@ -6384,8 +6386,6 @@ fn tool_install_removed_python() {
                 .unwrap();
         },
         windows => {
-            use uv_fs::Simplified;
-
             let pyvenv_cfg = tool_root.child("pyvenv.cfg");
             let broken_home = context.temp_dir.join("missing-python");
             let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
