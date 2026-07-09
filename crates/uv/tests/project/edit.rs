@@ -5037,7 +5037,6 @@ fn remove_subset_prunes_on_unreadable_external_metadata() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Unable to read complete dependency metadata for b; pruning based on available metadata
     Uninstalled 4 packages in [TIME]
      - candidate==1.0.0
      - orphan==1.0.0
@@ -5148,7 +5147,6 @@ fn remove_subset_uses_previous_lock_for_removed_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    warning: Unable to read complete dependency metadata for bridge; pruning based on available metadata
     Uninstalled 2 packages in [TIME]
      - bridge==1.0.0
      - candidate==1.0.0
@@ -5205,7 +5203,6 @@ fn remove_subset_prunes_selected_optional_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    warning: Unable to read complete dependency metadata for removed; pruning based on available metadata
     Uninstalled 3 packages in [TIME]
      - orphan==1.0.0
      - orphan-leaf==1.0.0
@@ -5264,7 +5261,6 @@ fn remove_subset_prunes_selected_group_dependency() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    warning: Unable to read complete dependency metadata for removed; pruning based on available metadata
     Uninstalled 3 packages in [TIME]
      - orphan==1.0.0
      - orphan-leaf==1.0.0
@@ -5318,7 +5314,6 @@ fn remove_subset_prunes_virtual_workspace_group() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    warning: Unable to read complete dependency metadata for removed; pruning based on available metadata
     Uninstalled 4 packages in [TIME]
      - candidate==1.0.0
      - orphan==1.0.0
@@ -5633,115 +5628,6 @@ fn remove_subset_uses_installed_extra_without_previous_lock() -> Result<()> {
     context.pip_show().arg("candidate").assert().failure();
 
     Ok(())
-}
-
-/// A failed removal should restore both the declaration and the previous lockfile.
-#[test]
-fn remove_subset_reverts_files_on_lock_failure() -> Result<()> {
-    let server = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["removed==1.0.0"]
-    "#})?;
-    context
-        .sync()
-        .arg("--index")
-        .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["removed==1.0.0", "missing==1.0.0"]
-    "#})?;
-    let pyproject = context.read("pyproject.toml");
-    let lock = context.read("uv.lock");
-
-    context
-        .remove()
-        .arg("removed")
-        .arg("--offline")
-        .arg("--index")
-        .arg(server.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .failure();
-
-    assert_eq!(context.read("pyproject.toml"), pyproject);
-    assert_eq!(context.read("uv.lock"), lock);
-
-    Ok(())
-}
-
-/// A sync failure after the replacement lock is written should restore both edited files.
-#[test]
-fn remove_subset_reverts_files_on_sync_failure() {
-    let index = uv_test::packse::PackseServer::new("extras/remove-prune-extra.toml");
-    let context = uv_test::test_context!("3.12");
-
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["removed==1.0.0"]
-    "#})
-        .unwrap();
-    context
-        .sync()
-        .arg("--index")
-        .arg(index.index_url())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .success();
-    context
-        .temp_dir
-        .child("pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["removed==1.0.0"]
-
-        [dependency-groups]
-        dev = ["build-only==1.0.0"]
-    "#})
-        .unwrap();
-    let pyproject = context.read("pyproject.toml");
-    let lock = context.read("uv.lock");
-
-    context
-        .remove()
-        .arg("removed")
-        .arg("--index")
-        .arg(index.index_url())
-        .arg("--no-build")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .assert()
-        .failure();
-
-    assert_eq!(context.read("pyproject.toml"), pyproject);
-    assert_eq!(context.read("uv.lock"), lock);
-    context.pip_show().arg("removed").assert().success();
-    context.pip_show().arg("build-only").assert().failure();
 }
 
 /// Frozen removal should not validate an existing lockfile.

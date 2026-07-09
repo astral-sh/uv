@@ -14,26 +14,16 @@ use uv_configuration::{
     ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
-use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
+use uv_workspace::pyproject::DependencyType;
 
 use crate::lock::{
     Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageId,
     SelectedDependency, TagPolicy,
 };
 use crate::{Lock, LockError, UniversalMarker};
-
-/// The section containing a direct dependency.
-#[derive(Debug, Clone, Copy)]
-pub enum DirectDependencyKind<'selection> {
-    /// The project's required dependencies.
-    Production,
-    /// An optional dependency selected by the named project extra.
-    Optional(&'selection ExtraName),
-    /// A dependency in the named dependency group.
-    Group(&'selection GroupName),
-}
 
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,
@@ -340,7 +330,7 @@ pub fn reachable_direct_dependency_names<'lock>(
     target: &impl Installable<'lock>,
     marker_environment: &ResolverMarkerEnvironment,
     project: Option<&PackageName>,
-    kind: DirectDependencyKind<'_>,
+    dependency_type: &DependencyType,
     names: &BTreeSet<PackageName>,
 ) -> Result<BTreeSet<PackageName>, LockError> {
     let lock = target.lock();
@@ -356,14 +346,19 @@ pub fn reachable_direct_dependency_names<'lock>(
             .ok_or_else(|| LockErrorKind::MissingRootPackage {
                 name: project_name.clone(),
             })?;
-        let dependencies = match kind {
-            DirectDependencyKind::Production => project.dependencies(),
-            DirectDependencyKind::Optional(extra) => project
+        let dependencies = match dependency_type {
+            DependencyType::Production => project.dependencies(),
+            DependencyType::Dev => project
+                .resolved_dependency_groups()
+                .get(&*DEV_DEPENDENCIES)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            DependencyType::Optional(extra) => project
                 .optional_dependencies()
                 .get(extra)
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
-            DirectDependencyKind::Group(group) => project
+            DependencyType::Group(group) => project
                 .resolved_dependency_groups()
                 .get(group)
                 .map(Vec::as_slice)
@@ -382,10 +377,11 @@ pub fn reachable_direct_dependency_names<'lock>(
             );
         }
     } else {
-        let requirements = match kind {
-            DirectDependencyKind::Production => Some(lock.requirements()),
-            DirectDependencyKind::Optional(_) => None,
-            DirectDependencyKind::Group(group) => lock.dependency_groups().get(group),
+        let requirements = match dependency_type {
+            DependencyType::Production => Some(lock.requirements()),
+            DependencyType::Dev => lock.dependency_groups().get(&*DEV_DEPENDENCIES),
+            DependencyType::Optional(_) => None,
+            DependencyType::Group(group) => lock.dependency_groups().get(group),
         };
         for requirement in requirements
             .into_iter()
