@@ -28,7 +28,7 @@ pub(crate) async fn cache_clean(
         return Ok(ExitStatus::Success);
     }
 
-    let cache = match cache.with_exclusive_lock_no_wait() {
+    let mut cache = match cache.with_exclusive_lock_no_wait() {
         Ok(cache) => cache,
         Err(cache) if force => {
             debug!("Cache is currently in use, proceeding due to `--force`");
@@ -42,6 +42,36 @@ pub(crate) async fn cache_clean(
             cache.with_exclusive_lock().await?
         }
     };
+
+    // Long-lived commands (e.g., servers started with `uv run`) release the main cache lock
+    // while running, and instead hold in-use locks on the cache entries they run from. Since
+    // removing the entire cache would delete those entries, wait for them to be released.
+    // (Package-scoped cleaning skips in-use entries instead of waiting.)
+    //
+    // The main lock must not be held while waiting: a child process holding an in-use lock
+    // may itself invoke uv, which would block on the main lock and prevent the child from
+    // ever exiting. Instead, probe under the main lock, release it while waiting on the
+    // in-use lock, then reacquire and re-check.
+    if !force && packages.is_empty() {
+        let mut warned = false;
+        while let Some(held) = cache
+            .find_held_in_use_lock()
+            .context("Failed to read the cache's in-use locks")?
+        {
+            if !warned {
+                writeln!(
+                    printer.stderr(),
+                    "Cache is currently in-use, waiting for other uv processes to finish (use `--force` to override)"
+                )?;
+                warned = true;
+            }
+            cache.release_lock();
+            Cache::wait_for_in_use_lock(&held).await.context(
+                "Failed waiting for a running uv-launched process to exit (use `--force` to override)",
+            )?;
+            cache = cache.with_exclusive_lock().await?;
+        }
+    }
 
     let summary = if packages.is_empty() {
         writeln!(

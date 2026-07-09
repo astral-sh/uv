@@ -133,6 +133,35 @@ pub fn is_enabled(flag: PreviewFeature) -> bool {
     get().is_enabled(flag)
 }
 
+/// Check if a specific preview feature is enabled globally, without panicking.
+///
+/// Unlike [`is_enabled`], returns `None` if the global preview state has not been initialized
+/// (or, with the `testing` feature, when the current thread does not hold a
+/// [`test::with_features`] guard). Intended for best-effort callers (e.g., opportunistic cache
+/// maintenance) that should treat an uninitialized state as "disabled" rather than crash.
+pub fn try_is_enabled(flag: PreviewFeature) -> Option<bool> {
+    match PREVIEW.get() {
+        Some(PreviewMode::Normal(mutex)) => {
+            let preview = match *mutex.lock().unwrap() {
+                PreviewState::Provisional(preview) => preview,
+                PreviewState::Final(preview) => preview,
+            };
+            Some(preview.is_enabled(flag))
+        }
+        #[cfg(feature = "testing")]
+        Some(PreviewMode::Test(rwlock)) => {
+            if !test::HELD.get() {
+                return None;
+            }
+            rwlock
+                .read()
+                .unwrap()
+                .map(|preview| preview.is_enabled(flag))
+        }
+        None => None,
+    }
+}
+
 /// Functions for unit tests, do not use from normal code!
 #[cfg(feature = "testing")]
 pub mod test {
@@ -262,6 +291,7 @@ pub enum PreviewFeature {
     CentralizedProjectEnvs = 1 << 35,
     ToolInstallLocks = 1 << 36,
     WorkspaceListScripts = 1 << 37,
+    CacheAutoprune = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -306,6 +336,7 @@ impl PreviewFeature {
             Self::CentralizedProjectEnvs => "centralized-project-envs",
             Self::ToolInstallLocks => "tool-install-locks",
             Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::CacheAutoprune => "cache-autoprune",
         }
     }
 }
@@ -363,6 +394,7 @@ impl FromStr for PreviewFeature {
             "centralized-project-envs" => Self::CentralizedProjectEnvs,
             "tool-install-locks" => Self::ToolInstallLocks,
             "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "cache-autoprune" => Self::CacheAutoprune,
             _ => return Err(PreviewFeatureParseError),
         })
     }

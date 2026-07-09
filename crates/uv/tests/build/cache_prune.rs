@@ -491,3 +491,218 @@ fn prune_stale_revision() -> Result<()> {
 
     Ok(())
 }
+
+/// Automatic pruning should remove dangling archives during a normal command, but only when due,
+/// and without touching referenced archives.
+#[test]
+fn autoprune() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio==4.3.0")?;
+
+    // Install a requirement, to populate the cache.
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+
+    // The run above should have recorded an autoprune run.
+    let marker = context.cache_dir.child(".autoprune");
+    marker.assert(predicates::path::exists());
+
+    // Add a dangling archive to the cache.
+    let dangling = context.cache_dir.child("archive-v0").child("dangling");
+    dangling.create_dir_all()?;
+    dangling.child("payload.txt").write_str("payload")?;
+
+    // The prune should not re-run while the archive bucket's growth is below the threshold
+    // (and within the minimum interval).
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+    dangling.assert(predicates::path::exists());
+
+    // Invalidate the marker's recorded archive count and backdate it past the minimum
+    // interval, to make the prune due again.
+    fs_err::write(marker.path(), "invalid")?;
+    let stale = std::time::SystemTime::now() - std::time::Duration::from_hours(48);
+    filetime::set_file_mtime(marker.path(), filetime::FileTime::from_system_time(stale))?;
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .assert()
+        .success();
+
+    // The dangling archive should be removed; the installed package should be unaffected.
+    dangling.assert(predicates::path::missing());
+    uv_snapshot!(context.filters(), context.pip_list(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Package Version
+    ------- -------
+    anyio   4.3.0
+
+    ----- stderr -----
+    ");
+
+    // A reinstall from the cache should still succeed.
+    uv_snapshot!(context.filters(), context
+        .pip_sync()
+        .arg("requirements.txt")
+        .arg("--reinstall"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ anyio==4.3.0
+    ");
+
+    Ok(())
+}
+
+/// With the `cache-autoprune` preview feature enabled, a long-lived `uv run` process releases
+/// the main cache lock while its child runs, so cache maintenance can proceed; the cached
+/// environment the child runs from is protected by an in-use lock and survives both
+/// `uv cache prune` and automatic pruning.
+#[test]
+#[cfg(unix)]
+fn prune_skips_in_use_environment() -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::Stdio;
+
+    let context = uv_test::test_context!("3.12");
+
+    // Start a long-lived child in a cached environment (`--with` uses an archive-backed
+    // cached environment). The child prints once it's running, then waits for stdin, so the
+    // test can sequence around it without sleeps.
+    let mut child = context
+        .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .arg("--no-project")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import importlib, iniconfig; print('ready', flush=True); input(); importlib.reload(iniconfig); print('ok', flush=True)")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    stdout.read_line(&mut line)?;
+    assert_eq!(line.trim(), "ready");
+
+    // The cached environment lives in the archive bucket.
+    let archives: Vec<_> = context
+        .cache_dir
+        .child("archive-v0")
+        .read_dir()?
+        .collect::<std::io::Result<Vec<_>>>()?;
+    assert!(!archives.is_empty());
+
+    // With the child still running, `uv cache prune` succeeds without waiting (the main lock
+    // was released) and retains the in-use environment.
+    context.prune().assert().success();
+
+    // The child can still (re)import from its environment after the prune, proving the
+    // environment's files were retained on disk.
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(b"\n")?;
+    drop(stdin);
+    line.clear();
+    stdout.read_line(&mut line)?;
+    assert_eq!(line.trim(), "ok");
+    let status = child.wait()?;
+    assert!(status.success());
+
+    Ok(())
+}
+
+/// `uv cache clean` (without `--force`) must wait for in-use cache entries to be released
+/// before removing the cache.
+#[test]
+#[cfg(unix)]
+fn clean_waits_for_in_use_environment() -> Result<()> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::Stdio;
+
+    let context = uv_test::test_context!("3.12");
+
+    let mut child = context
+        .run()
+        .env(EnvVars::UV_PREVIEW_FEATURES, "cache-autoprune")
+        .arg("--no-project")
+        .arg("--with")
+        .arg("iniconfig")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig; print('ready', flush=True); input()")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    stdout.read_line(&mut line)?;
+    assert_eq!(line.trim(), "ready");
+
+    // Start `uv cache clean`; it should block on the in-use lock until the child exits.
+    let mut clean = context
+        .clean()
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    // Give the clean a moment to reach the wait, then verify it hasn't finished.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(
+        clean.try_wait()?.is_none(),
+        "clean should block on the in-use environment"
+    );
+
+    // Let the child exit; the clean should then complete.
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(b"\n")?;
+    drop(stdin);
+    assert!(child.wait()?.success());
+    assert!(clean.wait()?.success());
+
+    Ok(())
+}
+
+/// Automatic pruning should not run when disabled (the default).
+#[test]
+fn autoprune_disabled() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio")?;
+
+    context
+        .pip_sync()
+        .arg("requirements.txt")
+        .assert()
+        .success();
+
+    let marker = context.cache_dir.child(".autoprune");
+    marker.assert(predicates::path::missing());
+
+    Ok(())
+}

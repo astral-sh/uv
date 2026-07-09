@@ -187,10 +187,56 @@ impl Display for LockedFileMode {
 #[cfg(feature = "tokio")]
 #[derive(Debug)]
 #[must_use]
-pub struct LockedFile(fs_err::File);
+pub struct LockedFile {
+    file: fs_err::File,
+    /// Whether the lock was explicitly released via [`LockedFile::release`].
+    released: std::sync::atomic::AtomicBool,
+}
 
 #[cfg(feature = "tokio")]
 impl LockedFile {
+    fn new(file: fs_err::File) -> Self {
+        Self {
+            file,
+            released: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Release the lock without dropping the [`LockedFile`].
+    ///
+    /// Unlike dropping, this can be used to release a lock behind shared ownership (e.g., an
+    /// [`std::sync::Arc`]) while other owners remain. Subsequent calls (and the eventual drop)
+    /// are no-ops.
+    pub fn release(&self) {
+        if self
+            .released
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
+        }
+        self.unlock_or_log();
+    }
+
+    /// Returns `true` if the locked file is still the file at its original path.
+    ///
+    /// A lock file can be unlinked (and recreated) by another process between this file being
+    /// opened and the lock being acquired; in that case, the lock is held on an orphaned file
+    /// and does not guard the path. Callers that create-then-lock should verify and retry.
+    pub fn verify_path(&self) -> bool {
+        let Ok(held) = self
+            .file
+            .file()
+            .try_clone()
+            .and_then(same_file::Handle::from_file)
+        else {
+            return false;
+        };
+        let Ok(current) = same_file::Handle::from_path(self.file.path()) else {
+            return false;
+        };
+        held == current
+    }
+
     /// Inner implementation for [`LockedFile::acquire`].
     async fn lock_file(
         file: fs_err::File,
@@ -206,7 +252,7 @@ impl LockedFile {
         let file = match try_lock_exclusive.await? {
             (Ok(()), file) => {
                 trace!("Acquired {mode} lock for `{resource}`");
-                return Ok(Self(file));
+                return Ok(Self::new(file));
             }
             (Err(err), file) => {
                 // Log error code and enum kind to help debugging more exotic failures.
@@ -239,7 +285,7 @@ impl LockedFile {
         })?;
 
         trace!("Acquired {mode} lock for `{resource}`");
-        Ok(Self(file))
+        Ok(Self::new(file))
     }
 
     /// Inner implementation for [`LockedFile::acquire_no_wait`].
@@ -251,7 +297,7 @@ impl LockedFile {
         match mode.try_lock(&file) {
             Ok(()) => {
                 trace!("Acquired {mode} lock for `{resource}`");
-                Some(Self(file))
+                Some(Self::new(file))
             }
             Err(err) => {
                 // Log error code and enum kind to help debugging more exotic failures.
@@ -402,7 +448,7 @@ impl LockedFile {
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn unlock(&self) -> Result<(), io::Error> {
-        self.0.unlock()
+        self.file.unlock()
     }
 
     /// Unlock the file.
@@ -416,17 +462,15 @@ impl LockedFile {
     fn unlock(&self) -> Result<(), io::Error> {
         use std::os::fd::AsFd;
 
-        rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
+        rustix::fs::flock(self.file.as_fd(), rustix::fs::FlockOperation::Unlock)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
-}
 
-#[cfg(feature = "tokio")]
-impl Drop for LockedFile {
-    fn drop(&mut self) {
+    /// Unlock the file, logging rather than propagating failures.
+    fn unlock_or_log(&self) {
         match self.unlock() {
             Ok(()) => {
-                trace!("Released lock at `{}`", self.0.path().display());
+                trace!("Released lock at `{}`", self.file.path().display());
             }
             // See <https://bugs.winehq.org/show_bug.cgi?id=59711>
             #[cfg(windows)]
@@ -434,14 +478,24 @@ impl Drop for LockedFile {
                 if uv_windows::is_wine()
                     && err.raw_os_error() == Some(ERROR_LOCK_VIOLATION.0.cast_signed()) =>
             {
-                trace!("Released lock at `{}`", self.0.path().display());
+                trace!("Released lock at `{}`", self.file.path().display());
             }
             Err(err) => {
                 error!(
                     "Failed to unlock resource at `{}`; program may be stuck: {err}",
-                    self.0.path().display()
+                    self.file.path().display()
                 );
             }
         }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Drop for LockedFile {
+    fn drop(&mut self) {
+        if self.released.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        self.unlock_or_log();
     }
 }

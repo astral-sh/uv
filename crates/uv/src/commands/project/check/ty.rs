@@ -174,6 +174,12 @@ pub(super) async fn run(
         command.env_remove("TY_UV_METADATA");
     }
 
+    // Mark the ty binary's cache entry and the environment ty analyzes (e.g., a cached script
+    // environment) as in use, then release the main cache lock so that cache maintenance can
+    // proceed while ty runs.
+    let _claims =
+        cache.claim_in_use_and_release_lock(std::iter::once(ty_path.as_path()).chain(venv_path));
+
     let mut handle = command.spawn().context("Failed to spawn `ty check`")?;
     let writer = if let Some(workspace_metadata) = workspace_metadata {
         debug!("Passing workspace metadata to `ty check` via stdin");
