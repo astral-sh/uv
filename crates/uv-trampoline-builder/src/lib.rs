@@ -715,8 +715,8 @@ if __name__ == "__main__":
             .expect("We should succeed at reading the launcher")
             .expect("The launcher should be valid");
 
-        assert!(launcher.kind == LauncherKind::Script);
-        assert!(launcher.python_path == python_executable_path);
+        assert_eq!(launcher.kind, LauncherKind::Script);
+        assert_eq!(launcher.python_path, python_executable_path);
 
         // Now code-sign the launcher and verify that it still works.
         sign_authenticode(console_bin_path.path());
@@ -766,8 +766,8 @@ if __name__ == "__main__":
             .expect("We should succeed at reading the launcher")
             .expect("The launcher should be valid");
 
-        assert!(launcher.kind == LauncherKind::Python);
-        assert!(launcher.python_path == python_executable_path);
+        assert_eq!(launcher.kind, LauncherKind::Python);
+        assert_eq!(launcher.python_path, python_executable_path);
 
         // Now code-sign the launcher and verify that it still works.
         sign_authenticode(console_bin_path.path());
