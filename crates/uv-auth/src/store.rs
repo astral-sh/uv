@@ -408,9 +408,9 @@ impl TextCredentialStore {
     }
 
     /// Remove credentials for a given service.
-    pub fn remove(&mut self, service: &Service, username: Username) -> Option<Credentials> {
+    pub fn remove(&mut self, service: Service, username: Username) -> Option<Credentials> {
         // Remove the specific credential for this service and username
-        self.credentials.remove(&(service.clone(), username))
+        self.credentials.remove(&(service, username))
     }
 }
 
@@ -475,7 +475,7 @@ mod tests {
 
         assert!(
             store
-                .remove(&service, Username::from(Some("user".to_string())))
+                .remove(service, Username::from(Some("user".to_string())))
                 .is_some()
         );
         let url = DisplaySafeUrl::parse("https://example.com/").unwrap();
