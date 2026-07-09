@@ -734,13 +734,11 @@ impl PyProjectToml {
             // Track whether each user-specified glob matched so we can flag the unmatched ones.
             let mut license_globs_matched = vec![false; license_globs_parsed.len()];
 
-            let license_globs =
-                GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
-                    Error::GlobSetTooLarge {
-                        field: "project.license-files".to_string(),
-                        source: err,
-                    }
-                })?;
+            let license_globs = GlobDirFilter::from_globs(license_globs_parsed.clone());
+            let license_globs = license_globs.map_err(|err| Error::GlobSetTooLarge {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
 
             for entry in WalkDir::new(root)
                 .sort_by_file_name()

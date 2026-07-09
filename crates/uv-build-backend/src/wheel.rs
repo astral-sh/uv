@@ -554,7 +554,7 @@ fn wheel_subdir_from_globs(
             source: err,
         })?;
     let matcher =
-        GlobDirFilter::from_globs(&license_files_globs).map_err(|err| Error::GlobSetTooLarge {
+        GlobDirFilter::from_globs(license_files_globs).map_err(|err| Error::GlobSetTooLarge {
             field: globs_field.to_string(),
             source: err,
         })?;
