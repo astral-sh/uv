@@ -664,32 +664,6 @@ mod tests {
         version.parse().unwrap()
     }
 
-    fn assert_less_than_is_monotonic(
-        specifier: &VersionSpecifier,
-        range: &Ranges<Version>,
-        versions: &[Version],
-    ) {
-        for accepted_version in versions {
-            for extended_version in versions
-                .iter()
-                .filter(|version| *version < accepted_version)
-            {
-                if specifier.contains(accepted_version) {
-                    assert!(
-                        specifier.contains(extended_version),
-                        "specifier `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
-                    );
-                }
-                if range.contains(accepted_version) {
-                    assert!(
-                        range.contains(extended_version),
-                        "range for `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
-                    );
-                }
-            }
-        }
-    }
-
     #[test]
     fn canonicalizes_known_pep440_successor_boundaries() {
         let range = |specifiers| {
@@ -852,6 +826,32 @@ mod tests {
     /// See: <https://github.com/pypa/packaging/pull/1144>
     #[test]
     fn less_than_ordering_is_monotonic() {
+        fn assert_less_than_is_monotonic(
+            specifier: &VersionSpecifier,
+            range: &Ranges<Version>,
+            versions: &[Version],
+        ) {
+            for accepted_version in versions {
+                for extended_version in versions
+                    .iter()
+                    .filter(|version| *version < accepted_version)
+                {
+                    if specifier.contains(accepted_version) {
+                        assert!(
+                            specifier.contains(extended_version),
+                            "specifier `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
+                        );
+                    }
+                    if range.contains(accepted_version) {
+                        assert!(
+                            range.contains(extended_version),
+                            "range for `{specifier}` accepts `{accepted_version}` but rejects `{extended_version}`"
+                        );
+                    }
+                }
+            }
+        }
+
         let versions = [
             "0.dev0",
             "0",
