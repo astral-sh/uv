@@ -3056,6 +3056,7 @@ fn preview_features() {
     +            CentralizedProjectEnvs,
     +            ToolInstallLocks,
     +            WorkspaceListScripts,
+    +            NoDistutilsPatch,
     +        ],
          },
          python_preference: Managed,

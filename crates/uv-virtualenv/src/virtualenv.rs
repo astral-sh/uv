@@ -17,6 +17,7 @@ use tracing::{debug, trace};
 use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
     ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
@@ -42,6 +43,15 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ),
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
+
+/// Python 3.10 and later already ignore the distutils install config keys this hook guards
+/// against, while the last pip release supporting Python 3.9 still needs the workaround.
+///
+/// See <https://github.com/pypa/virtualenv/issues/3181>
+fn install_distutils_patch(interpreter: &Interpreter) -> bool {
+    interpreter.python_tuple() < (3, 10)
+        || !uv_preview::is_enabled(PreviewFeature::NoDistutilsPatch)
+}
 
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
@@ -576,9 +586,10 @@ pub(crate) fn create(
         }
     }
 
-    // Populate `site-packages` with a `_virtualenv.py` file.
-    fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-    fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    if install_distutils_patch(interpreter) {
+        fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+        fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    }
 
     Ok(VirtualEnvironment {
         scheme: Scheme {
