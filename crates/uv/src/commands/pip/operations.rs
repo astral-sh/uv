@@ -731,9 +731,9 @@ pub(crate) async fn install(
             );
             candidates.extend(removed_graph.packages().iter().cloned());
             if !removed_graph.incomplete().is_empty() {
-                warn_user!(
-                    "Unable to read complete dependency metadata for {}; pruning based on available metadata",
-                    removed_graph.incomplete().iter().join(", ")
+                debug!(
+                    packages = %removed_graph.incomplete().iter().join(", "),
+                    "Unable to read complete dependency metadata; pruning based on available metadata"
                 );
             }
 
@@ -754,9 +754,9 @@ pub(crate) async fn install(
             );
 
             if !external_graph.incomplete().is_empty() {
-                warn_user!(
-                    "Unable to read complete dependency metadata for {}; pruning based on available metadata",
-                    external_graph.incomplete().iter().join(", ")
+                debug!(
+                    packages = %external_graph.incomplete().iter().join(", "),
+                    "Unable to read complete dependency metadata; pruning based on available metadata"
                 );
             }
             candidates.retain(|candidate| {
@@ -835,15 +835,20 @@ impl InstallationPlan {
         printer: Printer,
         preview: Preview,
     ) -> Result<Changelog, Error> {
-        let (plan, start) = self.into_parts();
-        let plan = apply_modifications(plan, &modifications);
+        let (mut plan, start) = self.into_parts();
+        match &modifications {
+            Modifications::Sufficient => plan.extraneous.clear(),
+            Modifications::Exact => {}
+            Modifications::Prune { candidates, .. } => plan
+                .extraneous
+                .retain(|distribution| candidates.contains(distribution.name())),
+        }
 
         if dry_run.enabled() {
             return report_dry_run(
                 dry_run,
                 resolution,
                 plan,
-                modifications,
                 start,
                 logger.as_ref(),
                 printer,
@@ -1069,18 +1074,6 @@ mod tests {
             None
         );
     }
-}
-
-/// Apply the requested environment-modification policy to an installation plan.
-fn apply_modifications(mut plan: Plan, modifications: &Modifications) -> Plan {
-    match modifications {
-        Modifications::Sufficient => plan.extraneous.clear(),
-        Modifications::Exact => {}
-        Modifications::Prune { candidates, .. } => plan
-            .extraneous
-            .retain(|distribution| candidates.contains(distribution.name())),
-    }
-    plan
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
