@@ -1827,7 +1827,8 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "`{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     name.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                     "--prerelease=allow".green(),
                 )
             }
@@ -1836,8 +1837,10 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "`{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     name.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                 )
             }
             Self::NoIndex => {
@@ -1940,8 +1943,12 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1957,8 +1964,12 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1972,8 +1983,12 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -2039,7 +2054,8 @@ impl std::fmt::Display for PubGrubHint {
                     "`{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     name.cyan(),
                     found_index.without_credentials().cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
                 )

@@ -211,10 +211,11 @@ fn dependencies_error(
 
 /// Render a [`uv_resolver::NoSolutionError`].
 fn no_solution(err: &uv_resolver::NoSolutionError, context: Option<&'static str>) {
+    let header = uv_resolver::NoSolutionHeader::new(err.environment().clone());
     let header = if let Some(context) = context {
-        err.header().with_context(context)
+        header.with_context(context)
     } else {
-        err.header()
+        header
     };
     let report = miette::Report::msg(err.report().to_string()).context(header);
     anstream::eprint!("{report:?}");

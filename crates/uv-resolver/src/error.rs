@@ -657,9 +657,9 @@ impl NoSolutionError {
         minimum
     }
 
-    /// Initialize a [`NoSolutionHeader`] for this error.
-    pub fn header(&self) -> NoSolutionHeader {
-        NoSolutionHeader::new(self.env.clone())
+    /// Return the [`ResolverEnvironment`] that caused the failure.
+    pub fn environment(&self) -> &ResolverEnvironment {
+        &self.env
     }
 
     /// Get the packages that are involved in this error.
@@ -1402,7 +1402,7 @@ pub struct NoSolutionHeader {
 
 impl NoSolutionHeader {
     /// Create a new [`NoSolutionHeader`] with the given [`ResolverEnvironment`].
-    fn new(env: ResolverEnvironment) -> Self {
+    pub fn new(env: ResolverEnvironment) -> Self {
         Self { env, context: None }
     }
 
