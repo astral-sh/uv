@@ -7323,8 +7323,7 @@ fn offline_registry() -> Result<()> {
     Ok(())
 }
 
-/// Preserve package availability diagnostics when an explicit pre-release requirement is routed
-/// through a resolver proxy.
+/// Preserve package availability diagnostics for an explicit pre-release requirement.
 #[test]
 fn offline_registry_prerelease() -> Result<()> {
     let context = uv_test::test_context!("3.12");

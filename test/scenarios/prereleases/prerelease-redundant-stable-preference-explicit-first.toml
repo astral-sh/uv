@@ -1,4 +1,4 @@
-name = "prerelease-redundant-authorization-explicit-first"
+name = "prerelease-redundant-stable-preference-explicit-first"
 description = "A broader pre-release requirement retains the stable preference when it appears before a narrower plain requirement."
 
 [root]

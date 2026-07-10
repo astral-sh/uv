@@ -1,12 +1,12 @@
 name = "prerelease-capped-union-backtrack"
-description = "A rejected pre-release opt-in below 3 does not authorize a pre-release in a disjoint active range above 3."
+description = "A rejected pre-release branch below 3 does not affect candidate selection in a disjoint active range above 3."
 
 [root]
 requires = ["e!=2.5", "a>=2.5"]
 
 [expected]
 satisfiable = true
-explanation = "The failed `e==4.0` branch cannot authorize `c==3.6b1`; the active unmarked range selects the final `c==3.5`."
+explanation = "The failed `e==4.0` branch does not affect the active unmarked range, which selects the final `c==3.5`."
 
 [expected.packages]
 a = "3.6b1"

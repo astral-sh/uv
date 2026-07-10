@@ -1,5 +1,5 @@
-name = "prerelease-marker-equivalent-authorization"
-description = "Requirements on the same marker proxy retain the stable preference within their fork."
+name = "prerelease-marker-equivalent-stable-preference"
+description = "Requirements with the same marker retain the stable preference within their fork."
 
 [resolver_options]
 universal = true

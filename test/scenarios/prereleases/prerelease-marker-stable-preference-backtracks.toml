@@ -1,5 +1,5 @@
-name = "prerelease-marker-authorization-backtracks"
-description = "Pre-release authorization on a marker proxy does not survive backtracking to a plain alternate parent."
+name = "prerelease-marker-stable-preference-backtracks"
+description = "A marker-scoped pre-release requirement from a rejected parent does not affect a plain alternate parent."
 
 [resolver_options]
 universal = true
@@ -10,7 +10,7 @@ requires = ["a", "d==1.0.0"]
 
 [expected]
 satisfiable = true
-explanation = "The rejected parent version's Linux requirements share pre-release authorization, but the selected alternate parent retains only its plain requirement and selects stable `c==1.0.0`."
+explanation = "The rejected parent version has a Linux pre-release requirement, but the selected alternate parent retains only its plain requirement and selects stable `c==1.0.0`."
 
 [expected.packages]
 a = "1.0.0"

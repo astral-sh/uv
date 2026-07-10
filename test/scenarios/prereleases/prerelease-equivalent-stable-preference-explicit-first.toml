@@ -1,4 +1,4 @@
-name = "prerelease-equivalent-authorization-explicit-first"
+name = "prerelease-equivalent-stable-preference-explicit-first"
 description = "Equivalent requirements retain the stable preference when the explicit requirement appears first."
 
 [root]

@@ -1,4 +1,4 @@
-name = "transitive-prerelease-redundant-authorization-parent-first"
+name = "transitive-prerelease-redundant-stable-preference-parent-first"
 description = "A transitive pre-release requirement retains the stable preference when its parent is prioritized before a compatible plain root requirement."
 
 [root]

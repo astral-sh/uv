@@ -1,12 +1,12 @@
 name = "prerelease-capped-union-alternate-parent"
-description = "A capped pre-release branch cannot authorize an unrelated pre-release in a higher active range."
+description = "A capped pre-release branch does not affect candidate selection in a higher active range."
 
 [root]
 requires = ["d", "g!=2.5"]
 
 [expected]
 satisfiable = true
-explanation = "The active `c>=3.5,<4` requirement selects the final `3.5`; the rejected `c==2.0b1` branch does not authorize `3.6b1`."
+explanation = "The active `c>=3.5,<4` requirement selects the final `3.5`; the rejected `c==2.0b1` branch does not affect that range."
 
 [expected.packages]
 a = "3.6b1"

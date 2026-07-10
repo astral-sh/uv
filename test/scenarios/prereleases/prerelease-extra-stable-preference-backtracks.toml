@@ -1,4 +1,4 @@
-name = "prerelease-extra-authorization-backtracks"
+name = "prerelease-extra-stable-preference-backtracks"
 description = "A pre-release extra requirement from a rejected parent does not affect a live plain extra requirement."
 
 [root]
@@ -6,7 +6,7 @@ requires = ["a", "d==1.0.0"]
 
 [expected]
 satisfiable = true
-explanation = "The parent version whose `c[extra]` requirements share pre-release authorization conflicts with `d==1.0.0`, so the selected alternate parent's plain requirement selects stable `c==1.0.0`."
+explanation = "The parent version with a pre-release requirement on `c[extra]` conflicts with `d==1.0.0`, so the selected alternate parent's plain requirement selects stable `c==1.0.0`."
 
 [expected.packages]
 a = "1.0.0"

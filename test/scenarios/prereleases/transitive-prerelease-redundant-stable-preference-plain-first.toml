@@ -1,4 +1,4 @@
-name = "transitive-prerelease-redundant-authorization-plain-first"
+name = "transitive-prerelease-redundant-stable-preference-plain-first"
 description = "A stable selection can be retained when a compatible plain root requirement is prioritized before a redundant transitive pre-release requirement."
 
 [root]

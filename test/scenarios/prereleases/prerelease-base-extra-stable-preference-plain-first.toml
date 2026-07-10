@@ -1,4 +1,4 @@
-name = "prerelease-base-extra-authorization-plain-first"
+name = "prerelease-base-extra-stable-preference-plain-first"
 description = "Base and extra requirements retain the stable preference when the plain base requirement appears first."
 
 [root]

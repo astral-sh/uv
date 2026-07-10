@@ -1,4 +1,4 @@
-name = "transitive-prerelease-authorizes-newer-prerelease"
+name = "transitive-prerelease-prefers-stable"
 description = "An active transitive dependency with a pre-release specifier still prefers a matching stable version."
 
 [root]

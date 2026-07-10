@@ -1,4 +1,4 @@
-name = "prerelease-multiple-redundant-authorization"
+name = "prerelease-multiple-redundant-stable-preference"
 description = "A pre-release requirement retains the stable preference alongside multiple plain requirements in the same root dependency batch."
 
 [root]

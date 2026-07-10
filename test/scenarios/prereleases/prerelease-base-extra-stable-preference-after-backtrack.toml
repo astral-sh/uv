@@ -1,4 +1,4 @@
-name = "prerelease-base-extra-authorization-after-backtrack"
+name = "prerelease-base-extra-stable-preference-after-backtrack"
 description = "A same-distribution dependency batch remains order-independent after rejecting an earlier parent version."
 
 [root]

@@ -1,4 +1,4 @@
-name = "prerelease-redundant-authorization-plain-first"
+name = "prerelease-redundant-stable-preference-plain-first"
 description = "Root requirements retain the stable preference when a narrower plain requirement appears first."
 
 [root]

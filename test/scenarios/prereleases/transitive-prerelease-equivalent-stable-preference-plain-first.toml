@@ -1,4 +1,4 @@
-name = "transitive-prerelease-equivalent-authorization-plain-first"
+name = "transitive-prerelease-equivalent-stable-preference-plain-first"
 description = "Requirements from one parent retain the stable preference when the plain requirement appears first."
 
 [root]

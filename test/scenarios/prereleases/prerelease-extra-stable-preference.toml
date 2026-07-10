@@ -1,4 +1,4 @@
-name = "prerelease-extra-authorization"
+name = "prerelease-extra-stable-preference"
 description = "Requirements on the same extra retain the stable preference before constraining the base package."
 
 [root]

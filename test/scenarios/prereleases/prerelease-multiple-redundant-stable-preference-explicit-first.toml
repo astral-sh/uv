@@ -1,4 +1,4 @@
-name = "prerelease-multiple-redundant-authorization-explicit-first"
+name = "prerelease-multiple-redundant-stable-preference-explicit-first"
 description = "An explicit requirement retains the stable preference alongside multiple plain requirements in the same dependency batch."
 
 [root]

@@ -1,5 +1,5 @@
-name = "prerelease-base-marker-authorization-explicit-first"
-description = "Base and marker requirements retain the stable preference within the marker fork when the explicit requirement appears first."
+name = "prerelease-base-marker-stable-preference-plain-first"
+description = "Base and marker requirements retain the stable preference within the marker fork when the plain requirement appears first."
 
 [resolver_options]
 universal = true
@@ -7,8 +7,8 @@ universal = true
 [root]
 requires_python = ">=3.12"
 requires = [
-  "c>=0.5a1 ; sys_platform == 'linux'",
   "c>=1.0",
+  "c>=0.5a1 ; sys_platform == 'linux'",
 ]
 
 [expected]
