@@ -18,16 +18,17 @@ pub enum PrereleaseMode {
     /// Allow all pre-release versions.
     Allow,
 
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints.
-    IfNecessary,
-
-    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
-    /// their version requirements.
-    #[deprecated(note = "use `if-necessary-or-explicit` instead")]
-    Explicit,
-
     /// Prefer stable versions, falling back to pre-release versions when necessary.
     #[default]
+    IfNecessary,
+
+    /// Prefer stable versions for first-party packages with explicit pre-release specifiers,
+    /// falling back to pre-release versions when necessary. Disallow pre-release versions for all
+    /// other packages.
+    Explicit,
+
+    /// Deprecated alias for `if-necessary`.
+    #[deprecated(note = "use `if-necessary` instead")]
     IfNecessaryOrExplicit,
 }
 
@@ -54,15 +55,13 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow all pre-release versions.
     Allow,
 
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints.
+    /// Prefer stable versions, falling back to pre-release versions when necessary.
     IfNecessary,
 
-    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
-    /// their version requirements.
+    /// Prefer stable versions for first-party packages with explicit pre-release specifiers,
+    /// falling back to pre-release versions when necessary. Disallow pre-release versions for all
+    /// other packages.
     Explicit(ForkSet),
-
-    /// Prefer stable versions, falling back to pre-release versions when necessary.
-    IfNecessaryOrExplicit,
 }
 
 impl PrereleaseStrategy {
@@ -76,11 +75,12 @@ impl PrereleaseStrategy {
         match mode {
             PrereleaseMode::Disallow => Self::Disallow,
             PrereleaseMode::Allow => Self::Allow,
-            PrereleaseMode::IfNecessary => Self::IfNecessary,
+            PrereleaseMode::IfNecessary | PrereleaseMode::IfNecessaryOrExplicit => {
+                Self::IfNecessary
+            }
             PrereleaseMode::Explicit => Self::Explicit(Self::explicit_packages(
                 manifest.candidate_selection_requirements(env, dependencies),
             )),
-            PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit,
         }
     }
 
@@ -114,12 +114,11 @@ impl PrereleaseStrategy {
             Self::IfNecessary => PrereleaseSelection::PreferStable,
             Self::Explicit(packages) => {
                 if packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
+                    PrereleaseSelection::PreferStable
                 } else {
                     PrereleaseSelection::Disallow
                 }
             }
-            Self::IfNecessaryOrExplicit => PrereleaseSelection::PreferStable,
         }
     }
 }

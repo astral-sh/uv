@@ -40,11 +40,9 @@ information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
-By default, uv prefers stable versions over pre-releases, falling back to pre-releases only if every
-stable candidate that satisfies the active constraints is rejected during resolution. An applicable
-direct or transitive requirement, constraint, or override that includes a pre-release identifier
-(e.g., `flask>=2.0.0rc1`) permits matching pre-releases, but does not move them ahead of compatible
-stable versions.
+By default (`if-necessary`), uv prefers stable versions over pre-releases, falling back to
+pre-releases only if every stable candidate that satisfies the active constraints is rejected during
+resolution.
 
 For example, suppose only `c==1.0` and `c==2.0a1` are available. Together, `c>=1` and
 `a -> c>=0.5a1` allow both versions, but uv selects `c==1.0` regardless of which requirement is
@@ -53,9 +51,9 @@ discovered first. If another active requirement rejects `c==1.0`, uv falls back 
 Use `--prerelease allow` to consider pre-releases for every package without preferring stable
 candidates first, or `--prerelease disallow` to exclude them entirely.
 
-The `explicit` mode is deprecated and will be removed in a future release; use
-`if-necessary-or-explicit` instead. It considers pre-releases only for first-party requirements that
-contain a pre-release identifier, without falling back for other packages.
+The `explicit` mode considers pre-releases only for first-party requirements that contain a
+pre-release identifier (preferring stable versions and falling back to pre-releases only if
+necessary), while disallowing pre-releases for all other packages.
 
 !!! note
 

@@ -6297,7 +6297,7 @@ pub struct ToolUpgradeArgs {
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
     /// stable candidate that satisfies the active constraints is rejected
-    /// (`if-necessary-or-explicit`).
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7621,7 +7621,7 @@ pub struct ResolverArgs {
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
     /// stable candidate that satisfies the active constraints is rejected
-    /// (`if-necessary-or-explicit`).
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7866,7 +7866,7 @@ pub struct ResolverInstallerArgs {
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
     /// stable candidate that satisfies the active constraints is rejected
-    /// (`if-necessary-or-explicit`).
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,

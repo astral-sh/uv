@@ -4313,12 +4313,14 @@ pub(crate) struct ResolverSettings {
 
 #[allow(deprecated)]
 fn warn_if_deprecated_prerelease_mode(prerelease: PrereleaseMode) -> PrereleaseMode {
-    if matches!(prerelease, PrereleaseMode::Explicit) {
+    if matches!(prerelease, PrereleaseMode::IfNecessaryOrExplicit) {
         warn_user_once!(
-            "The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead."
+            "The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead."
         );
+        PrereleaseMode::IfNecessary
+    } else {
+        prerelease
     }
-    prerelease
 }
 
 impl ResolverSettings {

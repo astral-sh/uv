@@ -10146,7 +10146,6 @@ fn lock_explicit_prerelease_mode() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead.
     Resolved 1 package in [TIME]
     ");
 

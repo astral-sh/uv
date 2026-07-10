@@ -4828,7 +4828,6 @@ fn explicit_prerelease_does_not_fall_back_if_necessary() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead.
       × No solution found when resolving dependencies:
       ╰─▶ Because only a<=0.1.0 is available and you require a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
@@ -4855,7 +4854,6 @@ fn explicit_prerelease_allows_direct_marker() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead.
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -4863,6 +4861,32 @@ fn explicit_prerelease_allows_direct_marker() {
     ");
 
     context.assert_installed("a", "0.3.0a1");
+}
+
+/// `--prerelease=explicit` should prefer a stable release over a newer pre-release for a direct
+/// requirement with a pre-release specifier.
+#[test]
+fn explicit_prerelease_prefers_stable_for_direct_marker() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-prerelease-specified-mixed-available.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=explicit")
+        .arg("a>=0.1.0a1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==0.3.0
+    ");
+
+    context.assert_installed("a", "0.3.0");
 }
 
 /// `--prerelease=explicit` should not allow a pre-release based only on a transitive pre-release
@@ -4883,13 +4907,38 @@ fn explicit_prerelease_disallows_transitive_marker() {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The `explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary-or-explicit` instead.
       × No solution found when resolving dependencies:
       ╰─▶ Because there is no version of c==2.0.0b1 and all versions of a depend on c==2.0.0b1, we can conclude that all versions of a cannot be used.
           And because you require a, we can conclude that your requirements are unsatisfiable.
 
     hint: `c` was requested with a pre-release marker (e.g., c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     ");
+}
+
+/// `--prerelease=if-necessary-or-explicit` should warn and behave like `if-necessary`.
+#[test]
+fn if_necessary_or_explicit_is_deprecated_alias() {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("prereleases/package-only-prereleases-in-range.toml");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .arg("--prerelease=if-necessary-or-explicit")
+        .arg("a>0.1.0"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead.
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
+
+    context.assert_installed("a", "1.0.0a1");
 }
 
 /// `--prerelease=disallow` should continue to reject explicitly requested transitive

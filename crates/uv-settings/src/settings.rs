@@ -870,9 +870,9 @@ pub struct ResolverInstallerSchema {
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
     /// stable candidate that satisfies the active constraints is rejected
-    /// (`if-necessary-or-explicit`).
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -1619,9 +1619,9 @@ pub struct PipOptions {
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
     /// stable candidate that satisfies the active constraints is rejected
-    /// (`if-necessary-or-explicit`).
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
