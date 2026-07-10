@@ -1,16 +1,16 @@
 name = "transitive-prerelease-authorizes-newer-prerelease"
-description = "An active transitive dependency with a pre-release specifier authorizes newer matching pre-releases."
+description = "An active transitive dependency with a pre-release specifier still prefers a matching stable version."
 
 [root]
 requires = ["a"]
 
 [expected]
 satisfiable = true
-explanation = "The selected version of `a` explicitly opts `c` into pre-releases."
+explanation = "The selected version of `a` allows pre-release fallback for `c`, but the stable candidate remains preferred."
 
 [expected.packages]
 a = "1.0.0"
-c = "2.0.0a1"
+c = "1.0.0"
 
 [packages.a.versions."1.0.0"]
 requires = ["c>=1.0.0a1"]

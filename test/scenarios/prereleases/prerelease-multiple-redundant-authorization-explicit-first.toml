@@ -1,15 +1,15 @@
 name = "prerelease-multiple-redundant-authorization-explicit-first"
-description = "An explicit requirement authorizes pre-releases for multiple plain requirements in the same dependency batch."
+description = "An explicit requirement retains the stable preference alongside multiple plain requirements in the same dependency batch."
 
 [root]
 requires = ["c>=0.5a1", "c<3.0", "c>=1.0"]
 
 [expected]
 satisfiable = true
-explanation = "The explicit requirement authorizes pre-releases for the same-package dependency batch, so `c==2.0.0a1` is selected independently of requirement order."
+explanation = "The explicit requirement does not override the stable preference, so `c==1.5.0` is selected independently of requirement order."
 
 [expected.packages]
-c = "2.0.0a1"
+c = "1.5.0"
 
 [packages.c.versions."1.5.0"]
 

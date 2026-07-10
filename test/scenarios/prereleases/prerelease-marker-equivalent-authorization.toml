@@ -1,5 +1,5 @@
 name = "prerelease-marker-equivalent-authorization"
-description = "Requirements on the same marker proxy share pre-release authorization within their fork."
+description = "Requirements on the same marker proxy retain the stable preference within their fork."
 
 [resolver_options]
 universal = true
@@ -13,7 +13,7 @@ requires = [
 
 [expected]
 satisfiable = true
-explanation = "The equivalent Linux requirements share pre-release authorization and select `c==2.0.0a1` in the fork where they apply."
+explanation = "The equivalent Linux requirements prefer `c==1.0.0` in the fork where they apply."
 
 [packages.c.versions."1.0.0"]
 

@@ -4756,7 +4756,7 @@ fn fork_requires_python() -> Result<()> {
     Ok(())
 }
 
-/// Base and marker requirements share pre-release authorization within the marker fork when the explicit requirement appears first.
+/// Base and marker requirements retain the stable preference within the marker fork when the explicit requirement appears first.
 ///
 /// ```text
 /// prerelease-base-marker-authorization-explicit-first
@@ -4798,14 +4798,14 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    // All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "
     );
 
@@ -4827,24 +4827,9 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
         name = "c"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform != 'linux'",
-        ]
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "c"
-        version = "2.0.0a1"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform == 'linux'",
-        ]
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -4852,8 +4837,7 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "c" },
         ]
 
         [package.metadata]
@@ -4878,7 +4862,7 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
     Ok(())
 }
 
-/// Base and marker requirements share pre-release authorization within the marker fork when the plain requirement appears first.
+/// Base and marker requirements retain the stable preference within the marker fork when the plain requirement appears first.
 ///
 /// ```text
 /// prerelease-base-marker-authorization-plain-first
@@ -4920,14 +4904,14 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    // All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "
     );
 
@@ -4949,24 +4933,9 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
         name = "c"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform != 'linux'",
-        ]
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "c"
-        version = "2.0.0a1"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform == 'linux'",
-        ]
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -4974,8 +4943,7 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "c" },
         ]
 
         [package.metadata]
@@ -5139,7 +5107,7 @@ fn prerelease_marker_authorization_backtracks() -> Result<()> {
     Ok(())
 }
 
-/// Requirements on the same marker proxy share pre-release authorization within their fork.
+/// Requirements on the same marker proxy retain the stable preference within their fork.
 ///
 /// ```text
 /// prerelease-marker-equivalent-authorization
@@ -5180,7 +5148,7 @@ fn prerelease_marker_equivalent_authorization() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // The equivalent Linux requirements share pre-release authorization and select `c==2.0.0a1` in the fork where they apply.
+    // The equivalent Linux requirements prefer `c==1.0.0` in the fork where they apply.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
@@ -5203,11 +5171,11 @@ fn prerelease_marker_equivalent_authorization() -> Result<()> {
 
         [[package]]
         name = "c"
-        version = "2.0.0a1"
+        version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]

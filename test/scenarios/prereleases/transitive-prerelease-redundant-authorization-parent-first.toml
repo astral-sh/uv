@@ -1,16 +1,16 @@
 name = "transitive-prerelease-redundant-authorization-parent-first"
-description = "A transitive pre-release requirement can select a pre-release when its parent is prioritized before a compatible plain root requirement."
+description = "A transitive pre-release requirement retains the stable preference when its parent is prioritized before a compatible plain root requirement."
 
 [root]
 requires = ["a", "c>=1.0"]
 
 [expected]
 satisfiable = true
-explanation = "Resolving `a` first activates `c>=0.5a1` before `c` is selected, so the resolver selects the newer `c==2.0.0a1`, which also satisfies `c>=1.0`."
+explanation = "Resolving `a` first activates `c>=0.5a1`, but the resolver still prefers the stable `c==1.0.0` that satisfies both requirements."
 
 [expected.packages]
 a = "1.0.0"
-c = "2.0.0a1"
+c = "1.0.0"
 
 [packages.a.versions."1.0.0"]
 requires = ["c>=0.5a1"]

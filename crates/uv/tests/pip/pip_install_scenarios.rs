@@ -2333,7 +2333,7 @@ fn package_only_prereleases() {
     context.assert_installed("a", "1.0.0a1");
 }
 
-/// The user requires a version of `a` with a prerelease specifier and both prerelease and stable releases are available.
+/// An explicit pre-release specifier matches both pre-release and stable versions.
 ///
 /// ```text
 /// package-prerelease-specified-mixed-available
@@ -2367,11 +2367,11 @@ fn package_prerelease_specified_mixed_available() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==1.0.0a1
+     + a==0.3.0
     ");
 
-    // Since the user provided a prerelease specifier, the latest prerelease version should be selected.
-    context.assert_installed("a", "1.0.0a1");
+    // Stable versions are preferred even when the user provides a pre-release specifier.
+    context.assert_installed("a", "0.3.0");
 }
 
 /// The user requires a version of `a` with a prerelease specifier and only stable releases are available.
@@ -2531,7 +2531,7 @@ fn package_prereleases_global_boundary() {
     context.assert_installed("a", "0.1.0");
 }
 
-/// The user requires a prerelease version of `a`. There are pre-releases on the boundary of their range.
+/// An explicit pre-release specifier includes stable and pre-release candidates at the boundary of its range.
 ///
 /// ```text
 /// package-prereleases-specifier-boundary
@@ -2565,11 +2565,11 @@ fn package_prereleases_specifier_boundary() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + a==0.2.0a1
+     + a==0.1.0
     ");
 
-    // Since the user used a pre-release specifier, pre-releases at the boundary should be selected.
-    context.assert_installed("a", "0.2.0a1");
+    // The stable candidate is preferred over pre-releases at the boundary of the range.
+    context.assert_installed("a", "0.1.0");
 }
 
 /// A package graph with stable and pre-release candidates for `a`, and only pre-release candidates for `b`.
@@ -2680,17 +2680,17 @@ fn prerelease_base_extra_authorization_after_backtrack() {
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
      + d==1.0.0
     ");
 
-    // After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` share pre-release authorization and select `c==2.0.0a1`.
+    // After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` retain the stable preference and select `c==1.0.0`.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
     context.assert_installed("d", "1.0.0");
 }
 
-/// Base and extra requirements share pre-release authorization when the explicit extra requirement appears first.
+/// Base and extra requirements retain the stable preference when the explicit extra requirement appears first.
 ///
 /// ```text
 /// prerelease-base-extra-authorization-explicit-first
@@ -2731,14 +2731,14 @@ fn prerelease_base_extra_authorization_explicit_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Requirements on a distribution and one of its extras select the same version, so they share pre-release authorization regardless of declaration order.
-    context.assert_installed("c", "2.0.0a1");
+    // Requirements on a distribution and one of its extras select the same stable version regardless of declaration order.
+    context.assert_installed("c", "1.0.0");
 }
 
-/// Base and extra requirements share pre-release authorization when the plain base requirement appears first.
+/// Base and extra requirements retain the stable preference when the plain base requirement appears first.
 ///
 /// ```text
 /// prerelease-base-extra-authorization-plain-first
@@ -2779,11 +2779,11 @@ fn prerelease_base_extra_authorization_plain_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Requirements on a distribution and one of its extras select the same version, so they share pre-release authorization regardless of declaration order.
-    context.assert_installed("c", "2.0.0a1");
+    // Requirements on a distribution and one of its extras select the same stable version regardless of declaration order.
+    context.assert_installed("c", "1.0.0");
 }
 
 /// A capped pre-release branch cannot authorize an unrelated pre-release in a higher active range.
@@ -2910,7 +2910,7 @@ fn prerelease_capped_union_backtrack() {
     context.assert_installed("e", "1.0");
 }
 
-/// Equivalent requirements share pre-release authorization when the explicit requirement appears first.
+/// Equivalent requirements retain the stable preference when the explicit requirement appears first.
 ///
 /// ```text
 /// prerelease-equivalent-authorization-explicit-first
@@ -2945,14 +2945,14 @@ fn prerelease_equivalent_authorization_explicit_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The requirement on `c>=1.0,>0.5a1` authorizes matching pre-releases regardless of requirement order.
-    context.assert_installed("c", "2.0.0a1");
+    // The explicit pre-release specifier does not override the stable preference, regardless of requirement order.
+    context.assert_installed("c", "1.0.0");
 }
 
-/// Equivalent requirements share pre-release authorization when the plain requirement appears first.
+/// Equivalent requirements retain the stable preference when the plain requirement appears first.
 ///
 /// ```text
 /// prerelease-equivalent-authorization-plain-first
@@ -2987,11 +2987,11 @@ fn prerelease_equivalent_authorization_plain_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The requirement on `c>=1.0,>0.5a1` authorizes matching pre-releases even though it has the same logical version set as `c>=1.0`.
-    context.assert_installed("c", "2.0.0a1");
+    // Equivalent requirement ranges retain the stable preference even when one names a pre-release.
+    context.assert_installed("c", "1.0.0");
 }
 
 /// A pre-release extra requirement from a rejected parent does not affect a live plain extra requirement.
@@ -3063,7 +3063,7 @@ fn prerelease_extra_authorization_backtracks() {
     context.assert_installed("d", "1.0.0");
 }
 
-/// Requirements on the same extra share pre-release authorization before constraining the base package.
+/// Requirements on the same extra retain the stable preference before constraining the base package.
 ///
 /// ```text
 /// prerelease-extra-authorization
@@ -3103,11 +3103,11 @@ fn prerelease_extra_authorization() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The requirements on `c[extra]` share pre-release authorization, and the selected proxy version pins the base package to the same version.
-    context.assert_installed("c", "2.0.0a1");
+    // The requirements on `c[extra]` prefer the stable candidate and pin the base package to the same version.
+    context.assert_installed("c", "1.0.0");
 }
 
 /// A pre-release is selected when PubGrub rejects every stable candidate in the active range.
@@ -3165,7 +3165,7 @@ fn prerelease_fallback_after_stable_rejected() {
     context.assert_installed("c", "1.5.0a1");
 }
 
-/// An explicit requirement authorizes pre-releases for multiple plain requirements in the same dependency batch.
+/// An explicit requirement retains the stable preference alongside multiple plain requirements in the same dependency batch.
 ///
 /// ```text
 /// prerelease-multiple-redundant-authorization-explicit-first
@@ -3208,14 +3208,14 @@ fn prerelease_multiple_redundant_authorization_explicit_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.5.0
     ");
 
-    // The explicit requirement authorizes pre-releases for the same-package dependency batch, so `c==2.0.0a1` is selected independently of requirement order.
-    context.assert_installed("c", "2.0.0a1");
+    // The explicit requirement does not override the stable preference, so `c==1.5.0` is selected independently of requirement order.
+    context.assert_installed("c", "1.5.0");
 }
 
-/// A pre-release requirement authorizes multiple plain requirements in the same root dependency batch.
+/// A pre-release requirement retains the stable preference alongside multiple plain requirements in the same root dependency batch.
 ///
 /// ```text
 /// prerelease-multiple-redundant-authorization
@@ -3256,14 +3256,14 @@ fn prerelease_multiple_redundant_authorization() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.5.0
     ");
 
-    // The broader pre-release requirement authorizes the same-package dependency batch, so `c==2.0.0a1` is selected even when that requirement appears last.
-    context.assert_installed("c", "2.0.0a1");
+    // The broader pre-release requirement does not override the stable preference, so `c==1.5.0` is selected even when that requirement appears last.
+    context.assert_installed("c", "1.5.0");
 }
 
-/// A broader pre-release requirement authorizes matching pre-releases when it appears before a narrower plain requirement.
+/// A broader pre-release requirement retains the stable preference when it appears before a narrower plain requirement.
 ///
 /// ```text
 /// prerelease-redundant-authorization-explicit-first
@@ -3298,14 +3298,14 @@ fn prerelease_redundant_authorization_explicit_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The broader requirement on `c>=0.5a1` authorizes matching pre-releases after the active range is narrowed by `c>=1.0`.
-    context.assert_installed("c", "2.0.0a1");
+    // The broader requirement on `c>=0.5a1` does not override the stable preference after the active range is narrowed by `c>=1.0`.
+    context.assert_installed("c", "1.0.0");
 }
 
-/// Root requirements share pre-release authorization when a narrower plain requirement appears first.
+/// Root requirements retain the stable preference when a narrower plain requirement appears first.
 ///
 /// ```text
 /// prerelease-redundant-authorization-plain-first
@@ -3340,11 +3340,11 @@ fn prerelease_redundant_authorization_plain_first() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Requirements in the same root dependency batch are combined before resolution, so `c>=0.5a1` authorizes matching pre-releases regardless of requirement order.
-    context.assert_installed("c", "2.0.0a1");
+    // Requirements in the same root dependency batch retain the stable preference regardless of requirement order.
+    context.assert_installed("c", "1.0.0");
 }
 
 /// The user requires a version of package `a` which only matches prerelease versions. They did not include a prerelease specifier for the package, but they opted into prereleases globally.
@@ -3972,7 +3972,7 @@ fn transitive_prerelease_authorization_backtracks() {
     context.assert_installed("d", "1.0.0");
 }
 
-/// An active transitive dependency with a pre-release specifier authorizes newer matching pre-releases.
+/// An active transitive dependency with a pre-release specifier still prefers a matching stable version.
 ///
 /// ```text
 /// transitive-prerelease-authorizes-newer-prerelease
@@ -4008,15 +4008,15 @@ fn transitive_prerelease_authorizes_newer_prerelease() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // The selected version of `a` explicitly opts `c` into pre-releases.
+    // The selected version of `a` allows pre-release fallback for `c`, but the stable candidate remains preferred.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
 }
 
-/// Requirements from one parent share pre-release authorization when the explicit requirement appears first.
+/// Requirements from one parent retain the stable preference when the explicit requirement appears first.
 ///
 /// ```text
 /// transitive-prerelease-equivalent-authorization-explicit-first
@@ -4056,15 +4056,15 @@ fn transitive_prerelease_equivalent_authorization_explicit_first() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases.
+    // Requirements from one selected parent retain the stable preference even when one names a pre-release.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
 }
 
-/// Requirements from one parent share pre-release authorization when the plain requirement appears first.
+/// Requirements from one parent retain the stable preference when the plain requirement appears first.
 ///
 /// ```text
 /// transitive-prerelease-equivalent-authorization-plain-first
@@ -4104,15 +4104,15 @@ fn transitive_prerelease_equivalent_authorization_plain_first() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases regardless of order.
+    // Requirements from one selected parent retain the stable preference regardless of requirement order.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
 }
 
-/// A transitive pre-release requirement can select a pre-release when its parent is prioritized before a compatible plain root requirement.
+/// A transitive pre-release requirement retains the stable preference when its parent is prioritized before a compatible plain root requirement.
 ///
 /// ```text
 /// transitive-prerelease-redundant-authorization-parent-first
@@ -4153,12 +4153,12 @@ fn transitive_prerelease_redundant_authorization_parent_first() {
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + a==1.0.0
-     + c==2.0.0a1
+     + c==1.0.0
     ");
 
-    // Resolving `a` first activates `c>=0.5a1` before `c` is selected, so the resolver selects the newer `c==2.0.0a1`, which also satisfies `c>=1.0`.
+    // Resolving `a` first activates `c>=0.5a1`, but the resolver still prefers the stable `c==1.0.0` that satisfies both requirements.
     context.assert_installed("a", "1.0.0");
-    context.assert_installed("c", "2.0.0a1");
+    context.assert_installed("c", "1.0.0");
 }
 
 /// A stable selection can be retained when a compatible plain root requirement is prioritized before a redundant transitive pre-release requirement.
@@ -4660,8 +4660,8 @@ fn equivalent_dependency_ranges() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a<=1.0.0 depends on c<=1.0 and a>=2.0.0 depends on c<1.0.post0.dev0, we can conclude that all versions of a depend on c<=1.0.
-          And because you require a and c>=2.0, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because all versions of a depend on c<=1.0 and you require a, we can conclude that you require c<=1.0.
+          And because you require c>=2.0, we can conclude that your requirements are unsatisfiable.
     ");
 
     // Both versions of `a` require the same logical range of `c`, which conflicts with the root requirement.

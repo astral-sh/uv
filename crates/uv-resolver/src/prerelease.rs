@@ -21,13 +21,12 @@ pub enum PrereleaseMode {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
-    /// their version requirements.
+    /// Prefer stable versions for first-party packages with explicit pre-release specifiers,
+    /// falling back to pre-release versions when necessary.
     #[deprecated(note = "use `if-necessary-or-explicit` instead")]
     Explicit,
 
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active direct or transitive requirement contains an explicit pre-release specifier.
+    /// Prefer stable versions, falling back to pre-release versions when necessary.
     #[default]
     IfNecessaryOrExplicit,
 }
@@ -58,13 +57,12 @@ pub(crate) enum PrereleaseStrategy {
     /// Allow pre-release versions when no stable candidate satisfies the active constraints.
     IfNecessary,
 
-    /// Allow pre-release versions for first-party packages with explicit pre-release specifiers in
-    /// their version requirements.
+    /// Prefer stable versions for first-party packages with explicit pre-release specifiers,
+    /// falling back to pre-release versions when necessary.
     Explicit(ForkSet),
 
-    /// Allow pre-release versions when no stable candidate satisfies the active constraints, or
-    /// when an active requirement contains an explicit pre-release specifier.
-    IfNecessaryOrExplicit(ForkSet),
+    /// Prefer stable versions, falling back to pre-release versions when necessary.
+    IfNecessaryOrExplicit,
 }
 
 impl PrereleaseStrategy {
@@ -82,9 +80,7 @@ impl PrereleaseStrategy {
             PrereleaseMode::Explicit => Self::Explicit(Self::explicit_packages(
                 manifest.candidate_selection_requirements(env, dependencies),
             )),
-            PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit(
-                Self::explicit_packages(manifest.requirements(env, dependencies)),
-            ),
+            PrereleaseMode::IfNecessaryOrExplicit => Self::IfNecessaryOrExplicit,
         }
     }
 
@@ -104,16 +100,13 @@ impl PrereleaseStrategy {
 
     /// Returns the pre-release candidate selection policy for a package.
     ///
-    /// An explicit transitive dependency is represented by a PubGrub package, so its
-    /// authorization is part of the partial solution and follows normal backtracking. When no
-    /// explicit authorization is active, pre-releases remain in the candidate universe but are
+    /// Pre-releases remain in the candidate universe but, unless they are globally allowed, are
     /// considered only after stable candidates. Keeping the candidate universe fixed is required
     /// for PubGrub's learned incompatibilities to remain valid.
     pub(crate) fn selection(
         &self,
         package_name: &PackageName,
         env: &ResolverEnvironment,
-        explicit_prerelease: bool,
     ) -> PrereleaseSelection {
         match self {
             Self::Disallow => PrereleaseSelection::Disallow,
@@ -121,18 +114,12 @@ impl PrereleaseStrategy {
             Self::IfNecessary => PrereleaseSelection::PreferStable,
             Self::Explicit(packages) => {
                 if packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
+                    PrereleaseSelection::PreferStable
                 } else {
                     PrereleaseSelection::Disallow
                 }
             }
-            Self::IfNecessaryOrExplicit(packages) => {
-                if explicit_prerelease || packages.contains(package_name, env) {
-                    PrereleaseSelection::Allow
-                } else {
-                    PrereleaseSelection::PreferStable
-                }
-            }
+            Self::IfNecessaryOrExplicit => PrereleaseSelection::PreferStable,
         }
     }
 }

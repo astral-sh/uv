@@ -1,16 +1,16 @@
 name = "transitive-prerelease-equivalent-authorization-explicit-first"
-description = "Requirements from one parent share pre-release authorization when the explicit requirement appears first."
+description = "Requirements from one parent retain the stable preference when the explicit requirement appears first."
 
 [root]
 requires = ["a"]
 
 [expected]
 satisfiable = true
-explanation = "Requirements from one selected parent are combined before resolution, so the requirement naming a pre-release authorizes matching pre-releases."
+explanation = "Requirements from one selected parent retain the stable preference even when one names a pre-release."
 
 [expected.packages]
 a = "1.0.0"
-c = "2.0.0a1"
+c = "1.0.0"
 
 [packages.a.versions."1.0.0"]
 requires = ["c>=1.0,>0.5a1", "c>=1.0"]

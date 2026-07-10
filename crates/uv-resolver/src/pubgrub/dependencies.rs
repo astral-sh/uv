@@ -12,7 +12,6 @@ use uv_pypi_types::{
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
 
-use crate::prerelease::contains_prerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
 use crate::resolver::UnsatisfiableRequirement;
 
@@ -146,10 +145,6 @@ impl PubGrubDependency {
         let parent_name = parent_package.and_then(|package| package.name_no_root());
         let is_normal_parent = parent_package
             .is_some_and(|parent| parent.extra().is_none() && parent.group().is_none());
-        let explicit_prerelease = matches!(
-            &requirement.source,
-            RequirementSource::Registry { specifier, .. } if contains_prerelease(specifier)
-        );
         let iter = if !requirement.extras.is_empty() {
             // This is crazy subtle, but if any of the extras in the
             // requirement are part of a declared conflict, then we
@@ -205,7 +200,7 @@ impl PubGrubDependency {
                 version,
                 source,
             } = pubgrub_requirement;
-            let dependency = match &*package {
+            match &*package {
                 PubGrubPackageInner::Package { .. } => Self {
                     package,
                     version,
@@ -258,20 +253,7 @@ impl PubGrubDependency {
                 PubGrubPackageInner::Python(_) => {
                     unreachable!("Python package in dependencies")
                 }
-                PubGrubPackageInner::System(_) => {
-                    unreachable!("System package in dependencies")
-                }
-                PubGrubPackageInner::Prerelease { .. } => {
-                    unreachable!("Pre-release package in requirements")
-                }
-            };
-            if explicit_prerelease {
-                Self {
-                    package: PubGrubPackage::prerelease(dependency.package),
-                    ..dependency
-                }
-            } else {
-                dependency
+                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         }))
     }
