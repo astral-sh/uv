@@ -421,7 +421,7 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected (`if-necessary`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary-or-explicit`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
@@ -1585,7 +1585,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected (`if-necessary`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary-or-explicit`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
