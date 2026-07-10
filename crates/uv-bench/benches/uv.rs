@@ -320,16 +320,26 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 //     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(&run));
 // }
 
-criterion_group!(
-    uv,
-    unpack_sdist_many_files,
-    unzip_wheel_many_files,
-    prepare_wheel_many_files,
-    install_wheel_many_files,
-    resolve_warm_jupyter,
-    resolve_warm_jupyter_universal,
-    resolve_warm_airflow
-);
+fn criterion_with_preview() -> Criterion<WallTime> {
+    uv_preview::set(Preview::default())
+        .expect("Global preview features should not have been initialized already");
+    uv_preview::finalize().expect("Failed to finalize preview features");
+
+    Criterion::default()
+}
+
+criterion_group! {
+    name = uv;
+    config = criterion_with_preview();
+    targets =
+        unpack_sdist_many_files,
+        unzip_wheel_many_files,
+        prepare_wheel_many_files,
+        install_wheel_many_files,
+        resolve_warm_jupyter,
+        resolve_warm_jupyter_universal,
+        resolve_warm_airflow
+}
 criterion_main!(uv);
 
 fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
