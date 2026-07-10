@@ -18760,7 +18760,8 @@ async fn credentials_from_subdirectory() -> Result<()> {
 
 /// Install a package with a post-release version constraint.
 ///
-/// `<V.postN` should include earlier post-releases but exclude pre-releases.
+/// `<V.postN` should include pre-releases of the base release and earlier post-releases, but
+/// exclude pre-releases of the specified post-release.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16868>
 #[test]

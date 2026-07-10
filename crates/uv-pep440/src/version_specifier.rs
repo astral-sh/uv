@@ -727,13 +727,13 @@ impl VersionSpecifier {
                     return true;
                 }
 
-                // The exclusive ordered comparison <V MUST NOT allow a pre-release of the specified
-                // version unless the specified version is itself a pre-release. E.g., <3.1 should
-                // not match 3.1.dev0, but should match both 3.0.dev0 and 3.0, while <3.1.dev1 does
-                // match 3.1.dev0, 3.0.dev0 and 3.0.
-                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal
-                    && !this.any_prerelease()
+                // The exclusive ordered comparison `<V` must not allow a pre-release of the
+                // specified version unless the specified version is itself a pre-release. The
+                // earliest pre-release of a post-release retains its post component, so
+                // `<1.0.post1` excludes `1.0.post1.dev0`, but includes `1.0a1`.
+                if !this.any_prerelease()
                     && other.any_prerelease()
+                    && other.as_ref() >= &this.clone().with_dev(Some(0))
                 {
                     return false;
                 }
@@ -1092,6 +1092,27 @@ mod tests {
                 .unwrap()
                 .contains(&version)
         );
+    }
+
+    /// Test the `<V.postN` cases corrected by `packaging` 26.1.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1140>
+    #[test]
+    fn test_less_than_post_release() {
+        for (specifier, candidate, expected) in [
+            ("<1.0.post1", "1.0a1", true),
+            ("<1.0.post1", "1.0.post0.dev0", true),
+            ("<1.0.post1", "1.0.post1.dev0", false),
+            ("<1!1.0.post1", "1!1.0a1", true),
+        ] {
+            assert_eq!(
+                VersionSpecifier::from_str(specifier)
+                    .unwrap()
+                    .contains(&Version::from_str(candidate).unwrap()),
+                expected,
+                "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+        }
     }
 
     const VERSIONS_ALL: &[&str] = &[
