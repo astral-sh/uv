@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use anyhow::{Context, Result, bail};
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -8,6 +10,30 @@ use url::Url;
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+
+fn json_tree_package_names(command: &mut Command) -> Result<Vec<String>> {
+    let output = command
+        .arg("--preview-features")
+        .arg("json-output")
+        .arg("--format")
+        .arg("json")
+        .output()?;
+    output.clone().assert().success();
+
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    report["resolution"]
+        .as_object()
+        .context("dependency graph resolution should be an object")?
+        .values()
+        .filter(|node| node["kind"] == "package")
+        .map(|node| {
+            node["name"]
+                .as_str()
+                .context("dependency graph node should have a name")
+                .map(ToOwned::to_owned)
+        })
+        .collect()
+}
 
 #[test]
 fn tree_centralized_environment_no_cache() -> Result<()> {
@@ -3259,6 +3285,24 @@ fn invert_preserves_extra_attribution() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-a",
+      "package-p",
+      "package-x"
+    ]
+    "#
+    );
+
     Ok(())
 }
 
@@ -3325,6 +3369,23 @@ fn invert_preserves_dependency_group_attribution() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     ");
+
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-a",
+      "package-x"
+    ]
+    "#
+    );
 
     Ok(())
 }
@@ -3405,6 +3466,24 @@ fn invert_preserves_marker_attribution() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     ");
+
+    assert_json_snapshot!(
+        json_tree_package_names(
+            context
+                .tree()
+                .arg("--universal")
+                .arg("--invert")
+                .arg("--package")
+                .arg("package-x")
+        )?,
+        @r#"
+    [
+      "package-b",
+      "package-p",
+      "package-x"
+    ]
+    "#
+    );
 
     Ok(())
 }
