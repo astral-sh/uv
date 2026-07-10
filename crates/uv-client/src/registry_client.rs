@@ -460,7 +460,7 @@ impl RegistryClient {
         // unrelated indexes can proceed concurrently.
         let flat_index_slot = {
             let mut cache = self.flat_indexes.lock().await;
-            cache.get_or_insert(index)
+            cache.get_or_insert(index.clone())
         };
         let mut flat_index = flat_index_slot.lock().await;
 
@@ -1367,9 +1367,9 @@ struct FlatIndexCache(FxHashMap<IndexUrl, FlatIndexSlot>);
 
 impl FlatIndexCache {
     /// Return the per-index slot for this flat index, creating it on first access.
-    fn get_or_insert(&mut self, index: &IndexUrl) -> FlatIndexSlot {
+    fn get_or_insert(&mut self, index: IndexUrl) -> FlatIndexSlot {
         self.0
-            .entry(index.clone())
+            .entry(index)
             .or_insert_with(|| Arc::new(Mutex::new(None)))
             .clone()
     }
