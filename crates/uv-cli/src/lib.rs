@@ -6296,7 +6296,7 @@ pub struct ToolUpgradeArgs {
     /// The strategy to use when considering pre-release versions.
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
-    /// stable candidate that satisfies the active constraints is rejected.
+    /// stable candidate that satisfies the active constraints is rejected (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7619,7 +7619,7 @@ pub struct ResolverArgs {
     /// The strategy to use when considering pre-release versions.
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
-    /// stable candidate that satisfies the active constraints is rejected.
+    /// stable candidate that satisfies the active constraints is rejected (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7863,7 +7863,7 @@ pub struct ResolverInstallerArgs {
     /// The strategy to use when considering pre-release versions.
     ///
     /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
-    /// stable candidate that satisfies the active constraints is rejected.
+    /// stable candidate that satisfies the active constraints is rejected (`if-necessary`).
     #[arg(
         long,
         value_enum,
