@@ -60,7 +60,7 @@ anyhow = { workspace = true }
 async_zip = { workspace = true }
 astral-tokio-tar = { workspace = true }
 clap = { workspace = true }
-criterion = { version = "4.0.3", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
+criterion = { version = "5.0.1", default-features = false, package = "codspeed-criterion-compat", features = ["async_tokio"] }
 flate2 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
