@@ -1554,11 +1554,10 @@ fn simplify_range(
     }
 
     // Check if pre-releases are allowed
-    let prereleases_not_allowed =
-        candidate_selector
-            .prerelease_strategy()
-            .selection(name, resolver_environment, false)
-            == PrereleaseSelection::Disallow;
+    let prereleases_not_allowed = candidate_selector
+        .prerelease_strategy()
+        .selection(name, resolver_environment)
+        == PrereleaseSelection::Disallow;
 
     let any_prerelease = range.iter().any(|(start, end)| {
         let is_pre1 = match start {

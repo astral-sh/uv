@@ -4756,10 +4756,10 @@ fn fork_requires_python() -> Result<()> {
     Ok(())
 }
 
-/// Base and marker requirements share pre-release authorization within the marker fork when the explicit requirement appears first.
+/// Base and marker requirements retain the stable preference within the marker fork when the explicit requirement appears first.
 ///
 /// ```text
-/// prerelease-base-marker-authorization-explicit-first
+/// prerelease-base-marker-stable-preference-explicit-first
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
@@ -4774,10 +4774,11 @@ fn fork_requires_python() -> Result<()> {
 ///     └── c-2.0.0a1
 /// ```
 #[test]
-fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
+fn prerelease_base_marker_stable_preference_explicit_first() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server =
-        PackseServer::new("prereleases/prerelease-base-marker-authorization-explicit-first.toml");
+    let server = PackseServer::new(
+        "prereleases/prerelease-base-marker-stable-preference-explicit-first.toml",
+    );
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4798,14 +4799,14 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    // All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "
     );
 
@@ -4827,24 +4828,9 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
         name = "c"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform != 'linux'",
-        ]
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "c"
-        version = "2.0.0a1"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform == 'linux'",
-        ]
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -4852,8 +4838,7 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "c" },
         ]
 
         [package.metadata]
@@ -4878,10 +4863,10 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
     Ok(())
 }
 
-/// Base and marker requirements share pre-release authorization within the marker fork when the plain requirement appears first.
+/// Base and marker requirements retain the stable preference within the marker fork when the plain requirement appears first.
 ///
 /// ```text
-/// prerelease-base-marker-authorization-plain-first
+/// prerelease-base-marker-stable-preference-plain-first
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
@@ -4896,10 +4881,10 @@ fn prerelease_base_marker_authorization_explicit_first() -> Result<()> {
 ///     └── c-2.0.0a1
 /// ```
 #[test]
-fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
+fn prerelease_base_marker_stable_preference_plain_first() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let server =
-        PackseServer::new("prereleases/prerelease-base-marker-authorization-plain-first.toml");
+        PackseServer::new("prereleases/prerelease-base-marker-stable-preference-plain-first.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4920,14 +4905,14 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order.
+    // All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     "
     );
 
@@ -4949,24 +4934,9 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
         name = "c"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform != 'linux'",
-        ]
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "c"
-        version = "2.0.0a1"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        resolution-markers = [
-            "sys_platform == 'linux'",
-        ]
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -4974,8 +4944,7 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "c", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "c", version = "2.0.0a1", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "c" },
         ]
 
         [package.metadata]
@@ -5000,10 +4969,112 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
     Ok(())
 }
 
-/// Pre-release authorization on a marker proxy does not survive backtracking to a plain alternate parent.
+/// Requirements with the same marker retain the stable preference within their fork.
 ///
 /// ```text
-/// prerelease-marker-authorization-backtracks
+/// prerelease-marker-equivalent-stable-preference
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires c>=1.0 ; sys_platform == 'linux'
+/// │   │   ├── satisfied by c-1.0.0
+/// │   │   └── satisfied by c-2.0.0a1
+/// │   └── requires c>=0.5a1 ; sys_platform == 'linux'
+/// │       ├── satisfied by c-1.0.0
+/// │       └── satisfied by c-2.0.0a1
+/// └── c
+///     ├── c-1.0.0
+///     └── c-2.0.0a1
+/// ```
+#[test]
+fn prerelease_marker_equivalent_stable_preference() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server =
+        PackseServer::new("prereleases/prerelease-marker-equivalent-stable-preference.toml");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''c>=1.0 ; sys_platform == 'linux'''',
+          '''c>=0.5a1 ; sys_platform == 'linux'''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let filters = context.filters();
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(server.index_url());
+    // The equivalent Linux requirements prefer `c==1.0.0` in the fork where they apply.
+    uv_snapshot!(filters, cmd, @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "c"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:6e14a2e7cc6be61fa5aa41c0e55beff8b708a3aea257fed948306a0741bb5c47", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/c-1.0.0-py3-none-any.whl", hash = "sha256:78c0da7c5681d751d38b2e60c78d1e29d6125d91e68e5aeb22372fa66527ff95", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "c", marker = "sys_platform == 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=0.5a1" },
+            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=1.0" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// A marker-scoped pre-release requirement from a rejected parent does not affect a plain alternate parent.
+///
+/// ```text
+/// prerelease-marker-stable-preference-backtracks
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
@@ -5034,9 +5105,10 @@ fn prerelease_base_marker_authorization_plain_first() -> Result<()> {
 ///     └── d-2.0.0
 /// ```
 #[test]
-fn prerelease_marker_authorization_backtracks() -> Result<()> {
+fn prerelease_marker_stable_preference_backtracks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/prerelease-marker-authorization-backtracks.toml");
+    let server =
+        PackseServer::new("prereleases/prerelease-marker-stable-preference-backtracks.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5057,7 +5129,7 @@ fn prerelease_marker_authorization_backtracks() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // The rejected parent version's Linux requirements share pre-release authorization, but the selected alternate parent retains only its plain requirement and selects stable `c==1.0.0`.
+    // The rejected parent version has a Linux pre-release requirement, but the selected alternate parent retains only its plain requirement and selects stable `c==1.0.0`.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0
@@ -5139,111 +5211,10 @@ fn prerelease_marker_authorization_backtracks() -> Result<()> {
     Ok(())
 }
 
-/// Requirements on the same marker proxy share pre-release authorization within their fork.
+/// A transitive pre-release requirement applies only to the universal-resolution fork in which its marker is active.
 ///
 /// ```text
-/// prerelease-marker-equivalent-authorization
-/// ├── environment
-/// │   └── python3.12
-/// ├── root
-/// │   ├── requires c>=1.0 ; sys_platform == 'linux'
-/// │   │   ├── satisfied by c-1.0.0
-/// │   │   └── satisfied by c-2.0.0a1
-/// │   └── requires c>=0.5a1 ; sys_platform == 'linux'
-/// │       ├── satisfied by c-1.0.0
-/// │       └── satisfied by c-2.0.0a1
-/// └── c
-///     ├── c-1.0.0
-///     └── c-2.0.0a1
-/// ```
-#[test]
-fn prerelease_marker_equivalent_authorization() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/prerelease-marker-equivalent-authorization.toml");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
-        r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        dependencies = [
-          '''c>=1.0 ; sys_platform == 'linux'''',
-          '''c>=0.5a1 ; sys_platform == 'linux'''',
-        ]
-        requires-python = ">=3.12"
-        "###,
-    )?;
-
-    let filters = context.filters();
-
-    let mut cmd = context.lock();
-    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
-    cmd.arg("--index-url").arg(server.index_url());
-    // The equivalent Linux requirements share pre-release authorization and select `c==2.0.0a1` in the fork where they apply.
-    uv_snapshot!(filters, cmd, @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "
-    );
-
-    let lock = context.read("uv.lock");
-    insta::with_settings!({
-        filters => filters,
-    }, {
-        assert_snapshot!(
-            lock, @r#"
-        version = 1
-        revision = 3
-        requires-python = ">=3.12"
-
-        [[package]]
-        name = "c"
-        version = "2.0.0a1"
-        source = { registry = "http://[LOCALHOST]/simple/" }
-        sdist = { url = "http://[LOCALHOST]/files/c-2.0.0a1.tar.gz", hash = "sha256:8a7ed3124e3a7af45e95f35e4fdedef9910eebacd1e76407561f11993fe2c304", upload-time = "2024-03-24T00:00:00Z" }
-        wheels = [
-            { url = "http://[LOCALHOST]/files/c-2.0.0a1-py3-none-any.whl", hash = "sha256:3c358de48ad6e716e72915f0fd23a5ff7cabc3a006210d36bc91dc2909c72172", upload-time = "2024-03-24T00:00:00Z" },
-        ]
-
-        [[package]]
-        name = "project"
-        version = "0.1.0"
-        source = { virtual = "." }
-        dependencies = [
-            { name = "c", marker = "sys_platform == 'linux'" },
-        ]
-
-        [package.metadata]
-        requires-dist = [
-            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=0.5a1" },
-            { name = "c", marker = "sys_platform == 'linux'", specifier = ">=1.0" },
-        ]
-        "#
-        );
-    });
-
-    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
-    context
-        .lock()
-        .arg("--locked")
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("--index-url")
-        .arg(server.index_url())
-        .assert()
-        .success();
-
-    Ok(())
-}
-
-/// A transitive pre-release authorization applies only to the universal-resolution fork in which its marker is active.
-///
-/// ```text
-/// transitive-prerelease-authorization-forks
+/// transitive-prerelease-forks
 /// ├── environment
 /// │   └── python3.12
 /// ├── root
@@ -5260,9 +5231,9 @@ fn prerelease_marker_equivalent_authorization() -> Result<()> {
 ///     └── c-2.0.0b1
 /// ```
 #[test]
-fn transitive_prerelease_authorization_forks() -> Result<()> {
+fn transitive_prerelease_forks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let server = PackseServer::new("prereleases/transitive-prerelease-authorization-forks.toml");
+    let server = PackseServer::new("prereleases/transitive-prerelease-forks.toml");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -5282,7 +5253,7 @@ fn transitive_prerelease_authorization_forks() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(server.index_url());
-    // Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release.
+    // Linux selects the required pre-release of `c`, while other platforms retain the stable release.
     uv_snapshot!(filters, cmd, @"
     success: true
     exit_code: 0

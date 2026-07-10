@@ -6,7 +6,7 @@ requires = ["a", "b"]
 
 [expected]
 satisfiable = true
-explanation = "The selected version of `a` explicitly authorizes pre-releases of `c`."
+explanation = "The selected version of `a` requires a pre-release of `c`."
 
 [expected.packages]
 a = "1.0.0"
