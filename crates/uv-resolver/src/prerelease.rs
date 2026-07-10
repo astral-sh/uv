@@ -128,7 +128,7 @@ impl PrereleaseStrategy {
 ///
 /// Exclusions do not opt a package into pre-releases. For example, `!=1.0a1` should not change
 /// which candidate kinds are considered.
-pub(crate) fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
+fn contains_prerelease(specifiers: &VersionSpecifiers) -> bool {
     specifiers
         .iter()
         .filter(|specifier| {
