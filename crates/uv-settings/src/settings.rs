@@ -2924,6 +2924,10 @@ impl schemars::JsonSchema for PreviewOption {
         schema.insert(
             "not".to_string(),
             schemars::json_schema!({
+                "properties": {
+                    "preview": {},
+                    "preview-features": {},
+                },
                 "required": ["preview", "preview-features"],
             })
             .into(),
