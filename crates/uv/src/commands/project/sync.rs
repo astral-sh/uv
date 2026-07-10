@@ -35,7 +35,7 @@ use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, Re
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
-use uv_warnings::warn_user;
+use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
@@ -926,11 +926,13 @@ pub(crate) async fn do_sync<'a>(
     Ok(changelog)
 }
 
-
+/// Carries dependencies checked during a locked-tool preflight into a following project sync.
+///
+/// The locked tool and project resolutions can overlap, so the later sync skips dependencies that
+/// were already checked instead of querying OSV twice.
 pub(crate) struct MalwareCheckContext<'a> {
     settings: &'a MalwareCheckSettings,
     checked_dependencies: Vec<Dependency>,
-    preview_warning_emitted: bool,
 }
 
 impl MalwareCheckContext<'_> {
@@ -938,7 +940,6 @@ impl MalwareCheckContext<'_> {
         if self.settings.enabled {
             self.checked_dependencies
                 .extend(malware_dependencies_from_resolution(resolution));
-            self.preview_warning_emitted = true;
         }
     }
 }
@@ -948,7 +949,6 @@ impl<'a> From<&'a MalwareCheckSettings> for MalwareCheckContext<'a> {
         Self {
             settings,
             checked_dependencies: Vec::new(),
-            preview_warning_emitted: false,
         }
     }
 }
@@ -994,7 +994,7 @@ fn malware_dependencies_from_resolution(resolution: &Resolution) -> Vec<Dependen
 
 fn warn_malware_check_preview(preview: Preview) {
     if !preview.is_enabled(PreviewFeature::MalwareCheck) {
-        warn_user!(
+        warn_user_once!(
             "Malware checks are experimental and may change without warning. Pass `--preview-features {}` to disable this warning.",
             PreviewFeature::MalwareCheck
         );
@@ -1015,9 +1015,7 @@ async fn maybe_check_malware(
         return Ok(());
     }
 
-    if !malware_context.preview_warning_emitted {
-        warn_malware_check_preview(preview);
-    }
+    warn_malware_check_preview(preview);
     check_malware(
         target,
         resolution,
