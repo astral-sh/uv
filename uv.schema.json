@@ -594,6 +594,10 @@
   },
   "additionalProperties": false,
   "not": {
+    "properties": {
+      "preview": {},
+      "preview-features": {}
+    },
     "required": ["preview", "preview-features"]
   },
   "definitions": {
@@ -1762,7 +1766,8 @@
             "packaged-init",
             "centralized-project-envs",
             "tool-install-locks",
-            "workspace-list-scripts"
+            "workspace-list-scripts",
+            "no-distutils-patch"
           ]
         },
         {
