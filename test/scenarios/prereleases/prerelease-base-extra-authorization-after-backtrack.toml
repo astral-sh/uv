@@ -6,11 +6,11 @@ requires = ["a", "d==1.0.0"]
 
 [expected]
 satisfiable = true
-explanation = "After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` share pre-release authorization and select `c==2.0.0a1`."
+explanation = "After rejecting `a==2.0.0`, the base and extra requirements from `a==1.0.0` retain the stable preference and select `c==1.0.0`."
 
 [expected.packages]
 a = "1.0.0"
-c = "2.0.0a1"
+c = "1.0.0"
 d = "1.0.0"
 
 [packages.a.versions."1.0.0"]

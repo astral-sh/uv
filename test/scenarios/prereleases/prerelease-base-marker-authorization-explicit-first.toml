@@ -1,5 +1,5 @@
 name = "prerelease-base-marker-authorization-explicit-first"
-description = "Base and marker requirements share pre-release authorization within the marker fork when the explicit requirement appears first."
+description = "Base and marker requirements retain the stable preference within the marker fork when the explicit requirement appears first."
 
 [resolver_options]
 universal = true
@@ -13,7 +13,7 @@ requires = [
 
 [expected]
 satisfiable = true
-explanation = "Linux selects the explicitly authorized pre-release of `c`, while other platforms retain the stable release, regardless of declaration order."
+explanation = "All platforms select the stable release of `c`, regardless of the explicit pre-release specifier or declaration order."
 
 [packages.c.versions."1.0.0"]
 

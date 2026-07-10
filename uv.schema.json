@@ -421,7 +421,7 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, but accept pre-releases when no stable\ncandidate satisfies the active constraints or when an active direct or transitive\nrequirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected. Explicit pre-release\nspecifiers do not override this preference (`if-necessary-or-explicit`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
@@ -1585,7 +1585,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, but accept pre-releases when no stable\ncandidate satisfies the active constraints or when an active direct or transitive\nrequirement contains an explicit pre-release specifier (`if-necessary-or-explicit`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected. Explicit pre-release\nspecifiers do not override this preference (`if-necessary-or-explicit`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
@@ -1719,7 +1719,7 @@
           "deprecated": true
         },
         {
-          "description": "Allow pre-release versions when no stable candidate satisfies the active constraints, or\nwhen an active direct or transitive requirement contains an explicit pre-release specifier.",
+          "description": "Prefer stable versions, falling back to pre-release versions when necessary.",
           "type": "string",
           "const": "if-necessary-or-explicit"
         }

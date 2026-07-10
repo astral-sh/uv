@@ -1,15 +1,15 @@
 name = "prerelease-equivalent-authorization-explicit-first"
-description = "Equivalent requirements share pre-release authorization when the explicit requirement appears first."
+description = "Equivalent requirements retain the stable preference when the explicit requirement appears first."
 
 [root]
 requires = ["c>=1.0,>0.5a1", "c>=1.0"]
 
 [expected]
 satisfiable = true
-explanation = "The requirement on `c>=1.0,>0.5a1` authorizes matching pre-releases regardless of requirement order."
+explanation = "The explicit pre-release specifier does not override the stable preference, regardless of requirement order."
 
 [expected.packages]
-c = "2.0.0a1"
+c = "1.0.0"
 
 [packages.c.versions."1.0.0"]
 

@@ -1324,9 +1324,7 @@ impl PubGrubReportFormatter<'_> {
         options: &Options,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
-        if selector.prerelease_strategy().selection(name, env, false)
-            != PrereleaseSelection::Disallow
-        {
+        if selector.prerelease_strategy().selection(name, env) != PrereleaseSelection::Disallow {
             return;
         }
 

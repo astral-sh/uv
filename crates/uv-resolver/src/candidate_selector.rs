@@ -85,15 +85,12 @@ impl CandidateSelector {
         installed_packages: &'a InstalledPackages,
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
-        explicit_prerelease: bool,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
-        let prerelease_selection =
-            self.prerelease_strategy
-                .selection(package_name, env, explicit_prerelease);
+        let prerelease_selection = self.prerelease_strategy.selection(package_name, env);
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -433,7 +430,7 @@ impl CandidateSelector {
             package_name,
             range,
             version_maps,
-            self.prerelease_strategy.selection(package_name, env, false),
+            self.prerelease_strategy.selection(package_name, env),
             env,
         )
     }
