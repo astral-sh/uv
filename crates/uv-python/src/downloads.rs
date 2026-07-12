@@ -1412,9 +1412,18 @@ impl ManagedPythonDownload {
         installation
             .ensure_externally_managed()
             .map_err(|err| io::Error::other(err))?;
-        installation
-            .ensure_sysconfig_patched()
-            .map_err(|err| io::Error::other(err))?;
+        // Patch sysconfig with the final destination path, even though we
+        // operate on the temp staging directory. The `_sysconfigdata_` file
+        // replaces `/install` with `install_root`, and it must reference the
+        // final path so the installation is valid after rename.
+        crate::sysconfig::update_sysconfig_at(
+            &extracted,
+            &path,
+            self.key.major,
+            self.key.minor,
+            self.key.variant.lib_suffix(),
+        )
+        .map_err(|err| io::Error::other(err))?;
         installation
             .ensure_canonical_executables()
             .map_err(|err| io::Error::other(err))?;
