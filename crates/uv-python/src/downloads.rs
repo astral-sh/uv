@@ -1450,25 +1450,6 @@ impl ManagedPythonDownload {
             }
         }
 
-        // Create the minor version symlink at the final location before the
-        // rename, so it becomes visible atomically with the installation.
-        // Uses the final `path` because the symlink lives in the installations
-        // parent directory, not inside the extracted tree.
-        // Only applicable on Unix where symlinks don't require the target
-        // directory to exist. Windows junctions require an existing target,
-        // so the minor version link is deferred until after the rename.
-        if cfg!(unix) {
-            if matches!(
-                self.key.implementation().as_ref(),
-                LenientImplementationName::Known(ImplementationName::CPython)
-            ) {
-                let final_install = ManagedPythonInstallation::new(path.clone(), self);
-                final_install
-                    .ensure_minor_version_link()
-                    .map_err(io::Error::other)?;
-            }
-        }
-
         // Persist it to the target.
         debug!("Moving {} to {}", extracted.display(), path.user_display());
         rename_with_retry(extracted, &path)
