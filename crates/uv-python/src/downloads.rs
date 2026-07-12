@@ -1440,18 +1440,36 @@ impl ManagedPythonDownload {
         installation
             .ensure_build_file()
             .map_err(|err| io::Error::other(err))?;
-        if let Err(e) = installation.ensure_dylib_patched() {
-            e.warn_user(&installation);
+        // Only applicable on macOS for dylib install_name patching.
+        if cfg!(target_os = "macos") && self.key.os().is_like_darwin() {
+            if matches!(
+                self.key.implementation().as_ref(),
+                LenientImplementationName::Known(ImplementationName::CPython)
+            ) {
+                if let Err(e) = installation.ensure_dylib_patched() {
+                    e.warn_user(&installation);
+                }
+            }
         }
 
         // Create the minor version symlink at the final location before the
         // rename, so it becomes visible atomically with the installation.
         // Uses the final `path` because the symlink lives in the installations
         // parent directory, not inside the extracted tree.
-        let final_install = ManagedPythonInstallation::new(path.clone(), self);
-        final_install
-            .ensure_minor_version_link()
-            .map_err(|err| io::Error::other(err))?;
+        // Only applicable on Unix where symlinks don't require the target
+        // directory to exist. Windows junctions require an existing target,
+        // so the minor version link is deferred until after the rename.
+        if cfg!(unix) {
+            if matches!(
+                self.key.implementation().as_ref(),
+                LenientImplementationName::Known(ImplementationName::CPython)
+            ) {
+                let final_install = ManagedPythonInstallation::new(path.clone(), self);
+                final_install
+                    .ensure_minor_version_link()
+                    .map_err(|err| io::Error::other(err))?;
+            }
+        }
 
         // Persist it to the target.
         debug!("Moving {} to {}", extracted.display(), path.user_display());
