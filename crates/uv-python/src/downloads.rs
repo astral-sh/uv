@@ -1404,19 +1404,11 @@ impl ManagedPythonDownload {
             fs_err::tokio::remove_dir_all(&path).await?;
         }
 
-        // Persist it to the target.
-        debug!("Moving {} to {}", extracted.display(), path.user_display());
-        rename_with_retry(extracted, &path)
-            .await
-            .map_err(|err| Error::CopyError {
-                to: path.clone(),
-                err,
-            })?;
-
-        // Finalize the installation immediately after renaming into place,
-        // before returning. This minimizes the race window where a concurrent
-        // `uv python find` could discover an incomplete installation.
-        let installation = ManagedPythonInstallation::new(path.clone(), self);
+        // Finalize the installation on the extracted temp directory BEFORE
+        // renaming into place. This eliminates the race window: when the rename
+        // completes, the installation is already fully functional, so a
+        // concurrent `uv python find` will never see an incomplete installation.
+        let installation = ManagedPythonInstallation::new(extracted.clone(), self);
         installation
             .ensure_externally_managed()
             .map_err(|err| io::Error::other(err))?;
@@ -1432,6 +1424,24 @@ impl ManagedPythonDownload {
         if let Err(e) = installation.ensure_dylib_patched() {
             e.warn_user(&installation);
         }
+
+        // Create the minor version symlink at the final location before the
+        // rename, so it becomes visible atomically with the installation.
+        // Uses the final `path` because the symlink lives in the installations
+        // parent directory, not inside the extracted tree.
+        let final_install = ManagedPythonInstallation::new(path.clone(), self);
+        final_install
+            .ensure_minor_version_link()
+            .map_err(|err| io::Error::other(err))?;
+
+        // Persist it to the target.
+        debug!("Moving {} to {}", extracted.display(), path.user_display());
+        rename_with_retry(extracted, &path)
+            .await
+            .map_err(|err| Error::CopyError {
+                to: path.clone(),
+                err,
+            })?;
 
         Ok(DownloadResult::Fetched(path))
     }
