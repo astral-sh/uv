@@ -1667,7 +1667,12 @@ pub struct PipCompileArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
-    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
+    #[arg(
+        long,
+        env = EnvVars::UV_ONLY_BINARY,
+        value_delimiter = ',',
+        conflicts_with = "no_build"
+    )]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// The Python version to use for resolution.
@@ -2029,7 +2034,12 @@ pub struct PipSyncArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
+    #[arg(
+        long,
+        env = EnvVars::UV_ONLY_BINARY,
+        value_delimiter = ',',
+        conflicts_with = "no_build"
+    )]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// Allow sync of empty requirements, which will clear the environment of all packages.
@@ -2415,7 +2425,12 @@ pub struct PipInstallArgs {
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
-    #[arg(long, value_delimiter = ',', conflicts_with = "no_build")]
+    #[arg(
+        long,
+        env = EnvVars::UV_ONLY_BINARY,
+        value_delimiter = ',',
+        conflicts_with = "no_build"
+    )]
     pub only_binary: Option<Vec<PackageNameSpecifier>>,
 
     /// The minimum Python version that should be supported by the requirements (e.g., `3.7` or

@@ -312,6 +312,11 @@ impl EnvVars {
     #[attr_added_in("0.5.30")]
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
+    /// Equivalent to the `--only-binary` command-line argument. If set, uv will only
+    /// use pre-built wheels for the given comma-delimited list of packages.
+    #[attr_added_in("0.11.0")]
+    pub const UV_ONLY_BINARY: &'static str = "UV_ONLY_BINARY";
+
     /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
     /// source distributions.
     #[attr_added_in("0.1.40")]
