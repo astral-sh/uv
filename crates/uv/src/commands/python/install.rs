@@ -700,6 +700,13 @@ async fn perform_install(
     }
 
     for installation in &installations {
+        // Patch dylib install_name after rename (Fetched installations are finalized
+        // in downloads.rs before the atomic rename to the staging path, so the
+        // install_name is stale; idempotent, so safe for all installations).
+        if let Err(e) = installation.ensure_dylib_patched() {
+            e.warn_user(installation);
+        }
+
         let upgradeable = (default || is_default_install)
             || requested_minor_versions.contains(&installation.key().version().python_version());
 
