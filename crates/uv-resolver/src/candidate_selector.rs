@@ -458,6 +458,29 @@ impl CandidateSelector {
                 PrereleaseCandidates::Stable,
                 env,
             ),
+            PrereleaseSelection::PreferStable
+                if self.index_strategy == IndexStrategy::UnsafeFirstMatch =>
+            {
+                version_maps.iter().find_map(|version_map| {
+                    let version_maps = std::slice::from_ref(version_map);
+                    self.select_no_preference_from(
+                        package_name,
+                        range,
+                        version_maps,
+                        PrereleaseCandidates::Stable,
+                        env,
+                    )
+                    .or_else(|| {
+                        self.select_no_preference_from(
+                            package_name,
+                            range,
+                            version_maps,
+                            PrereleaseCandidates::Prerelease,
+                            env,
+                        )
+                    })
+                })
+            }
             PrereleaseSelection::PreferStable => self
                 .select_no_preference_from(
                     package_name,
@@ -828,7 +851,8 @@ mod tests {
 /// Controls which release classes are visible during one candidate-selection pass.
 ///
 /// Stable-first selection uses separate [`Self::Stable`] and [`Self::Prerelease`] passes so that
-/// an incompatible stable candidate does not prevent falling back to a pre-release.
+/// an incompatible stable candidate does not prevent falling back to a pre-release. For
+/// [`IndexStrategy::UnsafeFirstMatch`], these passes are applied to each index in turn.
 #[derive(Debug, Clone, Copy)]
 enum PrereleaseCandidates {
     /// Consider versions with or without a pre-release component.

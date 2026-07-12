@@ -4889,6 +4889,54 @@ fn explicit_prerelease_prefers_stable_for_direct_marker() {
     context.assert_installed("a", "0.3.0");
 }
 
+/// `unsafe-first-match` should prefer a compatible pre-release on the first index over a stable
+/// release on a later index, while `unsafe-best-match` should prefer the stable release globally.
+#[test]
+fn prerelease_index_strategy_ordering() {
+    let private = PackseServer::new("prereleases/package-only-prereleases.toml");
+    let public = PackseServer::new("prereleases/package-stable-prerelease-candidates.toml");
+
+    let context = uv_test::test_context!("3.12");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(public.index_url())
+        .arg("--extra-index-url")
+        .arg(private.index_url())
+        .arg("--index-strategy=unsafe-first-match")
+        .arg("a>=1.0.0a1,<2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0a1
+    ");
+    context.assert_installed("a", "1.0.0a1");
+
+    let context = uv_test::test_context!("3.12");
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--index-url")
+        .arg(public.index_url())
+        .arg("--extra-index-url")
+        .arg(private.index_url())
+        .arg("--index-strategy=unsafe-best-match")
+        .arg("a>=1.0.0a1,<2"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
+    ");
+    context.assert_installed("a", "1.0.0");
+}
+
 /// `--prerelease=explicit` should not allow a pre-release based only on a transitive pre-release
 /// specifier.
 #[test]
