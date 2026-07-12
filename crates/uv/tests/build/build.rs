@@ -2359,9 +2359,7 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--list"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2419,9 +2417,7 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--wheel"), @"
     success: true
     exit_code: 0
     ----- stdout -----
