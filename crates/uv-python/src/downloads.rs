@@ -1416,14 +1416,24 @@ impl ManagedPythonDownload {
         // operate on the temp staging directory. The `_sysconfigdata_` file
         // replaces `/install` with `install_root`, and it must reference the
         // final path so the installation is valid after rename.
-        crate::sysconfig::update_sysconfig_at(
-            &extracted,
-            &path,
-            self.key.major,
-            self.key.minor,
-            self.key.variant.lib_suffix(),
-        )
-        .map_err(|err| io::Error::other(err))?;
+        // Only applicable on Unix, non-Windows, non-Emscripten, CPython.
+        if cfg!(unix) && !self.key.os().is_windows() {
+            if !self.key.os().is_emscripten() {
+                if matches!(
+                    self.key.implementation().as_ref(),
+                    LenientImplementationName::Known(ImplementationName::CPython)
+                ) {
+                    crate::sysconfig::update_sysconfig_at(
+                        &extracted,
+                        &path,
+                        self.key.major,
+                        self.key.minor,
+                        self.key.variant.lib_suffix(),
+                    )
+                    .map_err(|err| io::Error::other(err))?;
+                }
+            }
+        }
         installation
             .ensure_canonical_executables()
             .map_err(|err| io::Error::other(err))?;
