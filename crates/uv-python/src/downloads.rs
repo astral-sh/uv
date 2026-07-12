@@ -1413,6 +1413,26 @@ impl ManagedPythonDownload {
                 err,
             })?;
 
+        // Finalize the installation immediately after renaming into place,
+        // before returning. This minimizes the race window where a concurrent
+        // `uv python find` could discover an incomplete installation.
+        let installation = ManagedPythonInstallation::new(path.clone(), self);
+        installation
+            .ensure_externally_managed()
+            .map_err(|err| io::Error::other(err))?;
+        installation
+            .ensure_sysconfig_patched()
+            .map_err(|err| io::Error::other(err))?;
+        installation
+            .ensure_canonical_executables()
+            .map_err(|err| io::Error::other(err))?;
+        installation
+            .ensure_build_file()
+            .map_err(|err| io::Error::other(err))?;
+        if let Err(e) = installation.ensure_dylib_patched() {
+            e.warn_user(&installation);
+        }
+
         Ok(DownloadResult::Fetched(path))
     }
 
