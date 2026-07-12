@@ -4282,6 +4282,18 @@ pub(crate) struct ResolverSettings {
     pub(crate) upgrade: Upgrade,
 }
 
+#[allow(deprecated)]
+fn warn_if_deprecated_prerelease_mode(prerelease: PrereleaseMode) -> PrereleaseMode {
+    if matches!(prerelease, PrereleaseMode::IfNecessaryOrExplicit) {
+        warn_user_once!(
+            "The `if-necessary-or-explicit` pre-release mode is deprecated and will be removed in a future release. Use `if-necessary` instead."
+        );
+        PrereleaseMode::IfNecessary
+    } else {
+        prerelease
+    }
+}
+
 impl ResolverSettings {
     /// Resolve the [`ResolverSettings`] from the CLI and filesystem configuration.
     fn combine(
@@ -4337,7 +4349,7 @@ impl From<ResolverOptions> for ResolverSettings {
         Self {
             index_locations,
             resolution: value.resolution.unwrap_or_default(),
-            prerelease: value.prerelease.unwrap_or_default(),
+            prerelease: warn_if_deprecated_prerelease_mode(value.prerelease.unwrap_or_default()),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
             dependency_metadata: DependencyMetadata::from_entries(
                 value.dependency_metadata.into_iter().flatten(),
@@ -4480,7 +4492,9 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
                 build_isolation: value.build_isolation.unwrap_or_default(),
                 extra_build_dependencies: value.extra_build_dependencies.unwrap_or_default(),
                 extra_build_variables: value.extra_build_variables.unwrap_or_default(),
-                prerelease: value.prerelease.unwrap_or_default(),
+                prerelease: warn_if_deprecated_prerelease_mode(
+                    value.prerelease.unwrap_or_default(),
+                ),
                 resolution: value.resolution.unwrap_or_default(),
                 sources: NoSources::from_args(
                     value.no_sources,
@@ -4754,7 +4768,9 @@ impl PipSettings {
                 DependencyMode::Transitive
             },
             resolution: args.resolution.combine(resolution).unwrap_or_default(),
-            prerelease: args.prerelease.combine(prerelease).unwrap_or_default(),
+            prerelease: warn_if_deprecated_prerelease_mode(
+                args.prerelease.combine(prerelease).unwrap_or_default(),
+            ),
             fork_strategy: args
                 .fork_strategy
                 .combine(fork_strategy)
