@@ -474,10 +474,7 @@ mod tests {
 
         // Build a fake staging Python installation with a
         // `_sysconfigdata_` file containing `/install` paths.
-        let lib_dir = staging
-            .path()
-            .join("lib")
-            .join("python3.12");
+        let lib_dir = staging.path().join("lib").join("python3.12");
         fs_err::create_dir_all(&lib_dir)?;
 
         let sysconfigdata_path = lib_dir.join("_sysconfigdata__linux_x86_64-linux-gnu.py");

@@ -1411,7 +1411,7 @@ impl ManagedPythonDownload {
         let installation = ManagedPythonInstallation::new(extracted.clone(), self);
         installation
             .ensure_externally_managed()
-            .map_err(|err| io::Error::other(err))?;
+            .map_err(io::Error::other)?;
         // Patch sysconfig with the final destination path, even though we
         // operate on the temp staging directory. The `_sysconfigdata_` file
         // replaces `/install` with `install_root`, and it must reference the
@@ -1430,16 +1430,14 @@ impl ManagedPythonDownload {
                         self.key.minor,
                         self.key.variant.lib_suffix(),
                     )
-                    .map_err(|err| io::Error::other(err))?;
+                    .map_err(io::Error::other)?;
                 }
             }
         }
         installation
             .ensure_canonical_executables()
-            .map_err(|err| io::Error::other(err))?;
-        installation
-            .ensure_build_file()
-            .map_err(|err| io::Error::other(err))?;
+            .map_err(io::Error::other)?;
+        installation.ensure_build_file().map_err(io::Error::other)?;
         // Only applicable on macOS for dylib install_name patching.
         if cfg!(target_os = "macos") && self.key.os().is_like_darwin() {
             if matches!(
@@ -1467,7 +1465,7 @@ impl ManagedPythonDownload {
                 let final_install = ManagedPythonInstallation::new(path.clone(), self);
                 final_install
                     .ensure_minor_version_link()
-                    .map_err(|err| io::Error::other(err))?;
+                    .map_err(io::Error::other)?;
             }
         }
 
