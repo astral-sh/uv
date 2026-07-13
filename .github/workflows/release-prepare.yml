@@ -16,27 +16,8 @@ on:
 permissions: {}
 
 jobs:
-  authorize:
-    if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: "Verify maintainer access"
-        run: |
-          role="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/collaborators/${GITHUB_ACTOR}/permission" \
-            --jq '.role_name')"
-          if [[ "$role" != "admin" && "$role" != "maintain" ]]; then
-            echo "${GITHUB_ACTOR} must have the maintain repository role to prepare a release." >&2
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   release:
     if: github.repository == 'astral-sh/uv'
-    needs: authorize
     runs-on: ubuntu-latest
     environment: automations
     permissions:
