@@ -1,12 +1,14 @@
+use std::process::Command;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 
 use uv_static::EnvVars;
-use uv_test::{copy_dir_ignore, uv_snapshot};
+use uv_test::{copy_dir_ignore, get_bin, uv_snapshot};
 
 /// The workspace discovered while resolving settings is reused when the resolved cache root is
-/// unchanged, but not when constructing the resolved cache creates a new root.
+/// unchanged, but not when configuration changes the effective cache root.
 #[test]
 fn workspace_list_reuses_settings_discovery() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -37,6 +39,68 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--no-cache")
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+[tool.uv]
+no-cache = true
+
+[tool.uv.workspace]
+members = ["packages/*"]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    member
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `packages/member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    ");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+[tool.uv]
+cache-dir = "configured-cache"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+"#,
+    )?;
+
+    // Build the command manually so that the configured cache directory isn't overridden by the
+    // test context's `--cache-dir` argument.
+    let mut command = Command::new(get_bin!());
+    command
+        .arg("workspace")
+        .arg("list")
+        .current_dir(context.temp_dir.path())
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace");
+    context.add_shared_env(&mut command, false);
+    command.env_remove(EnvVars::UV_CACHE_DIR);
+
+    uv_snapshot!(context.filters(), command, @"
     success: true
     exit_code: 0
     ----- stdout -----

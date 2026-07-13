@@ -292,8 +292,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     //    starting from the current directory.
 
     // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
+    let discovery_no_cache = cli.top_level.cache_args.no_cache;
     let discovery_cache = Cache::from_settings(
-        cli.top_level.cache_args.no_cache,
+        discovery_no_cache,
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
@@ -578,7 +579,16 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if cache_settings.no_cache {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
-    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    // If `--no-cache` was set on the command line or in the environment, configuration cannot
+    // disable it. Reuse the temporary cache for the duration of the invocation instead of creating
+    // a second temporary directory after settings resolution.
+    let (cache, reuse_workspace_cache) = if discovery_no_cache && cache_settings.no_cache {
+        (discovery_cache, true)
+    } else {
+        let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+        let reuse_workspace_cache = cache.root() == discovery_cache.root();
+        (cache, reuse_workspace_cache)
+    };
     // This check happens after the first (fallible) workspace discovery, which we need to resolve
     // the settings that go into the cache constructor, but the check happens before the first
     // workspace discovery that's used beyond settings discovery.
@@ -617,7 +627,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
 
     // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
     // resolved cache has the same root.
-    let workspace_cache = if cache.root() == discovery_cache.root() {
+    let workspace_cache = if reuse_workspace_cache {
         workspace_cache
     } else {
         WorkspaceCache::default()
