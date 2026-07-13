@@ -53,5 +53,5 @@ maintainer action requested.
 
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
-Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
-root cause that you have not confirmed from the repository.
+Clearly distinguish source-backed findings from hypotheses in the summary and item reasons. Do not
+draft a public reply or claim a root cause that you have not confirmed from the repository.
