@@ -23,21 +23,9 @@
                 "type": "string",
                 "enum": ["open", "closed", "merged"]
               },
-              "relationship": {
-                "type": "string",
-                "enum": ["similar", "related"]
-              },
               "reason": { "type": "string" }
             },
-            "required": [
-              "kind",
-              "number",
-              "title",
-              "url",
-              "state",
-              "relationship",
-              "reason"
-            ]
+            "required": ["kind", "number", "title", "url", "state", "reason"]
           }
         },
         "search_scope": { "type": "string" }
