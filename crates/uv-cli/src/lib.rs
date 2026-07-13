@@ -29,7 +29,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{
-    AnnotationStyle, ExcludeNewerPackageEntry, ExcludeNewerValue, ForkStrategy, PrereleaseMode,
+    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackageEntry, ForkStrategy, PrereleaseMode,
     ResolutionMode,
 };
 use uv_settings::PythonInstallMirrors;
@@ -75,6 +75,8 @@ pub enum AuditOutputFormat {
     Text,
     /// Display the result in JSON format.
     Json,
+    /// Display the result in SARIF format.
+    Sarif,
 }
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
@@ -887,7 +889,7 @@ pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(alias = "clear")]
     Clean(CleanArgs),
-    /// Prune all unreachable objects from the cache.
+    /// Prune dangling cache entries and cached environments.
     Prune(PruneArgs),
     /// Show the cache directory.
     ///
@@ -1167,6 +1169,9 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Lock(LockArgs),
+    /// Upgrade a dependency in the project.
+    #[command(hide = true)]
+    Upgrade(UpgradeArgs),
     /// Export the project's lockfile to an alternate format.
     ///
     /// At present, `requirements.txt`, `pylock.toml` (PEP 751) and CycloneDX v1.5 JSON output
@@ -1621,9 +1626,9 @@ pub struct PipCompileArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -1655,9 +1660,10 @@ pub struct PipCompileArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -1982,9 +1988,9 @@ pub struct PipSyncArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2016,9 +2022,10 @@ pub struct PipSyncArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -2367,9 +2374,9 @@ pub struct PipInstallArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2401,9 +2408,10 @@ pub struct PipInstallArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -3279,8 +3287,10 @@ pub struct VenvArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for a specific package to those that were uploaded prior to the
     /// given date.
@@ -3388,6 +3398,8 @@ pub struct InitArgs {
     /// Disables creating extra files like `README.md`, the `src/` tree, `.python-version` files,
     /// etc.
     ///
+    /// A `[build-system]` table is only created with `--package` or `--build-backend`.
+    ///
     /// When combined with `--script`, the script will only contain the inline metadata header.
     #[arg(long)]
     pub bare: bool,
@@ -3402,7 +3414,9 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib` or `--build-backend`.
+    /// This is the default behavior when using `--lib` or `--build-backend`, or when the
+    /// `packaged-init` preview feature is enabled. It will become the default unconditionally in
+    /// the future.
     ///
     /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
     /// project structure.
@@ -4267,6 +4281,13 @@ pub struct LockArgs {
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
+}
+
+#[derive(Args)]
+pub struct UpgradeArgs {
+    /// The package to upgrade.
+    #[arg(value_hint = ValueHint::Other)]
+    pub package: PackageName,
 }
 
 #[derive(Args)]
@@ -5189,8 +5210,10 @@ pub struct FormatArgs {
     /// Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
     /// `2006-12-02T02:07:43Z`) or local date in the same format (e.g. `2006-12-02`), as well as
     /// durations relative to "now" (e.g., `-1 week`).
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER)]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Additional arguments to pass to Ruff.
     ///
@@ -5221,6 +5244,29 @@ pub struct FormatArgs {
 
 #[derive(Args)]
 pub struct CheckArgs {
+    /// Run checks for the specified PEP 723 Python script, rather than the current project.
+    ///
+    /// If provided, uv will use the dependencies based on the script's inline metadata table, in
+    /// adherence with PEP 723.
+    #[arg(
+        long,
+        conflicts_with = "extra",
+        conflicts_with = "all_extras",
+        conflicts_with = "no_extra",
+        conflicts_with = "no_all_extras",
+        conflicts_with = "dev",
+        conflicts_with = "no_dev",
+        conflicts_with = "only_dev",
+        conflicts_with = "group",
+        conflicts_with = "no_group",
+        conflicts_with = "no_default_groups",
+        conflicts_with = "only_group",
+        conflicts_with = "all_groups",
+        conflicts_with = "no_project",
+        value_hint = ValueHint::FilePath,
+    )]
+    pub script: Option<PathBuf>,
+
     /// Include optional dependencies from the specified extra name.
     ///
     /// May be provided more than once.
@@ -5336,9 +5382,6 @@ pub struct CheckArgs {
     pub frozen: bool,
 
     /// Avoid syncing the virtual environment [env: UV_NO_SYNC=]
-    ///
-    /// Implies `--frozen`, as the project dependencies will be ignored (i.e., the lockfile will not
-    /// be updated, since the environment will not be synced regardless).
     #[arg(long)]
     pub no_sync: bool,
 
@@ -5370,9 +5413,15 @@ pub struct CheckArgs {
     /// Accepts either a version (e.g., `0.0.1`) which will be treated as an exact pin,
     /// a version specifier (e.g., `>=0.0.1`), or `latest` to use the latest available version.
     ///
-    /// By default, a constrained version range of ty will be used (e.g., `>=0.0,<0.1`).
+    /// By default, the exact version resolved in `uv.lock` will be used when `ty` is a project
+    /// dependency or a dependency in the project's `dev` group. Otherwise, a constrained version
+    /// range of ty will be used (e.g., `>=0.0,<0.1`).
     #[arg(long, value_hint = ValueHint::Other)]
     pub ty_version: Option<String>,
+
+    /// Display the version of ty that will be used for type checking.
+    #[arg(long, hide = true)]
+    pub show_version: bool,
 
     /// Avoid discovering a project or workspace.
     ///
@@ -6073,8 +6122,10 @@ pub struct ToolListArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]
@@ -6336,8 +6387,10 @@ pub struct ToolUpgradeArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -6380,9 +6433,10 @@ pub struct ToolUpgradeArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7239,9 +7293,9 @@ pub struct RefreshArgs {
 pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     #[arg(
         long,
         env = EnvVars::UV_NO_BUILD,
@@ -7407,8 +7461,10 @@ pub struct InstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7451,9 +7507,10 @@ pub struct InstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7654,8 +7711,10 @@ pub struct ResolverArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7899,13 +7958,15 @@ pub struct ResolverInstallerArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(
         long,
         env = EnvVars::UV_EXCLUDE_NEWER,
         help_heading = "Resolver options",
         value_hint = ValueHint::Other,
     )]
-    pub exclude_newer: Option<ExcludeNewerValue>,
+    pub exclude_newer: Option<ExcludeNewerOverride>,
 
     /// Limit candidate packages for specific packages to those that were uploaded prior to the
     /// given date.
@@ -7948,9 +8009,10 @@ pub struct ResolverInstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -8034,8 +8096,10 @@ pub struct FetchArgs {
     /// Durations do not respect semantics of the local time zone and are always resolved to a fixed
     /// number of seconds assuming that a day is 24 hours (e.g., DST transitions are ignored).
     /// Calendar units such as months and years are not allowed.
+    ///
+    /// Use `false` to disable `exclude-newer`.
     #[arg(long, env = EnvVars::UV_EXCLUDE_NEWER, help_heading = "Resolver options")]
-    exclude_newer: Option<ExcludeNewerValue>,
+    exclude_newer: Option<ExcludeNewerOverride>,
 }
 
 #[derive(Args)]
@@ -8241,6 +8305,13 @@ pub enum WorkspaceCommand {
 }
 #[derive(Args)]
 pub struct MetadataArgs {
+    /// View metadata for the specified PEP 723 Python script, rather than the current workspace.
+    ///
+    /// If provided, uv will resolve the dependencies based on the script's inline metadata table,
+    /// in adherence with PEP 723.
+    #[arg(long, value_hint = ValueHint::FilePath)]
+    pub script: Option<PathBuf>,
+
     /// Check if the lockfile is up-to-date [env: UV_LOCKED=]
     ///
     /// Asserts that the `uv.lock` would remain unchanged after a resolution. If the lockfile is
@@ -8313,6 +8384,10 @@ pub struct WorkspaceListArgs {
     /// Show paths instead of names.
     #[arg(long)]
     pub paths: bool,
+
+    /// List all standalone scripts with inline metadata in the workspace.
+    #[arg(long)]
+    pub scripts: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

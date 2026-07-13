@@ -10,7 +10,7 @@ use uv_fs::Simplified;
 use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
-/// Prune all unreachable objects from the cache.
+/// Prune dangling cache entries and cached environments.
 pub(crate) async fn cache_prune(
     ci: bool,
     force: bool,

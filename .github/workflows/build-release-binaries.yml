@@ -34,11 +34,11 @@ jobs:
     name: sdist
     runs-on: depot-ubuntu-24.04-4
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -48,7 +48,7 @@ jobs:
       - name: "Build sdist"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           command: sdist
           args: --out dist
       - name: "Test sdist"
@@ -69,7 +69,7 @@ jobs:
       - name: "Build sdist uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
       - name: "Fix Cargo.lock in sdist uv-build"
@@ -89,11 +89,11 @@ jobs:
     name: x86_64-apple-darwin
     runs-on: depot-macos-15
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -107,11 +107,14 @@ jobs:
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: x86_64
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Use Rust's bundled Mach-O LLD, which supports ICF.
+          # ICF reduces the macOS x86_64 uv binary size by ~2%.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -140,11 +143,14 @@ jobs:
       - name: "Build wheels uv-build - x86_64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Use Rust's bundled Mach-O LLD, which supports ICF.
+          # ICF reduces the macOS x86_64 uv-build binary size by ~0.7%.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Upload wheels uv-build"
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -155,11 +161,11 @@ jobs:
     name: aarch64-apple-darwin
     runs-on: depot-macos-15
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
@@ -173,12 +179,15 @@ jobs:
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: aarch64
           manylinux: 2_17
           args: --release --locked --out dist --features self-update --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Use Rust's bundled Mach-O LLD, which supports ICF.
+          # ICF reduces the macOS aarch64 uv binary size by ~1.4%.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME} --no-index --find-links dist/ --force-reinstall
@@ -213,11 +222,14 @@ jobs:
       - name: "Build wheels uv-build - aarch64"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
           CARGO: ${{ github.workspace }}/scripts/cargo.sh
+          # Use Rust's bundled Mach-O LLD, which supports ICF.
+          # ICF reduces the macOS aarch64 uv-build binary size by ~0.7%.
+          RUSTFLAGS: "-C linker=rust-lld -C linker-flavor=ld64.lld -C link-arg=--icf=safe"
       - name: "Test wheel - aarch64"
         run: |
           pip install ${PACKAGE_NAME}_build --no-index --find-links crates/uv-build/dist --force-reinstall
@@ -245,11 +257,11 @@ jobs:
             arch: arm64
             runner: github-windows-11-aarch64-8
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
@@ -270,7 +282,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update,windows-gui-bin --compatibility pypi
         env:
@@ -312,7 +324,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
         env:
@@ -338,11 +350,11 @@ jobs:
           - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
           - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -353,7 +365,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
           # 32-bit compiler runs out of memory (4GB memory limit for 32-bit), so we cross compile
@@ -424,7 +436,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: 2_17
           docker-options: -e CARGO
@@ -469,11 +481,11 @@ jobs:
             manylinux: auto
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -483,7 +495,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -541,7 +553,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: ${{ matrix.platform.manylinux }}
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -586,11 +598,11 @@ jobs:
             arch: s390x
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -600,7 +612,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -663,7 +675,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -709,11 +721,11 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -723,7 +735,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -784,7 +796,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_17
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -818,11 +830,11 @@ jobs:
             arch: riscv64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -832,7 +844,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -891,7 +903,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: 2_31
           docker-options: -e CARGO ${{ matrix.platform.maturin_docker_options }}
@@ -934,11 +946,11 @@ jobs:
           - x86_64-unknown-linux-musl
           - i686-unknown-linux-musl
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -949,7 +961,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO
@@ -1001,7 +1013,7 @@ jobs:
       - name: "Build wheels uv-build"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
           docker-options: -e CARGO
@@ -1046,11 +1058,11 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -1060,7 +1072,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           # Tag the musl builds as manylinux 2_17 fallback cause the aarch64 build only support 2_28
@@ -1140,7 +1152,7 @@ jobs:
       - name: "Build wheels"
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          maturin-version: v1.13.1
+          maturin-version: v1.14.1
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml --compatibility pypi
@@ -1193,7 +1205,7 @@ jobs:
           path: crates/uv-build/dist
 
   check-wheels:
-    name: "Check wheel contents"
+    name: "check wheel contents"
     runs-on: ubuntu-slim
     needs:
       - macos-x86_64
@@ -1207,15 +1219,15 @@ jobs:
       - musllinux
       - musllinux-cross
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - name: "Install uv"
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: wheels_*-*
           path: wheels
           merge-multiple: true
-      - name: "Check wheel contents"
+      - name: "check wheel contents"
         run: uv run --no-project scripts/check_uv_wheel_contents.py wheels/*

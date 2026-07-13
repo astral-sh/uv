@@ -4,7 +4,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anstream::eprint;
 use anyhow::{Context, bail};
 use console::Term;
 use itertools::Itertools;
@@ -55,7 +54,9 @@ use crate::commands::project::{
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::{ToolPython, matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::{diagnostics, project::environment::CachedEnvironment, read_env_files};
+use crate::commands::{
+    UvError, diagnostics, project::environment::CachedEnvironment, read_env_files,
+};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 use crate::settings::ResolverSettings;
@@ -271,22 +272,19 @@ pub(crate) async fn run(
             // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
             if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
                 let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .with_hint(format!(
-                    "`{}` invokes the `{}` package. Did you mean `{}`?",
-                    format!("uvx run {rest}").green(),
-                    "run".cyan(),
-                    format!("uvx {rest}").green()
-                ))
-                .with_context("tool")
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .with_hint(format!(
+                        "`{}` invokes the `{}` package. Did you mean `{}`?",
+                        format!("uvx run {rest}").green(),
+                        "run".cyan(),
+                        format!("uvx {rest}").green()
+                    ))
+                    .with_context("tool")
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
 
-            let diagnostic =
-                diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs());
+            let diagnostic = diagnostics::OperationDiagnostic::default();
             let diagnostic = if let Some(verbose_flag) = find_verbose_flag(args) {
                 diagnostic.with_hint(format!(
                     "You provided `{}` to `{}`. Did you mean to provide it to `{}`? e.g., `{}`",
@@ -304,10 +302,8 @@ pub(crate) async fn run(
         }
 
         Err(ProjectError::Requirements(err)) => {
-            let err = miette::Report::msg(format!("{err}"))
-                .context("Failed to resolve `--with` requirement");
-            eprint!("{err:?}");
-            return Ok(ExitStatus::Failure);
+            let err = anyhow::Error::new(err).context("Failed to resolve `--with` requirement");
+            return Err(UvError::user(err).into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -951,6 +947,7 @@ async fn get_or_create_environment(
         client_builder,
     )
     .await?;
+    let exclusions = uv_configuration::Excludes::from_entries(spec.excludes.iter().cloned());
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -1053,7 +1050,8 @@ async fn get_or_create_environment(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
-                            overrides.iter(),
+                            &uv_configuration::Overrides::from_requirements(overrides.clone()),
+                            &exclusions,
                             InstallationStrategy::Permissive,
                             &markers,
                             &tags,

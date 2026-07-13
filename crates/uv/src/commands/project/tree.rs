@@ -15,7 +15,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion}
 use uv_resolver::{PackageMap, TreeDisplay};
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -65,18 +65,18 @@ pub(crate) async fn tree(
 ) -> Result<ExitStatus> {
     // Find the project requirements.
     let workspace_cache = WorkspaceCache::default();
-    let workspace;
+    let virtual_project;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(
+        virtual_project = VirtualProject::discover(
             project_dir,
             &DiscoveryOptions::default(),
             cache,
             &workspace_cache,
         )
         .await?;
-        LockTarget::Workspace(&workspace)
+        LockTarget::Workspace(virtual_project.workspace())
     };
 
     // Determine the groups to include.
@@ -169,11 +169,9 @@ pub(crate) async fn tree(
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -249,7 +247,7 @@ pub(crate) async fn tree(
                 client: &client,
                 capabilities: &capabilities,
                 prerelease: lock.prerelease_mode(),
-                exclude_newer: &exclude_newer,
+                exclude_newer,
                 index_locations,
                 requires_python: Some(lock.requires_python()),
                 tags: None,

@@ -129,7 +129,7 @@ pub(crate) async fn pip_uninstall(
     let urls = {
         let mut urls = unnamed
             .into_iter()
-            .map(|requirement| requirement.url.verbatim.to_url())
+            .map(|requirement| requirement.url.verbatim.into_url())
             .collect::<Vec<_>>();
         urls.sort_unstable();
         urls.dedup();

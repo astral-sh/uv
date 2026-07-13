@@ -175,7 +175,7 @@ fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
         (ParsedUrl::Archive(a), ParsedUrl::Archive(b)) => {
             a.subdirectory.as_deref().map(uv_fs::normalize_path)
                 == b.subdirectory.as_deref().map(uv_fs::normalize_path)
-                && CanonicalUrl::new(&a.url) == CanonicalUrl::new(&b.url)
+                && CanonicalUrl::new(a.url.clone()) == CanonicalUrl::new(b.url.clone())
         }
         (ParsedUrl::GitDirectory(a), ParsedUrl::GitDirectory(b)) => {
             a.subdirectory.as_deref().map(uv_fs::normalize_path)

@@ -11,11 +11,13 @@ use tracing::{debug, warn};
 
 pub use crate::locked_file::*;
 pub use crate::path::*;
+pub use crate::read::ValidatedReader;
 
 pub mod cachedir;
 pub mod link;
 mod locked_file;
 mod path;
+mod read;
 pub mod which;
 
 /// Attempt to check if the two paths refer to the same file.
@@ -125,11 +127,8 @@ fn create_junction(target: &Path, path: &Path) -> std::io::Result<()> {
                 )
             ) =>
         {
-            // Broken reparse point. Once junction::delete strips the reparse data, only an empty
-            // directory shell remains.
-            if junction::delete(path).is_ok() {
-                let _ = fs_err::remove_dir(path);
-            }
+            // Broken reparse point.
+            let _ = fs_err::remove_dir(path);
             Err(create_result.err().unwrap_or(err))
         }
         Err(err) => Err(create_result.err().unwrap_or(err)),
@@ -175,12 +174,8 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(windows)]
 fn replace_with_junction(src: &Path, dst: &Path) -> std::io::Result<()> {
     // Remove the existing junction, if any.
-    match junction::delete(dunce::simplified(dst)) {
-        Ok(()) => match fs_err::remove_dir_all(dst) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => return Err(err),
-        },
+    match fs_err::remove_dir(dst) {
+        Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
     }
@@ -205,25 +200,6 @@ fn replace_with_symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     }
 
     fs_err::os::windows::fs::symlink_dir(dunce::simplified(src), dunce::simplified(dst))
-}
-
-/// Read the target of a directory link created by [`create_symlink`] or
-/// [`replace_symlink`].
-///
-/// On Windows, uv normally creates junctions for directory links, but creates
-/// directory symbolic links under Wine. This function reads the appropriate link
-/// type for the current environment. For junctions, this uses the `junction`
-/// crate, which handles the `\??\` prefix that Windows uses internally for
-/// junction targets.
-#[cfg(windows)]
-pub fn read_link(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-    let path = path.as_ref();
-
-    if uv_windows::is_wine() {
-        fs_err::read_link(path)
-    } else {
-        junction::get_target(dunce::simplified(path))
-    }
 }
 
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
@@ -286,12 +262,30 @@ pub fn create_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::
     fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())
 }
 
+/// Remove a symbolic link at `path` without following its target.
+pub fn remove_symlink(path: impl AsRef<Path>) -> io::Result<()> {
+    let path = path.as_ref();
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::FileTypeExt;
+
+        if fs_err::symlink_metadata(path)?.file_type().is_symlink_dir() {
+            return fs_err::remove_dir(path);
+        }
+    }
+
+    fs_err::remove_file(path)
+}
+
 #[cfg(all(test, windows))]
-mod tests {
+mod windows_tests {
+    use std::os::windows::ffi::OsStrExt;
+
     use super::*;
 
     #[test]
-    fn read_link_reads_created_directory_link() -> std::io::Result<()> {
+    fn fs_err_read_link_reads_created_directory_link() -> std::io::Result<()> {
         let tempdir = tempfile::tempdir()?;
         let target = tempdir.path().join("target");
         fs_err::create_dir(&target)?;
@@ -299,7 +293,27 @@ mod tests {
 
         create_symlink(&target, &link)?;
 
-        assert_eq!(read_link(&link)?, dunce::simplified(&target));
+        assert_eq!(
+            verbatim_path(&fs_err::read_link(&link)?),
+            verbatim_path(&target)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn fs_err_read_link_reads_long_junction_target() -> std::io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let mut target = tempdir.path().join("target");
+        while target.as_os_str().encode_wide().count() < 257 {
+            target.push("long-path-component");
+        }
+        fs_err::create_dir_all(&target)?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+
+        let link_target = fs_err::read_link(&link)?;
+        assert_eq!(verbatim_path(&link_target), verbatim_path(&target));
         Ok(())
     }
 
@@ -319,7 +333,10 @@ mod tests {
 
         let err = create_junction(&target, &link).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidFilename);
-        assert!(!link.exists());
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound
+        ));
         Ok(())
     }
 }
@@ -333,13 +350,13 @@ mod tests {
 /// This function should only be used for files. If targeting a directory, use [`replace_symlink`]
 /// instead; it will use a junction on Windows, which is more performant.
 pub fn symlink_or_copy_file(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
-    #[cfg(windows)]
-    {
-        fs_err::copy(src.as_ref(), dst.as_ref())?;
-    }
-    #[cfg(unix)]
-    {
-        fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+    cfg_select! {
+        windows => {
+            fs_err::copy(src.as_ref(), dst.as_ref())?;
+        },
+        unix => {
+            fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref())?;
+        },
     }
 
     Ok(())
@@ -840,7 +857,14 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Re
 }
 
 /// Perform a safe removal of a virtual environment.
+///
+/// Links at `location` are removed without following them.
 pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
+    let file_type = fs_err::symlink_metadata(location)?.file_type();
+    if file_type.is_symlink() {
+        return remove_symlink(location);
+    }
+
     // On Windows, if the current executable is in the directory, defer self-deletion since Windows
     // won't let you unlink a running executable.
     #[cfg(windows)]
@@ -889,4 +913,74 @@ pub fn remove_virtualenv(location: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Prepare an empty virtual environment directory, resolving links when possible.
+///
+/// Returns whether an existing entry was found.
+pub fn clear_virtualenv(location: &Path) -> io::Result<bool> {
+    let location = location
+        .canonicalize()
+        .unwrap_or_else(|_| location.to_path_buf());
+    let cleared = match remove_virtualenv(&location) {
+        Ok(()) => true,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+        Err(err) => return Err(err),
+    };
+    fs_err::create_dir_all(location)?;
+    Ok(cleared)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_symlink_removes_directory_link_without_removing_target() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        fs_err::write(target.join("file"), "content")?;
+        let link = tempdir.path().join("link");
+
+        create_symlink(&target, &link)?;
+        remove_symlink(&link)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(&link),
+            Err(err) if err.kind() == io::ErrorKind::NotFound
+        ));
+        assert_eq!(fs_err::read_to_string(target.join("file"))?, "content");
+        Ok(())
+    }
+
+    #[test]
+    fn remove_virtualenv_removes_directory_link_without_removing_target() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let target = tempdir.path().join("target");
+        fs_err::create_dir(&target)?;
+        let marker = target.join("marker");
+        fs_err::write(&marker, "")?;
+        let environment = tempdir.path().join("environment");
+        create_symlink(&target, &environment)?;
+
+        remove_virtualenv(&environment)?;
+
+        assert!(matches!(
+            fs_err::symlink_metadata(environment),
+            Err(err) if err.kind() == io::ErrorKind::NotFound
+        ));
+        assert!(marker.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn clear_virtualenv_recreates_missing_directory() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let environment = tempdir.path().join("environment");
+
+        assert!(!clear_virtualenv(&environment)?);
+        assert!(environment.is_dir());
+        Ok(())
+    }
 }

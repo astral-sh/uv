@@ -5,7 +5,8 @@ mod settings;
 mod source_dist;
 mod wheel;
 
-pub use metadata::{PyProjectToml, check_direct_build};
+pub(crate) use metadata::PyProjectToml;
+pub use metadata::check_direct_build;
 pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
 use uv_warnings::warn_user_once;

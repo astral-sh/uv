@@ -192,11 +192,11 @@ impl InternerGuard<'_> {
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
@@ -218,7 +218,7 @@ impl InternerGuard<'_> {
             //
             // Note that in the presence of the `in` operator, we may not be able to simplify
             // some marker trees to a constant `true` or `false`. For example, it is not trivial to
-            // detect that `os_name > 'z' and os_name in 'Linux'` is unsatisfiable.
+            // detect that `os_name == 'Windows' and os_name in 'Linux'` is unsatisfiable.
             MarkerExpression::String {
                 key,
                 operator: MarkerOperator::In,
@@ -313,7 +313,10 @@ impl InternerGuard<'_> {
                     ),
                     _ => (key.into(), value),
                 };
-                (Variable::String(key), Edges::from_string(operator, value))
+                (
+                    Variable::String(key),
+                    Edges::from_string(key, operator, value),
+                )
             }
             MarkerExpression::List { pair, operator } => (
                 Variable::List(pair),
@@ -521,12 +524,16 @@ impl InternerGuard<'_> {
         }
     }
 
-    // Restrict the output of a given boolean variable in the tree.
+    // Restrict the output of selected boolean variables in the tree.
     //
     // If the provided function `f` returns a `Some` boolean value, the tree will be simplified
-    // with the assumption that the given variable is restricted to that value. If the function
+    // with the assumption that each variable is restricted to that value. If the function
     // returns `None`, the variable will not be affected.
-    pub(crate) fn restrict(&mut self, i: NodeId, f: &impl Fn(&Variable) -> Option<bool>) -> NodeId {
+    pub(crate) fn restrict_by(
+        &mut self,
+        i: NodeId,
+        f: &impl Fn(&Variable) -> Option<bool>,
+    ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
@@ -537,13 +544,106 @@ impl InternerGuard<'_> {
                 // Restrict this variable to the given output by merging it
                 // with the relevant child.
                 let node = if value { high } else { low };
-                return self.restrict(node.negate(i), f);
+                return self.restrict_by(node.negate(i), f);
             }
         }
 
         // Restrict all nodes recursively.
-        let children = node.children.map(i, |node| self.restrict(node, f));
+        let children = node.children.map(i, |node| self.restrict_by(node, f));
         self.create_node(node.var.clone(), children)
+    }
+
+    /// Restrict a marker by assuming that another marker is true.
+    ///
+    /// The returned marker is equivalent to `value` wherever `assumption` is true. Its value
+    /// outside of `assumption` is unspecified, which lets us eliminate decisions that are only
+    /// needed to restate the assumption.
+    pub(crate) fn restrict(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.restrict_cached(value, assumption, &mut cache)
+    }
+
+    fn restrict_cached(
+        &mut self,
+        value: NodeId,
+        assumption: NodeId,
+        cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
+    ) -> NodeId {
+        if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
+            return value;
+        }
+        if assumption.is_false() {
+            return NodeId::FALSE;
+        }
+        if value == assumption {
+            return NodeId::TRUE;
+        }
+        if value == assumption.not() {
+            return NodeId::FALSE;
+        }
+        if let Some(&result) = cache.get(&(value, assumption)) {
+            return result;
+        }
+
+        let value_node = self.shared.node(value);
+        let assumption_node = self.shared.node(assumption);
+        let result = match value_node.var.cmp(&assumption_node.var) {
+            Ordering::Less => {
+                let children = value_node.children.map(value, |value| {
+                    self.restrict_cached(value, assumption, cache)
+                });
+                self.create_node(value_node.var.clone(), children)
+            }
+            Ordering::Greater => {
+                // The value does not depend on this variable. Existentially quantify it out of the
+                // assumption, and continue with the remaining variables.
+                let mut quantified_assumption = NodeId::FALSE;
+                for child in assumption_node.children.nodes() {
+                    quantified_assumption =
+                        self.or(quantified_assumption, child.negate(assumption));
+                }
+                self.restrict_cached(value, quantified_assumption, cache)
+            }
+            Ordering::Equal => {
+                // Split both trees into matching ranges. Replace any ranges that are unreachable
+                // under the assumption with the first reachable child, simplifying them out of the
+                // resulting marker.
+                let mut fallback = None;
+                value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            NodeId::FALSE
+                        } else {
+                            let result = self.restrict_cached(value, assumption, cache);
+                            fallback.get_or_insert(result);
+                            result
+                        }
+                    },
+                );
+                let Some(fallback) = fallback else {
+                    return NodeId::FALSE;
+                };
+                let children = value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            fallback
+                        } else {
+                            self.restrict_cached(value, assumption, cache)
+                        }
+                    },
+                );
+                self.create_node(value_node.var.clone(), children)
+            }
+        };
+
+        cache.insert((value, assumption), result);
+        result
     }
 
     /// Returns a new tree where the only nodes remaining are non-`extra`
@@ -1225,15 +1325,47 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: ArcStr) -> Self {
-        let range: Ranges<ArcStr> = match operator {
-            MarkerOperator::Equal => Ranges::singleton(value),
-            MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
-            MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
-            MarkerOperator::GreaterEqual => Ranges::higher_than(value),
-            MarkerOperator::LessThan => Ranges::strictly_lower_than(value),
-            MarkerOperator::LessEqual => Ranges::lower_than(value),
-            MarkerOperator::TildeEqual => unreachable!("string comparisons with ~= are ignored"),
+    fn from_string(
+        key: CanonicalMarkerValueString,
+        operator: MarkerOperator,
+        value: ArcStr,
+    ) -> Self {
+        let range: Ranges<ArcStr> = match (key, operator) {
+            // `platform_release` and `platform_version` are `Version | String` fields. Preserve
+            // their existing lexicographic behavior here; their version-aware semantics are
+            // outside the pure string field behavior handled by this change.
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterThan,
+            ) => Ranges::strictly_higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::GreaterEqual,
+            ) => Ranges::higher_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessThan,
+            ) => Ranges::strictly_lower_than(value),
+            (
+                CanonicalMarkerValueString::PlatformRelease
+                | CanonicalMarkerValueString::PlatformVersion,
+                MarkerOperator::LessEqual,
+            ) => Ranges::lower_than(value),
+            (_, MarkerOperator::Equal) => Ranges::singleton(value),
+            (_, MarkerOperator::NotEqual) => Ranges::singleton(value).complement(),
+            // The marker specification defines strict ordering comparisons for string-valued
+            // fields as always false, while inclusive ordering comparisons are equivalent to
+            // equality.
+            (_, MarkerOperator::GreaterThan | MarkerOperator::LessThan) => Ranges::empty(),
+            (_, MarkerOperator::GreaterEqual | MarkerOperator::LessEqual) => {
+                Ranges::singleton(value)
+            }
+            (_, MarkerOperator::TildeEqual) => {
+                unreachable!("string comparisons with ~= are ignored")
+            }
             _ => unreachable!("`in` and `contains` are treated as boolean variables"),
         };
 
@@ -1277,15 +1409,10 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
+    fn from_versions(versions: Vec<Version>, operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
-            .iter()
-            .map(|version| {
-                (
-                    Bound::Included(version.clone()),
-                    Bound::Included(version.clone()),
-                )
-            })
+            .into_iter()
+            .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect();
 
         if operator == ContainerOperator::NotIn {
@@ -1306,13 +1433,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::FALSE));
         }
 
@@ -1784,15 +1911,17 @@ mod tests {
         assert!(m().or(extra_foo, extra_not_foo).is_true());
 
         let os_geq_bar = expr("os_name >= 'bar'");
-        assert!(!os_geq_bar.is_false());
+        assert_eq!(os_geq_bar, expr("os_name == 'bar'"));
 
-        let os_le_bar = expr("os_name < 'bar'");
-        assert!(m().and(os_geq_bar, os_le_bar).is_false());
-        assert!(m().or(os_geq_bar, os_le_bar).is_true());
+        let os_lt_bar = expr("os_name < 'bar'");
+        assert!(os_lt_bar.is_false());
+        assert!(m().and(os_geq_bar, os_lt_bar).is_false());
+        assert_eq!(m().or(os_geq_bar, os_lt_bar), os_geq_bar);
 
         let os_leq_bar = expr("os_name <= 'bar'");
-        assert!(!m().and(os_geq_bar, os_leq_bar).is_false());
-        assert!(m().or(os_geq_bar, os_leq_bar).is_true());
+        assert_eq!(os_leq_bar, os_geq_bar);
+        assert_eq!(m().and(os_geq_bar, os_leq_bar), os_geq_bar);
+        assert_eq!(m().or(os_geq_bar, os_leq_bar), os_geq_bar);
     }
 
     #[test]

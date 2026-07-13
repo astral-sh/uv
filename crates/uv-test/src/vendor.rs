@@ -244,20 +244,18 @@ async fn ensure_cached_artifact(artifact: &VendorArtifact, path: &Path) -> Resul
 
     match persist_with_retry_sync(temp, path) {
         Ok(()) => Ok(()),
-        Err(error) => {
+        Err(_)
             if let Ok(bytes) = fs_err::read(path)
-                && verify_bytes(artifact, &bytes).is_ok()
-            {
-                Ok(())
-            } else {
-                Err(error).with_context(|| {
-                    format!(
-                        "failed to persist cached vendor artifact `{}`",
-                        path.display()
-                    )
-                })
-            }
+                && verify_bytes(artifact, &bytes).is_ok() =>
+        {
+            Ok(())
         }
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to persist cached vendor artifact `{}`",
+                path.display()
+            )
+        }),
     }
 }
 

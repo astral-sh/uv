@@ -1,3 +1,7 @@
+// Don't optimize the alloc crate away due to it being otherwise unused.
+// https://github.com/rust-lang/rust/issues/64402
+extern crate uv_performance_memory_allocator;
+
 use std::fmt::Write;
 use std::hint::black_box;
 use std::io::Cursor;
@@ -93,6 +97,15 @@ fn create_many_files_sdist() -> tempfile::NamedTempFile {
     archive
 }
 
+fn create_sdist_extraction_directory() -> tempfile::TempDir {
+    #[cfg(target_os = "linux")]
+    if let Ok(directory) = tempfile::tempdir_in("/dev/shm") {
+        return directory;
+    }
+
+    tempfile::tempdir().expect("Failed to create sdist extraction directory")
+}
+
 fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
     let archive = create_many_files_sdist();
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -107,7 +120,7 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     runtime
                         .block_on(fs_err::tokio::File::open(archive.path()))
                         .expect("Failed to open temporary archive"),
-                    tempfile::tempdir().expect("Failed to create sdist extraction directory"),
+                    create_sdist_extraction_directory(),
                 )
             },
             |(archive, extracted_sdist)| {
@@ -123,7 +136,7 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                     .expect("Failed to strip top-level sdist directory");
                 black_box((files, extracted_sdist, source_tree))
             },
-            BatchSize::SmallInput,
+            BatchSize::PerIteration,
         );
     });
 }
@@ -307,16 +320,26 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 //     c.bench_function("resolve_warm_airflow_universal", |b| b.iter(&run));
 // }
 
-criterion_group!(
-    uv,
-    unpack_sdist_many_files,
-    unzip_wheel_many_files,
-    prepare_wheel_many_files,
-    install_wheel_many_files,
-    resolve_warm_jupyter,
-    resolve_warm_jupyter_universal,
-    resolve_warm_airflow
-);
+fn criterion_with_preview() -> Criterion<WallTime> {
+    uv_preview::set(Preview::default())
+        .expect("Global preview features should not have been initialized already");
+    uv_preview::finalize().expect("Failed to finalize preview features");
+
+    Criterion::default()
+}
+
+criterion_group! {
+    name = uv;
+    config = criterion_with_preview();
+    targets =
+        unpack_sdist_many_files,
+        unzip_wheel_many_files,
+        prepare_wheel_many_files,
+        install_wheel_many_files,
+        resolve_warm_jupyter,
+        resolve_warm_jupyter_universal,
+        resolve_warm_airflow
+}
 criterion_main!(uv);
 
 fn setup(manifest: Manifest, universal: bool) -> impl Fn() {
@@ -430,7 +453,7 @@ mod resolver {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &PLATFORM,
+            PLATFORM.clone(),
             (3, 11),
             "cpython",
             (3, 11),

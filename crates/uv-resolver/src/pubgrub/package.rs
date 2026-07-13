@@ -321,8 +321,8 @@ impl PubGrubPackage {
     }
 
     /// Returns a new [`PubGrubPackage`] representing the base package with the given name.
-    pub(crate) fn base(name: &PackageName) -> Self {
-        Self::from_package(name.clone(), None, None, MarkerTree::TRUE)
+    pub(crate) fn base(name: PackageName) -> Self {
+        Self::from_package(name, None, None, MarkerTree::TRUE)
     }
 }
 

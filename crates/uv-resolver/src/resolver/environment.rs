@@ -620,7 +620,7 @@ pub(crate) fn fork_version_by_python_requirement(
     python_requirement: &PythonRequirement,
     env: &ResolverEnvironment,
 ) -> Vec<ResolverEnvironment> {
-    let requires_python = RequiresPython::from_specifiers(requires_python);
+    let requires_python = RequiresPython::from_specifiers(requires_python.clone());
     let lower = requires_python.range().lower().clone();
 
     // Attempt to split the current Python requirement based on the `requires-python` specifier.

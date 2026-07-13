@@ -23,6 +23,7 @@ use uv_pep508::{
 use uv_pypi_types::{
     Identifier, IdentifierParseError, Keywords, Metadata23, ProjectUrls, VerbatimParsedUrl,
 };
+use uv_toml::deserialize_unique_map;
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::{BuildBackendSettings, Error, error_on_venv};
@@ -33,6 +34,19 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 /// No breaking changes were introduced to the uv build backend since these releases, so we can use
 /// the fast path for them too.
 const COMPATIBLE_VERSIONS: &[&str] = &["0.9.30", "0.10.12"];
+
+fn deserialize_optional_dependencies<'de, D, V>(
+    deserializer: D,
+) -> Result<Option<BTreeMap<ExtraName, V>>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    deserialize_unique_map(deserializer, |key: &ExtraName| {
+        format!("duplicate normalized extra name `{key}`")
+    })
+    .map(Some)
+}
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -345,7 +359,7 @@ impl<'de> Deserialize<'de> for VerbatimPackageName {
     expecting = "The project table needs to follow \
     https://packaging.python.org/en/latest/guides/writing-pyproject-toml"
 )]
-pub struct PyProjectToml {
+pub(crate) struct PyProjectToml {
     /// Project metadata
     project: Project,
     /// uv-specific configuration
@@ -720,13 +734,11 @@ impl PyProjectToml {
             // Track whether each user-specified glob matched so we can flag the unmatched ones.
             let mut license_globs_matched = vec![false; license_globs_parsed.len()];
 
-            let license_globs =
-                GlobDirFilter::from_globs(&license_globs_parsed).map_err(|err| {
-                    Error::GlobSetTooLarge {
-                        field: "project.license-files".to_string(),
-                        source: err,
-                    }
-                })?;
+            let license_globs = GlobDirFilter::from_globs(license_globs_parsed.clone());
+            let license_globs = license_globs.map_err(|err| Error::GlobSetTooLarge {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
 
             for entry in WalkDir::new(root)
                 .sort_by_file_name()
@@ -891,8 +903,7 @@ impl PyProjectToml {
         if !group
             .chars()
             .next()
-            .map(|c| c.is_alphanumeric() || c == '_')
-            .unwrap_or(false)
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
             || !group
                 .chars()
                 .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
@@ -984,6 +995,7 @@ struct Project {
     /// The dependencies of the project.
     dependencies: Option<Vec<Requirement>>,
     /// The optional dependencies of the project.
+    #[serde(default, deserialize_with = "deserialize_optional_dependencies")]
     optional_dependencies: Option<BTreeMap<ExtraName, Vec<Requirement>>>,
     /// Import names exclusively provided by the project.
     ///
@@ -1213,8 +1225,7 @@ impl BuildSystem {
                 }
                 Ranges::from(specifier.clone())
                     .bounding_range()
-                    .map(|bounding_range| bounding_range.1 != Bound::Unbounded)
-                    .unwrap_or(false)
+                    .is_some_and(|bounding_range| bounding_range.1 != Bound::Unbounded)
             }
         };
 
@@ -1809,6 +1820,24 @@ mod tests {
     }
 
     #[test]
+    fn reject_colliding_optional_dependency_names() {
+        let contents = extend_project(indoc! {r#"
+            [project.optional-dependencies]
+            foo-bar = ["anyio"]
+            foo_bar = ["iniconfig"]
+        "#});
+
+        let err = toml::from_str::<PyProjectToml>(&contents).unwrap_err();
+        assert_snapshot!(err.to_string(), @r#"
+        TOML parse error at line 4, column 1
+          |
+        4 | [project.optional-dependencies]
+          | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        duplicate normalized extra name `foo-bar`
+        "#);
+    }
+
+    #[test]
     fn invalid_readme_spec() {
         let contents = extend_project(indoc! {r#"
             readme = { path = "Readme.md" }
@@ -2172,15 +2201,16 @@ mod tests {
         // Versions are ordered from oldest to latest
         let last_compatible =
             Version::from_str(COMPATIBLE_VERSIONS[COMPATIBLE_VERSIONS.len() - 1]).unwrap();
-        if last_compatible.release()[0] != current_version.release()[0]
-            && last_compatible.release()[0] != current_version.release()[1]
-        {
-            panic!(
-                "Please update the list of compatible versions for the uv build backend: \
-                If there was no breaking change in uv-build, add the last release before the \
-                breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
-                to an empty list"
-            );
-        }
+        // uv is versioned as `0.<minor>.<patch>`, so a breaking release bumps the minor segment.
+        // The list is kept one minor behind the current release, so if the newest compatible
+        // version isn't the immediately preceding minor, we likely missed updating the list on a
+        // breaking release.
+        assert!(
+            last_compatible.release()[1] + 1 == current_version.release()[1],
+            "Please update the list of compatible versions for the uv build backend: \
+            If there was no breaking change in uv-build, add the last release before the \
+            breaking release to `COMPATIBLE_VERSIONS`, otherwise reset `COMPATIBLE_VERSIONS` \
+            to an empty list"
+        );
     }
 }

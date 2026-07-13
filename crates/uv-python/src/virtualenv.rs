@@ -35,19 +35,19 @@ pub struct VirtualEnvironment {
 #[derive(Debug, Clone)]
 pub struct PyVenvConfiguration {
     /// The `PYTHONHOME` directory containing the base Python executable.
-    pub(crate) home: Option<PathBuf>,
+    pub(super) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
-    pub(crate) virtualenv: bool,
+    pub(super) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
-    pub(crate) uv: bool,
+    pub(super) uv: bool,
     /// Is the virtual environment relocatable?
-    pub(crate) relocatable: bool,
+    pub(super) relocatable: bool,
     /// Was the virtual environment populated with seed packages?
-    pub(crate) seed: bool,
+    pub(super) seed: bool,
     /// Should the virtual environment include system site packages?
-    pub(crate) include_system_site_packages: bool,
+    pub(super) include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
-    pub(crate) version: Option<PythonVersion>,
+    pub(super) version: Option<PythonVersion>,
 }
 
 #[derive(Debug, Error)]
@@ -317,12 +317,12 @@ impl PyVenvConfiguration {
         let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
         let mut found = false;
         for line in &mut lines {
-            if let Some((lhs, _)) = line.split_once('=') {
-                if lhs.trim() == key {
-                    *line = Cow::Owned(format!("{key} = {value}"));
-                    found = true;
-                    break;
-                }
+            if let Some((lhs, _)) = line.split_once('=')
+                && lhs.trim() == key
+            {
+                *line = Cow::Owned(format!("{key} = {value}"));
+                found = true;
+                break;
             }
         }
         if !found {

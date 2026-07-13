@@ -814,14 +814,18 @@ impl ArchivedCachePolicy {
                 }
             }
         }
-        if age > freshness_lifetime {
+        // RFC 9111 S4.2 defines freshness as
+        // `freshness_lifetime > current_age`, so equality is stale.
+        //
+        // [RFC 9111 S4.2]: https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2
+        if age >= freshness_lifetime {
             let allows_stale = self.allows_stale(now);
             if !allows_stale {
                 tracing::trace!(
                     "Request to {} does not have a fresh cache entry because \
-                     its age is {} seconds, it is greater than the freshness \
-                     lifetime of {} seconds and stale cached responses are not \
-                     allowed",
+                     its age is {} seconds, it is greater than or equal to the \
+                     freshness lifetime of {} seconds and stale cached responses \
+                     are not allowed",
                     request.url(),
                     age,
                     freshness_lifetime,
@@ -908,7 +912,7 @@ impl ArchivedCachePolicy {
         let corrected_age_value = self.response.header_age().saturating_add(response_delay);
         let corrected_initial_age = apparent_age.max(corrected_age_value);
         let resident_age = unix_timestamp(now).saturating_sub(self.response.unix_timestamp.into());
-        let current_age = corrected_initial_age + resident_age;
+        let current_age = corrected_initial_age.saturating_add(resident_age);
         Duration::from_secs(current_age)
     }
 
@@ -1397,4 +1401,42 @@ fn parse_seconds(value: &[u8]) -> Option<u64> {
         return None;
     }
     std::str::from_utf8(value).ok()?.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    /// A server or proxy is free to send an arbitrarily large `Age` header, up
+    /// to `u64::MAX`. Combined with the resident age of a cached response, the
+    /// RFC 9111 S4.2.3 age computation must not overflow. Every term uses
+    /// saturating arithmetic, so the age saturates to `Duration::from_secs`
+    /// `(u64::MAX)` and the response is treated as stale rather than panicking
+    /// (debug) or wrapping around to a bogus "fresh" age (release). This must
+    /// remain stale even if the response's freshness lifetime also reaches
+    /// `u64::MAX`.
+    #[test]
+    fn age_saturates_on_huge_age_header() {
+        let request =
+            reqwest::Request::new(http::Method::GET, "https://example.com/".parse().unwrap());
+        let http_response = http::Response::builder()
+            .status(http::StatusCode::OK)
+            .header(http::header::AGE, u64::MAX.to_string())
+            .header(http::header::CACHE_CONTROL, format!("max-age={}", u64::MAX))
+            .body(Vec::new())
+            .unwrap();
+        let response = reqwest::Response::from(http_response);
+
+        let policy = CachePolicyBuilder::new(&request).build(&response);
+        let archived = policy.to_archived();
+
+        // `now` must be strictly after the response timestamp so that
+        // `resident_age` is non-zero, which is the term that triggers the
+        // overflow when added to a `u64::MAX`-derived initial age.
+        let now = SystemTime::now() + Duration::from_secs(5);
+        assert_eq!(archived.age(now), Duration::from_secs(u64::MAX));
+        assert!(!archived.is_fresh(now, &request));
+    }
 }

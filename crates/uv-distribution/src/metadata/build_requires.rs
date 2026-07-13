@@ -44,17 +44,18 @@ impl BuildRequires {
         locations: &IndexLocations,
         sources: &NoSources,
         editable: bool,
+        stop_discovery_at: Option<&Path>,
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
     ) -> Result<Self, MetadataError> {
-        let discovery = if sources.all() {
-            DiscoveryOptions {
-                members: MemberDiscovery::None,
-                ..Default::default()
-            }
-        } else {
-            DiscoveryOptions::default()
+        let discovery = DiscoveryOptions {
+            stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
+            members: if sources.all() {
+                MemberDiscovery::None
+            } else {
+                MemberDiscovery::default()
+            },
         };
         let Some(project_workspace) = ProjectWorkspace::from_maybe_project_root(
             install_path,

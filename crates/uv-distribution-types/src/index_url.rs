@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
+use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -96,7 +97,11 @@ impl IndexUrl {
 
     /// Convert the index URL into a [`DisplaySafeUrl`].
     pub fn into_url(self) -> DisplaySafeUrl {
-        self.inner().to_url()
+        match self {
+            Self::Pypi(url) | Self::Url(url) | Self::Path(url) => {
+                Arc::unwrap_or_clone(url).into_url()
+            }
+        }
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
@@ -121,17 +126,17 @@ impl IndexUrl {
             return;
         };
 
-        if let Some(path) = verbatim_url.given() {
-            if !is_disambiguated_path(path) {
-                if cfg!(windows) {
-                    warn_user!(
-                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
-                    );
-                } else {
-                    warn_user!(
-                        "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
-                    );
-                }
+        if let Some(path) = verbatim_url.given()
+            && !is_disambiguated_path(path)
+        {
+            if cfg!(windows) {
+                warn_user!(
+                    "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `.\\{path}` or `./{path}`). Support for ambiguous values will be removed in the future"
+                );
+            } else {
+                warn_user!(
+                    "Relative paths passed to `--index` or `--default-index` should be disambiguated from index names (use `./{path}`). Support for ambiguous values will be removed in the future"
+                );
             }
         }
     }
@@ -236,7 +241,7 @@ impl From<VerbatimUrl> for IndexUrl {
 
 impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
-        index.inner().to_url()
+        index.into_url()
     }
 }
 
@@ -295,7 +300,7 @@ impl IndexLocations {
 /// Returns `true` if two [`IndexUrl`]s refer to the same index.
 fn is_same_index(a: &IndexUrl, b: &IndexUrl) -> bool {
     RealmRef::from(&**b.url()) == RealmRef::from(&**a.url())
-        && CanonicalUrl::new(a.url()) == CanonicalUrl::new(b.url())
+        && CanonicalUrl::new(a.url().clone()) == CanonicalUrl::new(b.url().clone())
 }
 
 impl<'a> IndexLocations {
@@ -365,6 +370,15 @@ impl<'a> IndexLocations {
             .filter(|index| !index.explicit)
     }
 
+    /// Return an iterator over all [`Index`] entries to fetch in order.
+    ///
+    /// Unlike [`IndexLocations::indexes`], indexes with duplicate raw URLs are excluded.
+    pub fn fetch_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        let mut seen = FxHashSet::default();
+        self.indexes()
+            .filter(move |index| seen.insert(index.raw_url()))
+    }
+
     /// Return an iterator over all simple [`Index`] entries in order.
     ///
     /// If `no_index` was enabled, then this always returns an empty iterator.
@@ -389,15 +403,6 @@ impl<'a> IndexLocations {
     /// Return the `--no-index` flag.
     pub fn no_index(&self) -> bool {
         self.no_index
-    }
-
-    /// Clone the index locations into a [`IndexUrls`] instance.
-    pub fn index_urls(&'a self) -> IndexUrls {
-        IndexUrls {
-            indexes: self.indexes.clone(),
-            flat_indexes: self.flat_index.clone(),
-            no_index: self.no_index,
-        }
     }
 
     /// Return a vector containing all allowed [`Index`] entries.
@@ -457,140 +462,15 @@ impl<'a> IndexLocations {
         }
     }
 
-    /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
-    pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.simple_api_cache_control();
-            }
-        }
-        None
-    }
-
-    /// Return the artifact cache control header for an [`IndexUrl`], if configured.
-    pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.artifact_cache_control();
-            }
-        }
-        None
-    }
-
-    /// Return the `exclude-newer` setting for a given index, if the index is configured.
-    pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.exclude_newer();
-            }
-        }
-        None
-    }
-}
-
-impl From<&IndexLocations> for uv_auth::Indexes {
-    fn from(index_locations: &IndexLocations) -> Self {
-        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
-            let mut url = index.url().url().clone();
-            url.set_username("").ok();
-            url.set_password(None).ok();
-            let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
-            root_url.set_username("").ok();
-            root_url.set_password(None).ok();
-            uv_auth::Index {
-                url,
-                root_url,
-                auth_policy: index.authenticate,
-            }
-        }))
-    }
-}
-
-/// The index URLs to use for fetching packages.
-///
-/// This type merges the legacy `--index-url` and `--extra-index-url` options, along with the
-/// uv-specific `--index` and `--default-index`.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct IndexUrls {
-    indexes: Vec<Index>,
-    flat_indexes: Vec<Index>,
-    no_index: bool,
-}
-
-impl<'a> IndexUrls {
-    pub fn from_indexes(indexes: Vec<Index>) -> Self {
-        Self {
-            indexes,
-            flat_indexes: Vec::new(),
-            no_index: false,
-        }
-    }
-
-    /// Return an iterator over the configured flat-index locations.
-    pub fn flat_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        self.flat_indexes.iter()
-    }
-
-    /// Return the default [`Index`] entry.
-    ///
-    /// If `--no-index` is set, return `None`.
-    ///
-    /// If no index is provided, use the `PyPI` index.
-    fn default_index(&'a self) -> Option<&'a Index> {
-        if self.no_index {
-            None
-        } else {
-            let mut seen = FxHashSet::default();
-            self.indexes
-                .iter()
-                .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                .find(|index| index.default)
-                .or_else(|| Some(&DEFAULT_INDEX))
-        }
-    }
-
-    /// Return an iterator over the implicit [`Index`] entries.
-    ///
-    /// Default and explicit indexes are excluded.
-    fn implicit_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        if self.no_index {
-            Either::Left(std::iter::empty())
-        } else {
-            let mut seen = FxHashSet::default();
-            Either::Right(
-                self.indexes
-                    .iter()
-                    .filter(move |index| index.name.as_ref().is_none_or(|name| seen.insert(name)))
-                    .filter(|index| !index.default && !index.explicit),
-            )
-        }
-    }
-
-    /// Return an iterator over all [`IndexUrl`] entries in order.
-    ///
-    /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
-    /// over the `--index-url` definition.
-    ///
-    /// If `no_index` was enabled, then this always returns an empty
-    /// iterator.
-    pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
-        let mut seen = FxHashSet::default();
-        self.implicit_indexes()
-            .chain(self.default_index())
-            .filter(|index| !index.explicit)
-            .filter(move |index| seen.insert(index.raw_url())) // Filter out redundant raw URLs
-    }
-
     /// Return an iterator over all user-defined [`Index`] entries in order.
     ///
     /// Prioritizes the `[tool.uv.index]` definitions over the `--extra-index-url` definitions
     /// over the `--index-url` definition.
     ///
-    /// Unlike [`IndexUrl::indexes`], this includes explicit indexes and does _not_ insert PyPI
-    /// as a fallback default.
+    /// Unlike [`IndexLocations::indexes`], this includes explicit indexes and does _not_ insert
+    /// PyPI as a fallback default.
     ///
-    /// If `no_index` was enabled, then this always returns an empty
-    /// iterator.
+    /// If `no_index` was enabled, then this always returns an empty iterator.
     pub fn defined_indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
         if self.no_index {
             return Either::Left(std::iter::empty());
@@ -612,39 +492,60 @@ impl<'a> IndexUrls {
         Either::Right(non_default.into_iter().chain(default))
     }
 
-    /// Return the `--no-index` flag.
-    pub fn no_index(&self) -> bool {
-        self.no_index
+    /// Return the configured index matching the given URL.
+    fn index_for_url(&self, url: &IndexUrl) -> Option<&Index> {
+        self.indexes
+            .iter()
+            .find(|index| is_same_index(index.url(), url))
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
     pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.status_code_strategy();
-            }
-        }
-        IndexStatusCodeStrategy::Default
+        self.index_for_url(url).map_or(
+            IndexStatusCodeStrategy::Default,
+            Index::status_code_strategy,
+        )
+    }
+
+    /// Return whether the given status code is explicitly ignored for an [`IndexUrl`].
+    pub fn ignores_error_code_for(&self, url: &IndexUrl, status_code: StatusCode) -> bool {
+        self.index_for_url(url)
+            .is_some_and(|index| index.ignores_error_code(status_code))
     }
 
     /// Return the Simple API cache control header for an [`IndexUrl`], if configured.
     pub fn simple_api_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.simple_api_cache_control();
-            }
-        }
-        None
+        self.index_for_url(url)
+            .and_then(Index::simple_api_cache_control)
     }
 
     /// Return the artifact cache control header for an [`IndexUrl`], if configured.
     pub fn artifact_cache_control_for(&self, url: &IndexUrl) -> Option<http::HeaderValue> {
-        for index in &self.indexes {
-            if is_same_index(index.url(), url) {
-                return index.artifact_cache_control();
+        self.index_for_url(url)
+            .and_then(Index::artifact_cache_control)
+    }
+
+    /// Return the `exclude-newer` setting for a given index, if the index is configured.
+    pub fn exclude_newer_for(&self, url: &IndexUrl) -> Option<&ExcludeNewerOverride> {
+        self.index_for_url(url).and_then(Index::exclude_newer)
+    }
+}
+
+impl From<&IndexLocations> for uv_auth::Indexes {
+    fn from(index_locations: &IndexLocations) -> Self {
+        Self::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+            let mut url = index.url().url().clone();
+            url.set_username("").ok();
+            url.set_password(None).ok();
+            let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
+            root_url.set_username("").ok();
+            root_url.set_password(None).ok();
+            uv_auth::Index {
+                url,
+                root_url,
+                auth_policy: index.authenticate,
             }
-        }
-        None
+        }))
     }
 }
 
@@ -768,6 +669,20 @@ mod tests {
     }
 
     #[test]
+    fn fetch_indexes_deduplicates_raw_urls() {
+        let url = IndexUrl::from_str("https://index.example.com/simple").unwrap();
+        let mut first = Index::from(url.clone());
+        first.name = Some(IndexName::from_str("first").unwrap());
+        let mut second = Index::from(url);
+        second.name = Some(IndexName::from_str("second").unwrap());
+        second.default = true;
+        let locations = IndexLocations::new(vec![first, second], Vec::new(), false);
+
+        assert_eq!(locations.indexes().count(), 2);
+        assert_eq!(locations.fetch_indexes().count(), 1);
+    }
+
+    #[test]
     fn test_cache_control_lookup() {
         use std::str::FromStr;
 
@@ -806,25 +721,25 @@ mod tests {
             },
         ];
 
-        let index_urls = IndexUrls::from_indexes(indexes);
+        let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let url1 = IndexUrl::from_str("https://index1.example.com/simple").unwrap();
         assert_eq!(
-            index_urls.simple_api_cache_control_for(&url1),
+            index_locations.simple_api_cache_control_for(&url1),
             Some(HeaderValue::from_static("max-age=300"))
         );
         assert_eq!(
-            index_urls.artifact_cache_control_for(&url1),
+            index_locations.artifact_cache_control_for(&url1),
             Some(HeaderValue::from_static("max-age=1800"))
         );
 
         let url2 = IndexUrl::from_str("https://index2.example.com/simple").unwrap();
-        assert_eq!(index_urls.simple_api_cache_control_for(&url2), None);
-        assert_eq!(index_urls.artifact_cache_control_for(&url2), None);
+        assert_eq!(index_locations.simple_api_cache_control_for(&url2), None);
+        assert_eq!(index_locations.artifact_cache_control_for(&url2), None);
 
         let url3 = IndexUrl::from_str("https://index3.example.com/simple").unwrap();
-        assert_eq!(index_urls.simple_api_cache_control_for(&url3), None);
-        assert_eq!(index_urls.artifact_cache_control_for(&url3), None);
+        assert_eq!(index_locations.simple_api_cache_control_for(&url3), None);
+        assert_eq!(index_locations.artifact_cache_control_for(&url3), None);
     }
 
     #[test]
@@ -844,21 +759,10 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_urls = IndexUrls::from_indexes(indexes.clone());
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
-        // IndexUrls should return the default for PyTorch
-        assert_eq!(index_urls.simple_api_cache_control_for(&pytorch_url), None);
-        assert_eq!(
-            index_urls.artifact_cache_control_for(&pytorch_url),
-            Some(HeaderValue::from_static(
-                "max-age=365000000, immutable, public",
-            ))
-        );
-
-        // IndexLocations should also return the default for PyTorch
         assert_eq!(
             index_locations.simple_api_cache_control_for(&pytorch_url),
             None
@@ -891,22 +795,10 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_urls = IndexUrls::from_indexes(indexes.clone());
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let pytorch_url = IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap();
 
-        // User settings should override defaults
-        assert_eq!(
-            index_urls.simple_api_cache_control_for(&pytorch_url),
-            Some(HeaderValue::from_static("no-cache"))
-        );
-        assert_eq!(
-            index_urls.artifact_cache_control_for(&pytorch_url),
-            Some(HeaderValue::from_static("max-age=3600"))
-        );
-
-        // Same for IndexLocations
         assert_eq!(
             index_locations.simple_api_cache_control_for(&pytorch_url),
             Some(HeaderValue::from_static("no-cache"))
@@ -934,21 +826,10 @@ mod tests {
             exclude_newer: None,
         }];
 
-        let index_urls = IndexUrls::from_indexes(indexes.clone());
         let index_locations = IndexLocations::new(indexes, Vec::new(), false);
 
         let nvidia_url = IndexUrl::from_str("https://pypi.nvidia.com").unwrap();
 
-        // IndexUrls should return the default for NVIDIA
-        assert_eq!(index_urls.simple_api_cache_control_for(&nvidia_url), None);
-        assert_eq!(
-            index_urls.artifact_cache_control_for(&nvidia_url),
-            Some(HeaderValue::from_static(
-                "max-age=365000000, immutable, public",
-            ))
-        );
-
-        // IndexLocations should also return the default for NVIDIA
         assert_eq!(
             index_locations.simple_api_cache_control_for(&nvidia_url),
             None

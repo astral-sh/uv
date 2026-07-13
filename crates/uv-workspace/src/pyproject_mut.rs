@@ -11,12 +11,11 @@ use toml_edit::{
 };
 
 use uv_cache_key::CanonicalUrl;
-use uv_distribution_types::Index;
-use uv_fs::PortablePath;
+use uv_distribution_types::{Index, IndexFormat, IndexUrl};
+use uv_fs::{PortablePath, is_same_file_allow_missing};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerTree, Requirement, VersionOrUrl};
-use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -27,6 +26,21 @@ use crate::pyproject::{DependencyType, Source};
 pub struct PyProjectTomlMut {
     doc: DocumentMut,
     target: DependencyTarget,
+}
+
+fn index_locations_equal(existing: &str, incoming: &IndexUrl, root_dir: &Path) -> bool {
+    let Ok(existing) = IndexUrl::parse(existing, Some(root_dir)) else {
+        return false;
+    };
+
+    if let (IndexUrl::Path(existing), IndexUrl::Path(incoming)) = (&existing, incoming)
+        && let (Ok(existing), Ok(incoming)) = (existing.to_file_path(), incoming.to_file_path())
+        && let Some(equal) = is_same_file_allow_missing(&existing, &incoming)
+    {
+        return equal;
+    }
+
+    CanonicalUrl::new(existing.url().clone()) == CanonicalUrl::new(incoming.url().clone())
 }
 
 #[derive(Error, Debug)]
@@ -349,6 +363,50 @@ impl PyProjectTomlMut {
         Ok(edit)
     }
 
+    /// Replaces a dependency in `project.dependencies` without modifying its source.
+    ///
+    /// Returns `Some` if the dependency was replaced, or `None` if it was not found.
+    pub fn replace_dependency(
+        &mut self,
+        req: &Requirement,
+        raw: bool,
+    ) -> Result<Option<ArrayEdit>, Error> {
+        let Some(dependencies) = self
+            .project_mut()?
+            .and_then(|project| project.get_mut("dependencies"))
+            .map(|dependencies| {
+                dependencies
+                    .as_array_mut()
+                    .ok_or(Error::MalformedDependencies)
+            })
+            .transpose()?
+        else {
+            return Ok(None);
+        };
+        let mut to_replace = find_dependencies(&req.name, Some(&req.marker), dependencies);
+
+        match to_replace.as_slice() {
+            [] => Ok(None),
+            [_] => {
+                let (index, _) = to_replace.remove(0);
+                let req_string = if raw {
+                    req.displayable_with_credentials().to_string()
+                } else {
+                    req.to_string()
+                };
+                dependencies.replace(index, req_string);
+                Ok(Some(ArrayEdit::Update(index)))
+            }
+            _ => Err(Error::Ambiguous {
+                package_name: req.name.clone(),
+                requirements: to_replace
+                    .into_iter()
+                    .map(|(_, requirement)| requirement)
+                    .collect(),
+            }),
+        }
+    }
+
     /// Adds a development dependency to `tool.uv.dev-dependencies`.
     ///
     /// Returns `true` if the dependency was added, `false` if it was updated.
@@ -384,7 +442,7 @@ impl PyProjectTomlMut {
     }
 
     /// Add an [`Index`] to `tool.uv.index`.
-    pub fn add_index(&mut self, index: &Index) -> Result<(), Error> {
+    pub fn add_index(&mut self, index: &Index, root_dir: &Path) -> Result<(), Error> {
         let size = self.doc.len();
         let existing = self
             .doc
@@ -406,14 +464,13 @@ impl PyProjectTomlMut {
             .iter()
             .find(|table| {
                 // If the index has the same name, reuse it.
-                if let Some(index) = index.name.as_deref() {
-                    if table
+                if let Some(index) = index.name.as_deref()
+                    && table
                         .get("name")
                         .and_then(|name| name.as_str())
                         .is_some_and(|name| name == index)
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
 
                 // If the index is the default, and there's another default index, reuse it.
@@ -429,10 +486,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                    .is_some_and(|url| {
-                        CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
-                    })
+                    .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
                 {
                     return true;
                 }
@@ -443,31 +497,34 @@ impl PyProjectTomlMut {
             .unwrap_or_default();
 
         // If necessary, update the name.
-        if let Some(index) = index.name.as_deref() {
-            if table
+        if let Some(index) = index.name.as_deref()
+            && table
                 .get("name")
                 .and_then(|name| name.as_str())
                 .is_none_or(|name| name != index)
-            {
-                let mut formatted = Formatted::new(index.to_string());
-                if let Some(value) = table.get("name").and_then(Item::as_value) {
-                    if let Some(prefix) = value.decor().prefix() {
-                        formatted.decor_mut().set_prefix(prefix.clone());
-                    }
-                    if let Some(suffix) = value.decor().suffix() {
-                        formatted.decor_mut().set_suffix(suffix.clone());
-                    }
+        {
+            let mut formatted = Formatted::new(index.to_string());
+            if let Some(value) = table.get("name").and_then(Item::as_value) {
+                if let Some(prefix) = value.decor().prefix() {
+                    formatted.decor_mut().set_prefix(prefix.clone());
                 }
-                table.insert("name", Value::String(formatted).into());
+                if let Some(suffix) = value.decor().suffix() {
+                    formatted.decor_mut().set_suffix(suffix.clone());
+                }
             }
+            table.insert("name", Value::String(formatted).into());
         }
 
+        let existing_url = table.get("url").and_then(|item| item.as_str());
+
+        // Update the stored URL independently of whether the index location changed.
+        let url_needs_update =
+            existing_url.is_none_or(|url| url != index.url.without_credentials().as_str());
+        let index_location_changed =
+            existing_url.is_none_or(|url| !index_locations_equal(url, &index.url, root_dir));
+
         // If necessary, update the URL.
-        if table
-            .get("url")
-            .and_then(|item| item.as_str())
-            .is_none_or(|url| url != index.url.without_credentials().as_str())
-        {
+        if url_needs_update {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
@@ -500,17 +557,44 @@ impl PyProjectTomlMut {
             }
         }
 
+        // If the index location changed, sync the format to match the incoming index.
+        if index_location_changed {
+            match index.format {
+                IndexFormat::Flat => {
+                    if table
+                        .get("format")
+                        .and_then(Item::as_str)
+                        .is_none_or(|format| format != "flat")
+                    {
+                        let mut formatted = Formatted::new("flat".to_string());
+                        if let Some(value) = table.get("format").and_then(Item::as_value) {
+                            if let Some(prefix) = value.decor().prefix() {
+                                formatted.decor_mut().set_prefix(prefix.clone());
+                            }
+                            if let Some(suffix) = value.decor().suffix() {
+                                formatted.decor_mut().set_suffix(suffix.clone());
+                            }
+                        }
+                        table.insert("format", Value::String(formatted).into());
+                    }
+                }
+                IndexFormat::Simple => {
+                    // Remove the format key if it exists (Simple is the default).
+                    table.remove("format");
+                }
+            }
+        }
+
         // Remove any replaced tables.
         existing.retain(|table| {
             // If the index has the same name, skip it.
-            if let Some(index) = index.name.as_deref() {
-                if table
+            if let Some(index) = index.name.as_deref()
+                && table
                     .get("name")
                     .and_then(|name| name.as_str())
                     .is_some_and(|name| name == index)
-                {
-                    return false;
-                }
+            {
+                return false;
             }
 
             // If there's another default index, skip it.
@@ -526,8 +610,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| DisplaySafeUrl::parse(url).ok())
-                .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
+                .is_some_and(|url| index_locations_equal(url, &index.url, root_dir))
             {
                 return false;
             }
@@ -1124,10 +1207,10 @@ impl PyProjectTomlMut {
 
         if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
             // Check `project.dependencies`.
-            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
-                if !find_dependencies(name, marker, dependencies).is_empty() {
-                    types.push(DependencyType::Production);
-                }
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array)
+                && !find_dependencies(name, marker, dependencies).is_empty()
+            {
+                types.push(DependencyType::Production);
             }
 
             // Check `project.optional-dependencies`.
@@ -1175,10 +1258,9 @@ impl PyProjectTomlMut {
             .and_then(Item::as_table)
             .and_then(|uv| uv.get("dev-dependencies"))
             .and_then(Item::as_array)
+            && !find_dependencies(name, marker, dev_dependencies).is_empty()
         {
-            if !find_dependencies(name, marker, dev_dependencies).is_empty() {
-                types.push(DependencyType::Dev);
-            }
+            types.push(DependencyType::Dev);
         }
 
         types
@@ -1604,10 +1686,11 @@ fn find_dependencies(
 ) -> Vec<(usize, Requirement)> {
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
-        if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
-                to_replace.push((i, req));
-            }
+        if let Some(req) = dep.as_str().and_then(try_parse_requirement)
+            && marker.is_none_or(|m| *m == req.marker)
+            && *name == req.name
+        {
+            to_replace.push((i, req));
         }
     }
     to_replace
@@ -1782,12 +1865,19 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{AddBoundsKind, reformat_array_multiline, remove_dependency, split_specifiers};
+    use super::{
+        AddBoundsKind, DependencyTarget, PyProjectTomlMut, reformat_array_multiline,
+        remove_dependency, split_specifiers,
+    };
+    use anyhow::Result;
     use insta::assert_snapshot;
+    use std::path::Path;
     use std::str::FromStr;
     use toml_edit::DocumentMut;
+    use uv_distribution_types::Index;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_pep508::Requirement;
 
     #[test]
     fn split() {
@@ -1960,6 +2050,35 @@ dependencies = [
                 .to_string();
             assert_eq!(actual, expected, "{version}");
         }
+    }
+
+    #[test]
+    fn replace_dependency_preserves_source() -> Result<()> {
+        let mut pyproject = PyProjectTomlMut::from_toml(
+            r#"[project]
+dependencies = ["anyio<=2"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+            "#,
+            DependencyTarget::PyProjectToml,
+        )?;
+        let requirement = Requirement::from_str("anyio")?;
+
+        let replaced = pyproject.replace_dependency(&requirement, false)?;
+        assert!(replaced.is_some());
+
+        assert_snapshot!(
+            pyproject.to_string(),
+            @r#"
+[project]
+dependencies = ["anyio"]
+
+[tool.uv.sources]
+anyio = { index = "internal" }
+"#
+        );
+        Ok(())
     }
 
     #[test]
@@ -2207,5 +2326,71 @@ dependencies = [
 ]
 "#
         );
+    }
+
+    #[test]
+    fn add_index_syncs_format_on_url_update() {
+        let toml = r#"
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat/"
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml).unwrap();
+
+        // The URL spelling changes, but the canonical URL does not, so format should be preserved.
+        let equivalent_index = Index::from_str("index=https://example.com/flat").unwrap();
+        doc.add_index(&equivalent_index, Path::new(".")).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[[tool.uv.index]]
+name = "index"
+url = "https://example.com/flat"
+format = "flat"
+"#);
+
+        let new_index = Index::from_str("index=https://pypi.org/simple").unwrap();
+        doc.add_index(&new_index, Path::new(".")).unwrap();
+
+        assert_snapshot!(doc.to_string(), @r#"
+
+[[tool.uv.index]]
+name = "index"
+url = "https://pypi.org/simple"
+"#);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn add_index_preserves_format_when_windows_path_unchanged() -> Result<()> {
+        let toml = r#"
+[[tool.uv.index]]
+name = "index"
+url = 'C:\links'
+format = "flat"
+"#;
+
+        let mut doc = PyProjectTomlMut::from_toml(toml, DependencyTarget::PyProjectToml)?;
+
+        let new_index = Index::from_str(r"index=C:\links")?;
+        doc.add_index(&new_index, &std::env::current_dir()?)?;
+
+        let expected_url = new_index.url.without_credentials();
+        let index = doc.doc["tool"]["uv"]["index"]
+            .as_array_of_tables()
+            .and_then(|indexes| indexes.get(0))
+            .expect("index table");
+        assert_eq!(
+            index.get("url").and_then(|item| item.as_str()),
+            Some(expected_url.as_str())
+        );
+        assert_eq!(
+            index.get("format").and_then(|item| item.as_str()),
+            Some("flat")
+        );
+
+        Ok(())
     }
 }

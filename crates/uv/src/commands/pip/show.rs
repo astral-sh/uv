@@ -77,7 +77,7 @@ pub(crate) fn pip_show(
     let site_packages = SitePackages::from_environment(&environment)?;
 
     // Determine the markers and tags to use for resolution.
-    let markers = environment.interpreter().resolver_marker_environment();
+    let markers = environment.interpreter().to_resolver_marker_environment();
     let tags = environment.interpreter().tags()?;
 
     // Sort and deduplicate the packages, which are keyed by name.

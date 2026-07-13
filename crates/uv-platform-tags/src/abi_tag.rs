@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter, Write};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -136,11 +137,11 @@ impl AbiTag {
     }
 
     /// Return a pretty string representation of the ABI tag.
-    pub fn pretty(self) -> Option<String> {
+    pub fn pretty(self) -> Option<Cow<'static, str>> {
         match self {
             Self::None => None,
             Self::Abi3 => None,
-            Self::Abi3T => Some("stable ABI for free-threaded CPython".to_string()),
+            Self::Abi3T => Some(Cow::Borrowed("stable ABI for free-threaded CPython")),
             Self::CPython {
                 variant,
                 python_version,
@@ -156,26 +157,26 @@ impl AbiTag {
                 } else {
                     ""
                 };
-                Some(format!(
+                Some(Cow::Owned(format!(
                     "{}CPython {}.{}",
                     prefix, python_version.0, python_version.1
-                ))
+                )))
             }
             Self::PyPy {
                 implementation_version,
                 ..
-            } => Some(format!(
+            } => Some(Cow::Owned(format!(
                 "PyPy {}.{}",
                 implementation_version.0, implementation_version.1
-            )),
+            ))),
             Self::GraalPy {
                 implementation_version,
                 ..
-            } => Some(format!(
+            } => Some(Cow::Owned(format!(
                 "GraalPy {}.{}",
                 implementation_version.0, implementation_version.1
-            )),
-            Self::Pyston { .. } => Some("Pyston".to_string()),
+            ))),
+            Self::Pyston { .. } => Some(Cow::Borrowed("Pyston")),
         }
     }
 }
@@ -242,7 +243,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|digit| *digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
@@ -275,7 +276,7 @@ impl FromStr for AbiTag {
                     tag: full_tag.to_string(),
                 })?
                 .checked_sub(b'0')
-                .and_then(|d| if d < 10 { Some(d) } else { None })
+                .filter(|digit| *digit < 10)
                 .ok_or_else(|| ParseAbiTagError::InvalidImplMajorVersion {
                     implementation,
                     tag: full_tag.to_string(),
@@ -366,12 +367,18 @@ impl FromStr for AbiTag {
                         tag: s.to_string(),
                     })?;
             let (impl_major, impl_minor) = parse_impl_version(impl_ver_str, "GraalPy", s)?;
-            let (py_ver_str, _) =
+            let (py_ver_str, suffix) =
                 rest.split_once('_')
                     .ok_or_else(|| ParseAbiTagError::InvalidFormat {
                         implementation: "GraalPy",
                         tag: s.to_string(),
                     })?;
+            if suffix != "native" {
+                return Err(ParseAbiTagError::InvalidFormat {
+                    implementation: "GraalPy",
+                    tag: s.to_string(),
+                });
+            }
             let (major, minor) = parse_python_version(py_ver_str, "GraalPy", s)?;
             Ok(Self::GraalPy {
                 python_version: (major, minor),
@@ -483,8 +490,8 @@ mod tests {
         assert_eq!(AbiTag::Abi3T.to_string(), "abi3t");
         assert!(AbiTag::Abi3T.is_stable_abi());
         assert_eq!(
-            AbiTag::Abi3T.pretty(),
-            Some("stable ABI for free-threaded CPython".to_string())
+            AbiTag::Abi3T.pretty().as_deref(),
+            Some("stable ABI for free-threaded CPython")
         );
     }
 
@@ -492,15 +499,15 @@ mod tests {
     fn cpython_abi() {
         let tag = AbiTag::from_str("cp39").unwrap();
         assert_eq!(tag.to_string(), "cp39");
-        assert_eq!(tag.pretty(), Some("CPython 3.9".to_string()));
+        assert_eq!(tag.pretty().as_deref(), Some("CPython 3.9"));
 
         let tag = AbiTag::from_str("cp37m").unwrap();
         assert_eq!(tag.to_string(), "cp37m");
-        assert_eq!(tag.pretty(), Some("CPython 3.7".to_string()));
+        assert_eq!(tag.pretty().as_deref(), Some("CPython 3.7"));
 
         let tag = AbiTag::from_str("cp313t").unwrap();
         assert_eq!(tag.to_string(), "cp313t");
-        assert_eq!(tag.pretty(), Some("free-threaded CPython 3.13".to_string()));
+        assert_eq!(tag.pretty().as_deref(), Some("free-threaded CPython 3.13"));
 
         assert_eq!(
             AbiTag::from_str("cpXY"),
@@ -587,6 +594,20 @@ mod tests {
             Err(ParseAbiTagError::InvalidFormat {
                 implementation: "GraalPy",
                 tag: "graalpy310_graalpyXY".to_string()
+            })
+        );
+        assert_eq!(
+            AbiTag::from_str("graalpy240_310_wrong"),
+            Err(ParseAbiTagError::InvalidFormat {
+                implementation: "GraalPy",
+                tag: "graalpy240_310_wrong".to_string()
+            })
+        );
+        assert_eq!(
+            AbiTag::from_str("graalpy240_310_native_extra"),
+            Err(ParseAbiTagError::InvalidFormat {
+                implementation: "GraalPy",
+                tag: "graalpy240_310_native_extra".to_string()
             })
         );
     }

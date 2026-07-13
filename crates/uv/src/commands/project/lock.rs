@@ -12,8 +12,8 @@ use tracing::debug;
 use uv_cache::{Cache, Refresh};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, Reinstall,
-    Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExcludeDependency,
+    ExtrasSpecification, Override, PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -50,7 +50,7 @@ use crate::commands::project::{
     WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
@@ -268,16 +268,10 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        // Handle them here so we return exit code 1 instead of bubbling up as an error (exit code 2).
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }
@@ -527,12 +521,40 @@ async fn do_lock(
         sources,
         client_builder.credentials_cache(),
     )?;
-    let overrides = target.lower(
-        overrides,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
+    let overrides = {
+        let mut lowered_overrides = Vec::new();
+        for entry in overrides {
+            match entry {
+                Override::Requirement(requirement) => {
+                    lowered_overrides.extend(
+                        target
+                            .lower(
+                                vec![requirement],
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_iter()
+                            .map(Override::Requirement),
+                    );
+                }
+                Override::Package(package) => {
+                    lowered_overrides.push(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: target
+                            .lower(
+                                package.dependencies.into_vec(),
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        lowered_overrides
+    };
     let constraints = target.lower(
         constraints,
         index_locations,
@@ -697,7 +719,7 @@ async fn do_lock(
     let client_builder = client_builder.clone().keyring(*keyring_provider);
 
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }
@@ -950,11 +972,8 @@ async fn do_lock(
                     .map(NameRequirementSpecification::from)
                     .chain(external)
                     .collect(),
-                overrides
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
+                Vec::new(),
+                overrides.clone(),
                 excludes.clone(),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
@@ -1021,7 +1040,7 @@ async fn do_lock(
 }
 
 #[derive(Debug)]
-enum ValidatedLock {
+pub(crate) enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
     Unusable(Lock),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
@@ -1036,7 +1055,7 @@ enum ValidatedLock {
 
 impl ValidatedLock {
     /// Validate a [`Lock`] against the workspace requirements.
-    async fn validate<Context: BuildContext>(
+    pub(crate) async fn validate<Context: BuildContext>(
         lock: Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
@@ -1045,8 +1064,8 @@ impl ValidatedLock {
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
-        overrides: &[Requirement],
-        excludes: &[PackageName],
+        overrides: &[Override<Requirement>],
+        excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
@@ -1438,9 +1457,21 @@ impl ValidatedLock {
         }
     }
 
+    /// Return whether the existing lock satisfies the current inputs.
+    #[must_use]
+    pub(crate) fn is_satisfied(&self) -> bool {
+        matches!(self, Self::Satisfies(_))
+    }
+
+    /// Return whether the existing lock can provide version preferences.
+    #[must_use]
+    pub(crate) fn is_usable(&self) -> bool {
+        !matches!(self, Self::Unusable(_))
+    }
+
     /// Convert the [`ValidatedLock`] into a [`Lock`].
     #[must_use]
-    fn into_lock(self) -> Lock {
+    pub(crate) fn into_lock(self) -> Lock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,
@@ -1451,7 +1482,7 @@ impl ValidatedLock {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct LockEventVersion<'lock> {
+pub(super) struct LockEventVersion<'lock> {
     /// The version of the package, or `None` if the package has a dynamic version.
     version: Option<&'lock Version>,
     /// The short Git SHA of the package, if it was installed from a Git repository.
@@ -1480,7 +1511,7 @@ impl std::fmt::Display for LockEventVersion<'_> {
 
 /// A modification to a lockfile.
 #[derive(Debug, Clone)]
-enum LockEvent<'lock> {
+pub(super) enum LockEvent<'lock> {
     Update(
         DryRun,
         PackageName,
@@ -1493,7 +1524,7 @@ enum LockEvent<'lock> {
 
 impl<'lock> LockEvent<'lock> {
     /// Detect the change events between an (optional) existing and updated lockfile.
-    fn detect_changes(
+    pub(super) fn detect_changes(
         existing_lock: Option<&'lock Lock>,
         new_lock: &'lock Lock,
         dry_run: DryRun,
@@ -1553,6 +1584,14 @@ impl<'lock> LockEvent<'lock> {
                 }
             }
         })
+    }
+
+    pub(super) fn package(&self) -> &PackageName {
+        match self {
+            Self::Update(_, package, ..)
+            | Self::Add(_, package, ..)
+            | Self::Remove(_, package, ..) => package,
+        }
     }
 }
 

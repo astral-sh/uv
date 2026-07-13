@@ -26,14 +26,14 @@ impl BuildInfo {
     /// Creates a [`BuildInfo`] instance with the given configuration settings, extra build
     /// dependencies, and extra build variables.
     pub fn from_settings(
-        config_settings: &ConfigSettings,
-        extra_build_dependencies: &[ExtraBuildRequirement],
-        extra_build_variables: Option<&BuildVariables>,
+        config_settings: ConfigSettings,
+        extra_build_dependencies: Vec<ExtraBuildRequirement>,
+        extra_build_variables: Option<BuildVariables>,
     ) -> Self {
         Self {
-            config_settings: config_settings.clone(),
-            extra_build_requires: extra_build_dependencies.to_vec(),
-            extra_build_variables: extra_build_variables.cloned().unwrap_or_default(),
+            config_settings,
+            extra_build_requires: extra_build_dependencies,
+            extra_build_variables: extra_build_variables.unwrap_or_default(),
         }
     }
 

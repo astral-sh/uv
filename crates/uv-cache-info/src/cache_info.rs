@@ -168,18 +168,20 @@ impl CacheInfo {
                         );
                     } else {
                         // Fall back to the inode.
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::MetadataExt;
-                            directories
-                                .insert(dir, Some(DirectoryTimestamp::Inode(metadata.ino())));
-                        }
-                        #[cfg(not(unix))]
-                        {
-                            warn!(
-                                "Failed to read creation time for directory: `{}`",
-                                path.display()
-                            );
+                        cfg_select! {
+                            unix => {
+                                use std::os::unix::fs::MetadataExt;
+                                directories.insert(
+                                    dir,
+                                    Some(DirectoryTimestamp::Inode(metadata.ino())),
+                                );
+                            },
+                            _ => {
+                                warn!(
+                                    "Failed to read creation time for directory: `{}`",
+                                    path.display()
+                                );
+                            },
                         }
                     }
                 }

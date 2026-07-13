@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
@@ -22,6 +22,7 @@ use crate::printer::Printer;
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn format(
     project_dir: &Path,
+    ruff_path: Option<PathBuf>,
     check: bool,
     diff: bool,
     extra_args: Vec<String>,
@@ -74,89 +75,115 @@ pub(crate) async fn format(
         }
     };
 
-    let retry_policy = client_builder.retry_policy();
-    // Python downloads are performing their own retries to catch stream errors, disable the
-    // default retries to avoid the middleware from performing uncontrolled retries.
-    let client = client_builder.retries(0).build()?;
-
     // Determine the version to use and get the path to Ruff.
-    let reporter = BinaryDownloadReporter::single(printer);
-    let bin_version = version
-        .as_deref()
-        .map(BinVersion::from_str)
-        .transpose()?
-        .unwrap_or(BinVersion::Default);
-
-    let resolved = match bin_version {
-        BinVersion::Default => {
-            // Find the best version matching the default constraints
-            let constraints = Binary::Ruff.default_constraints();
-            let resolved = find_matching_version(
-                Binary::Ruff,
-                Some(&constraints),
-                exclude_newer,
-                &client,
-                &retry_policy,
-            )
-            .await
-            .with_context(|| {
-                format!("Failed to find ruff version matching default constraints: {constraints}")
-            })?;
-            debug!(
-                "Resolved `ruff@{constraints}` to `ruff=={}`",
-                resolved.version
-            );
-            resolved
-        }
-        BinVersion::Pinned(version) => {
-            // Use the exact version directly without manifest lookup.
-            if exclude_newer.is_some() {
-                debug!("`--exclude-newer` is ignored for pinned version `{version}`");
+    let ruff_path = if let Some(ruff_path) = ruff_path {
+        if show_version {
+            let output = Command::new(&ruff_path)
+                .arg("--version")
+                .output()
+                .await
+                .context("Failed to query Ruff version")?;
+            if !output.status.success() {
+                anyhow::bail!("Failed to query Ruff version");
             }
-            ResolvedVersion::from_version(Binary::Ruff, version)?
+            write!(
+                printer.stderr(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            )?;
         }
-        BinVersion::Latest => {
-            // Fetch the latest version from the manifest
-            let resolved =
-                find_matching_version(Binary::Ruff, None, exclude_newer, &client, &retry_policy)
-                    .await
-                    .with_context(|| "Failed to find latest ruff version")?;
-            debug!("Resolved `ruff@latest` to `ruff=={}`", resolved.version);
-            resolved
+        ruff_path
+    } else {
+        let retry_policy = client_builder.retry_policy();
+        // Python downloads are performing their own retries to catch stream errors, disable the
+        // default retries to avoid the middleware from performing uncontrolled retries.
+        let client = client_builder.retries(0).build()?;
+
+        let reporter = BinaryDownloadReporter::single(printer);
+        let bin_version = version
+            .as_deref()
+            .map(BinVersion::from_str)
+            .transpose()?
+            .unwrap_or(BinVersion::Default);
+
+        let resolved = match bin_version {
+            BinVersion::Default => {
+                // Find the best version matching the default constraints
+                let constraints = Binary::Ruff.default_constraints();
+                let resolved = find_matching_version(
+                    Binary::Ruff,
+                    Some(&constraints),
+                    exclude_newer,
+                    &client,
+                    &retry_policy,
+                )
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to find ruff version matching default constraints: {constraints}"
+                    )
+                })?;
+                debug!(
+                    "Resolved `ruff@{constraints}` to `ruff=={}`",
+                    resolved.version
+                );
+                resolved
+            }
+            BinVersion::Pinned(version) => {
+                // Use the exact version directly without manifest lookup.
+                if exclude_newer.is_some() {
+                    debug!("`--exclude-newer` is ignored for pinned version `{version}`");
+                }
+                ResolvedVersion::from_version(Binary::Ruff, version)?
+            }
+            BinVersion::Latest => {
+                // Fetch the latest version from the manifest
+                let resolved = find_matching_version(
+                    Binary::Ruff,
+                    None,
+                    exclude_newer,
+                    &client,
+                    &retry_policy,
+                )
+                .await
+                .with_context(|| "Failed to find latest ruff version")?;
+                debug!("Resolved `ruff@latest` to `ruff=={}`", resolved.version);
+                resolved
+            }
+            BinVersion::Constraint(constraints) => {
+                // Find the best version matching the constraints
+                let resolved = find_matching_version(
+                    Binary::Ruff,
+                    Some(&constraints),
+                    exclude_newer,
+                    &client,
+                    &retry_policy,
+                )
+                .await
+                .with_context(|| format!("Failed to find ruff version matching: {constraints}"))?;
+                debug!(
+                    "Resolved `ruff@{constraints}` to `ruff=={}`",
+                    resolved.version
+                );
+                resolved
+            }
+        };
+
+        if show_version {
+            writeln!(printer.stderr(), "ruff {}", resolved.version)?;
         }
-        BinVersion::Constraint(constraints) => {
-            // Find the best version matching the constraints
-            let resolved = find_matching_version(
-                Binary::Ruff,
-                Some(&constraints),
-                exclude_newer,
-                &client,
-                &retry_policy,
-            )
-            .await
-            .with_context(|| format!("Failed to find ruff version matching: {constraints}"))?;
-            debug!(
-                "Resolved `ruff@{constraints}` to `ruff=={}`",
-                resolved.version
-            );
-            resolved
-        }
+
+        bin_install(
+            Binary::Ruff,
+            &resolved,
+            &client,
+            &retry_policy,
+            &cache,
+            &reporter,
+        )
+        .await
+        .with_context(|| format!("Failed to install ruff {}", resolved.version))?
     };
-
-    if show_version {
-        writeln!(printer.stderr(), "ruff {}", resolved.version)?;
-    }
-
-    let ruff_path = bin_install(
-        Binary::Ruff,
-        &resolved,
-        &client,
-        &retry_policy,
-        &cache,
-        &reporter,
-    )
-    .await
-    .with_context(|| format!("Failed to install ruff {}", resolved.version))?;
 
     let mut command = Command::new(&ruff_path);
     command.current_dir(target_dir);

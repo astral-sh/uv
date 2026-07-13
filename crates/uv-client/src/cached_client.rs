@@ -1,5 +1,5 @@
 use std::time::{Duration, Instant};
-use std::{borrow::Cow, path::Path};
+use std::{borrow::Cow, io::Read, path::Path};
 
 use futures::FutureExt;
 use reqwest::{Request, Response};
@@ -12,6 +12,7 @@ use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 use uv_redacted::DisplaySafeUrl;
 
+use crate::base_client::CertificateSource;
 use crate::httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder};
 use crate::{BaseClient, Error, ErrorKind, OwnedArchive, ProblemDetails, RetryState};
 
@@ -215,6 +216,10 @@ impl CachedClient {
     /// The underlying [`BaseClient`] without caching.
     pub fn uncached(&self) -> &BaseClient {
         &self.0
+    }
+
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.0.certificate_source()
     }
 
     /// Make a cached request with a custom response transformation while using
@@ -519,7 +524,9 @@ impl CachedClient {
             .execute(req)
             .instrument(info_span!("revalidation_request", url = %url))
             .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+            .map_err(|err| {
+                Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+            })?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
             response.status(),
@@ -578,11 +585,9 @@ impl CachedClient {
         debug!("Sending fresh {} request for: {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();
-        let mut response = self
-            .0
-            .execute(req)
-            .await
-            .map_err(|err| Error::from_reqwest_middleware(url.clone(), err, start))?;
+        let mut response = self.0.execute(req).await.map_err(|err| {
+            Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+        })?;
         trace!(
             "Received response for fresh request with status {} for: {}",
             response.status(),
@@ -670,13 +675,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
@@ -709,13 +713,12 @@ impl CachedClient {
 
             match result {
                 Ok(ok) => return Ok(ok),
-                Err(err) => {
-                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) {
-                        retry_state.sleep_backoff(backoff).await;
-                        continue;
-                    }
-                    return Err(err.with_retries(retry_state.total_retries()));
+                Err(err)
+                    if let Some(backoff) = retry_state.should_retry(err.error(), err.retries()) =>
+                {
+                    retry_state.sleep_backoff(backoff).await;
                 }
+                Err(err) => return Err(err.with_retries(retry_state.total_retries())),
             }
         }
     }
@@ -825,12 +828,26 @@ impl DataWithCachePolicy {
     /// file given fails, then this returns an error.
     #[instrument]
     fn from_path_sync(path: &Path) -> Result<Self, Error> {
-        let file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
-        // Note that we don't wrap our file in a buffer because it will just
-        // get passed to AlignedVec::extend_from_reader, which doesn't benefit
-        // from an intermediary buffer. In effect, the AlignedVec acts as the
-        // buffer.
-        Self::from_reader(file)
+        let mut file = fs_err::File::open(path).map_err(ErrorKind::Io)?;
+        let file_size = file.metadata().map_err(ErrorKind::Io)?.len();
+        let file_size = usize::try_from(file_size)
+            .ok()
+            .filter(|&file_size| file_size <= AlignedVec::<16>::MAX_CAPACITY)
+            .ok_or_else(|| {
+                ErrorKind::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "cache entry file size of {file_size} bytes exceeds the maximum supported \
+                         size of {} bytes",
+                        AlignedVec::<16>::MAX_CAPACITY,
+                    ),
+                ))
+            })?;
+
+        let mut aligned_bytes = AlignedVec::with_capacity(file_size);
+        aligned_bytes.resize(file_size, 0);
+        file.read_exact(&mut aligned_bytes).map_err(ErrorKind::Io)?;
+        Self::from_aligned_bytes(aligned_bytes)
     }
 
     /// Loads cached data and its associated HTTP cache policy from the given
@@ -964,7 +981,7 @@ impl DataWithCachePolicy {
             );
             return Err(ErrorKind::ArchiveRead(msg).into());
         };
-        if bytes.len() < len_usize + 8 {
+        if len_usize > cache_policy_len_start {
             let msg = format!(
                 "invalid cache entry: data-with-cache-policy has cache policy length of {}, \
                  but total buffer size is {}",

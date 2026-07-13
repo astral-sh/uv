@@ -148,9 +148,7 @@ impl<'a, 'client> StaticMetadataDatabase<'a, 'client> {
         };
 
         match pyproject_toml.requires_python() {
-            Ok(Some(requires_python)) => {
-                Ok(Some(RequiresPython::from_specifiers(&requires_python)))
-            }
+            Ok(Some(requires_python)) => Ok(Some(RequiresPython::from_specifiers(requires_python))),
             Ok(None) | Err(uv_pypi_types::MetadataError::FieldNotFound("project")) => Ok(None),
             Err(uv_pypi_types::MetadataError::DynamicField("requires-python")) => {
                 debug!("Ignoring dynamic `requires-python` in source tree");
@@ -665,8 +663,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -886,8 +887,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -951,22 +955,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Determine the cache control policy for the request.
         let cache_control = match client.unmanaged.connectivity() {
-            Connectivity::Online => {
+            Connectivity::Online
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
                         .artifact_cache_control_for(index)
-                }) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.build_context
-                            .cache()
-                            .freshness(&cache_entry, source.name(), source.source_tree())
-                            .map_err(Error::CacheRead)?,
-                    )
-                }
+                }) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&cache_entry, source.name(), source.source_tree())
+                    .map_err(Error::CacheRead)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -1068,8 +1071,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1239,8 +1245,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1384,8 +1393,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1599,8 +1611,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1858,8 +1873,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2026,8 +2044,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2125,8 +2146,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2434,8 +2458,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let config_settings = self.config_settings_for(source.name());
         let extra_build_deps = self.extra_build_dependencies_for(source.name());
         let extra_build_variables = self.extra_build_variables_for(source.name());
-        let build_info =
-            BuildInfo::from_settings(&config_settings, extra_build_deps, extra_build_variables);
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        );
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2703,22 +2730,21 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Determine the cache control policy for the request.
         let cache_control = match client.unmanaged.connectivity() {
-            Connectivity::Online => {
+            Connectivity::Online
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
                         .artifact_cache_control_for(index)
-                }) {
-                    CacheControl::Override(header)
-                } else {
-                    CacheControl::from(
-                        self.build_context
-                            .cache()
-                            .freshness(&cache_entry, source.name(), source.source_tree())
-                            .map_err(Error::CacheRead)?,
-                    )
-                }
+                }) =>
+            {
+                CacheControl::Override(header)
             }
+            Connectivity::Online => CacheControl::from(
+                self.build_context
+                    .cache()
+                    .freshness(&cache_entry, source.name(), source.source_tree())
+                    .map_err(Error::CacheRead)?,
+            ),
             Connectivity::Offline => CacheControl::AllowStale,
         };
 
@@ -2909,6 +2935,23 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         Ok(hashes)
     }
 
+    /// For Git directories, we check them out into the cache, so we need to avoid workspace
+    /// discovery that goes outside the cache.
+    fn stop_discovery_at<'path>(
+        source: &BuildableSource<'_>,
+        source_root: &'path Path,
+    ) -> Option<&'path Path> {
+        if matches!(
+            source,
+            BuildableSource::Dist(SourceDist::GitDirectory(_))
+                | BuildableSource::Url(SourceUrl::GitDirectory(_))
+        ) {
+            Some(source_root)
+        } else {
+            None
+        }
+    }
+
     /// Build a source distribution, storing the built wheel in the cache.
     ///
     /// Returns the un-normalized disk filename, the parsed, normalized filename and the metadata
@@ -2990,6 +3033,14 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 BuildKind::Wheel
             };
 
+            let install_path = if let Some(subdirectory) = subdirectory {
+                source_root.join(subdirectory)
+            } else {
+                source_root.to_path_buf()
+            };
+
+            let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
             let build_key = BuildKey {
                 base_python: base_python.into_boxed_path(),
                 source_root: source_root.to_path_buf().into_boxed_path(),
@@ -3000,7 +3051,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             };
 
             if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
-                debug!("Creating build environment for: {source}");
+                debug!("Reusing existing build environment for: {source}");
                 let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
                 // Store the build context.
@@ -3008,14 +3059,15 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 wheel
             } else {
-                debug!("Reusing existing build environment for: {source}");
+                debug!("Creating build environment for: {source}");
 
                 let builder = self
                     .build_context
                     .setup_build(
                         source_root,
                         subdirectory,
-                        source_root,
+                        &install_path,
+                        stop_discovery_at,
                         Some(&source.to_string()),
                         source.as_dist(),
                         &no_sources,
@@ -3134,13 +3186,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             BuildKind::Wheel
         };
 
+        let install_path = if let Some(subdirectory) = subdirectory {
+            source_root.join(subdirectory)
+        } else {
+            source_root.to_path_buf()
+        };
+
+        let stop_discovery_at = Self::stop_discovery_at(source, source_root);
+
         // Set up the builder.
         let mut builder = self
             .build_context
             .setup_build(
                 source_root,
                 subdirectory,
-                source_root,
+                &install_path,
+                stop_discovery_at,
                 Some(&source.to_string()),
                 source.as_dist(),
                 &no_sources,

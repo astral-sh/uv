@@ -83,7 +83,7 @@ impl VersionSpecifiers {
     ///
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds<'a>(
-        mut bounds: impl Iterator<Item = (&'a Bound<Version>, &'a Bound<Version>)>,
+        mut bounds: impl Iterator<Item = (Bound<&'a Version>, Bound<&'a Version>)>,
     ) -> Self {
         let mut specifiers = Vec::new();
 
@@ -156,7 +156,23 @@ impl FromStr for VersionSpecifiers {
     type Err = VersionSpecifiersParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_version_specifiers(s).map(Self::from_unsorted)
+        let separator_count = s.bytes().filter(|byte| *byte == b',').count();
+        if separator_count == 0 {
+            if s.is_empty() {
+                return Ok(Self::empty());
+            }
+            return VersionSpecifier::from_str(s)
+                .map(Self::from)
+                .map_err(|err| VersionSpecifiersParseError {
+                    inner: Box::new(VersionSpecifiersParseErrorInner {
+                        err,
+                        line: s.to_string(),
+                        start: 0,
+                        end: s.len(),
+                    }),
+                });
+        }
+        parse_version_specifiers(s, separator_count + 1).map(Self::from_unsorted)
     }
 }
 
@@ -552,7 +568,7 @@ impl VersionSpecifier {
     ///
     /// This function is not applicable to ranges involving pre-release versions.
     pub fn from_release_only_bounds(
-        bounds: (&Bound<Version>, &Bound<Version>),
+        bounds: (Bound<&Version>, Bound<&Version>),
     ) -> impl Iterator<Item = Self> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
@@ -572,8 +588,8 @@ impl VersionSpecifier {
                         (Some(Self::equals_star_version(version)), None)
                     }
                     _ => (
-                        Self::from_lower_bound(&Bound::Included(v1.clone())),
-                        Self::from_upper_bound(&Bound::Excluded(v2.clone())),
+                        Self::from_lower_bound(Bound::Included(v1)),
+                        Self::from_upper_bound(Bound::Excluded(v2)),
                     ),
                 }
             }
@@ -584,7 +600,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given lower bound.
-    fn from_lower_bound(bound: &Bound<Version>) -> Option<Self> {
+    fn from_lower_bound(bound: Bound<&Version>) -> Option<Self> {
         match bound {
             Bound::Included(version) => {
                 Some(Self::from_version(Operator::GreaterThanEqual, version.clone()).unwrap())
@@ -597,7 +613,7 @@ impl VersionSpecifier {
     }
 
     /// Returns a version specifier representing the given upper bound.
-    fn from_upper_bound(bound: &Bound<Version>) -> Option<Self> {
+    fn from_upper_bound(bound: Bound<&Version>) -> Option<Self> {
         match bound {
             Bound::Included(version) => {
                 Some(Self::from_version(Operator::LessThanEqual, version.clone()).unwrap())
@@ -711,13 +727,13 @@ impl VersionSpecifier {
                     return true;
                 }
 
-                // The exclusive ordered comparison <V MUST NOT allow a pre-release of the specified
-                // version unless the specified version is itself a pre-release. E.g., <3.1 should
-                // not match 3.1.dev0, but should match both 3.0.dev0 and 3.0, while <3.1.dev1 does
-                // match 3.1.dev0, 3.0.dev0 and 3.0.
-                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal
-                    && !this.any_prerelease()
+                // The exclusive ordered comparison `<V` must not allow a pre-release of the
+                // specified version unless the specified version is itself a pre-release. The
+                // earliest pre-release of a post-release retains its post component, so
+                // `<1.0.post1` excludes `1.0.post1.dev0`, but includes `1.0a1`.
+                if !this.any_prerelease()
                     && other.any_prerelease()
+                    && other.as_ref() >= &this.clone().with_dev(Some(0))
                 {
                     return false;
                 }
@@ -937,11 +953,9 @@ impl From<ParseErrorKind> for VersionSpecifierParseError {
 /// Parse a list of specifiers such as `>= 1.0, != 1.3.*, < 2.0`.
 fn parse_version_specifiers(
     spec: &str,
+    specifier_count: usize,
 ) -> Result<Vec<VersionSpecifier>, VersionSpecifiersParseError> {
-    let mut version_ranges = Vec::new();
-    if spec.is_empty() {
-        return Ok(version_ranges);
-    }
+    let mut version_ranges = Vec::with_capacity(specifier_count);
     let mut start: usize = 0;
     let separator = ",";
     for version_range_spec in spec.split(separator) {
@@ -1078,6 +1092,27 @@ mod tests {
                 .unwrap()
                 .contains(&version)
         );
+    }
+
+    /// Test the `<V.postN` cases corrected by `packaging` 26.1.
+    ///
+    /// See: <https://github.com/pypa/packaging/pull/1140>
+    #[test]
+    fn test_less_than_post_release() {
+        for (specifier, candidate, expected) in [
+            ("<1.0.post1", "1.0a1", true),
+            ("<1.0.post1", "1.0.post0.dev0", true),
+            ("<1.0.post1", "1.0.post1.dev0", false),
+            ("<1!1.0.post1", "1!1.0a1", true),
+        ] {
+            assert_eq!(
+                VersionSpecifier::from_str(specifier)
+                    .unwrap()
+                    .contains(&Version::from_str(candidate).unwrap()),
+                expected,
+                "expected `{specifier}` to contain `{candidate}`: {expected}"
+            );
+        }
     }
 
     const VERSIONS_ALL: &[&str] = &[

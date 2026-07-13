@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.11.19"
+version = "0.11.28"
 description = "A Python package and project manager"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -85,6 +85,7 @@ etcetera = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 http = { workspace = true }
+ignore = { workspace = true }
 jiff = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true }
@@ -133,7 +134,6 @@ uv-test = { workspace = true }
 assert_cmd = { workspace = true }
 assert_fs = { workspace = true }
 backon = { workspace = true }
-base64 = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
 filetime = { workspace = true }
@@ -182,7 +182,8 @@ test-defaults = [
   "test-python-managed",
   "test-python-eol",
   "test-slow",
-  "test-ecosystem"
+  "test-ecosystem",
+  "test-universal"
 ]
 # Introduces a testing dependency on crates.io.
 test-crates-io = []
@@ -206,6 +207,8 @@ test-python-managed = []
 test-slow = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Includes test cases for universal, platform-independent behavior.
+test-universal = []
 # Includes test cases that write to the Windows registry. These tests mutate
 # global state (the Windows registry).
 # We don't run these tests by default locally; the CI for Windows enables them.

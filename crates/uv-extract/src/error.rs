@@ -1,11 +1,13 @@
 use std::{ffi::OsString, path::PathBuf};
 
+use crate::validate_archive_member_name;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("I/O operation failed during extraction")]
     Io(#[source] std::io::Error),
     #[error("Invalid zip file structure")]
-    AsyncZip(#[from] async_zip::error::ZipError),
+    AsyncZip(#[source] async_zip::error::ZipError),
     #[error("Invalid tar file")]
     Tar(#[from] tokio_tar::TarError),
     #[error(
@@ -93,6 +95,18 @@ pub enum Error {
     UnacceptableFilename { filename: String },
 }
 
+impl From<async_zip::error::ZipError> for Error {
+    fn from(err: async_zip::error::ZipError) -> Self {
+        let async_zip::error::ZipError::FileNameContainsNul { filename } = err else {
+            return Self::AsyncZip(err);
+        };
+
+        let filename = String::from_utf8_lossy(&filename);
+        validate_archive_member_name(&filename)
+            .expect_err("a filename containing an embedded NUL must be rejected")
+    }
+}
+
 impl Error {
     /// When reading from an archive, the error can either be an IO error from the underlying
     /// operating system, or an error with the archive. Both get wrapper into an IO error through
@@ -128,12 +142,8 @@ impl Error {
     pub fn is_http_streaming_failed(&self) -> bool {
         match self {
             Self::AsyncZip(async_zip::error::ZipError::UpstreamReadError(_)) => true,
-            Self::Io(err) => {
-                if let Some(inner) = err.get_ref() {
-                    inner.downcast_ref::<reqwest::Error>().is_some()
-                } else {
-                    false
-                }
+            Self::Io(err) if let Some(inner) = err.get_ref() => {
+                inner.downcast_ref::<reqwest::Error>().is_some()
             }
             _ => false,
         }

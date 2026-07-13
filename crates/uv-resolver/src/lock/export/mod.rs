@@ -209,25 +209,12 @@ impl<'lock> ExportableRequirements<'lock> {
 
             for requirement in root_requirements {
                 for dist in by_name.get(&requirement.name).into_iter().flatten() {
-                    // Determine whether this entry is "relevant" for the requirement, by intersecting
-                    // the markers.
-                    let marker = if dist.fork_markers.is_empty() {
-                        requirement.marker
-                    } else {
-                        let mut combined = MarkerTree::FALSE;
-                        for fork_marker in &dist.fork_markers {
-                            combined.or(fork_marker.pep508());
-                        }
-                        combined.and(requirement.marker);
-                        combined
-                    };
-
-                    if marker.is_false() {
+                    // Determine whether this entry is relevant for the requirement by
+                    // intersecting and simplifying the markers.
+                    let Some(marker) = target.lock().root_requirement_marker(requirement, dist)
+                    else {
                         continue;
-                    }
-
-                    // Simplify the marker.
-                    let marker = target.lock().simplify_environment(marker);
+                    };
 
                     // Add the dependency to the graph and get its index.
                     let dep_index = *inverse
@@ -524,15 +511,19 @@ fn conflict_marker_reachability<'lock>(
                     parent_marker.and(marker);
                 }
                 Edge::Optional { extra, marker, .. } => {
-                    // The optional extra is active for this edge itself, so add it before
-                    // resolving any active extras on the edge.
-                    if let Node::Package(parent) = graph[parent_index] {
+                    // The optional edge is only active when its extra is active. Preserve the
+                    // extra's reachability marker, since matching constraints can be omitted from
+                    // the dependency marker as redundant when the lockfile is written.
+                    let active_marker = if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        parent_map.insert(item, parent_marker);
-                    }
+                        *parent_map.entry(item).or_insert(parent_marker)
+                    } else {
+                        parent_marker
+                    };
 
                     // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
+                    let mut marker = resolve_activated_extras(*marker, scope_package, &parent_map);
+                    marker.and(active_marker);
 
                     // Propagate the edge to the known conflicts.
                     for value in parent_map.values_mut() {

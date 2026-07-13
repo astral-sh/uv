@@ -40,11 +40,12 @@ use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable};
-use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
+    #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
+    IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
         "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
     )]
@@ -192,6 +193,7 @@ where
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct PylockToml {
+    #[serde(deserialize_with = "deserialize_lock_version")]
     lock_version: Version,
     created_by: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,6 +208,20 @@ pub struct PylockToml {
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
+}
+
+fn deserialize_lock_version<'de, D>(deserializer: D) -> Result<Version, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = Version::deserialize(deserializer)?;
+    if version.release().first() != Some(&1) {
+        return Err(serde::de::Error::custom(format_args!(
+            "unsupported lock version (`{version}`, but only major version 1 is supported)"
+        )));
+    }
+
+    Ok(version)
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -373,13 +389,7 @@ impl<'lock> PylockToml {
 
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
-        for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(node) = &resolution.graph[node_index] else {
-                continue;
-            };
-            if !node.is_base() {
-                continue;
-            }
+        for (node_index, node) in resolution.base_dists() {
             let ResolvedDist::Installable { dist, version } = &node.dist else {
                 continue;
             };
@@ -1011,7 +1021,10 @@ impl<'lock> PylockToml {
             };
             doc.insert("attestation-identities", value(attestation_identities));
         }
-        if !self.packages.is_empty() {
+        if self.packages.is_empty() {
+            // `packages` is a required key in PEP 751, even when empty.
+            doc.insert("packages", value(Array::new()));
+        } else {
             let mut packages = ArrayOfTables::new();
             for dist in &self.packages {
                 packages.push(dist.to_toml()?);
@@ -1043,6 +1056,17 @@ impl<'lock> PylockToml {
             // Omit packages that aren't relevant to the current environment.
             if !package.marker.evaluate_pep751(markers, extras, groups) {
                 continue;
+            }
+
+            if let Some(requires_python) = package.requires_python.as_ref()
+                && !requires_python.contains(&markers.python_full_version().version)
+            {
+                return Err(PylockTomlErrorKind::IncompatibleRequiresPython(
+                    package.name.clone(),
+                    markers.python_full_version().version.clone(),
+                    requires_python.clone(),
+                )
+                .into());
             }
 
             match (
@@ -1360,7 +1384,7 @@ impl PylockTomlPackage {
         };
         Some(ResolvedRepositoryReference {
             reference: RepositoryReference {
-                url: RepositoryUrl::new(url),
+                url: RepositoryUrl::new(url.clone()),
                 reference,
             },
             sha: vcs.commit_id,

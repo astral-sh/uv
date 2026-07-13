@@ -20,7 +20,9 @@ use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
     AccessToken, CredentialsCache, KeyringProvider,
     cache::FetchUrl,
-    credentials::{Authentication, AuthenticationError, Credentials, Username},
+    credentials::{
+        Authentication, AuthenticationError, Credentials, CredentialsFromUrlError, Username,
+    },
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
@@ -32,6 +34,12 @@ static IS_DEPENDABOT: LazyLock<bool> =
 
 impl From<AuthenticationError> for Error {
     fn from(err: AuthenticationError) -> Self {
+        Self::middleware(err)
+    }
+}
+
+impl From<CredentialsFromUrlError> for Error {
+    fn from(err: CredentialsFromUrlError) -> Self {
         Self::middleware(err)
     }
 }
@@ -271,7 +279,8 @@ impl AuthMiddleware {
 
     /// Configure the [`CredentialsCache`] to use.
     #[must_use]
-    pub fn with_cache(mut self, cache: CredentialsCache) -> Self {
+    #[cfg(test)]
+    fn with_cache(mut self, cache: CredentialsCache) -> Self {
         self.cache = Arc::new(cache);
         self
     }
@@ -363,7 +372,7 @@ impl Middleware for AuthMiddleware {
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         // Check for credentials attached to the request already
-        let request_credentials = Credentials::from_request(&request).map(Authentication::from);
+        let request_credentials = Credentials::from_request(&request)?.map(Authentication::from);
 
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information

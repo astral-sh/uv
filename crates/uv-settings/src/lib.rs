@@ -481,8 +481,10 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     if cache_dir.is_some() {
         masked_fields.push("cache-dir");
     }
-    if preview.is_some() {
-        masked_fields.push("preview");
+    match preview {
+        Some(PreviewOption::Preview(_)) => masked_fields.push("preview"),
+        Some(PreviewOption::PreviewFeatures(_)) => masked_fields.push("preview-features"),
+        None => (),
     }
     if python_preference.is_some() {
         masked_fields.push("python-preference");
@@ -714,6 +716,8 @@ impl EnvFlag {
 /// the CLI level, however there are limited semantics in that context.
 #[derive(Debug, Clone)]
 pub struct EnvironmentOptions {
+    pub ruff_path: Option<PathBuf>,
+    pub ty_path: Option<PathBuf>,
     pub skip_wheel_filename_check: Option<bool>,
     pub hide_build_output: Option<bool>,
     pub python_install_bin: Option<bool>,
@@ -788,6 +792,8 @@ impl EnvironmentOptions {
         .map(Duration::from_secs);
 
         Ok(Self {
+            ruff_path: parse_path_environment_variable(EnvVars::RUFF),
+            ty_path: parse_path_environment_variable(EnvVars::TY),
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,
@@ -1037,7 +1043,6 @@ where
     }
 }
 
-#[cfg(feature = "tracing-durations-export")]
 /// Parse a path environment variable.
 fn parse_path_environment_variable(name: &'static str) -> Option<PathBuf> {
     let value = std::env::var_os(name)?;

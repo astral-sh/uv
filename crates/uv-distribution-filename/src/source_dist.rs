@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use crate::SourceDistExtension;
+use crate::{SourceDistExtension, normalized_package_name_matches};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -45,34 +45,45 @@ impl SourceDistFilename {
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
+        let Some(stem) = filename.get(..filename.len() - (extension.name().len() + 1)) else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Extension,
+            });
+        };
 
-        if stem.len() <= package_name.as_ref().len() + "-".len() {
+        let package_name_len = package_name.as_ref().len();
+        if stem.len() <= package_name_len + "-".len() {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
             });
         }
-        let actual_package_name = PackageName::from_str(&stem[..package_name.as_ref().len()])
-            .map_err(|err| SourceDistFilenameError {
+        let (Some(actual_package_name), Some(version)) = (
+            stem.get(..package_name_len),
+            stem.get(package_name_len..)
+                .and_then(|suffix| suffix.strip_prefix('-')),
+        ) else {
+            return Err(SourceDistFilenameError {
+                filename: filename.to_string(),
+                kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
+            });
+        };
+        if !normalized_package_name_matches(actual_package_name, package_name) {
+            PackageName::from_str(actual_package_name).map_err(|err| SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
-        if actual_package_name != *package_name {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
             });
         }
 
-        // We checked the length above
-        let version =
-            Version::from_str(&stem[package_name.as_ref().len() + "-".len()..]).map_err(|err| {
-                SourceDistFilenameError {
-                    filename: filename.to_string(),
-                    kind: SourceDistFilenameErrorKind::Version(err),
-                }
-            })?;
+        let version = Version::from_str(version).map_err(|err| SourceDistFilenameError {
+            filename: filename.to_string(),
+            kind: SourceDistFilenameErrorKind::Version(err),
+        })?;
 
         Ok(Self {
             name: package_name.clone(),
@@ -215,11 +226,41 @@ mod tests {
 
     #[test]
     fn errors() {
-        for invalid in ["b-1.2.3.zip", "a-1.2.3-gamma.3.zip"] {
+        for invalid in ["b-1.2.3.zip", "aX1.2.3.zip", "a-1.2.3-gamma.3.zip"] {
             let ext = SourceDistExtension::from_path(invalid).unwrap();
             assert!(
                 SourceDistFilename::parse(invalid, ext, &PackageName::from_str("a").unwrap())
                     .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_non_ascii() {
+        let package_name = PackageName::from_str("a").unwrap();
+        for (filename, extension) in [
+            ("é-1.2.3.zip", SourceDistExtension::Zip),
+            ("aé1.2.3.zip", SourceDistExtension::Zip),
+            ("é-1.zip", SourceDistExtension::TarGz),
+        ] {
+            assert!(SourceDistFilename::parse(filename, extension, &package_name).is_err());
+        }
+    }
+
+    #[test]
+    fn normalized_package_name() {
+        let package_name = PackageName::from_str("foo-bar").unwrap();
+        for filename in [
+            "foo-bar-1.2.3.zip",
+            "foo_bar-1.2.3.zip",
+            "foo.bar-1.2.3.zip",
+            "Foo.Bar-1.2.3.zip",
+        ] {
+            assert_eq!(
+                SourceDistFilename::parse(filename, SourceDistExtension::Zip, &package_name)
+                    .unwrap()
+                    .name,
+                package_name
             );
         }
     }

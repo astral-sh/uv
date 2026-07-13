@@ -1,6 +1,8 @@
 //! Create a virtual environment.
 
+use std::borrow::Cow;
 use std::env::consts::EXE_SUFFIX;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -15,6 +17,7 @@ use tracing::{debug, trace};
 use crate::{Error, Prompt};
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_platform_tags::Os;
+use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
 use uv_python::managed::{
     ManagedPythonInstallation, PythonMinorVersionLink, replace_link_to_executable,
@@ -40,6 +43,15 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ),
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
+
+/// Python 3.10 and later already ignore the distutils install config keys this hook guards
+/// against, while the last pip release supporting Python 3.9 still needs the workaround.
+///
+/// See <https://github.com/pypa/virtualenv/issues/3181>
+fn install_distutils_patch(interpreter: &Interpreter) -> bool {
+    interpreter.python_tuple() < (3, 10)
+        || !uv_preview::is_enabled(PreviewFeature::NoDistutilsPatch)
+}
 
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
@@ -150,14 +162,7 @@ pub(crate) fn create(
                         }
                     }
                     debug!("Removing existing {name} ({reason})");
-                    // Before removing the virtual environment, we need to canonicalize the path
-                    // because `Path::metadata` will follow the symlink but we're still operating on
-                    // the unresolved path and will remove the symlink itself.
-                    let location = location
-                        .canonicalize()
-                        .unwrap_or_else(|_| location.to_path_buf());
-                    uv_fs::remove_virtualenv(&location)?;
-                    fs_err::create_dir_all(&location)?;
+                    uv_fs::clear_virtualenv(location)?;
                 }
                 OnExisting::Fail => return err,
                 // If not a virtual environment, fail without prompting.
@@ -166,14 +171,7 @@ pub(crate) fn create(
                     match confirm_clear(location, name)? {
                         Some(true) => {
                             debug!("Removing existing {name} due to confirmation");
-                            // Before removing the virtual environment, we need to canonicalize the
-                            // path because `Path::metadata` will follow the symlink but we're still
-                            // operating on the unresolved path and will remove the symlink itself.
-                            let location = location
-                                .canonicalize()
-                                .unwrap_or_else(|_| location.to_path_buf());
-                            uv_fs::remove_virtualenv(&location)?;
-                            fs_err::create_dir_all(&location)?;
+                            uv_fs::clear_virtualenv(location)?;
                         }
                         Some(false) => return err,
                         // When we don't have a TTY, require `--clear` explicitly.
@@ -483,20 +481,18 @@ pub(crate) fn create(
         .join(path_sep);
 
         let virtual_env_dir = match (relocatable, name.to_owned()) {
-            (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
-            }
-            (true, "activate.bat") => r"%~dp0..".to_string(),
+            (true, "activate") => Cow::Borrowed(
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
+            ),
+            (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
             (true, "activate.fish") => {
-                r#"'"$(dirname -- "$(cd "$(dirname -- "$(status -f)")"; and pwd)")"'"#.to_string()
+                Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
             }
-            (true, "activate.nu") => r"(path self | path dirname | path dirname)".to_string(),
-            (false, "activate.nu") => {
-                format!(
-                    "'{}'",
-                    escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
-                )
-            }
+            (true, "activate.nu") => Cow::Borrowed(r"(path self | path dirname | path dirname)"),
+            (false, "activate.nu") => Cow::Owned(format!(
+                "'{}'",
+                escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
+            )),
             // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
@@ -528,7 +524,11 @@ pub(crate) fn create(
         ("uv".to_string(), version().to_string()),
         (
             "version_info".to_string(),
-            interpreter.markers().python_full_version().string.clone(),
+            if using_minor_version_link {
+                interpreter.python_minor_version().to_string()
+            } else {
+                interpreter.markers().python_full_version().string.clone()
+            },
         ),
         (
             "include-system-site-packages".to_string(),
@@ -586,9 +586,10 @@ pub(crate) fn create(
         }
     }
 
-    // Populate `site-packages` with a `_virtualenv.py` file.
-    fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
-    fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    if install_distutils_patch(interpreter) {
+        fs_err::write(site_packages.join("_virtualenv.py"), VIRTUALENV_PATCH)?;
+        fs_err::write(site_packages.join("_virtualenv.pth"), "import _virtualenv")?;
+    }
 
     Ok(VirtualEnvironment {
         scheme: Scheme {
@@ -724,54 +725,46 @@ enum WindowsExecutable {
 
 impl WindowsExecutable {
     /// The name of the Python executable.
-    fn exe(self, interpreter: &Interpreter) -> String {
+    fn exe(self, interpreter: &Interpreter) -> Cow<'static, OsStr> {
         match self {
-            Self::Python => String::from("python.exe"),
-            Self::PythonMajor => {
-                format!("python{}.exe", interpreter.python_major())
-            }
-            Self::PythonMajorMinor => {
-                format!(
-                    "python{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PythonMajorMinort => {
-                format!(
-                    "python{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::Pythonw => String::from("pythonw.exe"),
-            Self::PythonwMajorMinort => {
-                format!(
-                    "pythonw{}.{}t.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPy => String::from("pypy.exe"),
-            Self::PyPyMajor => {
-                format!("pypy{}.exe", interpreter.python_major())
-            }
-            Self::PyPyMajorMinor => {
-                format!(
-                    "pypy{}.{}.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::PyPyw => String::from("pypyw.exe"),
-            Self::PyPyMajorMinorw => {
-                format!(
-                    "pypy{}.{}w.exe",
-                    interpreter.python_major(),
-                    interpreter.python_minor()
-                )
-            }
-            Self::GraalPy => String::from("graalpy.exe"),
+            Self::Python => Cow::Borrowed(OsStr::new("python.exe")),
+            Self::PythonMajor => Cow::Owned(OsString::from(format!(
+                "python{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PythonMajorMinor => Cow::Owned(OsString::from(format!(
+                "python{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PythonMajorMinort => Cow::Owned(OsString::from(format!(
+                "python{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::Pythonw => Cow::Borrowed(OsStr::new("pythonw.exe")),
+            Self::PythonwMajorMinort => Cow::Owned(OsString::from(format!(
+                "pythonw{}.{}t.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPy => Cow::Borrowed(OsStr::new("pypy.exe")),
+            Self::PyPyMajor => Cow::Owned(OsString::from(format!(
+                "pypy{}.exe",
+                interpreter.python_major()
+            ))),
+            Self::PyPyMajorMinor => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::PyPyw => Cow::Borrowed(OsStr::new("pypyw.exe")),
+            Self::PyPyMajorMinorw => Cow::Owned(OsString::from(format!(
+                "pypy{}.{}w.exe",
+                interpreter.python_major(),
+                interpreter.python_minor()
+            ))),
+            Self::GraalPy => Cow::Borrowed(OsStr::new("graalpy.exe")),
         }
     }
 

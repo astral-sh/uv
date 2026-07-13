@@ -841,12 +841,14 @@ fn get_relocatable_executable(
 
 /// Reads the record file
 /// <https://www.python.org/dev/peps/pep-0376/#record>
-pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+pub fn read_record_into_iter(
+    record: impl Read,
+) -> impl Iterator<Item = Result<RecordEntry, Error>> {
     csv::ReaderBuilder::new()
         .has_headers(false)
         .escape(Some(b'"'))
         .from_reader(record)
-        .deserialize()
+        .into_deserialize()
         .map(|entry| {
             let entry: RecordEntry = entry?;
             Ok(RecordEntry {
@@ -855,7 +857,10 @@ pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
                 ..entry
             })
         })
-        .collect()
+}
+
+pub fn read_record(record: impl Read) -> Result<Vec<RecordEntry>, Error> {
+    read_record_into_iter(record).collect()
 }
 
 pub(crate) fn write_record(
@@ -997,30 +1002,46 @@ fn parse_email_message_file(
     Ok(data)
 }
 
-/// Find the prefix of the `dist-info` directory in an unzipped wheel.
+/// Find the prefix of the unique `dist-info` directory in an unzipped wheel.
 ///
 /// See: <https://github.com/PyO3/python-pkginfo-rs>
 ///
 /// See: <https://github.com/pypa/pip/blob/36823099a9cdd83261fdbc8c1d2a24fa2eea72ca/src/pip/_internal/utils/wheel.py#L38>
 pub(crate) fn find_dist_info(path: impl AsRef<Path>) -> Result<String, Error> {
-    // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level.
-    let Some(dist_info) = fs::read_dir(path.as_ref())?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let file_type = entry.file_type().ok()?;
-        if file_type.is_dir() {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "dist-info") {
-                Some(path)
-            } else {
-                None
+    // Iterate over `path` to find the `.dist-info` directory. It should be at the top-level,
+    // and wheels must contain exactly one.
+    let mut dist_info = fs::read_dir(path.as_ref())?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let file_type = entry.file_type().ok()?;
+            if file_type.is_dir() {
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "dist-info") {
+                    return Some(path);
+                }
             }
-        } else {
             None
+        })
+        .collect::<Vec<_>>();
+    dist_info.sort();
+
+    let dist_info = match dist_info.as_slice() {
+        [] => {
+            return Err(Error::InvalidWheel(
+                "Missing .dist-info directory".to_string(),
+            ));
         }
-    }) else {
-        return Err(Error::InvalidWheel(
-            "Missing .dist-info directory".to_string(),
-        ));
+        [dist_info] => dist_info,
+        _ => {
+            return Err(Error::InvalidWheel(format!(
+                "Multiple .dist-info directories found: {}",
+                dist_info
+                    .iter()
+                    .filter_map(|path| path.file_stem())
+                    .map(|prefix| prefix.to_string_lossy())
+                    .join(", ")
+            )));
+        }
     };
 
     let Some(dist_info_prefix) = dist_info.file_stem() else {
@@ -1059,8 +1080,12 @@ pub(crate) fn parse_scripts(
         .join(format!("{dist_info_prefix}.dist-info/entry_points.txt"));
 
     // Read the entry points mapping. If the file doesn't exist, we just return an empty mapping.
-    let Ok(ini) = fs::read_to_string(entry_points_path) else {
-        return Ok((Vec::new(), Vec::new()));
+    let ini = match fs::read_to_string(entry_points_path) {
+        Ok(ini) => ini,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        Err(err) => return Err(err.into()),
     };
 
     scripts_from_ini(extras, python_minor, ini)
@@ -1099,7 +1124,7 @@ impl RenameOrCopy {
 
 #[cfg(test)]
 mod test {
-    use std::io::Cursor;
+    use std::io::{Cursor, ErrorKind};
     use std::path::Path;
 
     use anyhow::Result;
@@ -1108,7 +1133,7 @@ mod test {
 
     use super::{
         Error, RecordEntry, Script, WheelFile, format_shebang, get_script_executable,
-        parse_email_message_file, read_record, write_installer_metadata,
+        parse_email_message_file, parse_scripts, read_record, write_installer_metadata,
     };
 
     #[test]
@@ -1184,6 +1209,25 @@ mod test {
         }
         WheelFile::parse(&wheel_with_version("1.0")).unwrap();
         WheelFile::parse(&wheel_with_version("2.0")).unwrap_err();
+    }
+
+    #[test]
+    fn invalid_utf8_entry_points() -> Result<()> {
+        let wheel = assert_fs::TempDir::new()?;
+        wheel
+            .child("example-1.0.0.dist-info/entry_points.txt")
+            .write_binary(&[0xff])?;
+
+        let error = parse_scripts(&wheel, "example-1.0.0", None, 13)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid UTF-8 should fail to parse"))?;
+
+        assert!(matches!(
+            error,
+            Error::Io(err) if err.kind() == ErrorKind::InvalidData
+        ));
+
+        Ok(())
     }
 
     #[test]

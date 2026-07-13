@@ -716,10 +716,10 @@ async fn proxy_invalid_url_in_uv_toml() {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "ftp://proxy.example.com:8080"
-      |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
+          |
+        1 | http-proxy = "ftp://proxy.example.com:8080"
+          |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        invalid proxy URL scheme `ftp` in `ftp://proxy.example.com:8080/`: expected http, https, socks5, or socks5h
     "#);
 }
 
@@ -747,10 +747,10 @@ async fn proxy_invalid_url_not_a_url_in_uv_toml() {
     ----- stderr -----
     error: Failed to parse: `uv.toml`
       Caused by: TOML parse error at line 1, column 14
-      |
-    1 | http-proxy = "not a valid url"
-      |              ^^^^^^^^^^^^^^^^^
-    invalid proxy URL: invalid international domain name
+          |
+        1 | http-proxy = "not a valid url"
+          |              ^^^^^^^^^^^^^^^^^
+        invalid proxy URL: invalid international domain name
     "#);
 }
 
@@ -1073,7 +1073,35 @@ async fn retry_read_timeout_index() {
     ----- stderr -----
     error: Request failed after 1 retry in [TIME]
       Caused by: Failed to fetch: `http://[LOCALHOST]/tqdm/`
-      Caused by: error decoding response body
+      Caused by: error decoding response body for url (http://[LOCALHOST]/tqdm/)
+      Caused by: request or response body error
+      Caused by: operation timed out
+    ");
+}
+
+#[tokio::test]
+async fn retry_read_timeout_python_downloads_json() {
+    let context = uv_test::test_context!("3.12");
+
+    let (server, _guard) = read_timeout_server();
+
+    uv_snapshot!(context.filters(), context
+        .python_list()
+        .env_remove(EnvVars::UV_PYTHON_DOWNLOADS)
+        .arg("--python-downloads-json-url")
+        .arg(&server)
+        // Speed the test up with the minimum testable values
+        .env(EnvVars::UV_HTTP_TIMEOUT, "1")
+        .env(EnvVars::UV_HTTP_RETRIES, "1"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while fetching remote python downloads json from 'http://[LOCALHOST]/'
+      Caused by: Request failed after 1 retry in [TIME]
+      Caused by: Failed to download http://[LOCALHOST]/
+      Caused by: error decoding response body for url (http://[LOCALHOST]/)
       Caused by: request or response body error
       Caused by: operation timed out
     ");

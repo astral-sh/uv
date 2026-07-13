@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
+use std::ops::Bound;
 
 use either::Either;
 use itertools::Itertools;
-use pubgrub::Range;
 use smallvec::SmallVec;
 use tracing::{debug, trace};
 
@@ -16,6 +16,7 @@ use uv_types::InstalledPackagesProvider;
 
 use crate::preferences::{Entry, PreferenceSource, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
+use crate::pubgrub::Range;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::version_map::{VersionMap, VersionMapDistHandle};
 use crate::{Exclusions, Manifest, Options, ResolverEnvironment};
@@ -123,14 +124,12 @@ impl CandidateSelector {
         };
 
         // If we're not upgrading, we should prefer the already-installed distribution.
-        if !upgrade {
-            if let Some(installed) = installed {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+        if !upgrade && let Some(installed) = installed {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         // Otherwise, find the best candidate from the version maps.
@@ -140,21 +139,21 @@ impl CandidateSelector {
         //
         // If the already-installed version is _more_ compatible than the best candidate
         // from the version maps, use the installed version.
-        if let Some(installed) = installed {
-            if compatible.as_ref().is_none_or(|compatible| {
+        if let Some(installed) = installed
+            && compatible.as_ref().is_none_or(|compatible| {
                 let highest = self.use_highest_version(package_name, env);
                 if highest {
                     installed.version() >= compatible.version()
                 } else {
                     installed.version() <= compatible.version()
                 }
-            }) {
-                trace!(
-                    "Using installed {} {} that satisfies {range}",
-                    installed.name, installed.version
-                );
-                return Some(installed);
-            }
+            })
+        {
+            trace!(
+                "Using installed {} {} that satisfies {range}",
+                installed.name, installed.version
+            );
+            return Some(installed);
         }
 
         compatible
@@ -457,6 +456,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    highest,
                 )
             } else {
                 Self::select_candidate(
@@ -479,6 +479,7 @@ impl CandidateSelector {
                     package_name,
                     range,
                     allow_prerelease,
+                    highest,
                 )
             }
         } else {
@@ -489,6 +490,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        highest,
                     )
                 })
             } else {
@@ -498,6 +500,7 @@ impl CandidateSelector {
                         package_name,
                         range,
                         allow_prerelease,
+                        highest,
                     )
                 })
             }
@@ -526,12 +529,26 @@ impl CandidateSelector {
     /// The returned [`Candidate`] _may not_ be compatible with the current platform; in such
     /// cases, the resolver is responsible for tracking the incompatibility and re-running the
     /// selection process with additional constraints.
+    ///
+    /// `versions` must be ordered from highest to lowest when `highest` is `true`, and from lowest
+    /// to highest otherwise.
     fn select_candidate<'a>(
         versions: impl Iterator<Item = (&'a Version, VersionMapDistHandle<'a>)>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         allow_prerelease: bool,
+        highest: bool,
     ) -> Option<Candidate<'a>> {
+        let segments = range.iter();
+        let segments = if highest {
+            Either::Left(segments.rev())
+        } else {
+            Either::Right(segments)
+        };
+        let Some(mut cursor) = RangeCursor::new(segments, highest) else {
+            trace!("Exhausted all candidates for package {package_name} with empty range");
+            return None;
+        };
         let mut steps = 0usize;
         let mut incompatible: Option<Candidate> = None;
         for (version, maybe_dist) in versions {
@@ -552,7 +569,7 @@ impl CandidateSelector {
                 if version.any_prerelease() && !allow_prerelease {
                     continue;
                 }
-                if !range.contains(version) {
+                if !cursor.contains(version) {
                     continue;
                 }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
@@ -626,6 +643,120 @@ impl CandidateSelector {
             "Exhausted all candidates for package {package_name} with range {range} after {steps} steps"
         );
         None
+    }
+}
+
+/// Tracks membership in a range while visiting versions monotonically.
+///
+/// Unlike [`Range::contains`], which searches the segments for every version, the cursor visits
+/// each segment at most once.
+struct RangeCursor<'a, Segments> {
+    current: (Bound<&'a Version>, Bound<&'a Version>),
+    segments: Segments,
+    highest: bool,
+}
+
+impl<'a, Segments> RangeCursor<'a, Segments>
+where
+    Segments: Iterator<Item = (Bound<&'a Version>, Bound<&'a Version>)>,
+{
+    /// Create a cursor over segments ordered in the same direction as the visited versions.
+    fn new(mut segments: Segments, highest: bool) -> Option<Self> {
+        Some(Self {
+            current: segments.next()?,
+            segments,
+            highest,
+        })
+    }
+
+    /// Return whether `version` is in the range, advancing past segments that cannot contain any
+    /// subsequently visited versions.
+    fn contains(&mut self, version: &Version) -> bool {
+        if self.highest {
+            loop {
+                let (start, end) = self.current;
+                if is_before(version, start) {
+                    let Some(current) = self.segments.next() else {
+                        return false;
+                    };
+                    self.current = current;
+                } else {
+                    return !is_after(version, end);
+                }
+            }
+        } else {
+            loop {
+                let (start, end) = self.current;
+                if is_after(version, end) {
+                    let Some(current) = self.segments.next() else {
+                        return false;
+                    };
+                    self.current = current;
+                } else {
+                    return !is_before(version, start);
+                }
+            }
+        }
+    }
+}
+
+fn is_before(version: &Version, bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(start) => version < start,
+        Bound::Excluded(start) => version <= start,
+        Bound::Unbounded => false,
+    }
+}
+
+fn is_after(version: &Version, bound: Bound<&Version>) -> bool {
+    match bound {
+        Bound::Included(end) => version > end,
+        Bound::Excluded(end) => version >= end,
+        Bound::Unbounded => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn version(value: &str) -> Version {
+        value.parse().expect("valid test version")
+    }
+
+    fn assert_range_cursor(highest: bool, values: &[&str]) {
+        let range = [
+            (Bound::Unbounded, Bound::Excluded(version("2"))),
+            (Bound::Included(version("3")), Bound::Included(version("4"))),
+            (Bound::Excluded(version("5")), Bound::Unbounded),
+        ]
+        .into_iter()
+        .collect::<Range<_>>();
+        let segments = if highest {
+            Either::Left(range.iter().rev())
+        } else {
+            Either::Right(range.iter())
+        };
+        let mut cursor = RangeCursor::new(segments, highest).expect("test range is not empty");
+
+        for value in values {
+            let version = version(value);
+            assert_eq!(
+                cursor.contains(&version),
+                range.contains(&version),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn range_cursor_ascending() {
+        assert_range_cursor(false, &["1", "2", "2.5", "3", "4", "5", "6"]);
+    }
+
+    #[test]
+    fn range_cursor_descending() {
+        assert_range_cursor(true, &["6", "5", "4", "3", "2.5", "2", "1"]);
     }
 }
 

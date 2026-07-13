@@ -14,7 +14,7 @@ use crate::{DependencyMode, Manifest, ResolverEnvironment};
 pub struct AllowedYanks(Arc<FxHashMap<PackageName, FxHashSet<Version>>>);
 
 impl AllowedYanks {
-    pub(crate) fn from_manifest(
+    pub fn from_manifest(
         manifest: &Manifest,
         env: &ResolverEnvironment,
         dependencies: DependencyMode,
@@ -22,7 +22,7 @@ impl AllowedYanks {
         let mut allowed_yanks = FxHashMap::<PackageName, FxHashSet<Version>>::default();
 
         // Allow yanks for any pinned input requirements.
-        for requirement in manifest.requirements(env, dependencies) {
+        for requirement in manifest.candidate_selection_requirements(env, dependencies) {
             let RequirementSource::Registry { specifier, .. } = &requirement.source else {
                 continue;
             };

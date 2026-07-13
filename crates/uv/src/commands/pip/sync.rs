@@ -114,6 +114,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         pylock,
         source_trees,
@@ -455,6 +456,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
+            override_dependencies,
             excludes,
             source_trees,
             project,
@@ -484,11 +486,9 @@ pub(crate) async fn pip_sync(
         {
             Ok((resolution, hasher)) => (Resolution::from(resolution), hasher),
             Err(err) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -534,7 +534,7 @@ pub(crate) async fn pip_sync(
         &reinstall,
         &build_options,
         link_mode,
-        compile,
+        compile.then_some(operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,
@@ -553,11 +553,9 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

@@ -103,6 +103,11 @@ impl PackseServer {
     pub fn index_url(&self) -> String {
         format!("{}/simple/", self.server.url())
     }
+
+    /// Return the URL for a generated distribution file.
+    pub fn file_url(&self, filename: &str) -> String {
+        format!("{}/files/{filename}", self.server.url())
+    }
 }
 
 /// Build the complete [`ServerIndex`] from a scenario and cached build dependencies.

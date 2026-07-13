@@ -46,11 +46,11 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    EnvironmentUpdate, MalwareFindings, PlatformState, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
+    EnvironmentUpdate, LinkErrorReporting, MalwareFindings, PlatformState, ProjectEnvironment,
+    ProjectError, ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
     script_extra_build_requires, script_specification, update_environment,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{
     FrozenSource, InstallerSettingsRef, LockCheck, LockCheckSource, ResolverInstallerSettings,
@@ -170,6 +170,7 @@ pub(crate) async fn sync(
                 active,
                 cache,
                 dry_run,
+                LinkErrorReporting::User,
                 printer,
             )
             .await?,
@@ -310,18 +311,14 @@ pub(crate) async fn sync(
                         output_format,
                         printer,
                     )?;
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(operations::Error::OutdatedEnvironment(changelog))
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(operations::Error::OutdatedEnvironment(changelog))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -366,11 +363,9 @@ pub(crate) async fn sync(
     {
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
             if dry_run.enabled() {
@@ -378,14 +373,9 @@ pub(crate) async fn sync(
                 // sync operation, but exit with a non-zero status.
                 Outcome::LockMismatch(prev, cur, lock_source)
             } else {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    ProjectError::LockMismatch(prev, cur, lock_source)
-                        .to_string()
-                        .bold()
-                )?;
-                return Ok(ExitStatus::Failure);
+                return Err(
+                    UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into(),
+                );
             }
         }
         Err(err) => return Err(err.into()),
@@ -454,18 +444,14 @@ pub(crate) async fn sync(
                 output_format,
                 printer,
             )?;
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(operations::Error::OutdatedEnvironment(changelog))
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(operations::Error::OutdatedEnvironment(changelog))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -483,14 +469,7 @@ pub(crate) async fn sync(
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
         Outcome::LockMismatch(prev, cur, lock_source) => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                ProjectError::LockMismatch(prev, cur, lock_source)
-                    .to_string()
-                    .bold()
-            )?;
-            Ok(ExitStatus::Failure)
+            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
         }
     }
 }
@@ -796,7 +775,7 @@ pub(crate) async fn do_sync(
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
 
     // Populate credentials from the target.
-    store_credentials_from_target(target, &client_builder);
+    store_credentials_from_target(target, &client_builder)?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(client_builder, cache.clone())
@@ -891,7 +870,7 @@ pub(crate) async fn do_sync(
         reinstall,
         build_options,
         link_mode,
-        compile_bytecode,
+        compile_bytecode.then_some(operations::BytecodeCompilation::All),
         &hasher,
         &tags,
         &client,
@@ -1025,10 +1004,13 @@ fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
 ///
 /// These credentials can come from any of `tool.uv.sources`, `tool.uv.dev-dependencies`,
 /// `project.dependencies`, and `project.optional-dependencies`.
-fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &BaseClientBuilder) {
+pub(super) fn store_credentials_from_target(
+    target: InstallTarget<'_>,
+    client_builder: &BaseClientBuilder,
+) -> Result<()> {
     // Iterate over any indexes in the target.
     for index in target.indexes() {
-        if let Some(credentials) = index.credentials() {
+        if let Some(credentials) = index.credentials()? {
             if let Some(root_url) = index.root_url() {
                 client_builder.store_credentials(&root_url, credentials.clone());
             }
@@ -1040,10 +1022,10 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
     for source in target.sources() {
         match source {
             Source::Git { git, .. } => {
-                uv_git::store_credentials_from_url(git);
+                uv_git::store_credentials_from_url(git)?;
             }
             Source::Url { url, .. } => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
@@ -1057,14 +1039,15 @@ fn store_credentials_from_target(target: InstallTarget<'_>, client_builder: &Bas
         match &url.parsed_url {
             ParsedUrl::GitDirectory(ParsedGitDirectoryUrl { url, .. })
             | ParsedUrl::GitPath(ParsedGitPathUrl { url, .. }) => {
-                uv_git::store_credentials_from_url(url.url());
+                uv_git::store_credentials_from_url(url.url())?;
             }
             ParsedUrl::Archive(ParsedArchiveUrl { url, .. }) => {
-                client_builder.store_credentials_from_url(url);
+                client_builder.store_credentials_from_url(url)?;
             }
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]

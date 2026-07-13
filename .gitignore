@@ -51,3 +51,7 @@ profile.json.gz
 # IDE
 .idea
 .vscode
+
+# Codex
+.codex/*
+!.codex/hooks.json

@@ -21,9 +21,12 @@ use tracing::{debug, warn};
 use url::ParseError;
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Credentials, CredentialsCache, Indexes, PyxTokenStore};
+use uv_auth::{
+    AuthMiddleware, Credentials, CredentialsCache, CredentialsFromUrlError, Indexes, PyxTokenStore,
+};
 use uv_configuration::ProxyUrlKind;
 use uv_configuration::{KeyringProviderType, ProxyUrl, TrustedHost};
+use uv_distribution_types::IndexCredentialsError;
 use uv_git::GitHttpSettings;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
@@ -61,13 +64,13 @@ pub const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub const DEFAULT_READ_TIMEOUT_UPLOAD: Duration = Duration::from_mins(15);
 
 #[derive(Debug, Error)]
-#[error("failed to build HTTP client")]
-pub struct ClientBuildError(#[source] reqwest::Error);
-
-impl From<reqwest::Error> for ClientBuildError {
-    fn from(error: reqwest::Error) -> Self {
-        Self(error)
-    }
+pub enum ClientBuildError {
+    #[error("failed to build HTTP client")]
+    Reqwest(#[from] reqwest::Error),
+    #[error(transparent)]
+    Credentials(#[from] CredentialsFromUrlError),
+    #[error(transparent)]
+    IndexCredentials(#[from] IndexCredentialsError),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -214,7 +217,7 @@ impl<'a> BaseClientBuilder<'a> {
     /// Note that some configuration options from this builder will still be applied
     /// to the client via middleware.
     #[must_use]
-    pub(crate) fn custom_client(mut self, client: Client) -> Self {
+    pub fn custom_client(mut self, client: Client) -> Self {
         self.custom_client = Some(client);
         self
     }
@@ -247,11 +250,6 @@ impl<'a> BaseClientBuilder<'a> {
     pub fn no_retry_delay(mut self, no_retry_delay: bool) -> Self {
         self.no_retry_delay = no_retry_delay;
         self
-    }
-
-    #[must_use]
-    pub fn system_certs(&self) -> bool {
-        self.system_certs
     }
 
     #[must_use]
@@ -361,7 +359,10 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     /// See [`CredentialsCache::store_credentials_from_url`].
-    pub fn store_credentials_from_url(&self, url: &DisplaySafeUrl) -> bool {
+    pub fn store_credentials_from_url(
+        &self,
+        url: &DisplaySafeUrl,
+    ) -> Result<bool, CredentialsFromUrlError> {
         self.credentials_cache.store_credentials_from_url(url)
     }
 
@@ -396,8 +397,8 @@ impl<'a> BaseClientBuilder<'a> {
         }
 
         // Use the custom client if provided, otherwise create a new one
-        let (raw_client, raw_dangerous_client) = match &self.custom_client {
-            Some(client) => (client.clone(), client.clone()),
+        let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
+            Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
             None => {
                 self.create_secure_and_insecure_clients(self.read_timeout, self.connect_timeout)?
             }
@@ -427,6 +428,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: self.read_timeout,
             connect_timeout: self.connect_timeout,
             credentials_cache: self.credentials_cache.clone(),
+            certificate_source,
         })
     }
 
@@ -456,6 +458,7 @@ impl<'a> BaseClientBuilder<'a> {
             read_timeout: existing.read_timeout,
             connect_timeout: existing.connect_timeout,
             credentials_cache: existing.credentials_cache.clone(),
+            certificate_source: existing.certificate_source,
         }
     }
 
@@ -463,7 +466,7 @@ impl<'a> BaseClientBuilder<'a> {
         &self,
         read_timeout: Duration,
         connect_timeout: Duration,
-    ) -> Result<(Client, Client), ClientBuildError> {
+    ) -> Result<(Client, Client, CertificateSource), ClientBuildError> {
         // Create user agent.
         let mut user_agent_string = format!("uv/{}", version());
 
@@ -475,6 +478,13 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
         let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
+        let certificate_source = if custom_certs.is_some() {
+            CertificateSource::Custom
+        } else if self.system_certs {
+            CertificateSource::System
+        } else {
+            CertificateSource::WebPki
+        };
 
         // Create a secure client that validates certificates.
         let raw_client = self.create_client(
@@ -496,7 +506,7 @@ impl<'a> BaseClientBuilder<'a> {
             self.redirect_policy,
         )?;
 
-        Ok((raw_client, raw_dangerous_client))
+        Ok((raw_client, raw_dangerous_client, certificate_source))
     }
 
     fn create_client(
@@ -688,6 +698,21 @@ pub struct BaseClient {
     no_retry_delay: bool,
     /// Global authentication cache for a uv invocation to share credentials across uv clients.
     credentials_cache: Arc<CredentialsCache>,
+    /// The certificate roots used by the underlying HTTP client.
+    certificate_source: CertificateSource,
+}
+
+/// The certificate roots used by a [`BaseClient`].
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum CertificateSource {
+    /// The system certificate roots.
+    System,
+    /// The bundled `WebPKI` certificate roots.
+    WebPki,
+    /// Custom roots loaded from `SSL_CERT_FILE` or `SSL_CERT_DIR`.
+    Custom,
+    /// An externally constructed client whose certificate roots are unknown.
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -745,6 +770,10 @@ impl BaseClient {
 
     pub(crate) fn credentials_cache(&self) -> &CredentialsCache {
         &self.credentials_cache
+    }
+
+    pub(crate) fn certificate_source(&self) -> CertificateSource {
+        self.certificate_source
     }
 
     /// The reqwest client without middleware.
@@ -962,7 +991,9 @@ fn request_into_redirect(
     // Check if there are credentials on the redirect location itself.
     // If so, move them to Authorization header.
     if !redirect_url.username().is_empty() {
-        if let Some(credentials) = Credentials::from_url(&redirect_url) {
+        if let Some(credentials) =
+            Credentials::from_url(&redirect_url).map_err(reqwest_middleware::Error::middleware)?
+        {
             let _ = redirect_url.set_username("");
             let _ = redirect_url.set_password(None);
             headers.insert(AUTHORIZATION, credentials.to_header_value());

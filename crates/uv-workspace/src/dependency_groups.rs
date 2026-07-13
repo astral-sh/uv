@@ -180,7 +180,7 @@ impl FlatDependencyGroups {
                 // should already have its markers applied to these.
                 for requirement in &mut requirements {
                     let extra_markers =
-                        RequiresPython::from_specifiers(requires_python).to_marker_tree();
+                        RequiresPython::from_specifiers(requires_python.clone()).to_marker_tree();
                     requirement.marker.and(extra_markers);
                 }
             }

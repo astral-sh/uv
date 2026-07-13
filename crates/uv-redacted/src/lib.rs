@@ -112,8 +112,11 @@ impl DisplaySafeUrl {
     fn reject_ambiguous_credentials(input: &str, url: &Url) -> Result<(), DisplaySafeUrlError> {
         // `git://`, `http://`, and `https://` URLs may carry credentials, while `file://` URLs
         // on Windows may contain both sigils, but it's always safe, e.g.
-        // `file://C:/Users/ferris/project@home/workspace`.
-        if url.scheme() == "file" {
+        // `file://C:/Users/ferris/project@home/workspace`. The same holds for VCS URLs that use a
+        // file transport, such as `git+file://C:/Users/ferris/repo.git@v1.0`, which likewise carry
+        // no network credentials but can pair a drive-letter `:` with an `@` revision.
+        let scheme = url.scheme();
+        if scheme == "file" || scheme.ends_with("+file") {
             return Ok(());
         }
 
@@ -123,10 +126,7 @@ impl DisplaySafeUrl {
 
         // Check for the suspicious pattern.
         if !has_credential_like_pattern(url.path())
-            && !url
-                .fragment()
-                .map(has_credential_like_pattern)
-                .unwrap_or(false)
+            && !url.fragment().is_some_and(has_credential_like_pattern)
         {
             return Ok(());
         }
@@ -637,6 +637,12 @@ mod tests {
             "git+https://githubproxy.cc/https://github.com/user/repo.git@branch",
             "git+https://proxy.example.com/https://github.com/org/project@v1.0.0",
             "git+https://proxy.example.com/https://github.com/org/project@refs/heads/main",
+            // https://github.com/astral-sh/uv/issues/19887
+            // Windows `git+file://` URLs pair a drive-letter `:` with an `@` revision, but use a
+            // file transport and so carry no credentials.
+            "git+file:///C:/Users/ferris/repo.git@v1.0",
+            "git+file:///C:/Users/ferris/repo.git@10c049896212932ad5f7b19456d90bc604eeca53",
+            "hg+file:///C:/Users/ferris/repo@default",
         ] {
             DisplaySafeUrl::parse(url).unwrap();
         }

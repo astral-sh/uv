@@ -55,14 +55,12 @@ fn get_doc_comment(attrs: &[Attribute]) -> String {
     attrs
         .iter()
         .filter_map(|attr| {
-            if attr.path().is_ident("doc") {
-                if let syn::Meta::NameValue(meta) = &attr.meta {
-                    if let syn::Expr::Lit(expr) = &meta.value {
-                        if let syn::Lit::Str(str) = &expr.lit {
-                            return Some(str.value().trim().to_string());
-                        }
-                    }
-                }
+            if attr.path().is_ident("doc")
+                && let syn::Meta::NameValue(meta) = &attr.meta
+                && let syn::Expr::Lit(expr) = &meta.value
+                && let syn::Lit::Str(str) = &expr.lit
+            {
+                return Some(str.value().trim().to_string());
             }
             None
         })
@@ -138,14 +136,12 @@ pub fn attribute_env_vars_metadata(_attr: TokenStream, input: TokenStream) -> To
                 Some((name, doc, added_in, item.ident.span()))
             }
             ImplItem::Fn(item) if !is_hidden(&item.attrs) => {
-                // Extract the environment variable patterns.
-                if let Some(pattern) = get_env_var_pattern_from_attr(&item.attrs) {
+                get_env_var_pattern_from_attr(&item.attrs).map(|pattern| {
+                    // Extract the environment variable patterns.
                     let doc = get_doc_comment(&item.attrs);
                     let added_in = get_added_in(&item.attrs);
-                    Some((pattern, doc, added_in, item.sig.span()))
-                } else {
-                    None // Skip if pattern extraction fails.
-                }
+                    (pattern, doc, added_in, item.sig.span())
+                })
             }
             _ => None,
         })

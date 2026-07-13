@@ -289,6 +289,7 @@ impl SourceBuild {
         source: &Path,
         subdirectory: Option<&Path>,
         install_path: &Path,
+        stop_discovery_at: Option<&Path>,
         fallback_package_name: Option<&PackageName>,
         fallback_package_version: Option<&Version>,
         interpreter: &Interpreter,
@@ -322,6 +323,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            stop_discovery_at,
             build_context.cache(),
             workspace_cache,
             credentials_cache,
@@ -458,6 +460,7 @@ impl SourceBuild {
                 version_id,
                 locations,
                 no_sources,
+                stop_discovery_at,
                 workspace_cache,
                 build_stack,
                 build_kind,
@@ -574,6 +577,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        stop_discovery_at: Option<&Path>,
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
         credentials_cache: &CredentialsCache,
@@ -606,6 +610,19 @@ impl SourceBuild {
             .build_system
             .as_ref()
             .and_then(|build_system| build_system.build_backend.as_deref());
+
+        if let Some(backend_path) = pyproject_toml
+            .build_system
+            .as_ref()
+            .and_then(|build_system| build_system.backend_path.as_ref())
+        {
+            for path in backend_path.iter() {
+                if !source_tree.join(path).is_dir() {
+                    return Err(Box::new(Error::InvalidBackendPath(path.to_string())));
+                }
+            }
+        }
+
         // Only show the warning for first party and URL dependencies, not for registry dependencies
         // (which have sources disabled).
         if !no_sources.all()
@@ -613,8 +630,7 @@ impl SourceBuild {
                 .tool
                 .as_ref()
                 .and_then(|tool| tool.uv.as_ref())
-                .map(|uv| uv.build_backend.is_some())
-                .unwrap_or(false)
+                .is_some_and(|uv| uv.build_backend.is_some())
             && build_backend != Some("uv_build")
             && let Some(package_name) =
                 package_name.or(pyproject_toml.project.as_ref().map(|project| &project.name))
@@ -655,6 +671,7 @@ impl SourceBuild {
                     locations,
                     no_sources,
                     true,
+                    stop_discovery_at,
                     cache,
                     workspace_cache,
                     credentials_cache,
@@ -998,6 +1015,7 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     no_sources: NoSources,
+    stop_discovery_at: Option<&Path>,
     workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
@@ -1104,6 +1122,7 @@ async fn create_pep517_build_environment(
             build_context
                 .source_tree_editable_policy()
                 .workspace_member_editable(None),
+            stop_discovery_at,
             build_context.cache(),
             workspace_cache,
             credentials_cache,
@@ -1209,6 +1228,7 @@ impl PythonRunner {
             .args(["-c", script])
             .current_dir(source_tree.simplified())
             .envs(environment_variables)
+            .env(EnvVars::UV_INTERNAL__BUILD_DIR, source_tree)
             .env(EnvVars::PATH, modified_path)
             .env(EnvVars::VIRTUAL_ENV, venv.root())
             // NOTE: it would be nice to get colored output from build backends,

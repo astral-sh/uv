@@ -122,7 +122,7 @@ impl KeyringProvider {
     }
 
     /// Store credentials to the system keyring.
-    #[instrument(skip(self))]
+    #[instrument(skip_all, fields(service = ?service, username = ?username))]
     async fn store_native(
         &self,
         service: &str,
@@ -204,7 +204,7 @@ impl KeyringProvider {
             "Should only use keyring for URLs without a password"
         );
         debug_assert!(
-            !username.map(str::is_empty).unwrap_or(false),
+            username.is_none_or(|username| !username.is_empty()),
             "Should only use keyring with a non-empty username"
         );
 

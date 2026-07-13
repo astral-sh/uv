@@ -581,7 +581,7 @@ impl Cache {
         Ok(summary)
     }
 
-    /// Run the garbage collector on the cache, removing any dangling entries.
+    /// Prune dangling cache entries and cached environments.
     pub fn prune(&self, ci: bool) -> Result<Removal, io::Error> {
         let mut summary = Removal::default();
 
@@ -614,14 +614,14 @@ impl Cache {
             }
         }
 
-        // Second, remove any cached environments. These are never referenced by symlinks, so we can
-        // remove them directly.
+        // Second, remove all cached environments. Centralized project environments can be
+        // referenced by `.venv` links, but are recreated when next needed.
         match fs_err::read_dir(self.bucket(CacheBucket::Environments)) {
             Ok(entries) => {
                 for entry in entries {
                     let entry = entry?;
                     let path = entry.path();
-                    debug!("Removing dangling cache environment: {}", path.display());
+                    debug!("Removing cached environment: {}", path.display());
                     summary += rm_rf(path)?;
                 }
             }
@@ -647,41 +647,44 @@ impl Cache {
                 Err(err) => return Err(err),
             }
 
-            for entry in walkdir::WalkDir::new(self.bucket(CacheBucket::SourceDistributions)) {
-                let entry = entry?;
-
-                // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
-                if !entry.file_type().is_dir() {
-                    continue;
-                }
-
-                if !entry.path().join("metadata.msgpack").exists() {
-                    continue;
-                }
-
-                // Remove everything except the built wheel archive and the metadata.
-                for entry in fs_err::read_dir(entry.path())? {
+            let source_distributions = self.bucket(CacheBucket::SourceDistributions);
+            if source_distributions.try_exists()? {
+                for entry in walkdir::WalkDir::new(source_distributions) {
                     let entry = entry?;
-                    let path = entry.path();
 
-                    // Retain the resolved metadata (`metadata.msgpack`).
-                    if path
-                        .file_name()
-                        .is_some_and(|file_name| file_name == "metadata.msgpack")
-                    {
+                    // If the directory contains a `metadata.msgpack`, then it's a built wheel revision.
+                    if !entry.file_type().is_dir() {
                         continue;
                     }
 
-                    // Retain any built wheel archives.
-                    if path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
-                    {
+                    if !entry.path().join("metadata.msgpack").exists() {
                         continue;
                     }
 
-                    debug!("Removing unzipped built wheel entry: {}", path.display());
-                    summary += rm_rf(path)?;
+                    // Remove everything except the built wheel archive and the metadata.
+                    for entry in fs_err::read_dir(entry.path())? {
+                        let entry = entry?;
+                        let path = entry.path();
+
+                        // Retain the resolved metadata (`metadata.msgpack`).
+                        if path
+                            .file_name()
+                            .is_some_and(|file_name| file_name == "metadata.msgpack")
+                        {
+                            continue;
+                        }
+
+                        // Retain any built wheel archives.
+                        if path
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                        {
+                            continue;
+                        }
+
+                        debug!("Removing unzipped built wheel entry: {}", path.display());
+                        summary += rm_rf(path)?;
+                    }
                 }
             }
         }
@@ -1174,7 +1177,7 @@ pub enum CacheBucket {
     Archive,
     /// Ephemeral virtual environments used to execute PEP 517 builds and other operations.
     Builds,
-    /// Reusable virtual environments used to invoke Python tools.
+    /// Reusable virtual environments for Python tools and projects.
     Environments,
     /// Cached Python downloads
     Python,
@@ -1191,16 +1194,18 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/it/cache_prune.rs`.
+            // in `crates/uv/tests/build/cache_prune.rs`.
             Self::SourceDistributions => "sdists-v9",
-            Self::FlatIndex => "flat-index-v2",
+            // Note that when bumping this, you'll also need to bump it
+            // in `crates/uv/tests/lock/lock.rs`.
+            Self::FlatIndex => "flat-index-v3",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v21",
+            // in `crates/uv/tests/build/cache_clean.rs`.
+            Self::Simple => "simple-v22",
             // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/it/cache_prune.rs`.
+            // in `crates/uv/tests/build/cache_prune.rs`.
             Self::Wheels => "wheels-v6",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
@@ -1337,6 +1342,7 @@ impl CacheBucket {
             Self::Archive,
             Self::Builds,
             Self::Environments,
+            Self::Python,
             Self::Binaries,
             Self::Osv,
         ]

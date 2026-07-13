@@ -6,6 +6,7 @@ use std::vec;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use thiserror::Error;
+use tracing::warn;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -31,14 +32,18 @@ use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy, SourceTreeEditablePolicy,
 };
-use uv_virtualenv::OnExisting;
+use uv_virtualenv::{OnExisting, RemovalReason};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
 use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{Changelog, report_interpreter};
-use crate::commands::project::{WorkspacePython, validate_project_requires_python};
+use crate::commands::project::{
+    LinkErrorReporting, WorkspacePython, centralized_environment_root,
+    centralized_environments_enabled, is_centralized_environment_link, lock_project_environment,
+    update_project_environment_link, validate_project_requires_python,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 
@@ -119,19 +124,19 @@ pub(crate) async fn venv(
         }
     };
 
-    // Determine the default path; either the virtual environment for the project or `.venv`
-    let path = path.unwrap_or(
-        project
-            .as_ref()
-            .and_then(|project| {
-                // Only use the project environment path if we're invoked from the root
-                // This isn't strictly necessary and we may want to change it later, but this
-                // avoids a breaking change when adding project environment support to `uv venv`.
-                (project.workspace().install_path() == project_dir)
-                    .then(|| project.workspace().venv(Some(false)))
-            })
-            .unwrap_or(PathBuf::from(".venv")),
-    );
+    // Only use the project environment path if we're invoked from the root with no explicit path.
+    // This isn't strictly necessary and we may want to change it later, but this avoids a breaking
+    // change when adding project environment support to `uv venv`.
+    let project_environment = project
+        .as_ref()
+        .map(VirtualProject::workspace)
+        .filter(|workspace| path.is_none() && workspace.install_path() == project_dir)
+        .map(|workspace| (workspace, workspace.environment_selection(Some(false))));
+
+    let centralized_workspace = project_environment
+        .as_ref()
+        .filter(|(_, selection)| centralized_environments_enabled(selection, cache))
+        .map(|(workspace, _)| *workspace);
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -174,6 +179,24 @@ pub(crate) async fn venv(
         python.into_interpreter()
     };
 
+    let upgradeable = python_request
+        .as_ref()
+        .is_none_or(|request| !request.includes_patch());
+
+    // Determine the default path.
+    let path = if let Some(workspace) = centralized_workspace {
+        centralized_environment_root(workspace, &interpreter, upgradeable, cache)
+    } else {
+        path.or_else(|| {
+            project_environment.as_ref().map(|(_, selection)| {
+                selection
+                    .explicit_path()
+                    .map_or_else(|| project_dir.join(".venv"), Path::to_path_buf)
+            })
+        })
+        .unwrap_or_else(|| PathBuf::from(".venv"))
+    };
+
     // Check if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
         match validate_project_requires_python(
@@ -190,16 +213,50 @@ pub(crate) async fn venv(
         }
     }
 
-    writeln!(
-        printer.stderr(),
-        "Creating virtual environment {}at: {}",
-        if seed { "with seed packages " } else { "" },
-        path.user_display().cyan()
-    )?;
+    let with_seed = if seed { " with seed packages" } else { "" };
+    if centralized_workspace.is_some() {
+        writeln!(
+            printer.stderr(),
+            "Creating virtual environment `{}`{with_seed}",
+            path.file_name()
+                .unwrap_or(path.as_os_str())
+                .to_string_lossy()
+                .cyan(),
+        )?;
+    } else {
+        writeln!(
+            printer.stderr(),
+            "Creating virtual environment{with_seed} at: {}",
+            path.user_display().cyan()
+        )?;
+    }
 
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    // Lock the project environment to avoid synchronization issues.
+    let _lock = if let Some((workspace, _)) = project_environment.as_ref() {
+        lock_project_environment(workspace)
+            .await
+            .inspect_err(|err| {
+                warn!("Failed to acquire project environment lock: {err}");
+            })
+            .ok()
+    } else {
+        None
+    };
+
+    let on_existing = match on_existing {
+        OnExisting::Prompt | OnExisting::Remove(_) if centralized_workspace.is_some() => {
+            // Centralized environments are managed by uv, so replace them without prompting.
+            OnExisting::Remove(RemovalReason::ManagedEnvironment)
+        }
+        OnExisting::Prompt | OnExisting::Remove(_)
+            if is_centralized_environment_link(&path, cache) =>
+        {
+            // Remove `.venv` without following it into the cache.
+            uv_fs::remove_symlink(&path).map_err(|err| VenvError::Creation(err.into()))?;
+            on_existing
+        }
+        _ => on_existing,
+    };
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
@@ -318,30 +375,36 @@ pub(crate) async fn venv(
         DefaultInstallLogger.on_complete(&changelog, printer, DryRun::Disabled)?;
     }
 
+    // Determine the appropriate environment path.
+    let scripts = if let Some(workspace) = centralized_workspace
+        && update_project_environment_link(&venv, workspace, LinkErrorReporting::User)
+        && let Ok(suffix) = venv.scripts().strip_prefix(&path)
+    {
+        workspace.install_path().join(".venv").join(suffix)
+    } else {
+        venv.scripts().to_path_buf()
+    };
+
     // Determine the appropriate activation command.
     let activation = match Shell::from_env() {
         None => None,
-        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => Some(format!(
-            "source {}",
-            shlex_posix(venv.scripts().join("activate"))
-        )),
+        Some(Shell::Bash | Shell::Zsh | Shell::Ksh) => {
+            Some(format!("source {}", shlex_posix(scripts.join("activate"))))
+        }
         Some(Shell::Fish) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.fish"))
+            shlex_posix(scripts.join("activate.fish"))
         )),
         Some(Shell::Nushell) => Some(format!(
             "overlay use {}",
-            shlex_posix(venv.scripts().join("activate.nu"))
+            shlex_posix(scripts.join("activate.nu"))
         )),
         Some(Shell::Csh) => Some(format!(
             "source {}",
-            shlex_posix(venv.scripts().join("activate.csh"))
+            shlex_posix(scripts.join("activate.csh"))
         )),
-        Some(Shell::Powershell) => Some(shlex_windows(
-            venv.scripts().join("activate"),
-            Shell::Powershell,
-        )),
-        Some(Shell::Cmd) => Some(shlex_windows(venv.scripts().join("activate"), Shell::Cmd)),
+        Some(Shell::Powershell) => Some(shlex_windows(scripts.join("activate"), Shell::Powershell)),
+        Some(Shell::Cmd) => Some(shlex_windows(scripts.join("activate"), Shell::Cmd)),
     };
     if let Some(act) = activation {
         writeln!(printer.stderr(), "Activate with: {}", act.green())?;

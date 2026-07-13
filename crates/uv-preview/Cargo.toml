@@ -1,6 +1,6 @@
 [package]
 name = "uv-preview"
-version = "0.0.52"
+version = "0.0.61"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -23,6 +23,8 @@ uv-warnings = { workspace = true }
 
 enumflags2 = { workspace = true }
 itertools = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -30,4 +32,5 @@ uv-preview = { path = ".", features = ["testing"] }
 
 [features]
 default = []
+schemars = ["dep:schemars"]
 testing = []

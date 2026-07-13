@@ -1,8 +1,9 @@
 use std::{
-    collections::{BTreeSet, Bound},
+    collections::{BTreeMap, BTreeSet, Bound},
     ffi::OsString,
     fmt::Write,
-    path::Path,
+    io,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, bail};
@@ -10,12 +11,19 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
-use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_configuration::GitLfsSetting;
-use uv_distribution::StaticMetadataDatabase;
+use uv_cache::{Cache, Refresh};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
+use uv_configuration::{
+    BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, ExcludeDependency,
+    ExtrasSpecification, GitLfsSetting, InstallOptions, Override, TargetTriple,
+};
+use uv_dispatch::BuildDispatch;
+use uv_distribution::{
+    DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
+};
 use uv_distribution_types::{
-    InstalledDist, Name, Requirement, RequiresPython, UnresolvedRequirement,
+    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
+    Resolution, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -23,17 +31,25 @@ use uv_fs::replace_symlink;
 use uv_fs::{CWD, Simplified};
 use uv_git::GitResolver;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_preview::Preview;
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
     VersionRequest,
 };
+use uv_requirements::RequirementsSpecification;
+use uv_resolver::{
+    FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+};
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
+use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip;
 
@@ -95,9 +111,13 @@ impl Hint for NoExecutablesError {
         hints
     }
 }
-use crate::commands::project::{ProjectError, PythonRequestSource};
+use crate::commands::project::{
+    EnvironmentSpecification, PlatformState, PreferenceLocation, ProjectError, PythonRequestSource,
+    lock::ValidatedLock,
+};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
+use crate::settings::ResolverSettings;
 
 /// Return all packages which contain an executable with the given name.
 pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec<InstalledDist> {
@@ -123,11 +143,16 @@ pub(super) fn matching_packages(name: &str, site_packages: &SitePackages) -> Vec
 
 /// Remove any entrypoints attached to the [`Tool`].
 pub(crate) fn remove_entrypoints(tool: &Tool) {
-    for executable in tool
-        .entrypoints()
-        .iter()
-        .map(|entrypoint| &entrypoint.install_path)
-    {
+    remove_entrypoint_paths(
+        tool.entrypoints()
+            .iter()
+            .map(|entrypoint| entrypoint.install_path.as_path()),
+    );
+}
+
+/// Remove the entrypoints at the given paths.
+fn remove_entrypoint_paths<'a>(entrypoints: impl IntoIterator<Item = &'a Path>) {
+    for executable in entrypoints {
         debug!("Removing executable: `{}`", executable.simplified_display());
         if let Err(err) = fs_err::remove_file(executable) {
             warn!(
@@ -254,6 +279,358 @@ async fn infer_requires_python_from_requirement(
     }
 }
 
+/// A universal lock for a tool environment.
+pub(crate) struct ToolLock {
+    root: PathBuf,
+    lock: Lock,
+}
+
+/// A tool lock validated against the current resolution inputs.
+pub(crate) struct ValidatedToolLock {
+    lock: ToolLock,
+    satisfied: bool,
+    usable: bool,
+}
+
+impl ValidatedToolLock {
+    /// Return whether the existing lock satisfies the current resolution inputs.
+    pub(crate) fn is_satisfied(&self) -> bool {
+        self.satisfied
+    }
+
+    /// Return the lock as a resolver preference if its versions remain usable.
+    pub(crate) fn preference(&self) -> Option<&ToolLock> {
+        self.usable.then_some(&self.lock)
+    }
+
+    /// Return the validated lock.
+    pub(crate) fn into_lock(self) -> ToolLock {
+        self.lock
+    }
+}
+
+impl ToolLock {
+    /// Build the lock manifest for a tool environment.
+    pub(crate) fn manifest(
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        excludes: &[ExcludeDependency],
+        build_constraints: &[Requirement],
+        dependency_metadata: &DependencyMetadata,
+    ) -> ResolverManifest {
+        ResolverManifest::new(
+            std::iter::empty::<PackageName>(),
+            requirements.iter().cloned(),
+            constraints.iter().cloned(),
+            overrides.iter().cloned().map(Override::Requirement),
+            excludes.iter().cloned(),
+            build_constraints.iter().cloned(),
+            std::iter::empty::<(GroupName, Vec<Requirement>)>(),
+            dependency_metadata.values().cloned(),
+        )
+    }
+
+    /// Build the lock for a tool environment.
+    pub(crate) fn from_resolution(
+        root: &Path,
+        resolution: &ResolverOutput,
+        manifest: &ResolverManifest,
+    ) -> anyhow::Result<Self> {
+        let lock = Lock::from_resolution(resolution, root, Vec::new())?;
+        let manifest = manifest.clone().relative_to(root)?;
+        Ok(Self {
+            root: root.to_path_buf(),
+            lock: lock.with_manifest(manifest),
+        })
+    }
+
+    /// Read the lock for a tool, if one has been generated.
+    pub(crate) fn read(directory: &Path) -> Option<Self> {
+        let path = directory.join("uv.lock");
+        match fs_err::read_to_string(&path) {
+            Ok(contents) => match toml::from_str(&contents) {
+                Ok(lock) => Some(Self {
+                    root: directory.to_path_buf(),
+                    lock,
+                }),
+                Err(err) => {
+                    debug!(
+                        "Ignoring invalid tool lock at `{}`: {err}",
+                        path.user_display()
+                    );
+                    None
+                }
+            },
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => {
+                debug!(
+                    "Ignoring unreadable tool lock at `{}`: {err}",
+                    path.user_display()
+                );
+                None
+            }
+        }
+    }
+
+    /// Write or remove the lock for a tool.
+    pub(crate) fn write(directory: &Path, lock: Option<&Self>) -> anyhow::Result<()> {
+        let path = directory.join("uv.lock");
+        if let Some(lock) = lock {
+            uv_fs::write_atomic_sync(&path, lock.lock.to_toml()?)?;
+        } else {
+            match fs_err::remove_file(path) {
+                Ok(()) => (),
+                Err(err) if err.kind() == io::ErrorKind::NotFound => (),
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate the lock against the current resolution inputs.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) async fn validate(
+        self,
+        requirements: &[Requirement],
+        constraints: &[Requirement],
+        overrides: &[Requirement],
+        excludes: &[ExcludeDependency],
+        build_constraints: &[Requirement],
+        refresh: &Refresh,
+        interpreter: &Interpreter,
+        settings: &ResolverSettings,
+        client_builder: &BaseClientBuilder<'_>,
+        state: &PlatformState,
+        concurrency: &Concurrency,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        printer: Printer,
+        preview: Preview,
+    ) -> Result<ValidatedToolLock, ProjectError> {
+        let ResolverSettings {
+            index_locations,
+            index_strategy,
+            keyring_provider,
+            resolution,
+            prerelease,
+            fork_strategy,
+            dependency_metadata,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            extra_build_dependencies,
+            extra_build_variables,
+            exclude_newer,
+            link_mode,
+            upgrade,
+            build_options,
+            sources,
+            torch_backend: _,
+            cuda_driver_version: _,
+            amd_gpu_architecture: _,
+        } = settings;
+
+        let client = RegistryClientBuilder::new(
+            client_builder.clone().keyring(*keyring_provider),
+            cache.clone(),
+        )
+        .index_locations(index_locations.clone())
+        .index_strategy(*index_strategy)
+        .markers(interpreter.markers())
+        .platform(interpreter.platform())
+        .build()?;
+
+        let environment;
+        let build_isolation = match build_isolation {
+            uv_configuration::BuildIsolation::Isolate => BuildIsolation::Isolated,
+            uv_configuration::BuildIsolation::Shared => {
+                environment = PythonEnvironment::from_interpreter(interpreter.clone());
+                BuildIsolation::Shared(&environment)
+            }
+            uv_configuration::BuildIsolation::SharedPackage(packages) => {
+                environment = PythonEnvironment::from_interpreter(interpreter.clone());
+                BuildIsolation::SharedPackage(&environment, packages)
+            }
+        };
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(*resolution)
+            .prerelease_mode(*prerelease)
+            .fork_strategy(*fork_strategy)
+            .exclude_newer(exclude_newer.clone())
+            .index_strategy(*index_strategy)
+            .build_options(build_options.clone())
+            .build();
+        let hasher = HashStrategy::Generate(HashGeneration::Url);
+        let build_hasher = HashStrategy::default();
+
+        let flat_index = {
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
+            let entries = client
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
+                .await?;
+            FlatIndex::from_entries(entries, None, &hasher, build_options)
+        };
+
+        let extra_build_requires =
+            LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
+                .into_inner();
+        let dispatch_constraints =
+            Constraints::from_requirements(build_constraints.iter().cloned());
+        let build_dispatch = BuildDispatch::new(
+            &client,
+            cache,
+            &dispatch_constraints,
+            interpreter,
+            index_locations,
+            &flat_index,
+            dependency_metadata,
+            state.clone().into_inner(),
+            *index_strategy,
+            config_setting,
+            config_settings_package,
+            build_isolation,
+            &extra_build_requires,
+            extra_build_variables,
+            *link_mode,
+            build_options,
+            &build_hasher,
+            exclude_newer.clone(),
+            sources.clone(),
+            SourceTreeEditablePolicy::Tool,
+            workspace_cache.clone(),
+            concurrency.clone(),
+            preview,
+        );
+        let database = DistributionDatabase::new(
+            &client,
+            &build_dispatch,
+            concurrency.downloads_semaphore.clone(),
+        );
+
+        let requires_python =
+            RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
+        let overrides = overrides
+            .iter()
+            .cloned()
+            .map(Override::Requirement)
+            .collect::<Vec<_>>();
+        let Self { root, lock } = self;
+        let validated = ValidatedLock::validate(
+            lock,
+            &root,
+            &BTreeMap::new(),
+            &[],
+            &BTreeMap::new(),
+            requirements,
+            &BTreeMap::new(),
+            constraints,
+            &overrides,
+            excludes,
+            build_constraints,
+            &Conflicts::empty(),
+            None,
+            None,
+            dependency_metadata,
+            interpreter,
+            &requires_python,
+            index_locations,
+            upgrade,
+            Some(refresh),
+            &options,
+            &hasher,
+            state.index(),
+            &database,
+            printer,
+        )
+        .await?;
+        let satisfied = validated.is_satisfied();
+        let usable = validated.is_usable();
+
+        Ok(ValidatedToolLock {
+            lock: Self {
+                root,
+                lock: validated.into_lock(),
+            },
+            satisfied,
+            usable,
+        })
+    }
+
+    /// Project the universal lock into a specific environment.
+    pub(crate) fn to_resolution(
+        &self,
+        project_name: Option<&PackageName>,
+        interpreter: &Interpreter,
+        python_platform: Option<&TargetTriple>,
+        build_options: &BuildOptions,
+    ) -> anyhow::Result<Resolution> {
+        struct ToolLockInstallTarget<'lock> {
+            tool_lock: &'lock ToolLock,
+            project_name: Option<&'lock PackageName>,
+        }
+
+        impl<'lock> Installable<'lock> for ToolLockInstallTarget<'lock> {
+            fn install_path(&self) -> &'lock Path {
+                &self.tool_lock.root
+            }
+
+            fn lock(&self) -> &'lock Lock {
+                &self.tool_lock.lock
+            }
+
+            fn roots(&self) -> impl Iterator<Item = &PackageName> {
+                std::iter::empty()
+            }
+
+            fn project_name(&self) -> Option<&PackageName> {
+                self.project_name
+            }
+        }
+
+        let markers = pip::resolution_markers(None, python_platform, interpreter);
+        let tags = pip::resolution_tags(None, python_platform, interpreter)?;
+        Ok(ToolLockInstallTarget {
+            tool_lock: self,
+            project_name,
+        }
+        .to_resolution(
+            &markers,
+            &tags,
+            &ExtrasSpecification::default().with_defaults(DefaultExtras::default()),
+            &DependencyGroupsWithDefaults::none(),
+            build_options,
+            &InstallOptions::default(),
+        )?)
+    }
+}
+
+/// Build an environment specification for a tool, preferring versions from its existing lock when
+/// available, then falling back to the installed environment.
+pub(crate) fn tool_environment_spec<'lock>(
+    requirements: RequirementsSpecification,
+    lock: Option<&'lock ToolLock>,
+    site_packages: Option<&SitePackages>,
+) -> EnvironmentSpecification<'lock> {
+    let specification = EnvironmentSpecification::from(requirements);
+    if let Some(lock) = lock {
+        return specification.with_preferences(PreferenceLocation::Lock {
+            lock: &lock.lock,
+            install_path: &lock.root,
+        });
+    }
+
+    let preferences = site_packages
+        .into_iter()
+        .flat_map(|site_packages| site_packages.iter().filter_map(Preference::from_installed))
+        .collect::<Vec<_>>();
+    if preferences.is_empty() {
+        return specification;
+    }
+
+    specification.with_preferences(PreferenceLocation::Entries(preferences))
+}
 /// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
 /// discover an alternate [`Interpreter`] that satisfies the `requires-python` constraint.
 pub(crate) async fn refine_interpreter(
@@ -360,8 +737,9 @@ pub(crate) fn finalize_tool_install(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
-    excludes: Vec<PackageName>,
+    excludes: Vec<ExcludeDependency>,
     build_constraints: Vec<Requirement>,
+    lock: Option<&ToolLock>,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let executable_directory = uv_tool::tool_executable_dir()?;
@@ -372,7 +750,7 @@ pub(crate) fn finalize_tool_install(
         executable_directory.user_display()
     );
 
-    let mut installed_entrypoints = Vec::new();
+    let mut installed_entrypoints: Vec<ToolEntrypoint> = Vec::new();
     let site_packages = SitePackages::from_environment(environment)?;
     let ordered_packages = entrypoints
         // Install dependencies first
@@ -391,9 +769,29 @@ pub(crate) fn finalize_tool_install(
         }
 
         let installed = site_packages.get_packages(package);
-        let dist = installed
-            .first()
-            .context("Expected at least one requirement")?;
+        let Some(dist) = installed.first() else {
+            if package != name {
+                bail!("Expected package `{package}` to be installed");
+            }
+
+            writeln!(
+                printer.stdout(),
+                "No executables are provided by package `{}`; removing tool",
+                package.cyan()
+            )?;
+            remove_entrypoint_paths(
+                installed_entrypoints
+                    .iter()
+                    .map(|entrypoint| entrypoint.install_path.as_path()),
+            );
+            installed_tools.remove_environment(name)?;
+
+            return Err(NoExecutablesError::Root {
+                package: package.clone(),
+                matching_dependency_packages: Vec::new(),
+            }
+            .into());
+        };
         let dist_entrypoints = entrypoint_paths(&site_packages, dist.name(), dist.version())?;
 
         // Determine the entry points targets. Use a sorted collection for deterministic output.
@@ -446,6 +844,11 @@ pub(crate) fn finalize_tool_install(
             )?;
 
             // Clean up the environment we just created.
+            remove_entrypoint_paths(
+                installed_entrypoints
+                    .iter()
+                    .map(|entrypoint| entrypoint.install_path.as_path()),
+            );
             installed_tools.remove_environment(name)?;
 
             return Err(err.into());
@@ -459,6 +862,11 @@ pub(crate) fn finalize_tool_install(
                 .peekable();
             if existing_entrypoints.peek().is_some() {
                 // Clean up the environment we just created
+                remove_entrypoint_paths(
+                    installed_entrypoints
+                        .iter()
+                        .map(|entrypoint| entrypoint.install_path.as_path()),
+                );
                 installed_tools.remove_environment(name)?;
 
                 let existing_entrypoints = existing_entrypoints
@@ -529,6 +937,7 @@ pub(crate) fn finalize_tool_install(
         installed_entrypoints,
         options.clone(),
     );
+    ToolLock::write(&installed_tools.tool_dir(name), lock)?;
     installed_tools.add_tool_receipt(name, tool)?;
 
     warn_out_of_path(&executable_directory);

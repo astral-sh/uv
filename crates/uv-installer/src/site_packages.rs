@@ -1,12 +1,14 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::iter::Flatten;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
+use uv_configuration::{ExcludeDependency, Excludes, Override, Overrides};
+use uv_distribution_filename::EggInfoFilename;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, Diagnostic, ExtraBuildRequires, ExtraBuildVariables,
     InstalledDist, InstalledDistKind, Name, NameRequirementSpecification, PackageConfigSettings,
@@ -49,8 +51,25 @@ impl SitePackages {
         Self::from_interpreter(environment.interpreter())
     }
 
+    /// Build an index of the requested installed packages from the given Python environment.
+    pub fn from_environment_for_packages<'a>(
+        environment: &PythonEnvironment,
+        package_names: impl IntoIterator<Item = &'a PackageName>,
+    ) -> Result<Self> {
+        let package_names = package_names.into_iter().collect::<FxHashSet<_>>();
+        Self::from_interpreter_with_filter(environment.interpreter(), Some(&package_names))
+    }
+
     /// Build an index of installed packages from the given Python executable.
     pub fn from_interpreter(interpreter: &Interpreter) -> Result<Self> {
+        Self::from_interpreter_with_filter(interpreter, None)
+    }
+
+    /// Build an index of installed packages from the given Python executable.
+    fn from_interpreter_with_filter(
+        interpreter: &Interpreter,
+        package_names: Option<&FxHashSet<&PackageName>>,
+    ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
         let mut by_name = FxHashMap::default();
         let mut by_url = FxHashMap::default();
@@ -58,30 +77,12 @@ impl SitePackages {
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
             let site_packages = match fs::read_dir(site_packages.as_ref()) {
-                Ok(read_dir) => {
-                    // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = read_dir
-                        .filter_map(|read_dir| match read_dir {
-                            Ok(entry) => match entry.file_type() {
-                                Ok(file_type) => (file_type.is_dir()
-                                    || entry
-                                        .path()
-                                        .extension()
-                                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
-                                .then_some(Ok(entry.path())),
-                                Err(err) => Some(Err(err)),
-                            },
-                            Err(err) => Some(Err(err)),
-                        })
-                        .collect::<Result<_, std::io::Error>>()
-                        .with_context(|| {
-                            format!(
-                                "Failed to read site-packages directory contents: {}",
-                                site_packages.user_display()
-                            )
-                        })?;
-                    dist_likes
-                }
+                Ok(read_dir) => sorted_dist_like_paths(read_dir).with_context(|| {
+                    format!(
+                        "Failed to read site-packages directory contents: {}",
+                        site_packages.user_display()
+                    )
+                })?,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                     return Ok(Self {
                         interpreter: interpreter.clone(),
@@ -95,6 +96,13 @@ impl SitePackages {
 
             // Index all installed packages by name.
             for path in site_packages {
+                if let Some(package_names) = package_names
+                    && let Some(package_name) = installed_dist_name(&path)
+                    && !package_names.contains(&package_name)
+                {
+                    continue;
+                }
+
                 let dist_info = match InstalledDist::try_from_path(&path) {
                     Ok(Some(dist_info)) => dist_info,
                     Ok(None) => continue,
@@ -116,6 +124,12 @@ impl SitePackages {
                         ));
                     }
                 };
+
+                if let Some(package_names) = package_names
+                    && !package_names.contains(dist_info.name())
+                {
+                    continue;
+                }
 
                 let idx = distributions.len();
 
@@ -322,6 +336,8 @@ impl SitePackages {
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
         overrides: &[UnresolvedRequirementSpecification],
+        override_dependencies: &[Override<Requirement>],
+        exclude_dependencies: &[ExcludeDependency],
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -409,10 +425,26 @@ impl SitePackages {
             named
         };
 
+        let overrides = Overrides::from_entries(
+            override_dependencies
+                .iter()
+                .cloned()
+                .chain(
+                    overrides
+                        .iter()
+                        .map(Cow::as_ref)
+                        .cloned()
+                        .map(Override::Requirement),
+                )
+                .collect(),
+        )?;
+        let excludes = Excludes::from_entries(exclude_dependencies.iter().cloned());
+
         self.satisfies_requirements(
             requirements.iter().map(Cow::as_ref),
             constraints.iter().map(|constraint| &constraint.requirement),
-            overrides.iter().map(Cow::as_ref),
+            &overrides,
+            &excludes,
             installation,
             markers,
             tags,
@@ -428,7 +460,8 @@ impl SitePackages {
         &self,
         requirements: impl ExactSizeIterator<Item = &'a Requirement>,
         constraints: impl Iterator<Item = &'a Requirement>,
-        overrides: impl Iterator<Item = &'a Requirement>,
+        overrides: &'a Overrides,
+        excludes: &'a Excludes,
         installation: InstallationStrategy,
         markers: &ResolverMarkerEnvironment,
         tags: &Tags,
@@ -437,7 +470,7 @@ impl SitePackages {
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
     ) -> Result<SatisfiesResult> {
-        // Collect the constraints and overrides by package name.
+        // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
             constraints.fold(FxHashMap::default(), |mut constraints, constraint| {
                 constraints
@@ -446,33 +479,18 @@ impl SitePackages {
                     .push(constraint);
                 constraints
             });
-        let overrides: FxHashMap<&PackageName, Vec<&Requirement>> =
-            overrides.fold(FxHashMap::default(), |mut overrides, r#override| {
-                overrides
-                    .entry(&r#override.name)
-                    .or_default()
-                    .push(r#override);
-                overrides
-            });
-
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for requirement in requirements {
-            if let Some(r#overrides) = overrides.get(&requirement.name) {
-                for dependency in r#overrides {
-                    if dependency.evaluate_markers(Some(markers), &[]) {
-                        if seen.insert((*dependency).clone()) {
-                            stack.push(Cow::Borrowed(*dependency));
-                        }
-                    }
-                }
-            } else {
-                if requirement.evaluate_markers(Some(markers), &[]) {
-                    if seen.insert(requirement.clone()) {
-                        stack.push(Cow::Borrowed(requirement));
-                    }
+        for requirement in overrides
+            .apply(requirements)
+            .filter(|requirement| !excludes.contains(&requirement.name))
+        {
+            if requirement.evaluate_markers(Some(markers), &[]) {
+                let requirement = requirement.into_owned();
+                if seen.insert(requirement.clone()) {
+                    stack.push(requirement);
                 }
             }
         }
@@ -543,21 +561,22 @@ impl SitePackages {
                         .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
 
                     // Add the dependencies to the queue.
-                    for dependency in &metadata.requires_dist {
-                        let dependency = Requirement::from(dependency.clone());
-                        if let Some(r#overrides) = overrides.get(&dependency.name) {
-                            for dependency in r#overrides {
-                                if dependency.evaluate_markers(Some(markers), &requirement.extras) {
-                                    if seen.insert((*dependency).clone()) {
-                                        stack.push(Cow::Borrowed(*dependency));
-                                    }
-                                }
-                            }
-                        } else {
-                            if dependency.evaluate_markers(Some(markers), &requirement.extras) {
-                                if seen.insert(dependency.clone()) {
-                                    stack.push(Cow::Owned(dependency));
-                                }
+                    let dependencies = metadata
+                        .requires_dist
+                        .iter()
+                        .cloned()
+                        .map(Requirement::from)
+                        .collect::<Vec<_>>();
+                    for dependency in overrides
+                        .apply_for(name, distribution.version(), &dependencies)
+                        .filter(|dependency| {
+                            !excludes.contains_for(name, distribution.version(), &dependency.name)
+                        })
+                    {
+                        if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                            let dependency = dependency.into_owned();
+                            if seen.insert(dependency.clone()) {
+                                stack.push(dependency);
                             }
                         }
                     }
@@ -609,6 +628,29 @@ pub enum SatisfiesResult {
     Unsatisfied(String),
 }
 
+/// Infer the package name from an installed distribution path without reading its metadata.
+///
+/// Returns `None` when the name cannot safely be derived from the filename alone.
+fn installed_dist_name(path: &Path) -> Option<PackageName> {
+    let extension = path.extension()?.to_str()?;
+    let file_stem = path.file_stem()?.to_str()?;
+
+    match extension {
+        "dist-info" => {
+            let (name, version) = file_stem.split_once('-')?;
+            Version::from_str(version).ok()?;
+            PackageName::from_str(name).ok()
+        }
+        "egg-info" => {
+            let filename = EggInfoFilename::parse(file_stem).ok()?;
+            filename.version?;
+            Some(filename.name)
+        }
+        // Legacy editables require reading metadata to determine their package name.
+        _ => None,
+    }
+}
+
 impl IntoIterator for SitePackages {
     type Item = InstalledDist;
     type IntoIter = Flatten<std::vec::IntoIter<Option<InstalledDist>>>;
@@ -616,6 +658,25 @@ impl IntoIterator for SitePackages {
     fn into_iter(self) -> Self::IntoIter {
         self.distributions.into_iter().flatten()
     }
+}
+
+fn sorted_dist_like_paths(read_dir: fs::ReadDir) -> Result<Vec<PathBuf>, std::io::Error> {
+    let mut paths = read_dir
+        .filter_map(|read_dir| match read_dir {
+            Ok(entry) => match entry.file_type() {
+                Ok(file_type) => (file_type.is_dir()
+                    || entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext == "egg-link" || ext == "egg-info"))
+                .then_some(Ok(entry.path())),
+                Err(err) => Some(Err(err)),
+            },
+            Err(err) => Some(Err(err)),
+        })
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    paths.sort_unstable();
+    Ok(paths)
 }
 
 #[derive(Debug)]
@@ -738,5 +799,41 @@ impl InstalledPackagesProvider for SitePackages {
 
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
         self.get_packages(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::sorted_dist_like_paths;
+
+    #[test]
+    fn sorted_dist_like_paths_filters_and_sorts() -> Result<()> {
+        let site_packages = tempfile::tempdir()?;
+        fs_err::create_dir(site_packages.path().join("z_package-1.0.0.dist-info"))?;
+        fs_err::create_dir(site_packages.path().join("a_package"))?;
+        fs_err::write(site_packages.path().join("editable.egg-link"), "")?;
+        fs_err::write(site_packages.path().join("module.py"), "")?;
+        fs_err::write(site_packages.path().join("metadata.egg-info"), "")?;
+
+        let paths = sorted_dist_like_paths(fs_err::read_dir(site_packages.path())?)?;
+        let names = paths
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "a_package".to_string(),
+                "editable.egg-link".to_string(),
+                "metadata.egg-info".to_string(),
+                "z_package-1.0.0.dist-info".to_string(),
+            ]
+        );
+
+        Ok(())
     }
 }

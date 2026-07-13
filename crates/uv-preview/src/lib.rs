@@ -1,7 +1,9 @@
+use std::borrow::Cow;
+#[cfg(any(test, feature = "testing"))]
+use std::ops::BitOr;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::BitOr,
     str::FromStr,
 };
 
@@ -256,6 +258,11 @@ pub enum PreviewFeature {
     MalwareCheck = 1 << 31,
     VenvSafeClear = 1 << 32,
     Check = 1 << 33,
+    PackagedInit = 1 << 34,
+    CentralizedProjectEnvs = 1 << 35,
+    ToolInstallLocks = 1 << 36,
+    WorkspaceListScripts = 1 << 37,
+    NoDistutilsPatch = 1 << 38,
 }
 
 impl PreviewFeature {
@@ -296,6 +303,11 @@ impl PreviewFeature {
             Self::MalwareCheck => "malware-check",
             Self::VenvSafeClear => "venv-safe-clear",
             Self::Check => "check-command",
+            Self::PackagedInit => "packaged-init",
+            Self::CentralizedProjectEnvs => "centralized-project-envs",
+            Self::ToolInstallLocks => "tool-install-locks",
+            Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::NoDistutilsPatch => "no-distutils-patch",
         }
     }
 }
@@ -349,6 +361,11 @@ impl FromStr for PreviewFeature {
             "malware-check" => Self::MalwareCheck,
             "venv-safe-clear" => Self::VenvSafeClear,
             "check" | "check-command" => Self::Check,
+            "packaged-init" => Self::PackagedInit,
+            "centralized-project-envs" => Self::CentralizedProjectEnvs,
+            "tool-install-locks" => Self::ToolInstallLocks,
+            "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "no-distutils-patch" => Self::NoDistutilsPatch,
             _ => return Err(PreviewFeatureParseError),
         })
     }
@@ -381,6 +398,43 @@ impl FromStr for MaybePreviewFeature {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for MaybePreviewFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name: Cow<'de, str> = serde::Deserialize::deserialize(deserializer)?;
+        Self::from_str(&name).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for MaybePreviewFeature {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("PreviewFeature")
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // Advertise canonical names for editor completions, while accepting any nonempty name to
+        // match the forwards-compatible runtime parsing behavior.
+        let choices: Vec<&str> = BitFlags::<PreviewFeature>::all()
+            .iter()
+            .map(PreviewFeature::as_str)
+            .collect();
+        schemars::json_schema!({
+            "type": "string",
+            "anyOf": [
+                {
+                    "enum": choices,
+                },
+                {
+                    "pattern": "\\S",
+                },
+            ],
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Preview {
     flags: BitFlags<PreviewFeature>,
@@ -394,7 +448,8 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
+    #[cfg(any(test, feature = "testing"))]
+    fn new(flags: &[PreviewFeature]) -> Self {
         Self {
             flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
         }
@@ -404,23 +459,6 @@ impl Preview {
         Self {
             flags: BitFlags::all(),
         }
-    }
-
-    /// Resolve preview arguments, warning and ignoring unknown feature names.
-    pub fn from_args(
-        preview: bool,
-        no_preview: bool,
-        preview_features: &[MaybePreviewFeature],
-    ) -> Self {
-        if no_preview {
-            return Self::default();
-        }
-
-        if preview {
-            return Self::all();
-        }
-
-        Self::from_feature_names(preview_features)
     }
 
     /// Check if a single feature is enabled.
@@ -438,7 +476,8 @@ impl Preview {
         !self.flags.is_empty()
     }
 
-    fn from_feature_names<'a>(
+    /// Resolve preview feature names, warning and ignoring unknown names.
+    pub fn from_feature_names<'a>(
         feature_names: impl IntoIterator<Item = &'a MaybePreviewFeature>,
     ) -> Self {
         let mut flags = BitFlags::empty();
@@ -507,6 +546,9 @@ mod tests {
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
         assert_eq!(preview.flags.bits().count_ones(), 2);
 
+        let preview = Preview::from_str("tool-install-locks").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::ToolInstallLocks));
+
         // Test with whitespace
         let preview = Preview::from_str("pylock , add-bounds").unwrap();
         assert!(preview.is_enabled(PreviewFeature::Pylock));
@@ -545,34 +587,6 @@ mod tests {
     }
 
     #[test]
-    fn test_preview_from_args() {
-        // Test no preview and no no_preview, and no features
-        let preview = Preview::from_args(false, false, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test no_preview
-        let preview = Preview::from_args(true, true, &[]);
-        assert_eq!(preview.to_string(), "disabled");
-
-        // Test preview (all features)
-        let preview = Preview::from_args(true, false, &[]);
-        assert_eq!(preview.to_string(), "enabled");
-
-        // Test specific features
-        let features = ["python-upgrade", "json-output"].map(|name| name.parse().unwrap());
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::PythonUpgrade));
-        assert!(preview.is_enabled(PreviewFeature::JsonOutput));
-        assert!(!preview.is_enabled(PreviewFeature::Pylock));
-
-        // Test unknown features
-        let features = ["unknown-feature", "pylock"].map(|name| name.parse().unwrap());
-        let preview = Preview::from_args(false, false, &features);
-        assert!(preview.is_enabled(PreviewFeature::Pylock));
-        assert_eq!(preview.flags.bits().count_ones(), 1);
-    }
-
-    #[test]
     fn test_preview_feature_as_str() {
         assert_eq!(
             PreviewFeature::PythonInstallDefault.as_str(),
@@ -581,6 +595,10 @@ mod tests {
         assert_eq!(PreviewFeature::PythonUpgrade.as_str(), "python-upgrade");
         assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
         assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
+        assert_eq!(
+            PreviewFeature::ToolInstallLocks.as_str(),
+            "tool-install-locks"
+        );
         assert_eq!(PreviewFeature::AddBounds.as_str(), "add-bounds");
         assert_eq!(
             PreviewFeature::PackageConflicts.as_str(),
@@ -647,6 +665,18 @@ mod tests {
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
         assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
         assert_eq!(PreviewFeature::Check.as_str(), "check-command");
+        assert_eq!(
+            PreviewFeature::CentralizedProjectEnvs.as_str(),
+            "centralized-project-envs"
+        );
+        assert_eq!(
+            PreviewFeature::WorkspaceListScripts.as_str(),
+            "workspace-list-scripts"
+        );
+        assert_eq!(
+            PreviewFeature::NoDistutilsPatch.as_str(),
+            "no-distutils-patch"
+        );
     }
 
     #[test]

@@ -95,7 +95,7 @@ impl Metadata {
 
     /// Lower by considering `tool.uv` in `pyproject.toml` if present, used for Git and directory
     /// dependencies.
-    pub(crate) async fn from_workspace(
+    pub async fn from_workspace(
         metadata: ResolutionMetadata,
         install_path: &Path,
         git_source: Option<&GitWorkspaceMember<'_>>,

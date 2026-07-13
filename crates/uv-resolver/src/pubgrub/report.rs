@@ -1,12 +1,15 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::ops::Bound;
 
 use indexmap::IndexSet;
 use itertools::Itertools;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, ReportFormatter, Term};
+use reqwest::StatusCode;
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -25,13 +28,15 @@ use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
-use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
+use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
     MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
     UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+
+type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {
@@ -49,6 +54,186 @@ pub(crate) struct PubGrubReportFormatter<'a> {
 
     /// The compatible tags for the resolution.
     pub(crate) tags: Option<&'a Tags>,
+}
+
+/// Render a PubGrub report without recursive tree traversal.
+///
+/// This preserves the output and shared-node reference behavior of
+/// [`pubgrub::DefaultStringReporter`], whose recursive entry point is private.
+pub(crate) fn report(
+    derivation_tree: &ErrorTree,
+    formatter: &PubGrubReportFormatter<'_>,
+) -> String {
+    match derivation_tree {
+        DerivationTree::External(external) => formatter.format_external(external),
+        DerivationTree::Derived(derived) => {
+            let mut reporter = IterativeReporter::default();
+            reporter.build(derived, formatter);
+            reporter.lines.join("\n")
+        }
+    }
+}
+
+/// Accumulates the report state used by [`report`].
+#[derive(Default)]
+struct IterativeReporter {
+    ref_count: usize,
+    shared_with_ref: Map<usize, usize>,
+    lines: Vec<String>,
+}
+
+impl IterativeReporter {
+    fn build(&mut self, root: &ReportDerived, formatter: &PubGrubReportFormatter<'_>) {
+        enum Task<'a> {
+            Build(&'a ReportDerived),
+            Finish(Option<usize>),
+            AfterFirstDerived {
+                current: &'a ReportDerived,
+                first: &'a ReportDerived,
+                second: &'a ReportDerived,
+            },
+            Emit(String),
+        }
+
+        let mut tasks = vec![Task::Build(root)];
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Build(current) => {
+                    tasks.push(Task::Finish(current.shared_id));
+                    match (current.cause1.as_ref(), current.cause2.as_ref()) {
+                        (
+                            DerivationTree::External(external1),
+                            DerivationTree::External(external2),
+                        ) => {
+                            self.lines.push(formatter.explain_both_external(
+                                external1,
+                                external2,
+                                &current.terms,
+                            ));
+                        }
+                        (DerivationTree::Derived(derived), DerivationTree::External(external))
+                        | (DerivationTree::External(external), DerivationTree::Derived(derived)) => {
+                            if let Some(ref_id) = self.line_ref_of(derived.shared_id) {
+                                self.lines.push(formatter.explain_ref_and_external(
+                                    ref_id,
+                                    derived,
+                                    external,
+                                    &current.terms,
+                                ));
+                            } else {
+                                match (derived.cause1.as_ref(), derived.cause2.as_ref()) {
+                                    (
+                                        DerivationTree::Derived(prior_derived),
+                                        DerivationTree::External(prior_external),
+                                    )
+                                    | (
+                                        DerivationTree::External(prior_external),
+                                        DerivationTree::Derived(prior_derived),
+                                    ) => {
+                                        tasks.push(Task::Emit(
+                                            formatter.and_explain_prior_and_external(
+                                                prior_external,
+                                                external,
+                                                &current.terms,
+                                            ),
+                                        ));
+                                        tasks.push(Task::Build(prior_derived));
+                                    }
+                                    _ => {
+                                        tasks.push(Task::Emit(
+                                            formatter
+                                                .and_explain_external(external, &current.terms),
+                                        ));
+                                        tasks.push(Task::Build(derived));
+                                    }
+                                }
+                            }
+                        }
+                        (DerivationTree::Derived(derived1), DerivationTree::Derived(derived2)) => {
+                            match (
+                                self.line_ref_of(derived1.shared_id),
+                                self.line_ref_of(derived2.shared_id),
+                            ) {
+                                (Some(ref1), Some(ref2)) => {
+                                    self.lines.push(formatter.explain_both_ref(
+                                        ref1,
+                                        derived1,
+                                        ref2,
+                                        derived2,
+                                        &current.terms,
+                                    ));
+                                }
+                                (Some(ref1), None) => {
+                                    tasks.push(Task::Emit(formatter.and_explain_ref(
+                                        ref1,
+                                        derived1,
+                                        &current.terms,
+                                    )));
+                                    tasks.push(Task::Build(derived2));
+                                }
+                                (None, Some(ref2)) => {
+                                    tasks.push(Task::Emit(formatter.and_explain_ref(
+                                        ref2,
+                                        derived2,
+                                        &current.terms,
+                                    )));
+                                    tasks.push(Task::Build(derived1));
+                                }
+                                (None, None) => {
+                                    tasks.push(Task::AfterFirstDerived {
+                                        current,
+                                        first: derived1,
+                                        second: derived2,
+                                    });
+                                    tasks.push(Task::Build(derived1));
+                                }
+                            }
+                        }
+                    }
+                }
+                Task::Finish(shared_id) => {
+                    if let Some(shared_id) = shared_id
+                        && !self.shared_with_ref.contains_key(&shared_id)
+                    {
+                        self.add_line_ref();
+                        self.shared_with_ref.insert(shared_id, self.ref_count);
+                    }
+                }
+                Task::AfterFirstDerived {
+                    current,
+                    first,
+                    second,
+                } => {
+                    if first.shared_id.is_some() {
+                        self.lines.push(String::new());
+                        tasks.push(Task::Build(current));
+                    } else {
+                        let ref_id = self.add_line_ref();
+                        self.lines.push(String::new());
+                        tasks.push(Task::Emit(formatter.and_explain_ref(
+                            ref_id,
+                            first,
+                            &current.terms,
+                        )));
+                        tasks.push(Task::Build(second));
+                    }
+                }
+                Task::Emit(line) => self.lines.push(line),
+            }
+        }
+    }
+
+    fn add_line_ref(&mut self) -> usize {
+        self.ref_count += 1;
+        if let Some(line) = self.lines.last_mut() {
+            let _ = write!(line, " ({})", self.ref_count);
+        }
+        self.ref_count
+    }
+
+    fn line_ref_of(&self, shared_id: Option<usize>) -> Option<usize> {
+        shared_id.and_then(|id| self.shared_with_ref.get(&id).copied())
+    }
 }
 
 impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
@@ -119,6 +304,14 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::Custom(package, set, reason) => {
+                if let UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(
+                    requirement,
+                )) = reason
+                    && let Some(root) = self.format_root_requires(package)
+                {
+                    return format!("{root} {requirement}");
+                }
+
                 if let Some(root) = self.format_root(package) {
                     format!("{root} cannot be used because {reason}")
                 } else {
@@ -155,6 +348,12 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                             PackageRange::dependency(dependency, dependency_set, None)
                         );
                     }
+                }
+
+                if dependency_set.is_empty()
+                    && let Some(root) = self.format_root(package)
+                {
+                    return format!("{root} for {dependency} cannot be satisfied");
                 }
 
                 if let Some(root) = self.format_root_requires(package) {
@@ -356,18 +555,18 @@ impl PubGrubReportFormatter<'_> {
     /// package is the root package.
     ///
     /// If not given the root package, returns `None`.
-    fn format_root_requires(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_root_requires(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
                 if self.is_single_project_workspace() {
-                    return Some("your project requires".to_string());
+                    return Some(Cow::Borrowed("your project requires"));
                 }
-                return Some("your workspace requires".to_string());
+                return Some(Cow::Borrowed("your workspace requires"));
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(name)) => Some(format!("{name} depends on")),
-            PubGrubPackageInner::Root(None) => Some("you require".to_string()),
+            PubGrubPackageInner::Root(Some(name)) => Some(Cow::Owned(format!("{name} depends on"))),
+            PubGrubPackageInner::Root(None) => Some(Cow::Borrowed("you require")),
             _ => None,
         }
     }
@@ -376,18 +575,17 @@ impl PubGrubReportFormatter<'_> {
     /// package is the root package.
     ///
     /// If not given the root package, returns `None`.
-    fn format_root(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_root(&self, package: &PubGrubPackage) -> Option<&'static str> {
         if self.is_workspace() {
             if matches!(&**package, PubGrubPackageInner::Root(_)) {
                 if self.is_single_project_workspace() {
-                    return Some("your project's requirements".to_string());
+                    return Some("your project's requirements");
                 }
-                return Some("your workspace's requirements".to_string());
+                return Some("your workspace's requirements");
             }
         }
         match &**package {
-            PubGrubPackageInner::Root(Some(_)) => Some("your requirements".to_string()),
-            PubGrubPackageInner::Root(None) => Some("your requirements".to_string()),
+            PubGrubPackageInner::Root(_) => Some("your requirements"),
             _ => None,
         }
     }
@@ -403,23 +601,23 @@ impl PubGrubReportFormatter<'_> {
     }
 
     /// Return a display name for the package if it is a workspace member.
-    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<String> {
+    fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
             PubGrubPackageInner::Package {
                 name, extra, group, ..
             } if self.workspace_members.contains(name) => {
                 if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
-                    Some("your project".to_string())
+                    Some(Cow::Borrowed("your project"))
                 } else {
-                    Some(format!("{package}"))
+                    Some(Cow::Owned(format!("{package}")))
                 }
             }
             PubGrubPackageInner::Extra { name, .. } if self.workspace_members.contains(name) => {
-                Some(format!("{package}"))
+                Some(Cow::Owned(format!("{package}")))
             }
             PubGrubPackageInner::Group { name, .. } if self.workspace_members.contains(name) => {
-                Some(format!("{package}"))
+                Some(Cow::Owned(format!("{package}")))
             }
             _ => None,
         }
@@ -479,8 +677,8 @@ impl PubGrubReportFormatter<'_> {
         match (external1, external2) {
             (
                 External::FromDependencyOf(package1, package_set1, dependency1, dependency_set1),
-                External::FromDependencyOf(package2, _, dependency2, dependency_set2),
-            ) if package1 == package2 => {
+                External::FromDependencyOf(package2, package_set2, dependency2, dependency_set2),
+            ) if package1 == package2 && package_set1 == package_set2 => {
                 let dependency1 = self.dependency_range(dependency1, dependency_set1);
                 let dependency2 = self.dependency_range(dependency2, dependency_set2);
 
@@ -515,7 +713,7 @@ impl PubGrubReportFormatter<'_> {
                 let external1 = self.format_external(external1);
                 let external2 = self.format_external(external2);
 
-                format!("{}and {}", padded("", &external1, " "), &external2)
+                format!("{}and {}", padded("", &external1, " "), external2)
             }
         }
     }
@@ -562,252 +760,230 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        match derivation_tree {
-            DerivationTree::External(External::Custom(package, set, reason)) => {
-                if let Some(name) = package.name_no_root() {
-                    // Check for no versions due to pre-release options.
-                    if !fork_urls.contains_key(name) {
-                        self.prerelease_hint(name, set, selector, env, options, output_hints);
+        let mut pending = vec![(derivation_tree, inherited_exclude_newer_ranges.clone())];
+        while let Some((derivation_tree, inherited_exclude_newer_ranges)) = pending.pop() {
+            match derivation_tree {
+                DerivationTree::External(External::Custom(package, set, reason)) => {
+                    if matches!(
+                        reason,
+                        UnavailableReason::Version(UnavailableVersion::UnsatisfiableDependency(_))
+                    ) {
+                        continue;
                     }
 
-                    // Check for no versions due to no `--find-links` flat index.
-                    Self::index_hints(
-                        name,
-                        set,
-                        selector,
-                        index_locations,
-                        index_capabilities,
-                        available_indexes,
-                        unavailable_packages,
-                        incomplete_packages,
-                        output_hints,
-                    );
+                    if let Some(name) = package.name_no_root() {
+                        // Check for no versions due to pre-release options.
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                        }
 
-                    if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
-                        incompatibility,
-                    )) = reason
-                    {
-                        match incompatibility {
-                            // Check for unavailable versions due to `--no-build` or `--no-binary`.
-                            IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
-                                output_hints.insert(PubGrubHint::NoBinary {
-                                    package: name.clone(),
-                                    option: options.build_options.no_binary().clone(),
-                                });
-                            }
-                            IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
-                                output_hints.insert(PubGrubHint::NoBuild {
-                                    package: name.clone(),
-                                    option: options.build_options.no_build().clone(),
-                                });
-                            }
-                            // Check for unavailable versions due to incompatible tags.
-                            IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
-                                if let Some(hint) = self.tag_hint(
-                                    name,
-                                    set,
-                                    *tag,
-                                    index,
-                                    selector,
-                                    fork_indexes,
-                                    env,
-                                    tags,
-                                ) {
-                                    output_hints.insert(hint);
+                        // Check for no versions due to no `--find-links` flat index.
+                        Self::index_hints(
+                            name,
+                            set,
+                            selector,
+                            index_locations,
+                            index_capabilities,
+                            available_indexes,
+                            unavailable_packages,
+                            incomplete_packages,
+                            output_hints,
+                        );
+
+                        if let UnavailableReason::Version(UnavailableVersion::IncompatibleDist(
+                            incompatibility,
+                        )) = reason
+                        {
+                            match incompatibility {
+                                // Check for unavailable versions due to `--no-build` or `--no-binary`.
+                                IncompatibleDist::Wheel(IncompatibleWheel::NoBinary) => {
+                                    output_hints.insert(PubGrubHint::NoBinary {
+                                        package: name.clone(),
+                                        option: options.build_options.no_binary().clone(),
+                                    });
                                 }
+                                IncompatibleDist::Source(IncompatibleSource::NoBuild) => {
+                                    output_hints.insert(PubGrubHint::NoBuild {
+                                        package: name.clone(),
+                                        option: options.build_options.no_build().clone(),
+                                    });
+                                }
+                                // Check for unavailable versions due to incompatible tags.
+                                IncompatibleDist::Wheel(IncompatibleWheel::Tag(tag)) => {
+                                    if let Some(hint) = self.tag_hint(
+                                        name,
+                                        set,
+                                        *tag,
+                                        index,
+                                        selector,
+                                        fork_indexes,
+                                        env,
+                                        tags,
+                                    ) {
+                                        output_hints.insert(hint);
+                                    }
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
                 }
-            }
-            DerivationTree::External(External::NoVersions(package, set)) => {
-                if let Some(name) = package.name_no_root() {
-                    // Check for no versions due to pre-release options.
-                    if !fork_urls.contains_key(name) {
-                        self.prerelease_hint(name, set, selector, env, options, output_hints);
-                    }
+                DerivationTree::External(External::NoVersions(package, set)) => {
+                    if let Some(name) = package.name_no_root() {
+                        // Check for no versions due to pre-release options.
+                        if !fork_urls.contains_key(name) {
+                            self.prerelease_hint(name, set, selector, env, options, output_hints);
+                        }
 
-                    // Check for no versions due to no `--find-links` flat index.
-                    Self::index_hints(
-                        name,
-                        set,
-                        selector,
-                        index_locations,
-                        index_capabilities,
-                        available_indexes,
-                        unavailable_packages,
-                        incomplete_packages,
-                        output_hints,
-                    );
+                        // Check for no versions due to no `--find-links` flat index.
+                        Self::index_hints(
+                            name,
+                            set,
+                            selector,
+                            index_locations,
+                            index_capabilities,
+                            available_indexes,
+                            unavailable_packages,
+                            incomplete_packages,
+                            output_hints,
+                        );
 
-                    let exclude_newer = if let Some(index) = fork_indexes.get(name) {
-                        options
-                            .exclude_newer
-                            .exclude_newer_package_for_index_with_source(
-                                name,
-                                index_locations.exclude_newer_for(index.url()),
-                            )
-                    } else {
-                        options
-                            .exclude_newer
-                            .exclude_newer_package(name)
-                            .map(|exclude_newer| {
-                                let source = if options.exclude_newer.package.contains_key(name) {
-                                    EffectiveExcludeNewerSource::Package
-                                } else {
-                                    EffectiveExcludeNewerSource::Global
-                                };
-                                (exclude_newer, source)
-                            })
-                    };
+                        let exclude_newer = if let Some(index) = fork_indexes.get(name) {
+                            options
+                                .exclude_newer
+                                .exclude_newer_package_for_index_with_source(
+                                    name,
+                                    index_locations.exclude_newer_for(index.url()),
+                                )
+                        } else {
+                            options
+                                .exclude_newer
+                                .exclude_newer_package(name)
+                                .map(|exclude_newer| {
+                                    let source = if options.exclude_newer.package.contains_key(name)
+                                    {
+                                        EffectiveExcludeNewerSource::Package
+                                    } else {
+                                        EffectiveExcludeNewerSource::Global
+                                    };
+                                    (exclude_newer, source)
+                                })
+                        };
 
-                    if let Some((exclude_newer, source)) = exclude_newer {
-                        // Check if there are no included versions in the requested
-                        // range, but there are still available versions in that range
-                        // (i.e., they were filtered out by `exclude-newer`).
-                        let no_included_in_set = self
-                            .included_versions
-                            .get(name)
-                            .is_none_or(|versions| !versions.iter().any(|v| set.contains(v)));
-                        let available_has_versions_in_set = self
-                            .available_versions
-                            .get(name)
-                            .is_some_and(|versions| versions.iter().any(|v| set.contains(v)));
-                        if no_included_in_set && available_has_versions_in_set {
-                            let version_hint_set =
-                                inherited_exclude_newer_ranges.get(name).map_or_else(
-                                    || set.clone(),
-                                    |exclude_newer_range| set.union(exclude_newer_range),
+                        if let Some((exclude_newer, source)) = exclude_newer {
+                            // Check if there are no included versions in the requested
+                            // range, but there are still available versions in that range
+                            // (i.e., they were filtered out by `exclude-newer`).
+                            let no_included_in_set = self
+                                .included_versions
+                                .get(name)
+                                .is_none_or(|versions| !versions.iter().any(|v| set.contains(v)));
+                            let available_has_versions_in_set = self
+                                .available_versions
+                                .get(name)
+                                .is_some_and(|versions| versions.iter().any(|v| set.contains(v)));
+                            if no_included_in_set && available_has_versions_in_set {
+                                let version_hint_set =
+                                    inherited_exclude_newer_ranges.get(name).map_or_else(
+                                        || set.clone(),
+                                        |exclude_newer_range| set.union(exclude_newer_range),
+                                    );
+                                let matching_version = self.exclude_newer_version_hint(
+                                    name,
+                                    &version_hint_set,
+                                    index,
+                                    fork_indexes,
                                 );
-                            let matching_version = self.exclude_newer_version_hint(
-                                name,
-                                &version_hint_set,
-                                index,
-                                fork_indexes,
-                            );
-                            output_hints.insert(PubGrubHint::ExcludeNewer {
-                                package: name.clone(),
-                                source,
-                                exclude_newer,
-                                matching_version,
+                                output_hints.insert(PubGrubHint::ExcludeNewer {
+                                    package: name.clone(),
+                                    source,
+                                    exclude_newer,
+                                    matching_version,
+                                });
+                            }
+                        }
+                    }
+                }
+                DerivationTree::External(External::FromDependencyOf(
+                    package,
+                    package_set,
+                    dependency,
+                    dependency_set,
+                )) => {
+                    // Check for a dependency on a workspace package by a non-workspace package.
+                    // Generally, this indicates that the workspace package is shadowing a transitive
+                    // dependency name.
+                    if let (Some(package_name), Some(dependency_name)) =
+                        (package.name(), dependency.name())
+                    {
+                        if workspace_members.contains(dependency_name)
+                            && !workspace_members.contains(package_name)
+                        {
+                            output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
+                                package: package_name.clone(),
+                                dependency: dependency_name.clone(),
+                                workspace: self.is_workspace()
+                                    && !self.is_single_project_workspace(),
+                            });
+                        }
+
+                        if package_name == dependency_name
+                            && (dependency.extra().is_none()
+                                || package.extra() == dependency.extra())
+                            && (dependency.group().is_none()
+                                || dependency.group() == package.group())
+                            && workspace_members.contains(package_name)
+                        {
+                            output_hints.insert(PubGrubHint::DependsOnItself {
+                                package: package_name.clone(),
+                                workspace: self.is_workspace()
+                                    && !self.is_single_project_workspace(),
+                            });
+                        }
+                    }
+                    // Check for no versions due to `Requires-Python`.
+                    if matches!(
+                        &**dependency,
+                        PubGrubPackageInner::Python(PubGrubPython::Target)
+                    ) {
+                        if let Some(name) = package.name() {
+                            output_hints.insert(PubGrubHint::RequiresPython {
+                                source: self.python_requirement.source(),
+                                requires_python: self.python_requirement.target().clone(),
+                                name: name.clone(),
+                                package_set: package_set.clone(),
+                                package_requires_python: dependency_set.clone(),
                             });
                         }
                     }
                 }
-            }
-            DerivationTree::External(External::FromDependencyOf(
-                package,
-                package_set,
-                dependency,
-                dependency_set,
-            )) => {
-                // Check for a dependency on a workspace package by a non-workspace package.
-                // Generally, this indicates that the workspace package is shadowing a transitive
-                // dependency name.
-                if let (Some(package_name), Some(dependency_name)) =
-                    (package.name(), dependency.name())
-                {
-                    if workspace_members.contains(dependency_name)
-                        && !workspace_members.contains(package_name)
-                    {
-                        output_hints.insert(PubGrubHint::DependsOnWorkspacePackage {
-                            package: package_name.clone(),
-                            dependency: dependency_name.clone(),
-                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
-                        });
+                DerivationTree::External(External::NotRoot(..)) => {}
+                DerivationTree::Derived(derived) => {
+                    let cause1_exclude_newer_ranges =
+                        Self::subtree_exclude_newer_ranges(&derived.cause1);
+                    let cause2_exclude_newer_ranges =
+                        Self::subtree_exclude_newer_ranges(&derived.cause2);
+
+                    let mut cause1_inherited_exclude_newer_ranges =
+                        inherited_exclude_newer_ranges.clone();
+                    for (name, range) in &cause2_exclude_newer_ranges {
+                        cause1_inherited_exclude_newer_ranges
+                            .entry(name.clone())
+                            .and_modify(|existing| *existing = existing.union(range))
+                            .or_insert_with(|| range.clone());
                     }
 
-                    if package_name == dependency_name
-                        && (dependency.extra().is_none() || package.extra() == dependency.extra())
-                        && (dependency.group().is_none() || dependency.group() == package.group())
-                        && workspace_members.contains(package_name)
-                    {
-                        output_hints.insert(PubGrubHint::DependsOnItself {
-                            package: package_name.clone(),
-                            workspace: self.is_workspace() && !self.is_single_project_workspace(),
-                        });
+                    let mut cause2_inherited_exclude_newer_ranges = inherited_exclude_newer_ranges;
+                    for (name, range) in &cause1_exclude_newer_ranges {
+                        cause2_inherited_exclude_newer_ranges
+                            .entry(name.clone())
+                            .and_modify(|existing| *existing = existing.union(range))
+                            .or_insert_with(|| range.clone());
                     }
-                }
-                // Check for no versions due to `Requires-Python`.
-                if matches!(
-                    &**dependency,
-                    PubGrubPackageInner::Python(PubGrubPython::Target)
-                ) {
-                    if let Some(name) = package.name() {
-                        output_hints.insert(PubGrubHint::RequiresPython {
-                            source: self.python_requirement.source(),
-                            requires_python: self.python_requirement.target().clone(),
-                            name: name.clone(),
-                            package_set: package_set.clone(),
-                            package_requires_python: dependency_set.clone(),
-                        });
-                    }
-                }
-            }
-            DerivationTree::External(External::NotRoot(..)) => {}
-            DerivationTree::Derived(derived) => {
-                let cause1_exclude_newer_ranges =
-                    Self::subtree_exclude_newer_ranges(&derived.cause1);
-                let cause2_exclude_newer_ranges =
-                    Self::subtree_exclude_newer_ranges(&derived.cause2);
 
-                let mut cause1_inherited_exclude_newer_ranges =
-                    inherited_exclude_newer_ranges.clone();
-                for (name, range) in &cause2_exclude_newer_ranges {
-                    cause1_inherited_exclude_newer_ranges
-                        .entry(name.clone())
-                        .and_modify(|existing| *existing = existing.union(range))
-                        .or_insert_with(|| range.clone());
+                    pending.push((&derived.cause2, cause2_inherited_exclude_newer_ranges));
+                    pending.push((&derived.cause1, cause1_inherited_exclude_newer_ranges));
                 }
-
-                let mut cause2_inherited_exclude_newer_ranges =
-                    inherited_exclude_newer_ranges.clone();
-                for (name, range) in &cause1_exclude_newer_ranges {
-                    cause2_inherited_exclude_newer_ranges
-                        .entry(name.clone())
-                        .and_modify(|existing| *existing = existing.union(range))
-                        .or_insert_with(|| range.clone());
-                }
-
-                self.generate_hints(
-                    &derived.cause1,
-                    index,
-                    selector,
-                    index_locations,
-                    index_capabilities,
-                    available_indexes,
-                    unavailable_packages,
-                    incomplete_packages,
-                    fork_urls,
-                    fork_indexes,
-                    env,
-                    current_environment,
-                    tags,
-                    workspace_members,
-                    options,
-                    &cause1_inherited_exclude_newer_ranges,
-                    output_hints,
-                );
-                self.generate_hints(
-                    &derived.cause2,
-                    index,
-                    selector,
-                    index_locations,
-                    index_capabilities,
-                    available_indexes,
-                    unavailable_packages,
-                    incomplete_packages,
-                    fork_urls,
-                    fork_indexes,
-                    env,
-                    current_environment,
-                    tags,
-                    workspace_members,
-                    options,
-                    &cause2_inherited_exclude_newer_ranges,
-                    output_hints,
-                );
             }
         }
     }
@@ -817,10 +993,9 @@ impl PubGrubReportFormatter<'_> {
     fn subtree_exclude_newer_ranges(
         derivation_tree: &ErrorTree,
     ) -> FxHashMap<PackageName, Range<Version>> {
-        fn collect(
-            derivation_tree: &ErrorTree,
-            exclude_newer_ranges: &mut FxHashMap<PackageName, Range<Version>>,
-        ) {
+        let mut exclude_newer_ranges: FxHashMap<PackageName, Range<Version>> = FxHashMap::default();
+        let mut trees = vec![derivation_tree];
+        while let Some(derivation_tree) = trees.pop() {
             match derivation_tree {
                 DerivationTree::External(External::Custom(package, versions, reason)) => {
                     if matches!(
@@ -840,14 +1015,11 @@ impl PubGrubReportFormatter<'_> {
                 }
                 DerivationTree::External(_) => {}
                 DerivationTree::Derived(derived) => {
-                    collect(&derived.cause1, exclude_newer_ranges);
-                    collect(&derived.cause2, exclude_newer_ranges);
+                    trees.push(&derived.cause2);
+                    trees.push(&derived.cause1);
                 }
             }
         }
-
-        let mut exclude_newer_ranges = FxHashMap::default();
-        collect(derivation_tree, &mut exclude_newer_ranges);
         exclude_newer_ranges
     }
 
@@ -1035,6 +1207,12 @@ impl PubGrubReportFormatter<'_> {
                     reason: reason.clone(),
                 });
             }
+            Some(UnavailablePackage::Network(status)) => {
+                hints.insert(PubGrubHint::InvalidPackageNetwork {
+                    package: name.clone(),
+                    status: *status,
+                });
+            }
             Some(UnavailablePackage::NotFound) => {}
             None => {}
         }
@@ -1074,6 +1252,13 @@ impl PubGrubReportFormatter<'_> {
                                 version: version.clone(),
                                 requires_python: requires_python.clone(),
                                 python_version: python_version.clone(),
+                            });
+                        }
+                        MetadataUnavailable::Network(status) => {
+                            hints.insert(PubGrubHint::InvalidVersionNetwork {
+                                package: name.clone(),
+                                version: version.clone(),
+                                status: *status,
                             });
                         }
                     }
@@ -1277,6 +1462,12 @@ pub enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         reason: UnavailableErrorChain,
     },
+    /// The package metadata could not be fetched due to a network error.
+    InvalidPackageNetwork {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        status: StatusCode,
+    },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
         package: PackageName,
@@ -1312,6 +1503,14 @@ pub enum PubGrubHint {
         requires_python: VersionSpecifiers,
         // excluded from `PartialEq` and `Hash`
         python_version: Version,
+    },
+    /// The package metadata could not be fetched due to a network error.
+    InvalidVersionNetwork {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        status: StatusCode,
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
@@ -1442,6 +1641,9 @@ enum PubGrubHintCore {
     InvalidPackageStructure {
         package: PackageName,
     },
+    InvalidPackageNetwork {
+        package: PackageName,
+    },
     InvalidVersionMetadata {
         package: PackageName,
     },
@@ -1449,6 +1651,9 @@ enum PubGrubHintCore {
         package: PackageName,
     },
     InvalidVersionStructure {
+        package: PackageName,
+    },
+    InvalidVersionNetwork {
         package: PackageName,
     },
     IncompatibleBuildRequirement {
@@ -1523,6 +1728,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::InvalidPackageStructure { package, .. } => {
                 Self::InvalidPackageStructure { package }
             }
+            PubGrubHint::InvalidPackageNetwork { package, .. } => {
+                Self::InvalidPackageNetwork { package }
+            }
             PubGrubHint::InvalidVersionMetadata { package, .. } => {
                 Self::InvalidVersionMetadata { package }
             }
@@ -1531,6 +1739,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::InvalidVersionStructure { package, .. } => {
                 Self::InvalidVersionStructure { package }
+            }
+            PubGrubHint::InvalidVersionNetwork { package, .. } => {
+                Self::InvalidVersionNetwork { package }
             }
             PubGrubHint::IncompatibleBuildRequirement { package, .. } => {
                 Self::IncompatibleBuildRequirement { package }
@@ -1616,7 +1827,8 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "`{}` was requested with a pre-release marker (e.g., {}), but pre-releases weren't enabled (try: `{}`)",
                     name.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                     "--prerelease=allow".green(),
                 )
             }
@@ -1625,8 +1837,10 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "`{}` was requested with a pre-release marker (e.g., {}), but build environments can't opt into pre-releases automatically.  Add `{}` to `build-system.requires`, `[tool.uv.extra-build-dependencies]`, or supply it via `uv build --build-constraint`.",
                     name.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                 )
             }
             Self::NoIndex => {
@@ -1658,6 +1872,14 @@ impl std::fmt::Display for PubGrubHint {
                     textwrap::indent(reason.to_string().as_str(), "  ")
                 )
             }
+            Self::InvalidPackageNetwork { package, status } => {
+                write!(
+                    f,
+                    "Metadata for `{}` could not be fetched; the server returned: `{}`",
+                    package.cyan(),
+                    format!("{status}").red(),
+                )
+            }
             Self::InvalidVersionMetadata {
                 package,
                 version,
@@ -1684,6 +1906,19 @@ impl std::fmt::Display for PubGrubHint {
                     textwrap::indent(reason, "  ")
                 )
             }
+            Self::InvalidVersionNetwork {
+                package,
+                version,
+                status,
+            } => {
+                write!(
+                    f,
+                    "Metadata for `{}` ({}) could not be fetched; the server returned: `{}`",
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    format!("{status}").red(),
+                )
+            }
             Self::InconsistentVersionMetadata {
                 package,
                 version,
@@ -1708,8 +1943,12 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "The `requires-python` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a more restrictive `requires-python` value (like {}).",
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1725,8 +1964,12 @@ impl std::fmt::Display for PubGrubHint {
                     f,
                     "The `--python-version` value ({}) includes Python versions that are not supported by your dependencies (e.g., {} only supports {}). Consider using a higher `--python-version` value.",
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1740,8 +1983,12 @@ impl std::fmt::Display for PubGrubHint {
                 write!(
                     f,
                     "The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
-                        .cyan(),
+                    PackageRange::compatibility(
+                        &PubGrubPackage::base(name.clone()),
+                        package_set,
+                        None,
+                    )
+                    .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1807,7 +2054,8 @@ impl std::fmt::Display for PubGrubHint {
                     "`{}` was found on {}, but not at the requested version ({}). A compatible version may be available on a subsequent index (e.g., {}). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `{}` to consider all versions from all indexes, regardless of the order in which they were defined.",
                     name.cyan(),
                     found_index.without_credentials().cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name.clone()), range, None)
+                        .cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
                 )
@@ -2230,7 +2478,7 @@ fn update_availability_range(
     range
         .iter()
         .filter_map(|(lower, upper)| {
-            let segment_range = Range::from_range_bounds((lower.clone(), upper.clone()));
+            let segment_range = Range::from_range_bounds((lower.cloned(), upper.cloned()));
 
             // Drop the segment if it's disjoint with the available range, e.g., if the segment is
             // `foo>999`, and the available versions are all `<10` it's useless to show.
@@ -2262,13 +2510,13 @@ fn update_availability_range(
                 Bound::Included(version) if !version_contained_in(version, available_versions) => {
                     Bound::Excluded(version.clone())
                 }
-                _ => (*lower).clone(),
+                _ => lower.cloned(),
             };
             let upper = match upper {
                 Bound::Included(version) if !version_contained_in(version, available_versions) => {
                     Bound::Excluded(version.clone())
                 }
-                _ => (*upper).clone(),
+                _ => upper.cloned(),
             };
 
             Some((lower, upper))
@@ -2327,7 +2575,7 @@ impl std::fmt::Display for PackageRange<'_> {
                     }
                 }
                 (Bound::Included(v), Bound::Excluded(b)) => {
-                    if let Some(prefix) = PrefixMatch::from_range(lower, upper) {
+                    if let Some(prefix) = PrefixMatch::from_range(*lower, *upper) {
                         write!(f, "{package}{prefix}")?;
                     } else {
                         write!(f, "{package}>={v},<{b}")?;
@@ -2436,4 +2684,121 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
 
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use pubgrub::{DefaultStringReporter, Reporter};
+    use uv_distribution_types::RequiresPython;
+    use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+
+    use super::*;
+
+    fn derived(
+        cause1: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        cause2: DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
+        shared_id: Option<usize>,
+    ) -> DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason> {
+        DerivationTree::Derived(Derived {
+            terms: Map::default(),
+            shared_id,
+            cause1: cause1.into(),
+            cause2: cause2.into(),
+        })
+    }
+
+    struct FormatterFixture {
+        included_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+        available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
+        python_requirement: PythonRequirement,
+        workspace_members: BTreeSet<PackageName>,
+    }
+
+    impl FormatterFixture {
+        fn new() -> Self {
+            let marker_environment = MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
+                implementation_name: "cpython",
+                implementation_version: "3.12.0",
+                os_name: "posix",
+                platform_machine: "x86_64",
+                platform_python_implementation: "CPython",
+                platform_release: "",
+                platform_system: "Linux",
+                platform_version: "",
+                python_full_version: "3.12.0",
+                python_version: "3.12",
+                sys_platform: "linux",
+            })
+            .expect("valid marker environment");
+            Self {
+                included_versions: FxHashMap::default(),
+                available_versions: FxHashMap::default(),
+                python_requirement: PythonRequirement::from_marker_environment(
+                    &marker_environment,
+                    RequiresPython::greater_than_equal_version(&Version::new([3_u64, 12])),
+                ),
+                workspace_members: BTreeSet::default(),
+            }
+        }
+
+        fn formatter(&self) -> PubGrubReportFormatter<'_> {
+            PubGrubReportFormatter {
+                included_versions: &self.included_versions,
+                available_versions: &self.available_versions,
+                python_requirement: &self.python_requirement,
+                workspace_members: &self.workspace_members,
+                tags: None,
+            }
+        }
+    }
+
+    #[test]
+    fn iterative_reporter_matches_pubgrub_for_shared_nodes() {
+        let fixture = FormatterFixture::new();
+        let formatter = fixture.formatter();
+        let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+        let external1 =
+            DerivationTree::External(External::NotRoot(package.clone(), Version::new([1_u64])));
+        let external2 =
+            DerivationTree::External(External::NotRoot(package.clone(), Version::new([2_u64])));
+        let external3 = DerivationTree::External(External::NotRoot(package, Version::new([3_u64])));
+        let shared = derived(external1.clone(), external2.clone(), Some(1));
+        let unshared = derived(external2.clone(), external3.clone(), None);
+
+        let trees = [
+            derived(shared.clone(), external3.clone(), None),
+            derived(external3.clone(), shared.clone(), None),
+            derived(shared.clone(), unshared, None),
+            derived(shared.clone(), shared, None),
+        ];
+
+        for tree in trees {
+            assert_eq!(
+                report(&tree, &formatter),
+                DefaultStringReporter::report_with_formatter(&tree, &formatter)
+            );
+        }
+    }
+
+    #[test]
+    fn formats_deep_derivation_tree_without_recursion() -> std::io::Result<()> {
+        let thread = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let fixture = FormatterFixture::new();
+                let formatter = fixture.formatter();
+                let package = PubGrubPackage::from(PubGrubPackageInner::Root(None));
+                let leaf =
+                    DerivationTree::External(External::NotRoot(package, Version::new([1_u64])));
+                let mut tree = leaf.clone();
+                for _ in 0..100_000 {
+                    tree = derived(tree, leaf.clone(), None);
+                }
+                let _report = report(&tree, &formatter);
+                crate::error::drop_derivation_tree(tree);
+            })?;
+
+        assert!(thread.join().is_ok());
+        Ok(())
+    }
 }

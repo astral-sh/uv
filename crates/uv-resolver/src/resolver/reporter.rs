@@ -39,9 +39,7 @@ impl dyn Reporter {
     pub(crate) fn into_distribution_reporter(
         self: Arc<dyn Reporter>,
     ) -> Arc<dyn uv_distribution::Reporter> {
-        Arc::new(Facade {
-            reporter: self.clone(),
-        })
+        Arc::new(Facade { reporter: self })
     }
 }
 

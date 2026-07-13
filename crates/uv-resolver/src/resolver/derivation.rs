@@ -5,7 +5,7 @@ use uv_distribution_types::{DerivationChain, DerivationStep};
 use uv_pep440::Version;
 
 use crate::dependency_provider::UvDependencyProvider;
-use crate::pubgrub::PubGrubPackage;
+use crate::pubgrub::{PubGrubPackage, Range};
 
 /// Build a [`DerivationChain`] from the pubgrub state, which is available in `uv-resolver`, but not
 /// in `uv-distribution-types`.
@@ -37,8 +37,13 @@ impl DerivationChainBuilder {
                 let incompat = &state.incompatibility_store[*index];
 
                 // Find a dependency from a package to the current package.
-                if let Kind::FromDependencyOf(id1, _, id2, v2) = &incompat.kind {
-                    if id == *id2 && v2.contains(version) {
+                if let Kind::FromDependencyOf(id1, id2) = &incompat.kind {
+                    let Some((_, dependency_versions)) = incompat.dependency_version_sets() else {
+                        continue;
+                    };
+                    let dependency_versions =
+                        dependency_versions.cloned().unwrap_or_else(Range::empty);
+                    if id == *id2 && dependency_versions.contains(version) {
                         if let Some(version) = solution.get(id1) {
                             let p1 = &state.package_store[*id1];
                             let p2 = &state.package_store[*id2];
@@ -55,7 +60,7 @@ impl DerivationChainBuilder {
                                     p1.extra().cloned(),
                                     p1.group().cloned(),
                                     Some(version.clone()),
-                                    v2.clone(),
+                                    dependency_versions.encoded_versions().clone(),
                                 ));
 
                                 // Recursively search the next package.

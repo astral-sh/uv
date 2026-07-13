@@ -116,22 +116,8 @@ impl std::fmt::Debug for Credential {
     }
 }
 
-/// A descriptor for the lifetime of stored credentials, returned from
-/// a credential store's [`persistence`](CredentialBuilderApi::persistence) call.
-#[non_exhaustive]
-pub enum CredentialPersistence {
-    /// Credentials vanish when the entry vanishes (stored in the entry)
-    EntryOnly,
-    /// Credentials vanish when the process terminates (stored in process memory)
-    ProcessOnly,
-    /// Credentials persist until the machine reboots (stored in kernel memory)
-    UntilReboot,
-    /// Credentials persist until they are explicitly deleted (stored on disk)
-    UntilDelete,
-}
-
 /// The API that [credential builders](CredentialBuilder) implement.
-pub trait CredentialBuilderApi {
+pub(crate) trait CredentialBuilderApi {
     /// Create a credential identified by the given target, service, and user.
     ///
     /// This typically has no effect on the content of the underlying store.
@@ -144,15 +130,6 @@ pub trait CredentialBuilderApi {
     /// this call is not so much for clients
     /// as it is to allow automatic derivation of a Debug trait for builders.
     fn as_any(&self) -> &dyn Any;
-
-    /// The lifetime of credentials produced by this builder.
-    ///
-    /// A default implementation is provided for backward compatibility,
-    /// since this API was added in a minor release.  The default assumes
-    /// that keystores use disk-based credential storage.
-    fn persistence(&self) -> CredentialPersistence {
-        CredentialPersistence::UntilDelete
-    }
 }
 
 impl std::fmt::Debug for CredentialBuilder {
@@ -162,10 +139,24 @@ impl std::fmt::Debug for CredentialBuilder {
 }
 
 /// A thread-safe implementation of the [`CredentialBuilder` API](CredentialBuilderApi).
-pub type CredentialBuilder = dyn CredentialBuilderApi + Send + Sync;
+pub(crate) type CredentialBuilder = dyn CredentialBuilderApi + Send + Sync;
 
+#[cfg(not(any(
+    all(target_os = "linux", feature = "secret-service"),
+    all(target_os = "freebsd", feature = "secret-service"),
+    all(target_os = "openbsd", feature = "secret-service"),
+    all(target_os = "macos", feature = "apple-native"),
+    all(target_os = "windows", feature = "windows-native"),
+)))]
 struct NopCredentialBuilder;
 
+#[cfg(not(any(
+    all(target_os = "linux", feature = "secret-service"),
+    all(target_os = "freebsd", feature = "secret-service"),
+    all(target_os = "openbsd", feature = "secret-service"),
+    all(target_os = "macos", feature = "apple-native"),
+    all(target_os = "windows", feature = "windows-native"),
+)))]
 impl CredentialBuilderApi for NopCredentialBuilder {
     fn build(&self, _: Option<&str>, _: &str, _: &str) -> Result<Box<Credential>> {
         Err(super::Error::NoDefaultCredentialBuilder)
@@ -174,14 +165,17 @@ impl CredentialBuilderApi for NopCredentialBuilder {
     fn as_any(&self) -> &dyn Any {
         self
     }
-
-    fn persistence(&self) -> CredentialPersistence {
-        CredentialPersistence::EntryOnly
-    }
 }
 
 // Return a credential builder that always fails. This is the builder
 // used if none of the crate-supplied keystores were included in the build.
-pub fn nop_credential_builder() -> Box<CredentialBuilder> {
+#[cfg(not(any(
+    all(target_os = "linux", feature = "secret-service"),
+    all(target_os = "freebsd", feature = "secret-service"),
+    all(target_os = "openbsd", feature = "secret-service"),
+    all(target_os = "macos", feature = "apple-native"),
+    all(target_os = "windows", feature = "windows-native"),
+)))]
+pub(crate) fn nop_credential_builder() -> Box<CredentialBuilder> {
     Box::new(NopCredentialBuilder)
 }

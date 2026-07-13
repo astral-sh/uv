@@ -26,8 +26,8 @@ use url::Url;
 use uv_auth::{Credentials, PyxTokenStore, Realm};
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive, RegistryClientBuilder,
-    RequestBuilder, RetryParsingError, RetryState,
+    BaseClient, ClientBuildError, DEFAULT_MAX_REDIRECTS, MetadataFormat, OwnedArchive,
+    RegistryClientBuilder, RequestBuilder, RetryParsingError, RetryState,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -78,6 +78,8 @@ pub enum PublishError {
     MixedCredentials(String),
     #[error("Failed to query check URL")]
     CheckUrlIndex(#[source] uv_client::Error),
+    #[error(transparent)]
+    ClientBuild(#[from] ClientBuildError),
     #[error(
         "Local file and index file do not match for {filename}. \
         Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
@@ -962,7 +964,7 @@ pub async fn check_url(
     let registry_client = registry_client_builder
         .clone()
         .cache(cache_refresh)
-        .wrap_existing(client);
+        .wrap_existing(client)?;
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
@@ -1540,7 +1542,7 @@ mod tests {
         group_files, upload,
     };
     use tokio::sync::Semaphore;
-    use uv_errors::{ErrorOptions, write_error_chain_with_options};
+    use uv_errors::{ErrorOptions, Hints, write_error_chain_with_options};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -1585,7 +1587,7 @@ mod tests {
             .expect("failed to build base client");
 
         let download_concurrency = Arc::new(Semaphore::new(1));
-        let registry = DisplaySafeUrl::parse(&format!("{}/final", &mock_server.uri())).unwrap();
+        let registry = DisplaySafeUrl::parse(&format!("{}/final", mock_server.uri())).unwrap();
         upload(
             &group,
             &form_metadata,
@@ -2213,7 +2215,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2233,7 +2235,7 @@ mod tests {
             .and(path("/final"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final/", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final/", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2241,7 +2243,7 @@ mod tests {
             .and(path("/final/"))
             .respond_with(
                 ResponseTemplate::new(308)
-                    .insert_header("Location", format!("{}/final", &mock_server.uri())),
+                    .insert_header("Location", format!("{}/final", mock_server.uri())),
             )
             .mount(&mock_server)
             .await;
@@ -2249,8 +2251,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2278,8 +2284,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2312,8 +2322,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
@@ -2349,8 +2363,12 @@ mod tests {
         let err = mock_server_upload(&mock_server).await.unwrap_err();
 
         let mut capture = String::new();
-        write_error_chain_with_options(&err, ErrorOptions::default().with_stream(&mut capture))
-            .unwrap();
+        write_error_chain_with_options(
+            &err,
+            Hints::none(),
+            ErrorOptions::default().with_stream(&mut capture),
+        )
+        .unwrap();
 
         let capture = capture.replace(&mock_server.uri(), "[SERVER]");
         let capture = anstream::adapter::strip_str(&capture);
