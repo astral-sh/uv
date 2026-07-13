@@ -19,6 +19,7 @@ jobs:
   release:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
+    environment: automations
     permissions:
       contents: write
       pull-requests: write
@@ -56,6 +57,24 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_BUMP: ${{ inputs.bump }}
 
+      - name: "Rewrite changelog"
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":read-only"
+          safety-strategy: drop-sudo
+          prompt-file: "agents/prompts/editorialize-changelog.md"
+          output-file: "CHANGELOG.md"
+
+      - name: "Commit changelog rewrite"
+        run: |
+          git diff --check -- CHANGELOG.md
+          if git diff --quiet -- CHANGELOG.md && git diff --cached --quiet -- CHANGELOG.md; then
+            echo "Codex left the generated changelog unchanged."
+          else
+            git -c core.hooksPath=/dev/null commit --only --message "Rewrite changelog" -- CHANGELOG.md
+          fi
+
       - name: "Create Pull Request"
         run: |
           branch="$(git branch --show-current)"
@@ -63,6 +82,6 @@ jobs:
           gh pr create \
             --base main \
             --head "$branch" \
-            --fill
+            --fill-first
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
