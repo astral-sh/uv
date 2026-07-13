@@ -16,7 +16,6 @@ jobs:
   labels:
     if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    environment: automations
     timeout-minutes: 15
     permissions:
       contents: read
