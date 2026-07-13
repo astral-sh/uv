@@ -35424,12 +35424,14 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    warning: iniconfig-2.1.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
+    warning: iniconfig-2.1.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     warning: iniconfig-2.0.0.tar.gz is missing an upload date, but user provided: 2025-01-01T00:00:00Z
     warning: iniconfig-2.0.0-py3-none-any.whl is missing an upload date, but user provided: 2025-01-01T00:00:00Z
       × No solution found when resolving dependencies:
       ╰─▶ Because there are no versions of iniconfig and your project depends on iniconfig>=2, we can conclude that your project's requirements are unsatisfiable.
 
-    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.0.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
+    hint: `iniconfig` was filtered by the index-specific `exclude-newer` setting to only include packages uploaded before 2025-01-01T00:00:00Z. The latest version satisfying the requirement is v2.1.0. Consider updating that index's cutoff, setting it to `false`, or using `exclude-newer-package` to override the cutoff for this package.
     ");
 
     pyproject_toml.write_str(&format!(
