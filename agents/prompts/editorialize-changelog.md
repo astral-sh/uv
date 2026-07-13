@@ -25,9 +25,7 @@ Apply these rules:
   to make them clearer, more precise, and more user-facing. Expand internal shorthand and add
   missing context when supported by the local changes. Preserve the original meaning and do not
   invent or broaden claims. Avoid purely stylistic synonym changes.
-- Preserve the relative order of entries already in each section. When moving entries from
-  `Other changes`, append them to the destination section in their original order. Remove empty
-  sections.
+- Put the most significant user-facing entries first within each section and remove empty sections.
 
 Return only the complete replacement release section, beginning with its `## ` heading. Do not
 include the next release heading, any older changelog content, a code fence, or commentary. Your
