@@ -1,6 +1,7 @@
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
+use insta::assert_snapshot;
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -53,6 +54,57 @@ fn write_audit_json_project(context: &uv_test::TestContext, index_url: &str) {
         [package.metadata]
         requires-dist = [
             {{ name = "iniconfig", specifier = "==2.0.0" }},
+        ]
+    "#})
+        .unwrap();
+}
+
+fn write_audit_fixable_project(context: &uv_test::TestContext, index_url: &str) {
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig>=2.0.0"]
+
+        [[tool.uv.index]]
+        url = "{index_url}"
+        default = true
+    "#})
+        .unwrap();
+
+    let lockfile = context.temp_dir.child("uv.lock");
+    lockfile
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-03-20T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = {{ registry = "{index_url}" }}
+        sdist = {{ url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }}
+        wheels = [
+            {{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" }},
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [
+            {{ name = "iniconfig" }},
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            {{ name = "iniconfig", specifier = ">=2.0.0" }},
         ]
     "#})
         .unwrap();
@@ -266,7 +318,7 @@ async fn audit_vulnerability_found() {
 
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -616,7 +668,7 @@ async fn audit_multiple_vulnerabilities_same_package() {
 
       Advisory information: https://example.com/web/VULN-B
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -927,7 +979,7 @@ async fn audit_ignore_by_id() {
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -1141,7 +1193,7 @@ async fn audit_ignore_until_fixed_with_fix() {
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -1364,7 +1416,7 @@ async fn audit_ignore_partial() {
 
       Advisory information: https://osv.dev/vulnerability/VULN-B
 
-      Fixed in: 2.0.1, pass --fix to update
+      Fixed in: iniconfig==2.0.1, pass --fix to update
 
 
     ----- stderr -----
@@ -1706,7 +1758,7 @@ async fn audit_script_vulnerability_found() {
 
       Advisory information: https://example.com/advisory/PYSEC-2023-0001
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     ----- stderr -----
@@ -2255,7 +2307,7 @@ async fn audit_vulnerability_and_project_status() {
 
       Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
 
-      Fixed in: 2.1.0, pass --fix to update
+      Fixed in: iniconfig==2.1.0, pass --fix to update
 
 
     Adverse statuses:
@@ -2359,4 +2411,105 @@ async fn audit_json_vulnerability_and_project_status() {
 
     ----- stderr -----
     "#);
+}
+
+/// audit --fix upgrades the specified package in the lockfile
+#[tokio::test]
+async fn audit_fix_updates_lockfile() {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-03-20T00:00:00Z");
+    let proxy = crate::pypi_proxy::start().await;
+    write_audit_fixable_project(&context, &proxy.url("/simple"));
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{"vulns": [{"id": "PYSEC-2023-0001"}]}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/v1/vulns/PYSEC-2023-0001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "PYSEC-2023-0001",
+            "modified": "2026-01-01T00:00:00Z",
+            "summary": "A test vulnerability in iniconfig",
+            "affected": [{
+                "ranges": [{
+                    "type": "ECOSYSTEM",
+                    "events": [
+                        {"introduced": "0"},
+                        {"fixed": "2.1.0"}
+                    ]
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(
+        context.filters(), context
+            .audit()
+            .arg("--preview-features")
+            .arg("audit")
+            .arg("--fix")
+            .arg("--service-url")
+            .arg(server.uri()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    Vulnerabilities:
+
+    iniconfig 2.0.0 has 1 known vulnerability:
+
+    - PYSEC-2023-0001: A test vulnerability in iniconfig
+
+      Fixed in: 2.1.0
+
+      Advisory information: https://osv.dev/vulnerability/PYSEC-2023-0001
+
+      Fixed in: iniconfig==2.1.0, pass --fix to update
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Found 1 known vulnerability and no adverse project statuses in 1 package
+    "
+    );
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2025-03-20T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.1.0"
+        source = { registry = "http://[LOCALHOST]/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f2/97/ebf4da567aa6827c909642694d71c9fcf53e5b504f2d96afea02718862f3/iniconfig-2.1.0.tar.gz", hash = "sha256:3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7", size = 4793, upload-time = "2025-03-19T20:09:59.721Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl", hash = "sha256:9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760", size = 6050, upload-time = "2025-03-19T20:10:01.071Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
+        "#);
+    });
 }

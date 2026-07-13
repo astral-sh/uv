@@ -2790,6 +2790,7 @@ async fn run_project(
                 args.service_url,
                 args.ignore,
                 args.ignore_until_fixed,
+                args.fix,
             ))
             .await
         }

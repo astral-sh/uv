@@ -2747,6 +2747,15 @@ pub struct AuditOptions {
         "#
     )]
     pub ignore_until_fixed: Option<Vec<String>>,
+    /// Whether to automatically fix vulnerabilities when a fix is available.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            fix = true
+        "#
+    )]
+    pub fix: Option<bool>,
 }
 
 #[derive(Debug, Clone)]

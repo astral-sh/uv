@@ -66,6 +66,22 @@ fn package_database() -> HashMap<&'static str, Vec<PackageEntry>> {
                 size: 4646,
                 upload_time: "2023-01-07T11:08:11.254Z",
             },
+            PackageEntry {
+                filename: "iniconfig-2.1.0-py3-none-any.whl",
+                url: "https://files.pythonhosted.org/packages/2c/e1/e6716421ea10d38022b952c159d5161ca1193197fb744506875fbb87ea7b/iniconfig-2.1.0-py3-none-any.whl",
+                sha256: "9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760",
+                requires_python: Some(">=3.8"),
+                upload_time: "2025-03-19T20:10:01.071471Z",
+                size: 6050,
+            },
+            PackageEntry {
+                filename: "iniconfig-2.1.0.tar.gz",
+                url: "https://files.pythonhosted.org/packages/f2/97/ebf4da567aa6827c909642694d71c9fcf53e5b504f2d96afea02718862f3/iniconfig-2.1.0.tar.gz",
+                sha256: "3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7",
+                requires_python: Some(">=3.8"),
+                size: 4793,
+                upload_time: "2025-03-19T20:09:59.721246Z",
+            },
         ],
     );
 

@@ -5508,6 +5508,9 @@ pub struct AuditArgs {
     #[arg(long)]
     pub ignore_until_fixed: Vec<String>,
 
+    #[arg(long)]
+    pub fix: bool,
+
     /// The service format to use for vulnerability lookups.
     ///
     /// Each service format has a default URL, which can be
