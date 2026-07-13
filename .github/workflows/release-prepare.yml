@@ -55,6 +55,7 @@ jobs:
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.6-sol
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
           prompt-file: "agents/prompts/editorialize-changelog.md"
