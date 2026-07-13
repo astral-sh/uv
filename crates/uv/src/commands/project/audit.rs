@@ -58,6 +58,7 @@ pub(crate) async fn audit(
     concurrency: Concurrency,
     no_config: bool,
     cache: Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
     output_format: AuditOutputFormat,
@@ -82,7 +83,6 @@ pub(crate) async fn audit(
         );
     }
 
-    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
@@ -91,7 +91,7 @@ pub(crate) async fn audit(
             project_dir,
             &DiscoveryOptions::default(),
             &cache,
-            &workspace_cache,
+            workspace_cache,
         )
         .await?;
         LockTarget::Workspace(&workspace)
@@ -187,7 +187,7 @@ pub(crate) async fn audit(
             Box::new(DefaultResolveLogger),
             &concurrency,
             &cache,
-            &WorkspaceCache::default(),
+            workspace_cache,
             printer,
             preview,
         )

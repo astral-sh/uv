@@ -5,9 +5,54 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
-#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
+
+/// The workspace discovered while resolving settings is reused by `uv tree`.
+#[test]
+fn tree_reuses_settings_workspace_discovery() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+
+            [tool.uv.workspace]
+            members = ["member"]
+        "#})?;
+    let member = context.temp_dir.child("member");
+    member.create_dir_all()?;
+    member
+        .child("pyproject.toml")
+        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--frozen")
+        .arg("--universal")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    root v0.1.0
+    member v0.1.0
+
+    ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `member`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/member`
+    DEBUG Found project root: `[TEMP_DIR]/`
+    ");
+
+    Ok(())
+}
 
 #[test]
 fn tree_centralized_environment_no_cache() -> Result<()> {
