@@ -132,7 +132,9 @@ jobs:
                     ) | join("\n")) + "\n"
                   end)
                 '
-              printf '\n'
+              printf '\n<details>\n<summary>Model JSON output</summary>\n\n```json\n'
+              jq . "$result"
+              printf '```\n</details>\n\n'
             done
           } > "$comment"
 
