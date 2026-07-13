@@ -21129,7 +21129,6 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Searching for user configuration in: `[UV_USER_CONFIG_DIR]/uv.toml`
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found project root: `[TEMP_DIR]/`
-    DEBUG No workspace root found, using project root
     DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at: `.venv`
