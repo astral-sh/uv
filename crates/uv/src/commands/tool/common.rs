@@ -43,6 +43,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
+    VERSION,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
@@ -349,7 +350,15 @@ impl ToolLock {
     pub(crate) fn read(directory: &Path) -> Option<Self> {
         let path = directory.join("uv.lock");
         match fs_err::read_to_string(&path) {
-            Ok(contents) => match toml::from_str(&contents) {
+            Ok(contents) => match toml::from_str::<Lock>(&contents) {
+                Ok(lock) if lock.version() > VERSION => {
+                    debug!(
+                        "Ignoring unsupported tool lock schema version v{} at `{}` (maximum supported version is v{VERSION})",
+                        lock.version(),
+                        path.user_display()
+                    );
+                    None
+                }
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,
