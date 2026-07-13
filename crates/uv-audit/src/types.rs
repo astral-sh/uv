@@ -156,7 +156,9 @@ impl Vulnerability {
     /// Choose the best semver-compatible fix.
     ///
     /// Performs a compatibility (~=) check on available fixes and chooses the lowest value.
-    pub fn semver_compatible_fix(&self) -> Result<Option<&Version>, VersionSpecifierBuildError> {
+    pub(crate) fn semver_compatible_fix(
+        &self,
+    ) -> Result<Option<&Version>, VersionSpecifierBuildError> {
         let constraint =
             VersionSpecifier::from_version(Operator::TildeEqual, self.dependency.version.clone())?
                 .only_minor_release();
