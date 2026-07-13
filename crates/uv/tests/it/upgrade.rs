@@ -1,5 +1,10 @@
 use anyhow::{Result, anyhow};
+use assert_cmd::assert::OutputAssertExt;
+use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
+use async_zip::base::write::ZipFileWriter;
+use async_zip::{Compression, ZipEntryBuilder};
+use futures::executor::block_on;
 use insta::allow_duplicates;
 use url::Url;
 
@@ -50,6 +55,32 @@ fn write_fork_upgrade_project(
         .write_str(&pyproject_toml)?;
     fs_err::remove_dir_all(&context.venv)?;
     Ok(pyproject_toml)
+}
+
+fn write_wheel(path: &ChildPath, name: &str, version: &str) -> Result<()> {
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
+
+    let entry = ZipEntryBuilder::new(
+        format!("{}.py", name.replace('-', "_")).into(),
+        Compression::Stored,
+    );
+    block_on(zip.write_entry_whole(entry, b""))?;
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/METADATA").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        format!("Metadata-Version: 2.3\nName: {name}\nVersion: {version}\n").as_bytes(),
+    ))?;
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+    ))?;
+    let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(path.path(), block_on(zip.close())?)?;
+
+    Ok(())
 }
 
 #[test]
@@ -220,6 +251,103 @@ fn upgrade_preserves_constraint_that_admits_multiple_fork_versions() -> Result<(
     );
 
     assert_project_unchanged(&context, &pyproject_toml)
+}
+
+/// Build-only versions must not widen the selected production requirement during `uv upgrade`.
+#[test]
+fn upgrade_ignores_build_only_version() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_wheel(&links.child("foo-1.0.0-py3-none-any.whl"), "foo", "1.0.0")?;
+    write_wheel(&links.child("foo-2.0.0-py3-none-any.whl"), "foo", "2.0.0")?;
+
+    let dep = context.temp_dir.child("dep");
+    dep.create_dir_all()?;
+    dep.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo<2"]
+
+        [build-system]
+        requires = ["foo==2.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep.child("build_backend.py").write_str(
+        r"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+",
+    )?;
+
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo<2", "dep"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["links"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+
+    let lock = fs_err::read(context.temp_dir.child("uv.lock"))?;
+    let lock_contents = context.read("uv.lock");
+    assert!(
+        lock_contents.contains("name = \"foo\"\nversion = \"1.0.0\""),
+        "{lock_contents}"
+    );
+    assert!(
+        lock_contents.contains("name = \"foo\"\nversion = \"2.0.0\""),
+        "{lock_contents}"
+    );
+    assert!(
+        lock_contents.contains("build-only = true"),
+        "{lock_contents}"
+    );
+
+    uv_snapshot!(context.filters(), context
+        .upgrade()
+        .arg("foo")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    No version change for foo
+    ");
+
+    assert_eq!(
+        fs_err::read_to_string(context.temp_dir.child("pyproject.toml"))?,
+        pyproject_toml
+    );
+    assert_eq!(fs_err::read(context.temp_dir.child("uv.lock"))?, lock);
+
+    Ok(())
 }
 
 #[test]

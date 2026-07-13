@@ -318,11 +318,30 @@ fn runtime_requirement_matches_package(requirement: &Requirement, package: &Pack
     }
 
     match (&requirement.source, &package.id.source) {
-        (RequirementSource::Registry { specifier, .. }, Source::Registry(_)) => package
-            .id
-            .version
-            .as_ref()
-            .is_some_and(|version| specifier.contains(version)),
+        (
+            RequirementSource::Registry {
+                specifier, index, ..
+            },
+            Source::Registry(source),
+        ) => {
+            let index_matches = index
+                .as_ref()
+                .is_none_or(|index| match (&index.url, source) {
+                    (IndexUrl::Pypi(_) | IndexUrl::Url(_), RegistrySource::Url(source)) => {
+                        index.url.without_credentials().as_str() == source.as_ref()
+                    }
+                    (IndexUrl::Path(index), RegistrySource::Path(source)) => index
+                        .to_file_path()
+                        .is_ok_and(|path| path.ends_with(source)),
+                    _ => false,
+                });
+            index_matches
+                && package
+                    .id
+                    .version
+                    .as_ref()
+                    .is_some_and(|version| specifier.contains(version))
+        }
         (
             RequirementSource::Url {
                 location,
@@ -1026,10 +1045,19 @@ impl Lock {
         // Project-less workspaces and scripts store their roots in the lock manifest instead of
         // on a package edge. Validate those roots separately so a corrupted `build-only` flag
         // cannot cause a runtime requirement to select an incompatible build package.
+        let mut runtime_environment = fork_markers_union(&fork_markers, &requires_python);
+        if !supported_environments.is_empty() {
+            let mut supported_environment = MarkerTree::FALSE;
+            for environment in &supported_environments {
+                supported_environment.or(*environment);
+            }
+            runtime_environment.and(supported_environment);
+        }
         for requirement in manifest
             .requirements
             .iter()
             .chain(manifest.dependency_groups.values().flatten())
+            .filter(|requirement| !requirement.marker.is_disjoint(runtime_environment))
         {
             let candidates = packages
                 .iter()
@@ -1100,6 +1128,37 @@ impl Lock {
                 }
             }
 
+            if let Some(build_dependency_packages) = &dist.build_dependency_packages {
+                for (package_id, edges) in build_dependency_packages {
+                    if !by_id.contains_key(package_id) {
+                        return Err(LockErrorKind::UnrecognizedBuildDependency {
+                            id: dist.id.clone(),
+                            dependency: BuildDependency::new(
+                                package_id.clone(),
+                                BTreeSet::new(),
+                                None,
+                                false,
+                            ),
+                        }
+                        .into());
+                    }
+
+                    for dependency in edges
+                        .dependencies
+                        .iter()
+                        .chain(edges.optional_dependencies.values().flatten())
+                    {
+                        if !by_id.contains_key(&dependency.package_id) {
+                            return Err(LockErrorKind::UnrecognizedDependency {
+                                id: package_id.clone(),
+                                dependency: dependency.clone(),
+                            }
+                            .into());
+                        }
+                    }
+                }
+            }
+
             // Perform the same validation for optional dependencies.
             for dependencies in dist.optional_dependencies.values() {
                 for dep in dependencies {
@@ -1129,6 +1188,16 @@ impl Lock {
             // Also check that our sources are consistent with whether we have
             // hashes or not.
             if let Some(requires_hash) = dist.id.source.requires_hash() {
+                if let Some(sdist) = &dist.sdist
+                    && requires_hash != sdist.hash().is_some()
+                {
+                    return Err(LockErrorKind::Hash {
+                        id: dist.id.clone(),
+                        artifact_type: "source distribution",
+                        expected: requires_hash,
+                    }
+                    .into());
+                }
                 for wheel in &dist.wheels {
                     if requires_hash != wheel.hash.is_some() {
                         return Err(LockErrorKind::Hash {
@@ -11434,6 +11503,80 @@ build-only = true
     }
 
     #[test]
+    fn runtime_manifest_group_ignores_unreachable_build_only_package() {
+        let lock = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+supported-markers = ["sys_platform == 'darwin'"]
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", marker = "sys_platform == 'win32'", specifier = ">=2" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://example.com/simple" }
+build-only = true
+"#,
+        );
+        assert!(lock.is_ok(), "{lock:?}");
+    }
+
+    #[test]
+    fn runtime_manifest_requirement_ignores_unreachable_build_only_package() {
+        let lock = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "shared", marker = "python_full_version < '3.12'", url = "https://build.example/shared-2.0.0.tar.gz" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { url = "https://build.example/shared-2.0.0.tar.gz" }
+build-only = true
+sdist = { hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+"#,
+        );
+        assert!(lock.is_ok(), "{lock:?}");
+    }
+
+    #[test]
+    fn runtime_manifest_registry_requirement_rejects_build_only_package() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", specifier = "==2.0.0", index = "https://build.example/simple" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://runtime.example/simple" }
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://build.example/simple" }
+build-only = true
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
     fn runtime_manifest_direct_requirement_rejects_build_only_package() {
         let result = toml::from_str::<Lock>(
             r#"
@@ -12113,6 +12256,87 @@ sdist = { url = "https://example.com/c.tar.gz", hash = "sha256:37dd54208da7e1cd8
             result,
             @"Invalid resolution record `build:a:wheel`: scoped build dependency package is not contained in the source package's build resolution"
         );
+    }
+
+    #[test]
+    fn scoped_build_edge_rejects_missing_package() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+build-dependency-packages = [
+    { name = "missing", version = "1.0.0", source = { registry = "https://pypi.org/simple" }, dependencies = [] },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"For package `a==1.0.0 @ registry+https://pypi.org/simple`, found build dependency `missing==1.0.0` with no locked package");
+    }
+
+    #[test]
+    fn scoped_build_edge_rejects_missing_dependency() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+build-dependency-packages = [
+    { name = "b", dependencies = [{ name = "missing", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }] },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"For package `b==1.0.0 @ registry+https://pypi.org/simple`, found dependency `missing==1.0.0` with no locked package");
+    }
+
+    #[test]
+    fn scoped_build_edge_rejects_missing_optional_dependency() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "a"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+build-dependencies = [{ name = "b" }]
+build-dependency-packages = [
+    { name = "b", optional-dependencies = { foo = [{ name = "missing", version = "1.0.0", source = { registry = "https://pypi.org/simple" } }] } },
+]
+sdist = { url = "https://example.com/a.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+
+[[package]]
+name = "b"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://example.com/b.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 0 }
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"For package `b==1.0.0 @ registry+https://pypi.org/simple`, found dependency `missing==1.0.0` with no locked package");
     }
 
     #[test]
@@ -13204,10 +13428,82 @@ requires-python = ">=3.12"
 name = "anyio"
 version = "4.3.0"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/anyio-4.3.0.tar.gz" }
 wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl" }]
 "#;
         let result: Result<Lock, _> = toml::from_str(data);
         assert_legacy_lock_debug_snapshot!(result);
+    }
+
+    #[test]
+    fn sdist_hash_optional_missing_find_links() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { registry = "file:///links" }
+build-only = true
+sdist = { path = "builder-1.0.0.tar.gz" }
+"#;
+        toml::from_str::<Lock>(data).unwrap();
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_direct_url() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { url = "https://example.com/builder-1.0.0.tar.gz" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ direct+https://example.com/builder-1.0.0.tar.gz` comes from a direct dependency, a hash was expected but one was not found for source distribution");
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_path() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { path = "builder-1.0.0.tar.gz" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ path+builder-1.0.0.tar.gz` comes from a path dependency, a hash was expected but one was not found for source distribution");
+    }
+
+    #[test]
+    fn sdist_hash_required_missing_git_archive() {
+        let data = r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+
+[[package]]
+name = "builder"
+version = "1.0.0"
+source = { git = "https://example.com/builder.git?path=builder-1.0.0.tar.gz#1111111111111111111111111111111111111111" }
+build-only = true
+sdist = {}
+"#;
+        let result = toml::from_str::<Lock>(data).unwrap_err();
+        assert_stripped_snapshot!(result, @"Since the package `builder==1.0.0 @ git+https://example.com/builder.git?path=builder-1.0.0.tar.gz#1111111111111111111111111111111111111111` comes from a git dependency, a hash was expected but one was not found for source distribution");
     }
 
     #[test]

@@ -61,7 +61,18 @@ Ok(
                     ),
                     resolution_id: None,
                 },
-                sdist: None,
+                sdist: Some(
+                    Url {
+                        url: UrlString(
+                            "https://files.pythonhosted.org/packages/anyio-4.3.0.tar.gz",
+                        ),
+                        metadata: SourceDistMetadata {
+                            hash: None,
+                            size: None,
+                            upload_time: None,
+                        },
+                    },
+                ),
                 wheels: [
                     Wheel {
                         url: Url {
