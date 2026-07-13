@@ -18,6 +18,8 @@ mod help;
 
 mod network;
 
+mod read_only_cache;
+
 #[cfg(feature = "test-pypi")]
 mod publish;
 

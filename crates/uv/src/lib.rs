@@ -2414,13 +2414,6 @@ async fn run_project(
                 .network_settings
                 .check_refresh_conflict(&args.refresh);
 
-            // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
-                args.refresh
-                    .clone()
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
-            );
-
             // If the script already exists, use it; otherwise, propagate the file path and we'll
             // initialize it later on.
             let script = script
@@ -2433,6 +2426,19 @@ async fn run_project(
                 })
                 .map(ScriptPath::Script)
                 .or(args.script.map(ScriptPath::Path));
+
+            // Frozen locks only read an existing lockfile, unless the script itself still needs to
+            // be initialized.
+            let cache = if args.frozen.is_some() && !matches!(&script, Some(ScriptPath::Path(_))) {
+                cache
+            } else {
+                cache.init().await?
+            }
+            .with_refresh(
+                args.refresh
+                    .clone()
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             Box::pin(commands::lock(
                 project_dir,
@@ -2721,8 +2727,13 @@ async fn run_project(
             let args = settings::TreeSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
-            // Initialize the cache.
-            let cache = cache.init().await?;
+            // A frozen universal tree only reads the lockfile unless it needs to query for newer
+            // versions.
+            let cache = if args.frozen.is_some() && args.universal && !args.outdated {
+                cache
+            } else {
+                cache.init().await?
+            };
 
             // Unwrap the script.
             let script = script.map(|script| match script {
@@ -2766,8 +2777,12 @@ async fn run_project(
             let args = settings::ExportSettings::resolve(args, filesystem, environment);
             show_settings!(args);
 
-            // Initialize the cache.
-            let cache = cache.init().await?;
+            // Frozen exports only read the lockfile.
+            let cache = if args.frozen.is_some() {
+                cache
+            } else {
+                cache.init().await?
+            };
 
             // Unwrap the script.
             let script = script.map(|script| match script {
