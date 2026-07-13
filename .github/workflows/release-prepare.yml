@@ -73,16 +73,9 @@ jobs:
       - name: "Create or update Pull Request"
         run: |
           branch="$(git branch --show-current)"
-          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          remote_branch="$(git ls-remote --refs origin "refs/heads/$branch" | cut -f1)"
-          if [ -n "$remote_branch" ]; then
-            git push \
-              --force-with-lease="refs/heads/$branch:$remote_branch" \
-              "$remote" \
-              HEAD:"$branch"
-          else
-            git push "$remote" HEAD:"$branch"
-          fi
+          git push --force \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:"$branch"
 
           pull_request="$(
             gh pr list \
