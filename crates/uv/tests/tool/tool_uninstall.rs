@@ -176,11 +176,7 @@ fn tool_uninstall_corrupt_receipt() {
         .success();
 
     // Corrupt the receipt
-    fs_err::write(
-        tool_dir.join("black").join("uv-receipt.toml"),
-        "garbage",
-    )
-    .unwrap();
+    fs_err::write(tool_dir.join("black").join("uv-receipt.toml"), "garbage").unwrap();
 
     uv_snapshot!(context.filters(), context.tool_uninstall().arg("black")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
