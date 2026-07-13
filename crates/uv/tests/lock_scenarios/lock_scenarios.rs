@@ -120,7 +120,7 @@ fn wrong_backtracking_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -286,7 +286,7 @@ fn wrong_backtracking_indirect() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -428,24 +428,14 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
@@ -553,7 +543,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -653,31 +643,21 @@ fn fork_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -688,8 +668,8 @@ fn fork_basic() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -947,31 +927,21 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform == 'darwin'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "4.3.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-4.3.0.tar.gz", hash = "sha256:ae6dc9fc44095c1d8ec669ea9ce6623fb598874d6436e989ccad9fbb8ecf121f", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -982,8 +952,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "a"
         version = "4.4.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-4.4.0.tar.gz", hash = "sha256:d531c73543a10f88aa8cb084ab856c7f369d442d09ad3ffdeb4a1771590b1d0f", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1018,8 +988,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "d"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/d-1.0.0.tar.gz", hash = "sha256:4f363304bad30565286697b70b1b48e348267d318562a3afb36af66a8a8cad1d", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1030,8 +1000,8 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         name = "d"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/d-2.0.0.tar.gz", hash = "sha256:710cbab9073b67674e70a5f5225f81fe5496739fb4d14e6b9ecec40109290ee9", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1136,7 +1106,7 @@ fn fork_upgrade() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -1257,31 +1227,21 @@ fn fork_incomplete_markers() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "python_full_version >= '3.14'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "python_full_version == '3.13.*'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "python_full_version < '3.13'" }
+        resolution-markers = [
+            "python_full_version >= '3.14'",
+            "python_full_version == '3.13.*'",
+            "python_full_version < '3.13'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:2" },
+        resolution-markers = [
+            "python_full_version < '3.13'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1292,8 +1252,8 @@ fn fork_incomplete_markers() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "python_full_version >= '3.14'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1421,7 +1381,7 @@ fn fork_marker_accrue() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -1625,43 +1585,25 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:3"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:4"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
-            { target = "runtime:1" },
-            { target = "runtime:2" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
@@ -1676,8 +1618,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:3" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1688,8 +1630,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "b"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "c" },
@@ -1703,8 +1645,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         name = "b"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1824,43 +1766,25 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:3"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:4"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
-            { target = "runtime:1" },
-            { target = "runtime:2" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
@@ -1875,8 +1799,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:3" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1887,8 +1811,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "b"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:f615a5b13329186c0948d63a275af18758e1346ad512f06366b0534e1c4e3ab3", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1899,8 +1823,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         name = "b"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2012,43 +1936,25 @@ fn fork_marker_inherit_combined() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:3"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:4"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
-            { target = "runtime:1" },
-            { target = "runtime:2" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
+            "implementation_name != 'cpython' and implementation_name != 'pypy' and sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
@@ -2063,8 +1969,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:3" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2075,8 +1981,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "b"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "implementation_name == 'pypy' and sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:675a6c7a1456ba55a2bb89763b3e58b9086a120918d8a9965b616f81f77150fb", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2087,8 +1993,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
         name = "b"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2193,31 +2099,21 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:36c9054329425d5b328167c29b8977798e496b738e0c773de19896aeff397ba6", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2228,8 +2124,8 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         dependencies = [
             { name = "b" },
@@ -2352,31 +2248,21 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         dependencies = [
             { name = "b" },
@@ -2390,8 +2276,8 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2519,31 +2405,21 @@ fn fork_marker_inherit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:36c9054329425d5b328167c29b8977798e496b738e0c773de19896aeff397ba6", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2554,8 +2430,8 @@ fn fork_marker_inherit() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2668,31 +2544,21 @@ fn fork_marker_limited_inherit() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:c59d625a854e3d8e7cca350ff23a960884bf8a558af994598950e60ecaecf1be", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2703,8 +2569,8 @@ fn fork_marker_limited_inherit() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2834,24 +2700,14 @@ fn fork_marker_selection() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
@@ -2866,8 +2722,8 @@ fn fork_marker_selection() -> Result<()> {
         name = "b"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:b532bd9c3ccd69c4d5e915542dc50fb748c91c7a8e204c75387178d68fca113f", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2878,8 +2734,8 @@ fn fork_marker_selection() -> Result<()> {
         name = "b"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2999,24 +2855,14 @@ fn fork_marker_track() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'darwin'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'darwin' and sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'darwin' and sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "a"
@@ -3034,8 +2880,8 @@ fn fork_marker_track() -> Result<()> {
         name = "b"
         version = "2.7"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'darwin'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.7.tar.gz", hash = "sha256:30fe41d5a9282b73cd50d58eceb33cec85d57c78af4a91fe3e202335f949949f", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3046,8 +2892,8 @@ fn fork_marker_track() -> Result<()> {
         name = "b"
         version = "2.8"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.8.tar.gz", hash = "sha256:673cbbd654751f7880842420431a400e62458486cb428bc7e508cfea4b9c8cd0", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3162,7 +3008,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -3458,24 +3304,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "python_full_version >= '3.14'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "python_full_version == '3.13.*'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "python_full_version < '3.13'" }
+        resolution-markers = [
+            "python_full_version >= '3.14'",
+            "python_full_version == '3.13.*'",
+            "python_full_version < '3.13'",
+        ]
 
         [[package]]
         name = "a"
@@ -3636,19 +3472,13 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "cleaver"
@@ -3669,8 +3499,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "fork-if-not-forked"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked-2.0.0.tar.gz", hash = "sha256:0e93f72e7bcbdc71a1a3573b1f79a747e82c9c238505a847e74d314143eedc18", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3681,8 +3511,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "fork-if-not-forked"
         version = "3.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked-3.0.0.tar.gz", hash = "sha256:cdbe6609a59da78b2ea6ddb8703131385dc71fd9d13bca82e35ed5d541a7425d", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3716,8 +3546,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "reject-cleaver1"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/reject_cleaver1-1.0.0.tar.gz", hash = "sha256:6da0074d5a0a178cb730df50264fe123ac776ebb72b8624a2e04eefe2c694246", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3728,8 +3558,8 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         name = "reject-cleaver1"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/reject_cleaver1-2.0.0.tar.gz", hash = "sha256:3b6adb7793ff0c4bf6e14d10e16156bc184046e1e5b738d921974ef6b9f9b58a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4021,26 +3851,20 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "bar"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         dependencies = [
             { name = "d" },
@@ -4055,8 +3879,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "bar"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:fa9a4faf506228722784ed740a362bccd96913f4f98a4e10d45ab79d8abb270a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4067,8 +3891,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "c"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/c-2.0.0.tar.gz", hash = "sha256:72db9a21521acaa8ff10d0ce3bb4b68bc6b275bcb77bdb3debd95388f5120021", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4079,8 +3903,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "c"
         version = "3.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/c-3.0.0.tar.gz", hash = "sha256:27d544487f21f6ece9d49d672fc8da1664c48a7ef864d8ff91b756183d77b831", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4161,8 +3985,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "unrelated-dep2"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/unrelated_dep2-1.0.0.tar.gz", hash = "sha256:43649d9e654b0a121308187b8a4f43fa2b498e08565e2432bd1e0e3f1728acb2", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4173,8 +3997,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "unrelated-dep2"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/unrelated_dep2-2.0.0.tar.gz", hash = "sha256:292e78906a8e8c74931f9a5b54aba9e6957afe87cca68a2a456363569e7aa652", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4311,26 +4135,20 @@ fn preferences_dependent_forking() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux'" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux'",
+        ]
 
         [[package]]
         name = "bar"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform != 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:d373f4858d602855ef53231a7f24ebff4e67e1fe30a2e810ee2b2a29b9d1a50a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4341,8 +4159,8 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "bar"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/bar-2.0.0.tar.gz", hash = "sha256:fa9a4faf506228722784ed740a362bccd96913f4f98a4e10d45ab79d8abb270a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4492,43 +4310,25 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "os_name == 'darwin' and sys_platform == 'illumos'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "os_name == 'linux' and sys_platform == 'illumos'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'" }
-
-        [[resolution]]
-        id = "runtime:3"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'windows'" }
-
-        [[resolution]]
-        id = "runtime:4"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'illumos' and sys_platform != 'windows'" }
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
+            "sys_platform == 'windows'",
+            "sys_platform != 'illumos' and sys_platform != 'windows'",
+        ]
 
         [[package]]
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
-            { target = "runtime:1" },
-            { target = "runtime:2" },
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
+            "os_name == 'linux' and sys_platform == 'illumos'",
+            "os_name != 'darwin' and os_name != 'linux' and sys_platform == 'illumos'",
         ]
         dependencies = [
             { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'darwin'" },
@@ -4543,8 +4343,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "a"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:3" },
+        resolution-markers = [
+            "sys_platform == 'windows'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:80ec95a66cff82a78a3333e3f5702e4254cf80533f21762933252eec58c9869a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4555,8 +4355,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "b"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "os_name == 'darwin' and sys_platform == 'illumos'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:b532bd9c3ccd69c4d5e915542dc50fb748c91c7a8e204c75387178d68fca113f", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4567,8 +4367,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         name = "b"
         version = "2.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "os_name == 'linux' and sys_platform == 'illumos'",
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:18fb09ba28eba255186405065e027093a6e952fa71eb565b4c46d619fdb60809", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4662,7 +4462,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.10"
 
@@ -4746,7 +4546,7 @@ fn fork_requires_python_full() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.10"
 
@@ -4835,7 +4635,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.10.1"
 
@@ -4928,7 +4728,7 @@ fn fork_requires_python() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.10"
 
@@ -5008,7 +4808,7 @@ fn requires_python_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.10"
 
@@ -5104,7 +4904,7 @@ fn unreachable_package() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -5205,7 +5005,7 @@ fn unreachable_wheels() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -5335,19 +5135,13 @@ fn marker_variants_have_different_extras() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "platform_python_implementation != 'PyPy'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "platform_python_implementation == 'PyPy'" }
+        resolution-markers = [
+            "platform_python_implementation != 'PyPy'",
+            "platform_python_implementation == 'PyPy'",
+        ]
 
         [[package]]
         name = "project"
@@ -5478,7 +5272,7 @@ fn virtual_package_extra_priorities() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -5590,7 +5384,7 @@ fn requires_python_subset() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
         required-markers = [
@@ -5696,7 +5490,7 @@ fn specific_architecture() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 

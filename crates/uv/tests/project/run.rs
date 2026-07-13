@@ -1076,7 +1076,7 @@ fn run_pep723_script_lock() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.11"
 
@@ -1189,7 +1189,7 @@ fn run_pep723_script_lock() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.11"
 
@@ -2572,7 +2572,7 @@ fn run_locked() -> Result<()> {
     }, {
         assert_snapshot!(
             existing, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -6401,7 +6401,7 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.11"
 

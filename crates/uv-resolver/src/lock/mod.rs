@@ -764,7 +764,7 @@ impl Lock {
                     .filter(|fork_markers| !fork_markers.is_disjoint(dist.marker))
                     .copied()
                     .collect::<Vec<_>>();
-                canonicalize_universal_markers(&fork_markers, &requires_python)
+                canonicalize_universal_markers(&fork_markers, &requires_python, false)
             } else {
                 vec![]
             };
@@ -904,7 +904,7 @@ impl Lock {
         // nothing at the top level, and `uv lock --check` should compare against
         // that canonical form rather than the raw resolver output.
         let fork_markers =
-            canonicalize_universal_markers(&resolution.fork_markers, &requires_python);
+            canonicalize_universal_markers(&resolution.fork_markers, &requires_python, false);
         let lock = Self::new(
             DEFAULT_VERSION,
             REVISION,
@@ -5181,7 +5181,8 @@ impl TryFrom<LockWire> for Lock {
             .map(UniversalMarker::from_combined)
             .collect::<Vec<_>>();
         fork_markers.extend(runtime_markers_by_id.values().copied());
-        let fork_markers = canonicalize_universal_markers(&fork_markers, &wire.requires_python);
+        let fork_markers =
+            canonicalize_universal_markers(&fork_markers, &wire.requires_python, true);
         let environment = SimplifiedMarkerTree::new(
             &wire.requires_python,
             fork_markers_union(&fork_markers, &wire.requires_python),
@@ -10981,7 +10982,7 @@ fn simplified_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
 ) -> Vec<String> {
-    canonical_marker_trees(markers, requires_python)
+    canonical_marker_trees(markers, requires_python, true)
         .into_iter()
         .filter_map(MarkerTree::try_to_string)
         .collect()
@@ -10992,12 +10993,14 @@ fn simplified_universal_markers(
 /// When the PEP 508 portions of the markers are disjoint, the lockfile stores
 /// only those simplified PEP 508 markers. Otherwise, it stores the simplified
 /// combined markers (including conflict markers). Markers that serialize to
-/// `true` are omitted.
+/// `true` are omitted. `preserve_conflicts` retains conflict-only runtime selectors
+/// when converting a version 2 lock to the legacy representation.
 fn canonicalize_universal_markers(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
+    preserve_conflicts: bool,
 ) -> Vec<UniversalMarker> {
-    canonical_marker_trees(markers, requires_python)
+    canonical_marker_trees(markers, requires_python, preserve_conflicts)
         .into_iter()
         .map(|marker| {
             let simplified = SimplifiedMarkerTree::new(requires_python, marker);
@@ -11010,6 +11013,7 @@ fn canonicalize_universal_markers(
 fn canonical_marker_trees(
     markers: &[UniversalMarker],
     requires_python: &RequiresPython,
+    preserve_conflicts: bool,
 ) -> Vec<MarkerTree> {
     let mut pep508_only = vec![];
     let mut seen = FxHashSet::default();
@@ -11024,7 +11028,8 @@ fn canonical_marker_trees(
         .iter()
         .tuple_combinations()
         .any(|(&marker1, &marker2)| !marker1.is_disjoint(marker2));
-    let any_conflicts = markers.iter().any(|marker| !marker.conflict().is_true());
+    let any_conflicts =
+        preserve_conflicts && markers.iter().any(|marker| !marker.conflict().is_true());
     let markers = if !any_overlap && !any_conflicts {
         pep508_only
     } else {

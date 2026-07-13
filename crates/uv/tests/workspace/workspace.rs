@@ -1499,7 +1499,7 @@ fn workspace_inherit_sources() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -2283,7 +2283,7 @@ fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(context.read("uv.lock"), @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 

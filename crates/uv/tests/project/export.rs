@@ -418,7 +418,7 @@ fn requirements_txt_simplifies_selected_root_extra_markers_from_lock() -> Result
     let lock = context.temp_dir.child("uv.lock");
     lock.write_str(
         r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -715,27 +715,17 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
         {
             insta::assert_snapshot!(
                 lock, @r#"
-            version = 2
+            version = 1
             revision = 3
             requires-python = ">=3.12"
+            resolution-markers = [
+                "sys_platform == 'darwin'",
+                "sys_platform == 'win32'",
+                "sys_platform != 'darwin' and sys_platform != 'win32'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25T00:00:00Z"
-
-            [[resolution]]
-            id = "runtime:0"
-            kind = "runtime"
-            target = { marker = "sys_platform == 'darwin'" }
-
-            [[resolution]]
-            id = "runtime:1"
-            kind = "runtime"
-            target = { marker = "sys_platform == 'win32'" }
-
-            [[resolution]]
-            id = "runtime:2"
-            kind = "runtime"
-            target = { marker = "sys_platform != 'darwin' and sys_platform != 'win32'" }
 
             [[package]]
             name = "async-generator"
@@ -835,8 +825,8 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             name = "trio"
             version = "0.10.0"
             source = { registry = "https://pypi.org/simple" }
-            selectors = [
-                { target = "runtime:1" },
+            resolution-markers = [
+                "sys_platform == 'win32'",
             ]
             dependencies = [
                 { name = "async-generator" },
@@ -853,8 +843,8 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
             name = "trio"
             version = "0.25.0"
             source = { registry = "https://pypi.org/simple" }
-            selectors = [
-                { target = "runtime:0" },
+            resolution-markers = [
+                "sys_platform == 'darwin'",
             ]
             dependencies = [
                 { name = "attrs" },
@@ -1756,9 +1746,14 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         {
             insta::assert_snapshot!(
                 lock, @r#"
-            version = 2
+            version = 1
             revision = 3
             requires-python = ">=3.12"
+            resolution-markers = [
+                "sys_platform == 'win32'",
+                "sys_platform == 'linux'",
+                "sys_platform != 'linux' and sys_platform != 'win32'",
+            ]
 
             [options]
             exclude-newer = "2024-03-25T00:00:00Z"
@@ -1771,27 +1766,12 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             [manifest.dependency-groups]
             async = [{ name = "anyio" }]
 
-            [[resolution]]
-            id = "runtime:0"
-            kind = "runtime"
-            target = { marker = "sys_platform == 'win32'" }
-
-            [[resolution]]
-            id = "runtime:1"
-            kind = "runtime"
-            target = { marker = "sys_platform == 'linux'" }
-
-            [[resolution]]
-            id = "runtime:2"
-            kind = "runtime"
-            target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
-
             [[package]]
             name = "anyio"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            selectors = [
-                { target = "runtime:0" },
+            resolution-markers = [
+                "sys_platform == 'win32'",
             ]
             dependencies = [
                 { name = "idna" },
@@ -1806,9 +1786,9 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             name = "anyio"
             version = "3.0.0"
             source = { registry = "https://pypi.org/simple" }
-            selectors = [
-                { target = "runtime:1" },
-                { target = "runtime:2" },
+            resolution-markers = [
+                "sys_platform == 'linux'",
+                "sys_platform != 'linux' and sys_platform != 'win32'",
             ]
             dependencies = [
                 { name = "idna" },
@@ -2949,9 +2929,14 @@ fn requirements_txt_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.11"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'win32'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -2962,27 +2947,12 @@ fn requirements_txt_script() -> Result<()> {
             { name = "anyio", marker = "sys_platform == 'win32'", specifier = "==2.0.0" },
         ]
 
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'win32'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
-
         [[package]]
         name = "anyio"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        selectors = [
-            { target = "runtime:0" },
+        resolution-markers = [
+            "sys_platform == 'win32'",
         ]
         dependencies = [
             { name = "idna" },
@@ -2997,8 +2967,8 @@ fn requirements_txt_script() -> Result<()> {
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         dependencies = [
             { name = "idna" },
@@ -3078,9 +3048,14 @@ fn requirements_txt_script() -> Result<()> {
     }, {
         assert_snapshot!(
             lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.11"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform == 'linux'",
+            "sys_platform != 'linux' and sys_platform != 'win32'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -3092,27 +3067,12 @@ fn requirements_txt_script() -> Result<()> {
             { name = "iniconfig" },
         ]
 
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'win32'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
         [[package]]
         name = "anyio"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        selectors = [
-            { target = "runtime:1" },
+        resolution-markers = [
+            "sys_platform == 'win32'",
         ]
         dependencies = [
             { name = "idna" },
@@ -3127,8 +3087,8 @@ fn requirements_txt_script() -> Result<()> {
         name = "anyio"
         version = "3.0.0"
         source = { registry = "https://pypi.org/simple" }
-        selectors = [
-            { target = "runtime:2" },
+        resolution-markers = [
+            "sys_platform == 'linux'",
         ]
         dependencies = [
             { name = "idna" },
@@ -5383,7 +5343,7 @@ fn export_lock_workspace_mismatch_with_frozen() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("uv.lock");
     pyproject_toml.write_str(
         r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
