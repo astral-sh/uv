@@ -1107,11 +1107,12 @@ async fn create_pep517_build_environment(
 
     // Some packages (such as tqdm 4.66.1) list only extra requires that have already been part of
     // the pyproject.toml requires (in this case, `wheel`). We can skip doing the whole resolution
-    // and installation again.
+    // and installation again, unless a locked build has a distinct final environment to replay.
     // TODO(konstin): Do we still need this when we have a fast resolver?
     if extra_requires
         .iter()
         .any(|req| !pep517_backend.requirements.contains(req))
+        || package_key.is_some_and(|package| build_context.has_locked_build_resolution(package))
     {
         debug!("Installing extra requirements for build backend");
         let requirements: Vec<_> = pep517_backend

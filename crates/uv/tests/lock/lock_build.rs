@@ -3232,6 +3232,36 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
         "{dep}"
     );
 
+    // Removing the initial root must not allow a frozen build to fall back to live resolution.
+    let bootstrap_root = lock
+        .lines()
+        .find(|line| line.starts_with("    { name = \"seed\", version = \"2.0.0\""))
+        .expect("locked bootstrap root");
+    let bootstrap_root = format!("{bootstrap_root}\n");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replacen(&bootstrap_root, "", 1))?;
+
+    uv_snapshot!(context.filters(), context
+        .sync()
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("extra-build-dependencies,lock-build-dependencies"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `dep @ file://[TEMP_DIR]/dep`
+      ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
+      ╰─▶ The initial build requirements for `dep` do not match the locked bootstrap environment
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
+    ");
+
     Ok(())
 }
 
@@ -3265,12 +3295,16 @@ fn lock_build_dependencies_static_metadata_captures_hook_requirements() -> Resul
     )?;
     dep_dir.child("build_backend.py").write_str(
         r#"
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_wheel(config_settings=None):
-    return ["helper"]
+    try:
+        version("helper")
+    except PackageNotFoundError:
+        return ["helper"]
+    raise RuntimeError("helper is installed before the backend hook runs")
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     if version("helper") != "0.1.0":
@@ -3764,8 +3798,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
 
-    // The hook no longer reports `helper`, but the frozen build must still replay the complete
-    // environment captured in the lock before invoking the backend.
+    // The hook no longer reports `helper`, but the frozen build must still replay the captured
+    // final environment after the dependency hook and before invoking the build hook.
     context
         .sync()
         .arg("--find-links")

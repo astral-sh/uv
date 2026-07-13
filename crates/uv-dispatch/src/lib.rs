@@ -445,6 +445,47 @@ impl<'a> BuildDispatch<'a> {
                     .any(|dependency| locked_dependency_satisfies(requirement, dependency))
             })
     }
+
+    fn locked_initial_resolution(
+        &self,
+        resolution: &LockedBuildResolution,
+        requirements: &[Requirement],
+    ) -> Option<Resolution> {
+        let direct_dependencies = resolution
+            .bootstrap_direct_dependencies()
+            .unwrap_or_else(|| resolution.direct_dependencies());
+        let markers = self.interpreter.to_resolver_marker_environment();
+        let initial_requirements = resolution.initial_requirements().unwrap_or(requirements);
+        let mut selected = Resolution::default();
+        for initial_requirement in initial_requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
+        {
+            let dependency = direct_dependencies
+                .iter()
+                .find(|dependency| locked_dependency_satisfies(initial_requirement, dependency))
+                .or_else(|| {
+                    // Match-runtime requirements are source-matched when replay begins, while
+                    // the stored initial requirement retains its original registry source. Use
+                    // current requirements only to find the source-matched counterpart of a
+                    // locked initial root; otherwise mutable source changes could bypass the lock.
+                    requirements
+                        .iter()
+                        .filter(|requirement| {
+                            requirement.name == initial_requirement.name
+                                && requirement.extras == initial_requirement.extras
+                                && requirement.evaluate_markers(Some(&markers), &[])
+                        })
+                        .find_map(|requirement| {
+                            direct_dependencies.iter().find(|dependency| {
+                                locked_dependency_satisfies(requirement, dependency)
+                            })
+                        })
+                })?;
+            selected.extend(dependency.resolution());
+        }
+        Some(selected)
+    }
 }
 
 fn merge_marker<K: Ord>(entry: Entry<'_, K, MarkerTree>, marker: MarkerTree) -> bool {
@@ -601,26 +642,33 @@ impl BuildContext for BuildDispatch<'_> {
             BuildResolutionStage::Bootstrap
         };
 
-        // If we have a locked build resolution for this package, replay the complete build
-        // environment without running the resolver. Backend hook requirements are validated
-        // separately from `build-system.requires`, which remains fixed by a frozen lock.
+        // If we have a locked build resolution for this package, replay the appropriate stage
+        // without running the resolver. Backend hook requirements are validated separately from
+        // `build-system.requires`, which remains fixed by a frozen lock.
         if let Some(package) = package
             && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
         {
-            if let Some(requirements) = validate_locked_requirements
-                && !self.locked_resolution_satisfies(locked_resolution, requirements)
-            {
-                return Err(BuildDispatchError::Anyhow(anyhow::anyhow!(
-                    "The build requirements returned by the backend for `{}` do not match the locked build environment",
-                    package.name
-                )));
-            }
-
+            let resolution = if let Some(requirements) = validate_locked_requirements {
+                if !self.locked_resolution_satisfies(locked_resolution, requirements) {
+                    return Err(BuildDispatchError::Anyhow(anyhow::anyhow!(
+                        "The build requirements returned by the backend for `{}` do not match the locked build environment",
+                        package.name
+                    )));
+                }
+                locked_resolution.resolution().clone()
+            } else {
+                self.locked_initial_resolution(locked_resolution, requirements)
+                    .ok_or_else(|| {
+                        BuildDispatchError::Anyhow(anyhow::anyhow!(
+                            "The initial build requirements for `{}` do not match the locked bootstrap environment",
+                            package.name
+                        ))
+                    })?
+            };
             debug!(
                 "Using locked build resolution for `{}=={:?}` (skipping resolver)",
                 package.name, package.version
             );
-            let resolution = locked_resolution.resolution().clone();
             let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
                 .map_err(anyhow::Error::from)?;
             return Ok(ResolvedRequirements::new(resolution, hasher));

@@ -19,9 +19,10 @@ This proposal separates concepts with different semantics:
 The schema supports the `wheel`, `editable`, and `sdist` operations. Capture is demand-driven: a
 command records the operations required by its replay contract.
 
-Lock generation performs build-requirement discovery and records the complete resolved environment.
-Frozen replay installs that recorded environment directly. It does not resolve build requirements or
-rerun dependency-discovery hooks.
+Lock generation performs build-requirement discovery and records the resolved bootstrap and final
+environments. Frozen replay installs the locked bootstrap environment, reruns and validates the
+dependency-discovery hook, and installs the locked final environment without resolving build
+requirements.
 
 This guarantees that build-dependency selection comes from the lockfile. It does not claim that
 arbitrary backend execution is hermetic or that two builds produce byte-identical artifacts.
@@ -159,11 +160,12 @@ packages = [
 ```
 
 During frozen replay, uv selects the build record for the exact source artifact and operation,
-installs the recorded package members into an isolated environment, and invokes the downstream
-metadata or artifact-production hook.
+installs its locked bootstrap environment, validates the dependency-discovery hook against the
+locked final roots, and installs the final environment before invoking the downstream metadata or
+artifact-production hook.
 
-The lockfile records the result of build-requirement discovery. Frozen replay does not perform
-dependency resolution and does not rerun dependency-discovery hooks.
+The lockfile records the result of build-requirement discovery. Frozen replay preserves the staged
+build environment without performing dependency resolution.
 
 ## Reference-Level Explanation
 
@@ -441,17 +443,19 @@ When frozen replay needs to build a source artifact, it:
 2. Selects the variant matching the target-runtime and build-executor contexts.
 3. Validates the record's structural integrity and referenced artifacts.
 4. Recursively builds source-selected environment members as required.
-5. Installs the recorded package members into an isolated environment.
-6. Invokes the downstream metadata or artifact-production hook.
+5. Installs the locked bootstrap environment into an isolated environment.
+6. Reruns the dependency-discovery hook and validates its output against the locked final roots.
+7. Installs the locked final environment.
+8. Invokes the downstream metadata or artifact-production hook.
 
 Frozen replay must not resolve build requirements outside the lockfile.
 
-Frozen replay must not rerun dependency-discovery hooks for a captured environment. Discovery hooks
-determine environment membership and belong to lock generation. Downstream metadata and
-artifact-production hooks consume the captured final environment.
+Frozen replay reruns dependency-discovery hooks in the locked bootstrap environment and validates
+their output against the locked final roots. Downstream metadata and artifact-production hooks
+consume the locked final environment.
 
-This is intentionally not a faithful replay of the ordinary frontend call sequence. It is a
-dependency-environment replay contract.
+This preserves the environment ordering used when the lock was captured without resolving outside
+the lockfile.
 
 Backend execution can still observe ambient environment variables, the network, filesystem state,
 and time unless separately constrained. This RFC does not claim byte-identical artifact reproduction
@@ -1079,20 +1083,19 @@ This alternative is rejected because the goal is to lock the complete build depe
 
 ### Replaying Dependency-Discovery Hooks
 
-Another alternative is to rerun dependency-discovery hooks during frozen replay and validate their
-requirements against locked data.
+Frozen replay reruns dependency-discovery hooks and validates their requirements against the locked
+final roots.
 
-That more closely preserves the ordinary frontend invocation sequence, but it requires the lockfile
-to distinguish bootstrap requirements from hook-added requirements and to reconstruct intermediate
-environments. Hook output can also change between locking and replay, making replay depend on
-backend execution rather than the captured lock.
+This preserves the ordinary frontend invocation sequence and ensures that hook-only dependencies are
+not installed before the hook runs. Hook output can change between locking and replay, so a changed
+hook is rejected instead of resolving new requirements outside the lockfile.
 
-Installing the captured final environment is simpler and more reproducible with respect to
-dependency selection.
+The selected bootstrap and final environments both come from the lockfile.
 
 ### Make Frozen Replay Faithful To Build Stages
 
-A stricter alternative is to lock each stage separately and replay the ordinary frontend sequence:
+The lockfile records each stage separately, and frozen replay follows the ordinary frontend
+sequence:
 
 ```text
 install bootstrap requirements
@@ -1101,17 +1104,14 @@ install hook-added requirements
 run prepare_metadata_for_build_wheel or build_wheel
 ```
 
-This is closer to how a non-frozen build runs. It also avoids installing hook-only dependencies
-before the discovery hook runs.
+This avoids installing hook-only dependencies before the discovery hook runs.
 
-The cost is a more complex lock model. The lockfile must distinguish bootstrap, hook-added,
-configured extra, and final requirements as replay authority. It also still executes discovery hooks
-during frozen replay, so a changed backend can produce changed hook output and force validation
-decisions at replay time.
+The lockfile must distinguish bootstrap, hook-added, configured extra, and final requirements as
+replay authority. A changed backend can produce changed hook output during frozen replay and must be
+rejected by validation.
 
-This RFC instead treats dependency discovery as lock-generation work. Frozen replay installs the
-final captured environment and invokes downstream hooks. Requirement provenance can still be stored
-for diagnostics, but stage replay is not the primary contract.
+Requirement provenance can still be stored for diagnostics, while the staged resolutions remain the
+replay authority.
 
 ### Capture Build Environments As A Separate Lockfile
 
