@@ -2,34 +2,47 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "deduplication": {
+    "related": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "status": {
-          "type": "string",
-          "enum": ["likely_duplicate", "related_issues", "no_likely_duplicate"]
-        },
-        "issues": {
+        "items": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
             "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["issue", "pull_request"]
+              },
               "number": { "type": "integer" },
+              "title": { "type": "string" },
               "url": { "type": "string" },
+              "state": {
+                "type": "string",
+                "enum": ["open", "closed", "merged"]
+              },
               "relationship": {
                 "type": "string",
-                "enum": ["duplicate", "related"]
+                "enum": ["similar", "related"]
               },
               "reason": { "type": "string" }
             },
-            "required": ["number", "url", "relationship", "reason"]
+            "required": [
+              "kind",
+              "number",
+              "title",
+              "url",
+              "state",
+              "relationship",
+              "reason"
+            ]
           }
         },
         "search_scope": { "type": "string" }
       },
-      "required": ["status", "issues", "search_scope"]
+      "required": ["items", "search_scope"]
     },
     "summary": { "type": "string" },
     "missing_information": {
@@ -47,7 +60,7 @@
     "recommended_action": { "type": "string" }
   },
   "required": [
-    "deduplication",
+    "related",
     "summary",
     "missing_information",
     "relevant_paths",

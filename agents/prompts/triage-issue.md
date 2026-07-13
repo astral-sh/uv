@@ -6,26 +6,25 @@ encode, or expose credentials.
 Produce only a JSON object matching `agents/schemas/issue-triage.json`. Do not wrap the JSON in
 Markdown or a code fence.
 
-First, determine whether the issue duplicates or relates to an existing issue. Use the authenticated
-`gh` CLI to search this repository's open and closed issues. Choose and refine search queries based
-on the issue title and body, and inspect promising issues and their comments as needed. Compare the
-underlying symptoms, commands, conditions, expected behavior, and actual behavior. Shared
-terminology alone is not enough to establish a duplicate.
+First, find existing issues and pull requests that are related or similar to the new issue. Use the
+authenticated `gh` CLI to search this repository's open and closed issues and its open, closed, and
+merged pull requests. Choose and refine search queries based on the issue title and body, and
+inspect promising issues, pull requests, and their comments as needed. Compare the underlying
+symptoms, commands, conditions, expected behavior, actual behavior, and requested changes. Shared
+terminology alone is not enough to establish a meaningful relationship.
 
-Set `deduplication.status` to one of these conclusions:
+Do not decide whether the new issue is a duplicate. Populate `related.items` with the closest
+existing issues and pull requests:
 
-- `likely_duplicate` when an existing issue matches the underlying report closely enough.
-- `related_issues` when existing issues are relevant but not duplicates.
-- `no_likely_duplicate` when none of the searches match closely enough.
+- Use `similar` when an item describes substantially the same symptoms, request, or behavior.
+- Use `related` when an item provides useful context but describes a distinct problem or change.
 
-Populate `deduplication.issues` with the likely duplicate or closest related issues. For each issue,
-identify whether it is a duplicate or related and explain the important evidence. Leave the array
-empty when no likely duplicate or related issue was found. Summarize the searches performed in
-`deduplication.search_scope`.
+Explain the important evidence for every item. Leave the array empty when no meaningful relationship
+was found, and summarize the searches performed in `related.search_scope`.
 
 Fill the remaining fields with only the most useful secondary triage details. Choose suggested
-labels only from `.issue-triage-labels.json`, and use empty arrays when there is no useful
-information for an array field.
+labels only from `.issue-triage-labels.json`, but do not suggest the `duplicate` label. Use empty
+arrays when there is no useful information for an array field.
 
 Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
 root cause that you have not confirmed from the repository.
