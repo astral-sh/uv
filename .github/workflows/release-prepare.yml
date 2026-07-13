@@ -59,7 +59,13 @@ jobs:
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
           prompt-file: "agents/prompts/editorialize-changelog.md"
-          output-file: "CHANGELOG.md"
+          output-file: "${{ runner.temp }}/changelog-section.md"
+
+      - name: "Apply changelog rewrite"
+        run: |
+          uv run scripts/update-latest-changelog-section.py \
+            CHANGELOG.md \
+            "$RUNNER_TEMP/changelog-section.md"
 
       - name: "Commit changelog rewrite"
         run: |
