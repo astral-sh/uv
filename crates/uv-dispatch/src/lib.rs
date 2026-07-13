@@ -156,8 +156,6 @@ pub struct BuildDispatch<'a> {
     universal_build_environments: SupportedEnvironments,
     /// The marker environments that require artifact coverage for universal build dependencies.
     universal_build_artifact_environments: SupportedEnvironments,
-    /// The environments in which individual source packages can require builds.
-    universal_build_markers: Mutex<BTreeMap<BuildPackageKey, MarkerTree>>,
     /// The environments in which individual build resolution contexts can require builds.
     universal_build_context_markers: Mutex<BTreeMap<BuildResolutionGraphKey, MarkerTree>>,
 }
@@ -222,7 +220,6 @@ impl<'a> BuildDispatch<'a> {
             universal_build_requires_python: None,
             universal_build_environments: SupportedEnvironments::default(),
             universal_build_artifact_environments: SupportedEnvironments::default(),
-            universal_build_markers: Mutex::new(BTreeMap::new()),
             universal_build_context_markers: Mutex::new(BTreeMap::new()),
         }
     }
@@ -286,17 +283,6 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
-    /// Record the marker environments in which a source package can require building.
-    ///
-    /// Returns `true` if the marker environments for the package expanded.
-    pub fn add_universal_build_marker(&self, package: BuildPackageKey, marker: MarkerTree) -> bool {
-        let mut markers = self
-            .universal_build_markers
-            .lock()
-            .expect("universal build marker lock poisoned");
-        merge_marker(markers.entry(package), marker)
-    }
-
     /// Record the marker environments in which a build resolution context can require building.
     ///
     /// Returns `true` if the marker environments for the context expanded.
@@ -317,45 +303,17 @@ impl<'a> BuildDispatch<'a> {
         package: &BuildPackageKey,
         stage: BuildResolutionStage,
     ) -> Option<MarkerTree> {
-        if let Some(key) = self.build_resolution_context(package, stage) {
-            if let Some(marker) = self
-                .universal_build_context_markers
-                .lock()
-                .expect("universal build context marker lock poisoned")
-                .get(&key)
-                .copied()
-            {
-                return Some(marker);
-            }
-        }
-
-        self.universal_build_markers
+        let key = self.build_resolution_context(package, stage)?;
+        self.universal_build_context_markers
             .lock()
-            .expect("universal build marker lock poisoned")
-            .get(package)
+            .expect("universal build context marker lock poisoned")
+            .get(&key)
             .copied()
     }
 
     /// Return the collected build resolutions.
     pub fn build_resolutions(&self) -> &BuildResolutions {
         &self.build_resolutions
-    }
-
-    /// Record the active build resolution context for a source package.
-    ///
-    /// The context is assigned by the lockfile layer, which owns the serialized
-    /// resolution identity. Build dispatch only preserves the association while
-    /// backend setup resolves build requirements.
-    pub fn set_build_resolution_context(&self, context: BuildResolutionGraphKey) {
-        let stage = context.stage.unwrap_or(BuildResolutionStage::Build);
-        let mut contexts = self
-            .build_resolution_contexts
-            .lock()
-            .expect("build resolution context lock poisoned");
-        contexts
-            .entry(context.package.clone())
-            .or_default()
-            .insert(stage, context);
     }
 
     /// Record both active PEP 517 stage contexts for a source package.

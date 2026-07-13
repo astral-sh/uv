@@ -76,14 +76,6 @@ reason = "used by Pixi to inspect cached registry wheels"
 [[override]]
 lint = "hawk::unnecessary_public"
 crate = "uv_resolver"
-item = "python_requirement::PythonRequirement::from_marker_environment"
-kind = "inherent_method"
-level = "expect"
-reason = "used by Pixi to construct resolver inputs"
-
-[[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_resolver"
 item = "resolver::Resolver::<Provider, InstalledPackages>::new_custom_io"
 kind = "inherent_method"
 level = "expect"

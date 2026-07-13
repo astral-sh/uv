@@ -183,7 +183,7 @@ pub fn build_keys_match(left: &BuildPackageKey, right: &BuildPackageKey) -> bool
 
 impl BuildPackageSource {
     /// Construct a source discriminator from a [`SourceDist`].
-    pub fn from_source_dist(source: &SourceDist) -> Self {
+    fn from_source_dist(source: &SourceDist) -> Self {
         match source {
             SourceDist::Registry(dist) => {
                 Self::Registry(dist.index.without_credentials().as_ref().to_string())
@@ -289,15 +289,6 @@ pub enum BuildResolutionOperation {
 }
 
 impl BuildResolutionOperation {
-    /// Return the operation for a source distribution.
-    pub fn from_source_dist(source_dist: &SourceDist) -> Self {
-        if source_dist.is_editable() {
-            Self::Editable
-        } else {
-            Self::Wheel
-        }
-    }
-
     /// Return the serialized operation name.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -330,7 +321,7 @@ pub struct BuildResolutionGraphKey {
 
 impl BuildResolutionGraphKey {
     /// Create a package-only build resolution graph key.
-    pub fn package(package: BuildPackageKey) -> Self {
+    fn package(package: BuildPackageKey) -> Self {
         Self {
             package,
             operation: BuildResolutionOperation::Wheel,
@@ -338,33 +329,6 @@ impl BuildResolutionGraphKey {
             stage: None,
             target_marker: None,
         }
-    }
-
-    /// Create a context-qualified build resolution graph key.
-    pub fn context(package: BuildPackageKey, context: String) -> Self {
-        Self {
-            package,
-            operation: BuildResolutionOperation::Wheel,
-            context: Some(context),
-            stage: Some(BuildResolutionStage::Build),
-            target_marker: None,
-        }
-    }
-
-    /// Create a context-qualified build resolution graph key with target reachability.
-    pub fn context_with_marker(
-        package: BuildPackageKey,
-        context: String,
-        stage: BuildResolutionStage,
-        target_marker: Option<MarkerTree>,
-    ) -> Self {
-        Self::context_with_marker_and_operation(
-            package,
-            BuildResolutionOperation::Wheel,
-            context,
-            stage,
-            target_marker,
-        )
     }
 
     /// Create an operation- and context-qualified build resolution graph key with target
@@ -384,14 +348,6 @@ impl BuildResolutionGraphKey {
             target_marker,
         }
     }
-
-    /// Return a copy of the key with a new stage and context.
-    #[must_use]
-    pub fn with_stage(mut self, context: String, stage: BuildResolutionStage) -> Self {
-        self.context = Some(context);
-        self.stage = Some(stage);
-        self
-    }
 }
 
 /// Map of build resolution graph keys to their captured graphs.
@@ -408,22 +364,6 @@ fn get_unambiguous_key<'a, T>(
     let mut matches = map
         .iter()
         .filter(|(key, _)| build_keys_match(key, package))
-        .map(|(_, value)| value);
-    let first = matches.next()?;
-    matches.next().is_none().then_some(first)
-}
-
-fn get_unambiguous_graph<'a>(
-    map: &'a BuildResolutionGraphMap,
-    package: &BuildPackageKey,
-) -> Option<&'a BuildResolutionGraph> {
-    if let Some(value) = map.get(&BuildResolutionGraphKey::package(package.clone())) {
-        return Some(value);
-    }
-
-    let mut matches = map
-        .iter()
-        .filter(|(key, _)| build_keys_match(&key.package, package))
         .map(|(_, value)| value);
     let first = matches.next()?;
     matches.next().is_none().then_some(first)
@@ -760,28 +700,10 @@ impl BuildResolutions {
         graphs.insert(key, graph);
     }
 
-    /// Get the exact graph for a package key, or the only source-compatible graph when a dynamic
-    /// source package omits its version.
-    pub fn get_unambiguous(&self, package: &BuildPackageKey) -> Option<BuildResolutionGraph> {
-        let graphs = self.0.lock().unwrap();
-        get_unambiguous_graph(&graphs, package).cloned()
-    }
-
     /// Get the exact graph for a build resolution graph key.
     pub fn get(&self, key: &BuildResolutionGraphKey) -> Option<BuildResolutionGraph> {
         let graphs = self.0.lock().unwrap();
         graphs.get(key).cloned()
-    }
-
-    /// Get a legacy package-keyed snapshot of unqualified build resolutions.
-    pub fn snapshot(&self) -> BTreeMap<BuildPackageKey, BuildResolutionGraph> {
-        self.0
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|(key, _)| key.context.is_none())
-            .map(|(key, graph)| (key.package.clone(), graph.clone()))
-            .collect()
     }
 
     /// Get all captured build resolutions, including context-qualified graphs.
@@ -810,32 +732,63 @@ mod tests {
         )
     }
 
+    fn context_key(
+        package: BuildPackageKey,
+        context: String,
+        stage: BuildResolutionStage,
+        target_marker: Option<MarkerTree>,
+    ) -> BuildResolutionGraphKey {
+        BuildResolutionGraphKey::context_with_marker_and_operation(
+            package,
+            BuildResolutionOperation::Wheel,
+            context,
+            stage,
+            target_marker,
+        )
+    }
+
     #[test]
     fn build_resolutions_retain_contextual_graphs_for_same_package() {
         let package = package_key();
         let build_resolutions = BuildResolutions::default();
 
         build_resolutions.insert_key(
-            BuildResolutionGraphKey::context(package.clone(), "build:dep:wheel:one".to_string()),
+            context_key(
+                package.clone(),
+                "build:dep:wheel:one".to_string(),
+                BuildResolutionStage::Build,
+                None,
+            ),
             BuildResolutionGraph::default(),
         );
         build_resolutions.insert_key(
-            BuildResolutionGraphKey::context(package.clone(), "build:dep:wheel:two".to_string()),
+            context_key(
+                package.clone(),
+                "build:dep:wheel:two".to_string(),
+                BuildResolutionStage::Build,
+                None,
+            ),
             BuildResolutionGraph::default(),
         );
 
         let graphs = build_resolutions.snapshot_contexts();
         assert_eq!(graphs.len(), 2);
-        let one =
-            BuildResolutionGraphKey::context(package.clone(), "build:dep:wheel:one".to_string());
-        let two =
-            BuildResolutionGraphKey::context(package.clone(), "build:dep:wheel:two".to_string());
+        let one = context_key(
+            package.clone(),
+            "build:dep:wheel:one".to_string(),
+            BuildResolutionStage::Build,
+            None,
+        );
+        let two = context_key(
+            package.clone(),
+            "build:dep:wheel:two".to_string(),
+            BuildResolutionStage::Build,
+            None,
+        );
         assert!(graphs.contains_key(&one));
         assert!(graphs.contains_key(&two));
         assert!(build_resolutions.get(&one).is_some());
         assert!(build_resolutions.get(&two).is_some());
-        assert!(build_resolutions.get_unambiguous(&package).is_none());
-        assert!(build_resolutions.snapshot().is_empty());
     }
 
     #[test]
@@ -843,8 +796,13 @@ mod tests {
         let package = package_key();
         let build_resolutions = BuildResolutions::default();
         let context = "build:dep:wheel:one".to_string();
-        let first = BuildResolutionGraphKey::context(package.clone(), context.clone());
-        let second = BuildResolutionGraphKey::context_with_marker(
+        let first = context_key(
+            package.clone(),
+            context.clone(),
+            BuildResolutionStage::Build,
+            None,
+        );
+        let second = context_key(
             package,
             context,
             BuildResolutionStage::Bootstrap,
@@ -861,15 +819,15 @@ mod tests {
     }
 
     #[test]
-    fn build_resolutions_keep_legacy_package_keyed_snapshot() {
+    fn build_resolutions_keep_package_keyed_capture() {
         let package = package_key();
         let build_resolutions = BuildResolutions::default();
 
         build_resolutions.insert(package.clone(), BuildResolutionGraph::default());
 
-        assert!(build_resolutions.get_unambiguous(&package).is_some());
-        assert_eq!(build_resolutions.snapshot().len(), 1);
-        assert_eq!(build_resolutions.snapshot_contexts().len(), 1);
+        let graphs = build_resolutions.snapshot_contexts();
+        assert_eq!(graphs.len(), 1);
+        assert!(graphs.contains_key(&BuildResolutionGraphKey::package(package)));
     }
 
     #[test]
@@ -902,16 +860,9 @@ mod tests {
         assert_eq!(get_unambiguous_key(&only_first, &versionless), Some(&1));
         assert!(get_unambiguous_key(&only_first, &second).is_none());
 
-        let both = BTreeMap::from([(first.clone(), 1), (second.clone(), 2)]);
+        let both = BTreeMap::from([(first, 1), (second.clone(), 2)]);
         assert_eq!(get_unambiguous_key(&both, &versionless), Some(&1));
         assert_eq!(get_unambiguous_key(&both, &second), Some(&2));
-
-        let graphs = BTreeMap::from([(
-            BuildResolutionGraphKey::package(first),
-            BuildResolutionGraph::default(),
-        )]);
-        assert!(get_unambiguous_graph(&graphs, &versionless).is_some());
-        assert!(get_unambiguous_graph(&graphs, &second).is_none());
 
         let directory = BuildPackageKey::with_source(
             PackageName::from_str("workspace").expect("valid package name"),

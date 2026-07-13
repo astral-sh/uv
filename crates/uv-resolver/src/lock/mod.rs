@@ -1376,62 +1376,6 @@ impl Lock {
             })
             .collect_vec();
 
-        let mut build_resolution_contexts = BTreeMap::new();
-        let mut context_counts = BTreeMap::new();
-        for &(graph_key, _) in &build_resolution_graphs {
-            let parent_key = &graph_key.package;
-            let stage = graph_key.stage.unwrap_or(BuildResolutionStage::Build);
-            let package = self.packages.iter().find(|package| {
-                build_keys_match(&build_key_for_package(package, root), parent_key)
-            });
-            let operation = graph_key.operation;
-            let target = graph_key
-                .target_marker
-                .map(|marker| {
-                    UniversalMarker::from_combined(self.requires_python.complexify_markers(marker))
-                })
-                .and_then(|marker| {
-                    TargetSelector::from_universal_marker(marker, &self.requires_python)
-                })
-                .filter(|target| !target.is_empty())
-                .or_else(|| {
-                    package.and_then(|package| {
-                        build_resolution_target(build_markers, package, root, &self.requires_python)
-                    })
-                });
-            let id = if let Some(context) = graph_key.context.clone() {
-                context
-            } else {
-                let base = package.map_or_else(
-                    || {
-                        build_resolution_context_id_with_context(
-                            parent_key,
-                            operation,
-                            stage,
-                            target.as_ref(),
-                        )
-                    },
-                    |package| {
-                        build_resolution_context_id_for_package(
-                            package,
-                            operation,
-                            stage,
-                            target.as_ref(),
-                        )
-                    },
-                );
-                let count = context_counts.entry(base.clone()).or_insert(0usize);
-                let id = if *count == 0 {
-                    base
-                } else {
-                    format!("{base}:{}", *count + 1)
-                };
-                *count += 1;
-                id
-            };
-            build_resolution_contexts.insert(graph_key.clone(), id);
-        }
-
         // First pass: create all new Package entries (without dependencies) and
         // collect direct build requirements per parent.
         for &(graph_key, info) in &build_resolution_graphs {
@@ -2745,7 +2689,7 @@ impl Lock {
     }
 
     /// Returns the number of packages in the lockfile.
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.packages.len()
     }
 
@@ -6411,7 +6355,7 @@ impl Package {
     ///
     /// This is used for build dependency packages, which don't carry metadata
     /// (no transitive dependency tracking needed).
-    pub(crate) fn from_resolved_dist(
+    fn from_resolved_dist(
         resolved_dist: &ResolvedDist,
         hashes: &[HashDigest],
         root: &Path,
@@ -7318,11 +7262,6 @@ impl Package {
             Source::Git(_, git) => Some(&git.precise),
             _ => None,
         }
-    }
-
-    /// Returns the resolved build dependencies of the package.
-    pub fn build_dependencies(&self) -> &[BuildDependency] {
-        &self.build_dependencies
     }
 
     /// Return the fork markers for this package, if any.
@@ -9360,28 +9299,18 @@ impl BuildDependency {
         }
     }
 
-    /// Returns the package name.
-    pub fn name(&self) -> &PackageName {
-        &self.package_id.name
-    }
-
-    /// Returns the version.
-    pub fn version(&self) -> Option<&Version> {
-        self.package_id.version.as_ref()
-    }
-
     /// Returns the marker, if any.
-    pub fn marker(&self) -> Option<&MarkerTree> {
+    fn marker(&self) -> Option<&MarkerTree> {
         self.marker.as_ref()
     }
 
     /// Returns `true` if this dependency should match the selected runtime package.
-    pub fn match_runtime(&self) -> bool {
+    fn match_runtime(&self) -> bool {
         self.match_runtime
     }
 
     /// Returns the extras requested for this build dependency.
-    pub fn extras(&self) -> &BTreeSet<ExtraName> {
+    fn extras(&self) -> &BTreeSet<ExtraName> {
         &self.extras
     }
 
