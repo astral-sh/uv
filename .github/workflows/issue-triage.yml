@@ -34,38 +34,6 @@ jobs:
             --limit 1000 \
             --json name,description \
             > .issue-triage-labels.json
-          jq -r '
-            ["about", "after", "before", "being", "could", "does", "error", "failed", "fails",
-             "failure", "from", "have", "into", "issue", "should", "that", "then", "this",
-             "using", "what", "when", "where", "which", "while", "with", "without", "would"]
-              as $stopwords
-            | .title
-            | ascii_downcase
-            | scan("[[:alnum:]_.-]{4,}")
-            | select(. as $word | ($stopwords | index($word) | not))
-          ' .issue-triage-event.json \
-            | awk '!seen[$0]++ && count < 4 { print; count++ }' \
-            | while IFS= read -r query; do
-                for state in closed open; do
-                  gh search issues \
-                    --repo "$GITHUB_REPOSITORY" \
-                    --match title,body \
-                    --state "$state" \
-                    --limit 10 \
-                    --json number,title,body,state,url,labels \
-                    -- "$query" \
-                    | jq -c '.[] | .body = ((.body // "")[:2000])'
-                done
-              done \
-            | jq -s \
-                --argjson issue_number "$ISSUE_NUMBER" \
-                'reduce .[] as $issue ([];
-                  if $issue.number == $issue_number or any(.[]; .number == $issue.number)
-                  then .
-                  else . + [$issue]
-                  end
-                )' \
-            > .issue-triage-related-issues.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -73,9 +41,12 @@ jobs:
       - name: "Triage issue"
         id: triage
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          permission-profile: ":read-only"
+          codex-home: "agents/codex"
+          permission-profile: "issue-triage"
           safety-strategy: drop-sudo
           allow-users: "*"
           prompt-file: "agents/prompts/triage-issue.md"
