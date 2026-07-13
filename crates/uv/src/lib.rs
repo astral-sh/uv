@@ -2679,8 +2679,13 @@ async fn run_project(
                 .network_settings
                 .check_refresh_conflict(&args.refresh);
 
-            // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
+            // Reading a project version only accesses `pyproject.toml` or the lockfile.
+            let cache = if args.value.is_none() && args.bump.is_empty() {
+                cache
+            } else {
+                cache.init().await?
+            }
+            .with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
