@@ -22,9 +22,7 @@ existing issues and pull requests:
 Explain the important evidence for every item. Leave the array empty when no meaningful relationship
 was found, and summarize the searches performed in `related.search_scope`.
 
-Fill the remaining fields with only the most useful secondary triage details. Choose suggested
-labels only from `.issue-triage-labels.json`, but do not suggest the `duplicate` label. Use empty
-arrays when there is no useful information for an array field.
+Set `summary` to a concise overview of the closest relationships, or state that none were found.
 
 Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
 root cause that you have not confirmed from the repository.

@@ -44,27 +44,7 @@
       },
       "required": ["items", "search_scope"]
     },
-    "summary": { "type": "string" },
-    "missing_information": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "relevant_paths": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "suggested_labels": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "recommended_action": { "type": "string" }
+    "summary": { "type": "string" }
   },
-  "required": [
-    "related",
-    "summary",
-    "missing_information",
-    "relevant_paths",
-    "suggested_labels",
-    "recommended_action"
-  ]
+  "required": ["related", "summary"]
 }

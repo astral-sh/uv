@@ -29,11 +29,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author \
             > .issue-triage-event.json
-          gh label list \
-            --repo "$GITHUB_REPOSITORY" \
-            --limit 1000 \
-            --json name,description \
-            > .issue-triage-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
