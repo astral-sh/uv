@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use reqwest::StatusCode;
 
-use uv_client::MetadataFormat;
+use uv_client::{MetadataFormat, SimpleDetailRequirements};
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
@@ -179,14 +179,29 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         package_name: &'io PackageName,
         index: Option<&'io IndexMetadata>,
     ) -> PackageVersionsResult {
+        let exclude_newer = &self.exclude_newer;
+        let index_locations = self.index_locations;
         let result = self
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple_detail(
+                client.simple_detail_with_requirements(
                     package_name,
                     index.map(IndexMetadataRef::from),
                     self.capabilities,
+                    |index| {
+                        if exclude_newer
+                            .exclude_newer_package_for_index(
+                                package_name,
+                                index_locations.exclude_newer_for(index),
+                            )
+                            .is_some()
+                        {
+                            SimpleDetailRequirements::UPLOAD_TIME
+                        } else {
+                            SimpleDetailRequirements::empty()
+                        }
+                    },
                     semaphore,
                 )
             })

@@ -6247,6 +6247,7 @@ dependencies = [
  "astral_async_http_range_reader",
  "astral_async_zip",
  "async-trait",
+ "bitflags 2.13.0",
  "bytecheck",
  "fs-err",
  "futures",

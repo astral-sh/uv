@@ -21,7 +21,7 @@ use url::Url;
 use walkdir::WalkDir;
 use wiremock::{
     Mock, MockServer, ResponseTemplate,
-    matchers::{basic_auth, method, path},
+    matchers::{basic_auth, header, method, path},
 };
 
 use uv_fs::{PortablePath, Simplified};
@@ -3979,6 +3979,112 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
 
     hint: `setuptools` was filtered by `exclude-newer` to only include packages uploaded before 2018-10-09T00:00:00Z. The latest version satisfying the requirement is v69.2.0, published at 2024-03-13T11:20:54.103Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     "
+    );
+
+    Ok(())
+}
+
+/// Request the JSON Simple API when `exclude-newer` requires upload times.
+#[tokio::test]
+async fn exclude_newer_requests_json_simple_api() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let server = MockServer::start().await;
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )
+    .map_err(|()| anyhow!("Failed to convert wheel path to URL"))?;
+
+    Mock::given(method("GET"))
+        .and(path("/tqdm/"))
+        .and(header("Accept", "application/vnd.pypi.simple.v1+json"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                serde_json::json!({
+                    "name": "tqdm",
+                    "files": [{
+                        "filename": wheel_filename,
+                        "url": wheel_url,
+                        "hashes": {},
+                        "requires-python": ">=3.8",
+                        "upload-time": "2024-01-01T00:00:00Z"
+                    }]
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--index-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    Ok(())
+}
+
+/// Preserve HTML Simple API compatibility when `exclude-newer` is disabled for a package.
+#[tokio::test]
+async fn exclude_newer_package_disabled_accepts_html_simple_api() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
+    let server = MockServer::start().await;
+    let wheel_filename = "tqdm-1000.0.0-py3-none-any.whl";
+    let wheel_url = Url::from_file_path(
+        context
+            .workspace_root
+            .join("test/links")
+            .join(wheel_filename),
+    )
+    .map_err(|()| anyhow!("Failed to convert wheel path to URL"))?;
+
+    Mock::given(method("GET"))
+        .and(path("/tqdm/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(r#"<a href="{wheel_url}">{wheel_filename}</a>"#),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("tqdm")
+        .arg("--exclude-newer-package")
+        .arg("tqdm=false")
+        .arg("--index-url")
+        .arg(server.uri()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==1000.0.0
+    "
+    );
+
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].headers.get("Accept").unwrap(),
+        "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
     );
 
     Ok(())

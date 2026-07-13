@@ -309,12 +309,31 @@ impl RegistryClient {
     /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
     /// which the PyPI JSON API implements.
-    #[instrument(skip_all, fields(package = % package_name))]
     pub async fn simple_detail<'index>(
         &'index self,
         package_name: &PackageName,
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
+        download_concurrency: &Semaphore,
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        self.simple_detail_with_requirements(
+            package_name,
+            index,
+            capabilities,
+            |_| SimpleDetailRequirements::default(),
+            download_concurrency,
+        )
+        .await
+    }
+
+    /// Fetch package metadata from an index with per-index metadata requirements.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn simple_detail_with_requirements<'index>(
+        &'index self,
+        package_name: &PackageName,
+        index: Option<IndexMetadataRef<'index>>,
+        capabilities: &IndexCapabilities,
+        requirements: impl Fn(&IndexUrl) -> SimpleDetailRequirements + Sync,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
@@ -346,6 +365,7 @@ impl RegistryClient {
                                     index.url,
                                     capabilities,
                                     &status_code_strategy,
+                                    requirements(index.url),
                                 )
                                 .await?
                             {
@@ -392,6 +412,7 @@ impl RegistryClient {
                                         index.url,
                                         capabilities,
                                         &status_code_strategy,
+                                        requirements(index.url),
                                     )
                                     .await?
                                 {
@@ -507,6 +528,7 @@ impl RegistryClient {
         index: &IndexUrl,
         capabilities: &IndexCapabilities,
         status_code_strategy: &IndexStatusCodeStrategy,
+        requirements: SimpleDetailRequirements,
     ) -> Result<SimpleMetadataSearchOutcome, Error> {
         // Format the URL for PyPI.
         let mut url = index.url().clone();
@@ -549,8 +571,15 @@ impl RegistryClient {
         let result = if matches!(index, IndexUrl::Path(_)) {
             self.fetch_local_simple_detail(package_name, &url).await
         } else {
-            self.fetch_remote_simple_detail(package_name, &url, index, &cache_entry, cache_control)
-                .await
+            self.fetch_remote_simple_detail(
+                package_name,
+                &url,
+                index,
+                &cache_entry,
+                cache_control,
+                requirements,
+            )
+            .await
         };
 
         match result {
@@ -593,19 +622,16 @@ impl RegistryClient {
         index: &IndexUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
+        requirements: SimpleDetailRequirements,
     ) -> Result<OwnedArchive<SimpleDetailMetadata>, Error> {
         // In theory, we should be able to pass `MediaType::all()` to all registries, and as
         // unsupported media types should be ignored by the server. For now, we implement this
         // defensively to avoid issues with misconfigured servers.
-        let accept = if self
+        let is_pyx = self
             .pyx_token_store
             .as_ref()
-            .is_some_and(|token_store| token_store.is_known_url(index.url()))
-        {
-            MediaType::all()
-        } else {
-            MediaType::pypi()
-        };
+            .is_some_and(|token_store| token_store.is_known_url(index.url()));
+        let accept = simple_detail_accept(index, is_pyx, requirements);
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
@@ -1655,6 +1681,15 @@ impl IntoIterator for SimpleDetailMetadata {
     }
 }
 
+bitflags::bitflags! {
+    /// Metadata required from a Simple API project detail response.
+    #[derive(Debug, Default, Clone, Copy, Eq, PartialEq)]
+    pub struct SimpleDetailRequirements: u8 {
+        /// Request a representation that can include file upload times.
+        const UPLOAD_TIME = 1;
+    }
+}
+
 impl ArchivedSimpleDetailMetadata {
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &rkyv::Archived<SimpleDetailMetadatum>> {
         self.versions.iter()
@@ -1669,6 +1704,31 @@ impl ArchivedSimpleDetailMetadata {
     /// [PEP 792]: https://peps.python.org/pep-0792/
     pub fn project_status(&self) -> &rkyv::Archived<ProjectStatus> {
         &self.project_status
+    }
+}
+
+/// Return whether an index supports uv's non-standard `data-upload-time` HTML extension.
+fn supports_html_upload_time(index: &IndexUrl) -> bool {
+    let url = index.url();
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("download.pytorch.org")
+            || (host.eq_ignore_ascii_case("astral-sh.github.io")
+                && url.path().starts_with("/pytorch-mirror/"))
+    })
+}
+
+fn simple_detail_accept(
+    index: &IndexUrl,
+    is_pyx: bool,
+    requirements: SimpleDetailRequirements,
+) -> &'static str {
+    let requires_upload_time = requirements.contains(SimpleDetailRequirements::UPLOAD_TIME);
+    match (is_pyx, requires_upload_time) {
+        (true, true) => MediaType::all_with_upload_time(),
+        (true, false) => MediaType::all(),
+        (false, true) if supports_html_upload_time(index) => MediaType::pypi(),
+        (false, true) => MediaType::pypi_with_upload_time(),
+        (false, false) => MediaType::pypi(),
     }
 }
 
@@ -1701,11 +1761,24 @@ impl MediaType {
         "application/vnd.pypi.simple.v1+json, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
     }
 
+    /// Return the `Accept` header value for PyPI media types that support upload times.
+    #[inline]
+    const fn pypi_with_upload_time() -> &'static str {
+        // PEP 700 only defines upload times for the JSON representation.
+        "application/vnd.pypi.simple.v1+json"
+    }
+
     /// Return the `Accept` header value for all supported media types.
     #[inline]
     const fn all() -> &'static str {
         // See: https://peps.python.org/pep-0691/#version-format-selection
         "application/vnd.pyx.simple.v1+msgpack, application/vnd.pyx.simple.v1+json;q=0.9, application/vnd.pypi.simple.v1+json;q=0.8, application/vnd.pypi.simple.v1+html;q=0.2, text/html;q=0.01"
+    }
+
+    /// Return the `Accept` header value for all media types that support upload times.
+    #[inline]
+    const fn all_with_upload_time() -> &'static str {
+        "application/vnd.pyx.simple.v1+msgpack, application/vnd.pyx.simple.v1+json;q=0.9, application/vnd.pypi.simple.v1+json;q=0.8"
     }
 }
 
@@ -1766,6 +1839,32 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     type Error = Box<dyn std::error::Error>;
+
+    #[test]
+    fn upload_time_accept_headers() {
+        let requirements = super::SimpleDetailRequirements::UPLOAD_TIME;
+        for index in [
+            "https://download.pytorch.org/whl/cu130",
+            "https://astral-sh.github.io/pytorch-mirror/whl/cu130",
+        ] {
+            let index = IndexUrl::from_str(index).unwrap();
+            assert_eq!(
+                super::simple_detail_accept(&index, false, requirements),
+                super::MediaType::pypi()
+            );
+        }
+
+        for index in [
+            "https://pypi.org/simple",
+            "https://astral-sh.github.io/another-index/simple",
+        ] {
+            let index = IndexUrl::from_str(index).unwrap();
+            assert_eq!(
+                super::simple_detail_accept(&index, false, requirements),
+                super::MediaType::pypi_with_upload_time()
+            );
+        }
+    }
 
     async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
         let server = MockServer::start().await;

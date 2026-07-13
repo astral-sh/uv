@@ -1,7 +1,7 @@
 use tokio::sync::Semaphore;
 use tracing::debug;
 
-use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
+use uv_client::{MetadataFormat, RegistryClient, SimpleDetailRequirements, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     File, IndexCapabilities, IndexLocations, IndexMetadataRef, IndexUrl, RequiresPython,
@@ -122,10 +122,17 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .simple_detail(
+            .simple_detail_with_requirements(
                 package,
                 index.map(IndexMetadataRef::from),
                 self.capabilities,
+                |index| {
+                    if self.effective_exclude_newer(package, index).is_some() {
+                        SimpleDetailRequirements::UPLOAD_TIME
+                    } else {
+                        SimpleDetailRequirements::empty()
+                    }
+                },
                 download_concurrency,
             )
             .await

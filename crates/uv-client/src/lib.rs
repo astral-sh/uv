@@ -9,7 +9,7 @@ pub use error::{Error, ErrorKind, ProblemDetails, WrappedReqwestError};
 pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use registry_client::{
     Connectivity, MetadataFormat, RegistryClient, RegistryClientBuilder, SimpleDetailMetadata,
-    SimpleDetailMetadatum, SimpleIndexMetadata, VersionFiles,
+    SimpleDetailMetadatum, SimpleDetailRequirements, SimpleIndexMetadata, VersionFiles,
 };
 pub(crate) use retry::UvRetryableStrategy;
 pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
