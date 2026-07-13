@@ -18,10 +18,15 @@ Apply these rules:
 - Apply a feature-area override only when it is unambiguous: keep any change to a preview feature
   under `Preview features`, even when it fixes a bug; use `Python` for Python runtime or
   distribution changes; and move an entry from `Enhancements` or `Other changes` to `Performance`
-  only when performance is the primary intent of the local change. Triage other entries from
-  `Other changes` into a clear user-facing section or drop them if they are internal-only.
-- Prefer the generated wording. Reword an entry only when it is unclear, misleading, or inconsistent
-  with nearby releases. Make the smallest correction necessary and do not invent or broaden claims.
+  only when performance is the primary intent of the local change. Move an entry from
+  `Other changes` to a more specific section only when the local change unambiguously fits one. Keep
+  retained entries in `Other changes` when no established section fits and they describe user- or
+  ecosystem-relevant maintenance, such as MSRV or toolchain updates and public API compatibility for
+  downstream integrations.
+- Treat the generated wording as source material, not a preferred baseline. Rewrite retained entries
+  to make them clearer, more precise, and more user-facing. Expand internal shorthand and add
+  missing context when supported by the local changes. Preserve the original meaning and do not
+  invent or broaden claims. Avoid purely stylistic synonym changes.
 - Put the most significant user-facing entries first within each section and remove empty sections.
 
 Return only the complete replacement release section, beginning with its `## ` heading. Do not
