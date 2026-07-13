@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/session-start.sh"
+            "command": "bash agents/hooks/session-start.sh"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run scripts/hooks/post-edit-format.py"
+            "command": "uv run agents/hooks/post-edit-format.py"
           }
         ]
       }
