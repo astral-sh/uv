@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
+          codex-home: "agents/configs/codex-issue-triage"
           permission-profile: "issue-triage"
           safety-strategy: drop-sudo
           allow-users: "*"
