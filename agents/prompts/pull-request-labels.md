@@ -15,21 +15,23 @@ or replacing them. Use label names and descriptions as the primary guidance for 
 a label is ambiguous or has no description, inspect its recent use on pull requests and follow the
 repository's established convention rather than its generic meaning.
 
-Prioritize labels that describe the user-visible effect and the affected area. Recommend the
-smallest set that clearly describes the change: normally one primary change-type label plus only the
-most specific affected-area and feature-status labels, and usually no more than three semantic
-labels total. Use more only when the pull request has multiple independent user-visible effects, and
-do not add a broad label that merely describes an implementation detail already implied by a more
-specific label. Recommend `internal` for changes that are not user-facing, and distinguish bug
-fixes, enhancements, performance changes, documentation, testing, and CI changes using the
-repository's existing label conventions. Treat change-type labels and feature-status labels as
-orthogonal. When a change affects a preview feature, recommend `preview` in addition to the
-applicable change-type label, such as `bug` for a bug fix or `enhancement` for an improvement.
+Prioritize labels that describe the user-visible effect. Recommend exactly one semantic label in the
+typical case: the single label that best matches the repository's established primary
+classification. Do not automatically add labels for every affected area or implementation detail.
+Recommend additional semantic labels only when recent usage establishes that they are orthogonal,
+or when the pull request has multiple independent user-visible effects. Even then, choose the
+smallest set and usually no more than three semantic labels total. Recommend `internal` for changes
+that are not user-facing, and distinguish bug fixes, enhancements, performance changes,
+documentation, testing, and CI changes using the repository's existing label conventions. Treat
+`breaking` and feature-status labels as orthogonal when applicable. When a change affects a preview
+feature, recommend `preview` in addition to the applicable change-type label, such as `bug` for a bug
+fix or `enhancement` for an improvement.
 
 Infer `test:*`, `build:*`, and `coverage` CI-control labels from the changed code and the pull
-request's intent. Recommend a control label only when it materially selects appropriate test or
-build coverage for the pull request; do not infer it from a similarly named path alone. These
-CI-control labels are additional to the usual three-label semantic limit.
+request's intent. Treat these as rare opt-in controls: recommend one only with concrete evidence that
+it materially selects appropriate test or build coverage for the pull request, and do not infer it
+from a similarly named path alone. These CI-control labels are additional to the usual three-label
+semantic limit.
 
 Do not recommend `codex`, `bot:*`, `do-not-merge`, or issue-management labels.
 
