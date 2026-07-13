@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use crate::SourceDistExtension;
+use crate::{SourceDistExtension, normalized_package_name_matches};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uv_normalize::{InvalidNameError, PackageName};
@@ -138,17 +138,6 @@ impl SourceDistFilename {
             extension,
         })
     }
-}
-
-fn normalized_package_name_matches(actual: &str, expected: &PackageName) -> bool {
-    actual
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' => byte.to_ascii_lowercase(),
-            b'_' | b'.' => b'-',
-            _ => byte,
-        })
-        .eq(expected.as_ref().bytes())
 }
 
 impl Display for SourceDistFilename {

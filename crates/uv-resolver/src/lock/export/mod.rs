@@ -124,6 +124,10 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
+
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
@@ -514,15 +518,19 @@ fn conflict_marker_reachability<'lock>(
                     parent_marker.and(marker);
                 }
                 Edge::Optional { extra, marker, .. } => {
-                    // The optional extra is active for this edge itself, so add it before
-                    // resolving any active extras on the edge.
-                    if let Node::Package(parent) = graph[parent_index] {
+                    // The optional edge is only active when its extra is active. Preserve the
+                    // extra's reachability marker, since matching constraints can be omitted from
+                    // the dependency marker as redundant when the lockfile is written.
+                    let active_marker = if let Node::Package(parent) = graph[parent_index] {
                         let item = ConflictItem::from((parent.name().clone(), (*extra).clone()));
-                        parent_map.insert(item, parent_marker);
-                    }
+                        *parent_map.entry(item).or_insert(parent_marker)
+                    } else {
+                        parent_marker
+                    };
 
                     // Resolve any active extras on the edge.
-                    let marker = resolve_activated_extras(*marker, scope_package, &parent_map);
+                    let mut marker = resolve_activated_extras(*marker, scope_package, &parent_map);
+                    marker.and(active_marker);
 
                     // Propagate the edge to the known conflicts.
                     for value in parent_map.values_mut() {

@@ -25,15 +25,15 @@ pub(crate) fn resolution_markers(
 ) -> ResolverMarkerEnvironment {
     match (python_platform, python_version) {
         (Some(python_platform), Some(python_version)) => ResolverMarkerEnvironment::from(
-            python_version.markers(&python_platform.markers(interpreter.markers())),
+            python_version.markers(python_platform.markers(interpreter.markers().clone())),
         ),
         (Some(python_platform), None) => {
-            ResolverMarkerEnvironment::from(python_platform.markers(interpreter.markers()))
+            ResolverMarkerEnvironment::from(python_platform.markers(interpreter.markers().clone()))
         }
         (None, Some(python_version)) => {
-            ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers()))
+            ResolverMarkerEnvironment::from(python_version.markers(interpreter.markers().clone()))
         }
-        (None, None) => interpreter.resolver_marker_environment(),
+        (None, None) => interpreter.to_resolver_marker_environment(),
     }
 }
 
@@ -48,11 +48,14 @@ pub(crate) fn resolution_tags<'env>(
 
     let (platform, manylinux_compatible) = if let Some(python_platform) = python_platform {
         (
-            &python_platform.platform(),
+            python_platform.platform(),
             python_platform.manylinux_compatible(),
         )
     } else {
-        (interpreter.platform(), interpreter.manylinux_compatible())
+        (
+            interpreter.platform().clone(),
+            interpreter.manylinux_compatible(),
+        )
     };
 
     let version_tuple = if let Some(python_version) = python_version {

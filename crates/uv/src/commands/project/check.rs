@@ -28,8 +28,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment, ScriptInterpreter,
-    UniversalState, WorkspacePython, default_dependency_groups, validate_project_requires_python,
+    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment,
+    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::{ExitStatus, diagnostics, project};
@@ -294,14 +295,32 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
+
+        let marker_environment = venv.interpreter().to_resolver_marker_environment();
+        if ty_path.is_none()
+            && ty_version.is_none()
+            && result
+                .lock()
+                .dependency_selection(
+                    None,
+                    &PackageName::from_str("ty")?,
+                    marker_environment.markers(),
+                )
+                .map_err(anyhow::Error::msg)?
+                .root()
+                .is_some()
+        {
+            locked_ty_path = Some(
+                venv.scripts()
+                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX)),
+            );
+        }
 
         let target = InstallTarget::Script {
             script,
@@ -333,11 +352,9 @@ pub(crate) async fn check(
         {
             Ok(_) => {}
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -383,6 +400,7 @@ pub(crate) async fn check(
                 None,
                 cache,
                 DryRun::Disabled,
+                LinkErrorReporting::User,
                 printer,
             )
             .await?
@@ -466,11 +484,9 @@ pub(crate) async fn check(
         {
             Ok(result) => result,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::with_system_certs(
-                    client_builder.system_certs(),
-                )
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                return diagnostics::OperationDiagnostic::default()
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -514,13 +530,13 @@ pub(crate) async fn check(
                 let resolution = project::toolchain::resolution_from_lock(
                     project,
                     result.lock(),
-                    tool.package(),
+                    &tool,
                     &base_interpreter,
                     &settings.resolver.build_options,
                 )?;
                 project::sync::store_credentials_from_target(target, &client_builder)?;
                 let ty_state = state.fork();
-                let environment = match CachedEnvironment::from_resolution(
+                let environment = match CachedEnvironment::from_locked_resolution(
                     &resolution,
                     result
                         .lock()
@@ -540,11 +556,9 @@ pub(crate) async fn check(
                 {
                     Ok(environment) => environment,
                     Err(ProjectError::Operation(err)) => {
-                        return diagnostics::OperationDiagnostic::with_system_certs(
-                            client_builder.system_certs(),
-                        )
-                        .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::default()
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -584,11 +598,9 @@ pub(crate) async fn check(
             {
                 Ok(_) => {}
                 Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                    return diagnostics::OperationDiagnostic::default()
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }

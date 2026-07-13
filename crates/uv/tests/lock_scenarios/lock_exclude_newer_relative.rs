@@ -1388,7 +1388,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @r"
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1396,10 +1396,10 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     ----- stderr -----
     error: Failed to parse `uv.lock`
       Caused by: TOML parse error at line 5, column 1
-      |
-    5 | [options]
-      | ^^^^^^^^^
-    data did not match any variant of untagged enum Helper
+          |
+        5 | [options]
+          | ^^^^^^^^^
+        data did not match any variant of untagged enum Helper
     ");
 
     Ok(())

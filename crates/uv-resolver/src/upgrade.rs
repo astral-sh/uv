@@ -49,7 +49,7 @@ impl UpgradePackages {
                 if let Some(groups) = upgrade.groups() {
                     // Check package-level dependency groups (the standard case for projects with
                     // a `[project]` table).
-                    for package in lock.packages() {
+                    for package in lock.runtime_packages() {
                         for (group_name, dependencies) in package.resolved_dependency_groups() {
                             if groups.contains(group_name) {
                                 for dependency in dependencies {

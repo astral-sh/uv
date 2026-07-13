@@ -2,8 +2,6 @@ use std::fmt::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use owo_colors::OwoColorize;
-
 use uv_cache::{Cache, Refresh};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
@@ -22,10 +20,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment, ScriptInterpreter,
-    UniversalState, WorkspacePython,
+    LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptEnvironment,
+    ScriptInterpreter, UniversalState, WorkspacePython,
 };
-use crate::commands::{ExitStatus, diagnostics};
+use crate::commands::{ExitStatus, UvError, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, ResolverSettings};
 
@@ -187,6 +185,7 @@ pub(crate) async fn metadata(
                         Some(false),
                         cache,
                         DryRun::Disabled,
+                        LinkErrorReporting::User,
                         printer,
                     )
                     .await?
@@ -236,15 +235,10 @@ pub(crate) async fn metadata(
 
             print_metadata(&export, printer)
         }
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }

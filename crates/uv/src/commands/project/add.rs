@@ -23,10 +23,10 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    Identifier, Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement,
+    Identifier, Index, IndexLocations, IndexName, IndexUrl, NameRequirementSpecification,
+    Requirement, RequirementSource, UnresolvedRequirement,
 };
-use uv_fs::{LockedFile, LockedFileError, Simplified};
+use uv_fs::{CWD, LockedFile, LockedFileError, Simplified};
 use uv_git::store_credentials;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -54,8 +54,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState, WorkspacePython, default_dependency_groups, init_script_python_requirement,
+    LinkErrorReporting, PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState, WorkspacePython, default_dependency_groups,
+    init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
@@ -318,6 +319,7 @@ pub(crate) async fn add(
                 active,
                 cache,
                 DryRun::Disabled,
+                LinkErrorReporting::User,
                 printer,
             )
             .await?
@@ -686,11 +688,15 @@ pub(crate) async fn add(
 
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
-        let urls = IndexUrls::from_indexes(indexes);
-        let mut indexes = urls.defined_indexes().collect::<Vec<_>>();
+        let root_dir = match &target {
+            AddTarget::Script(_, _) => CWD.as_path(),
+            AddTarget::Project(project, _) => project.root(),
+        };
+        let locations = IndexLocations::new(indexes, Vec::new(), false);
+        let mut indexes = locations.defined_indexes().collect::<Vec<_>>();
         indexes.reverse();
         for index in indexes {
-            toml.add_index(index)?;
+            toml.add_index(index, root_dir)?;
         }
     }
 
@@ -779,9 +785,7 @@ pub(crate) async fn add(
             match err {
                 ProjectError::Operation(err) => {
                     let standard_library_hint = standard_library_hint(&err, &edits, python_minor);
-                    let diagnostic = diagnostics::OperationDiagnostic::with_system_certs(
-                        client_builder.system_certs(),
-                    );
+                    let diagnostic = diagnostics::OperationDiagnostic::default();
                     let diagnostic = if let Some(hint) = standard_library_hint {
                         diagnostic.with_hint(hint)
                     } else {
@@ -925,7 +929,7 @@ fn edits(
                 let credentials = uv_auth::Credentials::from_url(&git)?;
                 if let Some(credentials) = credentials {
                     debug!("Caching credentials for: {git}");
-                    store_credentials(RepositoryUrl::new(&git), credentials);
+                    store_credentials(RepositoryUrl::new(git.clone()), credentials);
 
                     // Redact the credentials.
                     git.remove_credentials();

@@ -18,7 +18,6 @@ fn no_package() {
     exit_code: 0
     ----- stdout -----
 
-
     ----- stderr -----
     "
     );

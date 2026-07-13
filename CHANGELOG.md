@@ -3,6 +3,156 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.11.28
+
+Released on 2026-07-07.
+
+### Security
+
+This release updates our ZIP library, [astral-async-zip](https://github.com/astral-sh/rs-async-zip), to v0.0.20, which includes 15 changes that harden our ZIP handling against [parser differentials](https://www.brainonfire.net/blog/2022/04/11/what-is-parser-mismatch/). uv may reject ZIP archives with malformed or ambiguous content that were previously accepted.
+
+See the [upstream commits](https://github.com/astral-sh/rs-async-zip/compare/v0.0.18...v0.0.20) for a full list of changes.
+
+### Python
+
+- Upgrade GraalPy to 25.1.3 ([#20069](https://github.com/astral-sh/uv/pull/20069))
+
+### Enhancements
+
+- Improve trace logs for unexpected error chains ([#20220](https://github.com/astral-sh/uv/pull/20220))
+- Move lockfile update guidance to a hint ([#20219](https://github.com/astral-sh/uv/pull/20219))
+- Preserve indentation for multiline error causes ([#20156](https://github.com/astral-sh/uv/pull/20156))
+- Render user errors with their cause chains ([#20217](https://github.com/astral-sh/uv/pull/20217))
+- Route final command errors through the printer to respect `-q` and `-qq` ([#20163](https://github.com/astral-sh/uv/pull/20163))
+- Use standard rendering for `uv build` errors ([#20159](https://github.com/astral-sh/uv/pull/20159))
+- Use standard rendering for tool requirement errors ([#20160](https://github.com/astral-sh/uv/pull/20160))
+
+### Performance
+
+- Only compile bytecode for installed distributions in `uv pip install` ([#19914](https://github.com/astral-sh/uv/pull/19914))
+- Avoid allocating URL-safe Git revisions ([#20194](https://github.com/astral-sh/uv/pull/20194))
+- Avoid allocating canonical Python request strings ([#20193](https://github.com/astral-sh/uv/pull/20193))
+- Avoid allocating custom Astral mirror URLs ([#20204](https://github.com/astral-sh/uv/pull/20204))
+- Avoid allocating expanded compatibility tags ([#20190](https://github.com/astral-sh/uv/pull/20190))
+- Avoid allocating shell strings that need no escaping ([#20196](https://github.com/astral-sh/uv/pull/20196))
+- Avoid allocating static ABI descriptions ([#20201](https://github.com/astral-sh/uv/pull/20201))
+- Avoid allocating static Windows executable names ([#20200](https://github.com/astral-sh/uv/pull/20200))
+- Avoid allocating static dependency table names ([#20199](https://github.com/astral-sh/uv/pull/20199))
+- Avoid allocating static platform triple components ([#20195](https://github.com/astral-sh/uv/pull/20195))
+- Avoid allocating static resolver report labels ([#20198](https://github.com/astral-sh/uv/pull/20198))
+- Avoid allocating static unavailable-version messages ([#20197](https://github.com/astral-sh/uv/pull/20197))
+- Avoid allocating unchanged Python download architectures ([#20202](https://github.com/astral-sh/uv/pull/20202))
+- Avoid allocating unchanged paths during case normalization ([#20203](https://github.com/astral-sh/uv/pull/20203))
+- Avoid allocations when expanding group conflicts ([#20211](https://github.com/astral-sh/uv/pull/20211))
+- Avoid allocations when formatting requirements ([#20206](https://github.com/astral-sh/uv/pull/20206))
+- Avoid cloning credential lookup services ([#20210](https://github.com/astral-sh/uv/pull/20210))
+- Avoid cloning dry-run distributions ([#20209](https://github.com/astral-sh/uv/pull/20209))
+- Avoid cloning owned dependency metadata ([#20212](https://github.com/astral-sh/uv/pull/20212))
+- Avoid redundant direct URL clones ([#20207](https://github.com/astral-sh/uv/pull/20207))
+- Create metadata version errors lazily ([#20205](https://github.com/astral-sh/uv/pull/20205))
+- Optimize expanded tag compatibility checks ([#20171](https://github.com/astral-sh/uv/pull/20171))
+- Optimize parsing of single-digit three-part versions ([#20118](https://github.com/astral-sh/uv/pull/20118))
+
+### Bug fixes
+
+- Avoid overflow when computing HTTP cache age ([#20178](https://github.com/astral-sh/uv/pull/20178))
+- Respect `--upgrade` when `upgrade-package` is configured ([#19955](https://github.com/astral-sh/uv/pull/19955))
+- Support `uv tree` in dependency-group-only projects ([#20167](https://github.com/astral-sh/uv/pull/20167))
+- Treat cache entries as stale at exact expiration ([#20183](https://github.com/astral-sh/uv/pull/20183))
+
+## 0.11.27
+
+Released on 2026-07-06.
+
+### Enhancements
+
+- Continue on ignored errors when fetching wheel metadata ([#12255](https://github.com/astral-sh/uv/pull/12255))
+- Use caching for `--python-downloads-json-url` ([#16749](https://github.com/astral-sh/uv/pull/16749))
+
+### Preview features
+
+- Discover extensionless shebang scripts in `uv workspace list --scripts` ([#20099](https://github.com/astral-sh/uv/pull/20099))
+
+### Performance
+
+- Avoid full site-packages scans for direct reinstalls ([#20119](https://github.com/astral-sh/uv/pull/20119))
+- Avoid redundant pyproject parsing ([#20076](https://github.com/astral-sh/uv/pull/20076))
+- Cache default dependency markers when reading locks ([#20125](https://github.com/astral-sh/uv/pull/20125))
+- Enable SIMD-accelerated TOML parsing ([#20079](https://github.com/astral-sh/uv/pull/20079))
+- Intern `requires-python` specifiers in Simple API parsing ([#20104](https://github.com/astral-sh/uv/pull/20104))
+- Read cache entries into exact-sized buffers ([#20120](https://github.com/astral-sh/uv/pull/20120))
+- Reduce VersionSpecifiers parsing allocations ([#20105](https://github.com/astral-sh/uv/pull/20105))
+- Reduce site-packages scan allocation overhead ([#20087](https://github.com/astral-sh/uv/pull/20087))
+- Reuse package names when parsing wheel filenames ([#20110](https://github.com/astral-sh/uv/pull/20110))
+- Sort Simple API files after grouping ([#20112](https://github.com/astral-sh/uv/pull/20112))
+
+### Bug fixes
+
+- Always emit `packages` table for pylock.toml ([#20145](https://github.com/astral-sh/uv/pull/20145))
+- Avoid blank line for empty `uv pip tree` ([#20062](https://github.com/astral-sh/uv/pull/20062))
+- Encode hashes in file paths ([#19807](https://github.com/astral-sh/uv/pull/19807))
+- Error on a registry uv.lock package without a version instead of panicking ([#19855](https://github.com/astral-sh/uv/pull/19855))
+- Preserve conditional extra markers in exports ([#20148](https://github.com/astral-sh/uv/pull/20148))
+- Skip the ambiguous authority check for file transport VCS URLs ([#20086](https://github.com/astral-sh/uv/pull/20086))
+- Sync index format when `uv add --index` updates an existing index URL ([#19818](https://github.com/astral-sh/uv/pull/19818))
+
+### Other changes
+
+- Re-add `pub` APIs used in Pixi ([#20074](https://github.com/astral-sh/uv/pull/20074))
+- Update Rust toolchain to 1.96.1 ([#20103](https://github.com/astral-sh/uv/pull/20103))
+
+## 0.11.26
+
+Released on 2026-06-30.
+
+### Performance
+
+- Adapt uv to IDs-only PubGrub dependencies ([#20048](https://github.com/astral-sh/uv/pull/20048))
+- Avoid allocations in `ForkMap::contains` ([#20023](https://github.com/astral-sh/uv/pull/20023))
+- Reuse resolver work across PubGrub iterations ([#20020](https://github.com/astral-sh/uv/pull/20020))
+- Speed up candidate selection for disjoint ranges ([#20026](https://github.com/astral-sh/uv/pull/20026))
+
+### Bug fixes
+
+- Warn when the build cache is inside the source directory ([#20056](https://github.com/astral-sh/uv/pull/20056))
+
+## 0.11.25
+
+Released on 2026-06-26.
+
+### Security
+
+This release updates our tar library, [astral-tokio-tar](https://github.com/astral-sh/tokio-tar), to v0.6.3, which includes over 20 changes that harden our tar handling against [parser differentials](https://www.brainonfire.net/blog/2022/04/11/what-is-parser-mismatch/). uv may reject source distributions with malformed or ambiguous content that were previously accepted.
+
+See the [upstream commits](https://github.com/astral-sh/tokio-tar/compare/v0.6.2...v0.6.3) for a full list of changes.
+
+### Enhancements
+
+- Add a full "lockfile" to tool receipts ([#18937](https://github.com/astral-sh/uv/pull/18937))
+- Allow scoped overrides to add dependencies ([#19974](https://github.com/astral-sh/uv/pull/19974))
+- Avoid writing redundant lockfile markers with `tool.uv.environments` ([#19933](https://github.com/astral-sh/uv/pull/19933))
+- Factor supported environments out of lockfile markers ([#19969](https://github.com/astral-sh/uv/pull/19969))
+- Recommend our own build backend in the build frontend ([#19994](https://github.com/astral-sh/uv/pull/19994))
+- Reject wheels with multiple .dist-info directories ([#19986](https://github.com/astral-sh/uv/pull/19986))
+- Simplify dependency markers under parent reachability ([#19971](https://github.com/astral-sh/uv/pull/19971))
+- Support scoped dependency exclusions ([#19977](https://github.com/astral-sh/uv/pull/19977))
+- Support scoped dependency overrides ([#19970](https://github.com/astral-sh/uv/pull/19970))
+- Explain why files are skipped in registry index parsing ([#19983](https://github.com/astral-sh/uv/pull/19983))
+
+### Preview features
+
+- Add `uv workspace list --scripts` ([#20009](https://github.com/astral-sh/uv/pull/20009))
+- Support centralised environments in `uv venv` ([#19912](https://github.com/astral-sh/uv/pull/19912))
+- Use locked ty versions in `uv check` ([#19884](https://github.com/astral-sh/uv/pull/19884))
+- Add centralized storage of project environments ([#18214](https://github.com/astral-sh/uv/pull/18214))
+- Verify lockfile hashes before reusing a cached ty in `uv check` ([#19995](https://github.com/astral-sh/uv/pull/19995))
+- Use locked dependency selection for `uv check --script` ([#19989](https://github.com/astral-sh/uv/pull/19989))
+
+### Bug fixes
+
+- Preserve standalone markers in workspace metadata ([#20011](https://github.com/astral-sh/uv/pull/20011))
+- Reject `uv build` if the cache dir is enclosed ([#19991](https://github.com/astral-sh/uv/pull/19991))
+
 ## 0.11.24
 
 Released on 2026-06-23.
@@ -26,7 +176,6 @@ Released on 2026-06-23.
 - Reapply "Fix transparent Python upgrades in project environments" ([#19928](https://github.com/astral-sh/uv/pull/19928))
 - Clean up partial tool entrypoint installs ([#19966](https://github.com/astral-sh/uv/pull/19966))
 - Fix relocatable `activate.fish` and broaden Fish version support ([#19856](https://github.com/astral-sh/uv/pull/19856))
-
 
 ## 0.11.23
 
@@ -767,5 +916,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
 
 <!-- prettier-ignore-end -->
-
-

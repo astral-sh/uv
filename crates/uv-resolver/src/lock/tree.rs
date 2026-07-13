@@ -66,8 +66,7 @@ impl<'env> TreeDisplay<'env> {
         let members: BTreeSet<&PackageId> = if lock.members().is_empty() {
             lock.root().into_iter().map(|package| &package.id).collect()
         } else {
-            lock.packages
-                .iter()
+            lock.runtime_packages()
                 .filter_map(|package| {
                     if lock.members().contains(&package.id.name) {
                         Some(&package.id)
@@ -140,6 +139,9 @@ impl<'env> TreeDisplay<'env> {
                 })
                 .flatten()
             {
+                if !dep.is_runtime_edge() {
+                    continue;
+                }
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }

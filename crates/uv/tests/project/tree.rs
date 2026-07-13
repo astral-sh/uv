@@ -5,9 +5,45 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use url::Url;
 
+#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
+#[test]
+fn tree_centralized_environment_no_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    fs_err::remove_dir_all(&context.venv)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tree()
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("centralized-project-envs"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+
+    ----- stderr -----
+    warning: The `centralized-project-envs` feature has no effect when `--no-cache` is enabled
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    ");
+
+    assert!(!context.venv.exists());
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
 #[test]
 fn nested_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -49,6 +85,7 @@ fn nested_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn nested_platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -178,6 +215,7 @@ fn invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn frozen() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -240,6 +278,7 @@ fn frozen() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -278,6 +317,7 @@ fn outdated() -> Result<()> {
 /// Uses idna which has releases at:
 /// - 3.6: 2023-11-25
 /// - 3.7: 2024-04-11
+#[cfg(feature = "test-universal")]
 #[test]
 fn outdated_exclude_newer_relative() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -335,6 +375,89 @@ fn outdated_exclude_newer_relative() -> Result<()> {
     Ok(())
 }
 
+/// Exclude a dependency only when it is declared by a matching package version.
+#[test]
+fn scoped_exclude_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "sniffio==1.3.1"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "anyio" }, dependencies = ["idna"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["sniffio"] },
+        ]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // The structured exclusion is persisted in the lockfile manifest.
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The exact-version entry takes precedence over the all-versions entry, removing AnyIO's edge
+    // to Sniffio without removing the direct requirement while retaining the edge to IDNA.
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v3.7.0
+    │   └── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    // The version-gated exclusion is ignored when the parent version does not match.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "sniffio==1.3.1"]
+
+        [tool.uv]
+        exclude-dependencies = [
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["sniffio"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── anyio v3.7.0
+    │   ├── idna v3.6
+    │   └── sniffio v1.3.1
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
 #[test]
 fn platform_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -460,6 +583,7 @@ fn platform_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -506,6 +630,7 @@ fn repeated_dependencies() -> Result<()> {
 
 /// In this case, a package is included twice at the same version, but pointing to different direct
 /// URLs.
+#[cfg(feature = "test-universal")]
 #[test]
 fn repeated_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -632,6 +757,7 @@ fn dev_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn dev_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -689,6 +815,7 @@ fn dev_dependencies_inverted() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -739,6 +866,7 @@ fn optional_dependencies() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn optional_dependencies_inverted() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -804,6 +932,7 @@ fn optional_dependencies_inverted() -> Result<()> {
 /// When a package is required both as a plain dep and as a dep with extras (e.g., from a
 /// dependency group), `uv tree` should not display extra-conditional dependencies for the plain
 /// occurrence.
+#[cfg(feature = "test-universal")]
 #[test]
 fn dep_and_group_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1218,6 +1347,7 @@ fn group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1304,6 +1434,7 @@ fn cycle() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_orphaned_roots() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1336,6 +1467,7 @@ fn cycle_no_orphaned_roots() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_no_infinite_loop() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1379,6 +1511,7 @@ fn cycle_no_infinite_loop() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1423,6 +1556,7 @@ fn cycle_invert() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1469,6 +1603,7 @@ fn cycle_depth_boundary_no_premature_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_invert_deep() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1521,6 +1656,7 @@ fn cycle_invert_deep() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn cycle_depth_no_dedupe() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1563,6 +1699,7 @@ fn cycle_depth_no_dedupe() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1643,6 +1780,7 @@ fn workspace_dev() -> Result<()> {
 }
 
 /// An inverted tree should only follow consumers that activate the extra required by the path.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_extra_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1724,6 +1862,7 @@ fn invert_preserves_extra_attribution() -> Result<()> {
 }
 
 /// Member dependency groups describe the root member, not consumers of that member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_dependency_group_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1790,6 +1929,7 @@ fn invert_preserves_dependency_group_attribution() -> Result<()> {
 }
 
 /// Universal inverted trees should not join edges from mutually exclusive environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1870,6 +2010,7 @@ fn invert_preserves_marker_attribution() -> Result<()> {
 
 /// Universal inverted trees should include every version that directly depends on a package in a
 /// satisfiable marker environment.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_marker_split_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1953,6 +2094,7 @@ fn invert_preserves_marker_split_versions() -> Result<()> {
 }
 
 /// Declared conflicts are world knowledge for the encoded extra and group markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2074,6 +2216,7 @@ fn invert_preserves_conflict_marker_attribution() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2084,6 +2227,42 @@ fn non_project() -> Result<()> {
         [tool.uv.workspace]
         members = []
 
+        [dependency-groups]
+        async = ["anyio"]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--group").arg("async"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    anyio v4.3.0 (group: async)
+    ├── idna v3.6
+    └── sniffio v1.3.1
+
+    ----- stderr -----
+    warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
+
+    Ok(())
+}
+
+/// A pyproject.toml with only `[dependency-groups]` (no `[project]`, no `[tool.uv.workspace]`)
+/// is valid per PEP 735, and `uv tree` must handle it.
+#[cfg(feature = "test-universal")]
+#[test]
+fn dependency_groups_only() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
         [dependency-groups]
         async = ["anyio"]
     "#,
@@ -2202,6 +2381,7 @@ fn non_project_group_selection_with_extras() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn non_project_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2675,6 +2855,7 @@ fn script() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn only_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2757,6 +2938,7 @@ fn only_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn show_sizes() -> Result<()> {
     let context = uv_test::test_context!("3.12");

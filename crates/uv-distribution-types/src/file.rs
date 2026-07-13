@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -31,7 +32,7 @@ pub struct File {
     pub dist_info_metadata: bool,
     pub filename: SmallString,
     pub hashes: HashDigests,
-    pub requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<Arc<VersionSpecifiers>>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
     // annoying to do so with rkyv. Since we only use this field for doing

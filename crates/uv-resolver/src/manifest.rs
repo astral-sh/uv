@@ -15,42 +15,42 @@ use crate::{DependencyMode, Exclusions, ResolverEnvironment};
 #[derive(Clone, Debug)]
 pub struct Manifest {
     /// The direct requirements for the project.
-    pub(crate) requirements: Vec<Requirement>,
+    pub(super) requirements: Vec<Requirement>,
 
     /// The constraints for the project.
-    pub(crate) constraints: Constraints,
+    pub(super) constraints: Constraints,
 
     /// The overrides for the project.
-    pub(crate) overrides: Overrides,
+    pub(super) overrides: Overrides,
 
     /// The dependency excludes for the project.
-    pub(crate) excludes: Excludes,
+    pub(super) excludes: Excludes,
 
     /// The preferences for the project.
     ///
     /// These represent "preferred" versions of a given package. For example, they may be the
     /// versions that are already installed in the environment, or already pinned in an existing
     /// lockfile.
-    pub(crate) preferences: Preferences,
+    pub(super) preferences: Preferences,
 
     /// The name of the project.
-    pub(crate) project: Option<PackageName>,
+    pub(super) project: Option<PackageName>,
 
     /// Members of the project's workspace.
-    pub(crate) workspace_members: BTreeSet<PackageName>,
+    pub(super) workspace_members: BTreeSet<PackageName>,
 
     /// The installed packages to exclude from consideration during resolution.
     ///
     /// These typically represent packages that are being upgraded or reinstalled
     /// and should be pulled from a remote source like a package index.
-    pub(crate) exclusions: Exclusions,
+    pub(super) exclusions: Exclusions,
 
     /// The lookahead requirements for the project.
     ///
     /// These represent transitive dependencies that should be incorporated when making
     /// determinations around "allowed" versions (for example, "allowed" URLs or "allowed"
     /// pre-release versions).
-    pub(crate) lookaheads: Vec<RequestedRequirements>,
+    pub(super) lookaheads: Vec<RequestedRequirements>,
 }
 
 impl Manifest {
@@ -126,6 +126,34 @@ impl Manifest {
             .chain(self.overrides(env, mode))
     }
 
+    /// Return all requirements that affect manifest-wide candidate selection policy.
+    ///
+    /// Scoped overrides are included even when their scope is not selected. Whether a scoped
+    /// override applies is only known during resolution, after pre-release and yanked-version
+    /// policy has already been initialized.
+    pub(crate) fn candidate_selection_requirements<'a>(
+        &'a self,
+        env: &'a ResolverEnvironment,
+        mode: DependencyMode,
+    ) -> impl Iterator<Item = Cow<'a, Requirement>> + 'a {
+        self.requirements(env, mode).chain(
+            self.overrides
+                .scoped_requirements()
+                .filter(|(package, version, requirement)| {
+                    !self.excludes.contains_for_scope(
+                        &self.overrides,
+                        package,
+                        *version,
+                        &requirement.name,
+                    )
+                })
+                .map(|(_, _, requirement)| Cow::Borrowed(requirement))
+                .filter(move |requirement| {
+                    requirement.evaluate_markers(env.marker_environment(), &[])
+                }),
+        )
+    }
+
     /// Like [`Self::requirements`], but without the overrides.
     pub(crate) fn requirements_no_overrides<'a>(
         &'a self,
@@ -139,8 +167,18 @@ impl Manifest {
                     .iter()
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
-                            .filter(|requirement| !self.excludes.contains(&requirement.name))
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())
@@ -187,7 +225,7 @@ impl Manifest {
             // Include all direct and transitive requirements, with constraints and overrides applied.
             DependencyMode::Transitive => Either::Left(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -197,7 +235,7 @@ impl Manifest {
             // Include direct requirements, with constraints and overrides applied.
             DependencyMode::Direct => Either::Right(
                 self.overrides
-                    .requirements()
+                    .global_requirements()
                     .filter(|requirement| !self.excludes.contains(&requirement.name))
                     .filter(move |requirement| {
                         requirement.evaluate_markers(env.marker_environment(), &[])
@@ -231,7 +269,18 @@ impl Manifest {
                     .filter(|lookahead| lookahead.direct())
                     .flat_map(move |lookahead| {
                         self.overrides
-                            .apply(lookahead.requirements())
+                            .apply_for(
+                                lookahead.package(),
+                                lookahead.version(),
+                                lookahead.requirements(),
+                            )
+                            .filter(|requirement| {
+                                !self.excludes.contains_for(
+                                    lookahead.package(),
+                                    lookahead.version(),
+                                    &requirement.name,
+                                )
+                            })
                             .filter(move |requirement| {
                                 requirement
                                     .evaluate_markers(env.marker_environment(), lookahead.extras())

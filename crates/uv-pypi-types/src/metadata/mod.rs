@@ -16,7 +16,7 @@ use uv_pep508::Pep508Error;
 
 use crate::VerbatimParsedUrl;
 
-pub use build_requires::BuildRequires;
+pub use build_requires::{BackendPath, BuildRequires, BuildSystem};
 pub use metadata_resolver::ResolutionMetadata;
 pub use metadata10::Metadata10;
 pub use metadata23::{Keywords, Metadata23, ProjectUrls};
@@ -112,12 +112,9 @@ impl<'a> Headers<'a> {
 
 /// Parse a `Metadata-Version` field into a (major, minor) tuple.
 fn parse_version(metadata_version: &str) -> Result<(u8, u8), MetadataError> {
-    let (major, minor) =
-        metadata_version
-            .split_once('.')
-            .ok_or(MetadataError::InvalidMetadataVersion(
-                metadata_version.to_string(),
-            ))?;
+    let (major, minor) = metadata_version
+        .split_once('.')
+        .ok_or_else(|| MetadataError::InvalidMetadataVersion(metadata_version.to_string()))?;
     let major = major
         .parse::<u8>()
         .map_err(|_| MetadataError::InvalidMetadataVersion(metadata_version.to_string()))?;

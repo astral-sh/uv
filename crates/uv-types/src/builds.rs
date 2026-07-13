@@ -4,8 +4,12 @@ use std::sync::{Arc, Mutex};
 
 use papaya::{HashMap, ResizeMode};
 
+use uv_cache_info::{CacheInfo, CacheInfoError};
 use uv_configuration::{BuildKind, NoSources};
-use uv_distribution_types::{Requirement, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{
+    BuildInfo, ConfigSettings, Dist, ExtraBuildRequires, ExtraBuildVariables, Name,
+    PackageConfigSettings, Requirement, Resolution, ResolvedDist, SourceDist,
+};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -154,6 +158,27 @@ pub enum BuildPackageSource {
     Directory(String),
     Editable(String),
     Virtual(String),
+}
+
+/// Return whether two build package keys refer to the same source package.
+///
+/// Dynamic source packages can omit their version, and a workspace source can be represented as
+/// either editable or non-editable depending on the build operation.
+pub fn build_keys_match(left: &BuildPackageKey, right: &BuildPackageKey) -> bool {
+    left.name == right.name
+        && (left.version == right.version || left.version.is_none() || right.version.is_none())
+        && match (left.source.as_ref(), right.source.as_ref()) {
+            (left, right) if left == right => true,
+            (
+                Some(BuildPackageSource::Directory(left)),
+                Some(BuildPackageSource::Editable(right)),
+            )
+            | (
+                Some(BuildPackageSource::Editable(left)),
+                Some(BuildPackageSource::Directory(right)),
+            ) => left == right,
+            _ => false,
+        }
 }
 
 impl BuildPackageSource {
@@ -380,30 +405,12 @@ fn get_unambiguous_key<'a, T>(
         return Some(value);
     }
 
-    let mut version_matches = map
+    let mut matches = map
         .iter()
-        .filter(|(key, _)| key.name == package.name && key.version == package.version)
+        .filter(|(key, _)| build_keys_match(key, package))
         .map(|(_, value)| value);
-
-    if let Some(first) = version_matches.next() {
-        if version_matches.next().is_none() {
-            return Some(first);
-        }
-        return None;
-    }
-
-    if package.version.is_none() {
-        let mut name_matches = map
-            .iter()
-            .filter(|(key, _)| key.name == package.name)
-            .map(|(_, value)| value);
-        let first = name_matches.next()?;
-        if name_matches.next().is_none() {
-            return Some(first);
-        }
-    }
-
-    None
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }
 
 fn get_unambiguous_graph<'a>(
@@ -414,32 +421,12 @@ fn get_unambiguous_graph<'a>(
         return Some(value);
     }
 
-    let mut version_matches = map
+    let mut matches = map
         .iter()
-        .filter(|(key, _)| {
-            key.package.name == package.name && key.package.version == package.version
-        })
+        .filter(|(key, _)| build_keys_match(&key.package, package))
         .map(|(_, value)| value);
-
-    if let Some(first) = version_matches.next() {
-        if version_matches.next().is_none() {
-            return Some(first);
-        }
-        return None;
-    }
-
-    if package.version.is_none() {
-        let mut name_matches = map
-            .iter()
-            .filter(|(key, _)| key.package.name == package.name)
-            .map(|(_, value)| value);
-        let first = name_matches.next()?;
-        if name_matches.next().is_none() {
-            return Some(first);
-        }
-    }
-
-    None
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }
 
 /// Locked build dependency resolutions, indexed by package key.
@@ -538,6 +525,126 @@ impl LockedBuildResolutions {
     pub fn get(&self, package: &BuildPackageKey) -> Option<&LockedBuildResolution> {
         get_unambiguous_key(&self.0, package)
     }
+
+    /// Return a stable digest for the complete locked build environment and any nested source
+    /// builds it contains.
+    pub fn cache_key(
+        &self,
+        package: &BuildPackageKey,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
+    ) -> Result<Option<String>, CacheInfoError> {
+        self.cache_key_with_stack(
+            package,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
+            &mut BTreeSet::new(),
+        )
+    }
+
+    fn cache_key_with_stack(
+        &self,
+        package: &BuildPackageKey,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
+        stack: &mut BTreeSet<BuildPackageKey>,
+    ) -> Result<Option<String>, CacheInfoError> {
+        let Some(resolution) = self.get(package) else {
+            return Ok(None);
+        };
+        if !stack.insert(package.clone()) {
+            return Ok(None);
+        }
+
+        let mut distributions = resolution
+            .resolution
+            .hashes()
+            .map(|(distribution, hashes)| -> Result<_, CacheInfoError> {
+                let mut hashes = hashes.to_vec();
+                hashes.sort();
+
+                let (build_info, cache_info, nested) =
+                    if let ResolvedDist::Installable { dist, version } = distribution
+                        && let Dist::Source(source) = dist.as_ref()
+                    {
+                        let name = distribution.name();
+                        let settings = config_settings_package.get(name).map_or_else(
+                            || config_settings.clone(),
+                            |settings| settings.clone().merge(config_settings.clone()),
+                        );
+                        let build_info = BuildInfo::from_settings(
+                            settings,
+                            extra_build_requires.get(name).cloned().unwrap_or_default(),
+                            extra_build_variables.get(name).cloned(),
+                        )
+                        .cache_shard();
+                        let nested_package = BuildPackageKey::from_source_dist(
+                            name.clone(),
+                            source.version().cloned().or_else(|| version.clone()),
+                            Some(source),
+                        );
+                        let nested = self.cache_key_with_stack(
+                            &nested_package,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                            stack,
+                        )?;
+                        let cache_info = match source {
+                            SourceDist::Path(source) => {
+                                Some(CacheInfo::from_file(&source.install_path)?)
+                            }
+                            SourceDist::Directory(source) => {
+                                Some(CacheInfo::from_directory(&source.install_path)?)
+                            }
+                            SourceDist::Registry(_)
+                            | SourceDist::DirectUrl(_)
+                            | SourceDist::GitDirectory(_)
+                            | SourceDist::GitPath(_) => None,
+                        }
+                        .as_ref()
+                        .map(uv_cache_key::hash_digest);
+                        (build_info, cache_info, nested)
+                    } else {
+                        (None, None, None)
+                    };
+
+                let (kind, filename) = match distribution {
+                    ResolvedDist::Installable { dist, .. } => (
+                        match dist.as_ref() {
+                            Dist::Built(_) => "wheel",
+                            Dist::Source(_) => "sdist",
+                        },
+                        dist.file().map(|file| file.filename.to_string()),
+                    ),
+                    ResolvedDist::Installed { .. } => ("installed", None),
+                };
+
+                Ok((
+                    distribution.to_string(),
+                    distribution
+                        .index()
+                        .map(|index| index.without_credentials().as_ref().to_string()),
+                    hashes,
+                    kind,
+                    filename,
+                    build_info,
+                    cache_info,
+                    nested,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        stack.remove(package);
+        distributions.sort();
+        Ok(Some(uv_cache_key::hash_digest(&distributions)))
+    }
 }
 
 /// A list of `(name, version)` pairs representing preferred build dependency versions.
@@ -575,8 +682,8 @@ impl BuildResolutions {
         graphs.insert(key, graph);
     }
 
-    /// Get the exact graph for a package key, or the only graph with a matching
-    /// name and version when source identity is unavailable.
+    /// Get the exact graph for a package key, or the only source-compatible graph when a dynamic
+    /// source package omits its version.
     pub fn get_unambiguous(&self, package: &BuildPackageKey) -> Option<BuildResolutionGraph> {
         let graphs = self.0.lock().unwrap();
         get_unambiguous_graph(&graphs, package).cloned()
@@ -608,6 +715,13 @@ impl BuildResolutions {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+
+    use uv_distribution_filename::{SourceDistExtension, WheelFilename};
+    use uv_distribution_types::{
+        BuiltDist, ConfigSettingPackageEntry, File, FileLocation, IndexUrl, Node,
+        RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    };
+    use uv_pypi_types::HashDigests;
 
     use super::*;
 
@@ -678,5 +792,202 @@ mod tests {
         assert!(build_resolutions.get_unambiguous(&package).is_some());
         assert_eq!(build_resolutions.snapshot().len(), 1);
         assert_eq!(build_resolutions.snapshot_contexts().len(), 1);
+    }
+
+    #[test]
+    fn build_resolution_lookup_respects_source_identity() {
+        let name = PackageName::from_str("dep").expect("valid package name");
+        let version = Some(Version::from_str("1.0.0").expect("valid version"));
+        let first = BuildPackageKey::with_source(
+            name.clone(),
+            version.clone(),
+            Some(BuildPackageSource::Registry(
+                "https://one.example/simple".to_string(),
+            )),
+        );
+        let second = BuildPackageKey::with_source(
+            name.clone(),
+            version,
+            Some(BuildPackageSource::Registry(
+                "https://two.example/simple".to_string(),
+            )),
+        );
+        let versionless = BuildPackageKey::with_source(
+            name,
+            None,
+            Some(BuildPackageSource::Registry(
+                "https://one.example/simple".to_string(),
+            )),
+        );
+
+        let only_first = BTreeMap::from([(first.clone(), 1)]);
+        assert_eq!(get_unambiguous_key(&only_first, &versionless), Some(&1));
+        assert!(get_unambiguous_key(&only_first, &second).is_none());
+
+        let both = BTreeMap::from([(first.clone(), 1), (second.clone(), 2)]);
+        assert_eq!(get_unambiguous_key(&both, &versionless), Some(&1));
+        assert_eq!(get_unambiguous_key(&both, &second), Some(&2));
+
+        let graphs = BTreeMap::from([(
+            BuildResolutionGraphKey::package(first),
+            BuildResolutionGraph::default(),
+        )]);
+        assert!(get_unambiguous_graph(&graphs, &versionless).is_some());
+        assert!(get_unambiguous_graph(&graphs, &second).is_none());
+
+        let directory = BuildPackageKey::with_source(
+            PackageName::from_str("workspace").expect("valid package name"),
+            Some(Version::from_str("1.0.0").expect("valid version")),
+            Some(BuildPackageSource::Directory(
+                "file:///workspace".to_string(),
+            )),
+        );
+        let editable = BuildPackageKey::with_source(
+            PackageName::from_str("workspace").expect("valid package name"),
+            None,
+            Some(BuildPackageSource::Editable(
+                "file:///workspace".to_string(),
+            )),
+        );
+        assert!(build_keys_match(&directory, &editable));
+    }
+
+    #[test]
+    fn locked_build_cache_key_includes_registry_without_credentials() {
+        fn locked_resolution(index: &str, filename: &str) -> LockedBuildResolution {
+            let name = PackageName::from_str("helper").expect("valid package name");
+            let version = Version::from_str("1.0.0").expect("valid version");
+            let index = IndexUrl::from_str(index).expect("valid index");
+            let file = Box::new(File {
+                dist_info_metadata: false,
+                filename: filename.into(),
+                hashes: HashDigests::empty(),
+                requires_python: None,
+                size: None,
+                upload_time_utc_ms: None,
+                url: FileLocation::new(
+                    format!("https://files.example/{filename}").into(),
+                    &"https://files.example/".into(),
+                ),
+                yanked: None,
+                zstd: None,
+            });
+            let dist = if Path::new(filename)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("whl"))
+            {
+                Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                    wheels: vec![RegistryBuiltWheel {
+                        filename: WheelFilename::from_str(filename).expect("valid wheel filename"),
+                        file,
+                        index,
+                    }],
+                    best_wheel_index: 0,
+                    sdist: None,
+                }))
+            } else {
+                Dist::Source(SourceDist::Registry(RegistrySourceDist {
+                    name,
+                    version: version.clone(),
+                    file,
+                    ext: SourceDistExtension::TarGz,
+                    index,
+                    wheels: vec![],
+                }))
+            };
+            let mut graph = petgraph::graph::DiGraph::new();
+            graph.add_node(Node::Dist {
+                dist: ResolvedDist::Installable {
+                    dist: Arc::new(dist),
+                    version: Some(version),
+                },
+                hashes: HashDigests::empty(),
+                install: true,
+            });
+            LockedBuildResolution::new(Resolution::new(graph), Vec::new(), None)
+        }
+
+        let package = package_key();
+        let cache_key = |index, filename, package_settings| {
+            LockedBuildResolutions::new(BTreeMap::from([(
+                package.clone(),
+                locked_resolution(index, filename),
+            )]))
+            .cache_key(
+                &package,
+                &ConfigSettings::default(),
+                package_settings,
+                &ExtraBuildRequires::default(),
+                &ExtraBuildVariables::default(),
+            )
+            .expect("readable cache info")
+        };
+
+        let default_settings = PackageConfigSettings::default();
+        let custom_settings =
+            [ConfigSettingPackageEntry::from_str("helper:mode=custom").expect("valid setting")]
+                .into_iter()
+                .collect();
+
+        assert_eq!(
+            cache_key(
+                "https://user:password@one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://two.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &custom_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0-py3-none-any.whl",
+                &default_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0-py3-none-any.whl",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "helper-1.0.0-py3-none-macosx_11_0_arm64.whl",
+                &default_settings
+            )
+        );
     }
 }

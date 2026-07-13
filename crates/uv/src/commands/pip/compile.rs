@@ -14,8 +14,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildIsolation, BuildOptions, Concurrency, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, NoSources, PipCompileFormat, Reinstall, Upgrade,
+    BuildIsolation, BuildOptions, Concurrency, Constraints, ExcludeDependency, ExtrasSpecification,
+    IndexStrategy, NoBinary, NoBuild, NoSources, Override, PipCompileFormat, Reinstall, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -23,7 +23,7 @@ use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, HashGeneration, Index, IndexLocations,
     NameRequirementSpecification, Origin, PackageConfigSettings, Requirement, RequiresPython,
-    UnresolvedRequirementSpecification, Verbatim,
+    Verbatim,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -68,8 +68,8 @@ pub(crate) async fn pip_compile(
     excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
-    overrides_from_workspace: Vec<Requirement>,
-    excludes_from_workspace: Vec<uv_normalize::PackageName>,
+    overrides_from_workspace: Vec<Override<Requirement>>,
+    excludes_from_workspace: Vec<ExcludeDependency>,
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     required_environments: SupportedEnvironments,
@@ -204,6 +204,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        mut override_dependencies,
         excludes,
         pylock,
         source_trees,
@@ -225,6 +226,8 @@ pub(crate) async fn pip_compile(
     )
     .await?;
 
+    override_dependencies.extend(overrides_from_workspace);
+
     // Reject `pylock.toml` files, which are valid outputs but not inputs.
     if pylock.is_some() {
         return Err(anyhow!(
@@ -242,17 +245,7 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    let overrides: Vec<UnresolvedRequirementSpecification> = overrides
-        .iter()
-        .cloned()
-        .chain(
-            overrides_from_workspace
-                .into_iter()
-                .map(UnresolvedRequirementSpecification::from),
-        )
-        .collect();
-
-    let excludes: Vec<PackageName> = excludes
+    let excludes: Vec<ExcludeDependency> = excludes
         .into_iter()
         .chain(excludes_from_workspace)
         .collect();
@@ -578,6 +571,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        override_dependencies,
         excludes,
         source_trees,
         project,
@@ -607,11 +601,9 @@ pub(crate) async fn pip_compile(
     {
         Ok((resolution, _)) => resolution,
         Err(err) => {
-            return diagnostics::OperationDiagnostic::with_system_certs(
-                client_builder.system_certs(),
-            )
-            .report(err)
-            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            return diagnostics::OperationDiagnostic::default()
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 

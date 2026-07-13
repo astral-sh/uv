@@ -139,7 +139,8 @@ impl ManagedPythonInstallations {
     }
 
     /// Create a temporary Python installation directory.
-    pub fn temp() -> Result<Self, Error> {
+    #[cfg(all(test, unix))]
+    pub(crate) fn temp() -> Result<Self, Error> {
         Ok(Self::from_path(
             StateStore::temp()?.bucket(StateBucket::ManagedPython),
         ))
@@ -829,23 +830,23 @@ impl PythonMinorVersionLink {
                 .is_ok_and(|target| verbatim_path(&target) == verbatim_path(&self.target_directory))
         };
 
-        #[cfg(unix)]
-        {
-            self.symlink_directory
-                .symlink_metadata()
-                .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                && points_to_target()
-        }
-        #[cfg(windows)]
-        {
-            self.symlink_directory
-                .symlink_metadata()
-                .is_ok_and(|metadata| {
-                    // Check that this is a reparse point, which indicates this
-                    // is a symlink or junction.
-                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
-                })
-                && points_to_target()
+        cfg_select! {
+            unix => {
+                self.symlink_directory
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
+                    && points_to_target()
+            },
+            windows => {
+                self.symlink_directory
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| {
+                        // Check that this is a reparse point, which indicates this
+                        // is a symlink or junction.
+                        (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0) != 0
+                    })
+                    && points_to_target()
+            },
         }
     }
 }

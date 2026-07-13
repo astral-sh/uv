@@ -252,8 +252,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { target = "runtime:1" },
     ]
     dependencies = [
-        { name = "idna", marker = "python_full_version < '3.12'" },
-        { name = "sniffio", marker = "python_full_version < '3.12'" },
+        { name = "idna" },
+        { name = "sniffio" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770, upload-time = "2023-12-16T17:06:57.709Z" }
     wheels = [
@@ -268,8 +268,8 @@ fn root_package_splits_transitive_too() -> Result<()> {
         { target = "runtime:0" },
     ]
     dependencies = [
-        { name = "idna", marker = "python_full_version >= '3.12'" },
-        { name = "sniffio", marker = "python_full_version >= '3.12'" },
+        { name = "idna" },
+        { name = "sniffio" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
     wheels = [
@@ -296,7 +296,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b1" }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" }, marker = "python_full_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { url = "https://files.pythonhosted.org/packages/9b/dd/b3c12c6d707058fa947864b67f0c4e0c39ef8610988d7baea9578f3c48f3/iniconfig-1.1.1-py2.py3-none-any.whl" } },
     ]
 
     [package.metadata]
@@ -307,7 +307,7 @@ fn root_package_splits_transitive_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b2" }
     dependencies = [
-        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }, marker = "python_full_version >= '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" } },
     ]
 
     [package.metadata]
@@ -457,8 +457,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         { target = "runtime:1" },
     ]
     dependencies = [
-        { name = "idna", marker = "python_full_version < '3.12'" },
-        { name = "sniffio", marker = "python_full_version < '3.12'" },
+        { name = "idna" },
+        { name = "sniffio" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/2d/b8/7333d87d5f03247215d86a86362fd3e324111788c6cdd8d2e6196a6ba833/anyio-4.2.0.tar.gz", hash = "sha256:e1875bb4b4e2de1669f4bc7869b6d3f54231cdced71605e6e64c9be77e3be50f", size = 158770, upload-time = "2023-12-16T17:06:57.709Z" }
     wheels = [
@@ -473,8 +473,8 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
         { target = "runtime:0" },
     ]
     dependencies = [
-        { name = "idna", marker = "python_full_version >= '3.12'" },
-        { name = "sniffio", marker = "python_full_version >= '3.12'" },
+        { name = "idna" },
+        { name = "sniffio" },
     ]
     sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
     wheels = [
@@ -486,7 +486,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b1" }
     dependencies = [
-        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+        { name = "iniconfig", version = "1.1.1", source = { registry = "https://pypi.org/simple" } },
     ]
 
     [package.metadata]
@@ -497,7 +497,7 @@ fn root_package_splits_other_dependencies_too() -> Result<()> {
     version = "0.1.0"
     source = { directory = "b2" }
     dependencies = [
-        { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+        { name = "iniconfig", version = "2.0.0", source = { registry = "https://pypi.org/simple" } },
     ]
 
     [package.metadata]

@@ -1,17 +1,24 @@
 use anyhow::Result;
+#[cfg(feature = "test-universal")]
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+#[cfg(feature = "test-universal")]
 use url::Url;
 
 use uv_fs::Simplified;
+#[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
+#[cfg(feature = "test-universal")]
 use uv_test::packse::PackseServer;
-#[cfg(feature = "test-git")]
+use uv_test::uv_snapshot;
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 use uv_test::{READ_ONLY_GITHUB_TOKEN, decode_token};
-use uv_test::{download_to_disk, uv_snapshot, venv_bin_path};
+#[cfg(feature = "test-universal")]
+use uv_test::{download_to_disk, venv_bin_path};
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_wheel_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -144,6 +151,7 @@ fn lock_wheel_registry() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sdist_registry() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -238,8 +246,8 @@ fn lock_sdist_registry() -> Result<()> {
 }
 
 /// Lock a Git requirement using `tool.uv.sources`.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -508,8 +516,8 @@ fn lock_sdist_git() -> Result<()> {
 }
 
 /// Lock a Git requirement using PEP 508.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -602,8 +610,8 @@ fn lock_sdist_git_subdirectory() -> Result<()> {
 }
 
 /// Lock a Git requirement using PEP 508.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git_pep508() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -837,8 +845,8 @@ fn lock_sdist_git_pep508() -> Result<()> {
 }
 
 /// Lock a Git requirement using `tool.uv.sources` with a short revision.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git_short_rev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -945,8 +953,8 @@ fn lock_sdist_git_short_rev() -> Result<()> {
 }
 
 /// Lock a Git requirement that points to a pre-built source archive within a repository.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git_archive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1064,8 +1072,8 @@ fn lock_sdist_git_archive() -> Result<()> {
 }
 
 /// Reject a Git source archive when Git LFS was requested but could not be initialized.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_sdist_git_archive_missing_lfs() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1104,8 +1112,8 @@ fn lock_sdist_git_archive_missing_lfs() -> Result<()> {
 }
 
 /// Lock a Git requirement that points to a pre-built wheel within a repository.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_wheel_git_archive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1225,8 +1233,8 @@ fn lock_wheel_git_archive() -> Result<()> {
 }
 
 /// Reject a Git wheel archive when Git LFS was requested but could not be initialized.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1265,6 +1273,7 @@ fn lock_wheel_git_archive_missing_lfs() -> Result<()> {
 }
 
 /// Lock a requirement from a direct URL to a wheel.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_wheel_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1419,28 +1428,31 @@ fn lock_wheel_url() -> Result<()> {
 }
 
 /// Lock a requirement from a direct URL to a source distribution.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sdist_url() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(
+    pyproject_toml.write_str(&formatdoc! {
         r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz"]
+        dependencies = ["a @ {sdist_url}"]
         "#,
-    )?;
+        sdist_url = server.file_url("a-1.0.0.tar.gz"),
+    })?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     let lock = context.read("uv.lock");
@@ -1458,66 +1470,21 @@ fn lock_sdist_url() -> Result<()> {
         exclude-newer = "2024-03-25T00:00:00Z"
 
         [[package]]
-        name = "anyio"
-        version = "4.3.0"
-        source = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }
-        dependencies = [
-            { name = "idna" },
-            { name = "sniffio" },
-        ]
-        sdist = { hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" }
-
-        [package.metadata]
-        requires-dist = [
-            { name = "anyio", extras = ["trio"], marker = "extra == 'test'" },
-            { name = "coverage", extras = ["toml"], marker = "extra == 'test'", specifier = ">=7" },
-            { name = "exceptiongroup", marker = "python_full_version < '3.11'", specifier = ">=1.0.2" },
-            { name = "exceptiongroup", marker = "extra == 'test'", specifier = ">=1.2.0" },
-            { name = "hypothesis", marker = "extra == 'test'", specifier = ">=4.0" },
-            { name = "idna", specifier = ">=2.8" },
-            { name = "packaging", marker = "extra == 'doc'" },
-            { name = "psutil", marker = "extra == 'test'", specifier = ">=5.9" },
-            { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
-            { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.6.1" },
-            { name = "sniffio", specifier = ">=1.1" },
-            { name = "sphinx", marker = "extra == 'doc'", specifier = ">=7" },
-            { name = "sphinx-autodoc-typehints", marker = "extra == 'doc'", specifier = ">=1.2.0" },
-            { name = "sphinx-rtd-theme", marker = "extra == 'doc'" },
-            { name = "trio", marker = "extra == 'trio'", specifier = ">=0.23" },
-            { name = "trustme", marker = "extra == 'test'" },
-            { name = "typing-extensions", marker = "python_full_version < '3.11'", specifier = ">=4.1" },
-            { name = "uvloop", marker = "platform_python_implementation == 'CPython' and sys_platform != 'win32' and extra == 'test'", specifier = ">=0.17" },
-        ]
-        provides-extras = ["doc", "test", "trio"]
-
-        [[package]]
-        name = "idna"
-        version = "3.6"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
-        ]
+        name = "a"
+        version = "1.0.0"
+        source = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz" }
+        sdist = { hash = "sha256:3d2b4c28a4e112f3a1cef1db4dc5efa33fcbbcc38bc11ccc80321097db86c097" }
 
         [[package]]
         name = "project"
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "anyio" },
+            { name = "a" },
         ]
 
         [package.metadata]
-        requires-dist = [{ name = "anyio", url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz" }]
-
-        [[package]]
-        name = "sniffio"
-        version = "1.3.1"
-        source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
-        ]
+        requires-dist = [{ name = "a", url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz" }]
         "#
         );
     });
@@ -1529,7 +1496,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // Re-run with `--check --offline`. We cannot refresh direct URL metadata without network
@@ -1540,7 +1507,7 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // Install from the lockfile.
@@ -1550,11 +1517,9 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
-     + idna==3.6
-     + sniffio==1.3.1
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0 (from http://[LOCALHOST]/files/a-1.0.0.tar.gz)
     ");
 
     // Re-install from the lockfile.
@@ -1564,13 +1529,14 @@ fn lock_sdist_url() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Checked 3 packages in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     Ok(())
 }
 
 /// Lock a requirement from a direct URL to a source distribution, with a subdirectory.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sdist_url_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1708,6 +1674,7 @@ fn lock_sdist_url_subdirectory() -> Result<()> {
 }
 
 /// Lock a requirement from a direct URL to a source distribution, with a subdirectory.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1842,6 +1809,7 @@ fn lock_sdist_url_subdirectory_pep508() -> Result<()> {
 }
 
 /// Lock a project with an extra. When resolving, all extras should be included.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1986,6 +1954,7 @@ fn lock_project_extra() -> Result<()> {
 }
 
 /// Lock a project with `uv.tool.override-dependencies`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_overrides() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2044,7 +2013,233 @@ fn lock_project_with_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Lock a project with `tool.uv.override-dependencies` scoped to a package version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            "idna==3.1",
+            # A bare override must remain a global override when round-tripping the lockfile.
+            "sniffio",
+            # The package-scoped override takes precedence for AnyIO's dependency.
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        overrides = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = [{ name = "idna", specifier = "==3.2" }] },
+            { name = "idna", specifier = "==3.1" },
+            { name = "sniffio" },
+        ]
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload-time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.2"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/cb/38/4c4d00ddfa48abe616d7e572e02a04273603db446975ab46bbcd36552005/idna-3.2.tar.gz", hash = "sha256:467fbad99067910785144ce333826c71fb0e63a425657295239737f7ecd125f3", size = 243962, upload-time = "2021-05-29T16:53:32.008Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a", size = 59633, upload-time = "2021-05-29T16:53:30.337Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.2
+     + sniffio==1.3.1
+    ");
+
+    // A package-scoped override does not replace a direct requirement for the same dependency.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "idna==3.6"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and your project depends on anyio==3.7.0, we can conclude that your project depends on idna==3.2.
+          And because your project depends on idna==3.6, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    // A version-gated override is ignored for other versions of the parent package.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0", "idna==3.6"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.6.2" }, dependencies = ["idna==3.2"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated idna v3.2 -> v3.6
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - idna==3.2
+     + idna==3.6
+    ");
+
+    Ok(())
+}
+
+/// Reject conflicting overrides scoped to the same package version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_conflicting_scoped_overrides() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.3"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio==3.7.0 depends on idna==3.2 and idna==3.3, we can conclude that anyio==3.7.0 cannot be used.
+          And because your project depends on anyio==3.7.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.override-dependencies` that reference `tool.uv.sources`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_override_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2102,7 +2297,205 @@ fn lock_project_with_override_sources() -> Result<()> {
     Ok(())
 }
 
+/// Reject a URL override scoped to a package version.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna @ https://files.pythonhosted.org/packages/d7/77/ff688d1504cdc4db2a938e2b7b9adee5dd52e34efbd2431051efc9984de9/idna-3.2-py3-none-any.whl"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Scoped override for `anyio` cannot use a URL or path source for `idna`; scoped overrides currently support version specifiers only
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with a pre-release pin from a scoped override.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["pandas==2.2.3"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pandas", version = "2.2.3" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── pandas v2.2.3
+        ├── numpy v2.4.0rc1
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Do not allow an excluded scoped override to opt a direct dependency into pre-releases.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_excluded_scoped_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.13"
+        dependencies = ["numpy>=2.3", "pandas==2.2.3"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "pandas" }, dependencies = ["numpy==2.4.0rc1"] },
+        ]
+        exclude-dependencies = [
+            { package = { name = "pandas" }, dependencies = ["numpy"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── numpy v2.3.5
+    └── pandas v2.2.3
+        ├── python-dateutil v2.9.0.post0
+        │   └── six v1.17.0
+        ├── pytz v2025.2
+        └── tzdata v2025.3
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Lock a project with an explicitly pinned yanked release from a scoped override.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_yank() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["requests==2.31.0"]
+
+        [tool.uv]
+        constraint-dependencies = ["urllib3>=2.0,<2.0.1"]
+        override-dependencies = [
+            { package = { name = "requests", version = "2.31.0" }, dependencies = ["urllib3==2.0.0"] },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    warning: `urllib3==2.0.0` is yanked (reason: "Truncated response bodies when streaming a large compressed body. Upgrade to at least 2.0.2 (See: https://github.com/urllib3/urllib3/issues/3009)")
+    "###);
+
+    Ok(())
+}
+
+/// Reject a scoped override from an explicit index.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "anyio", version = "3.7.0" }, dependencies = ["idna==3.2"] },
+        ]
+
+        [tool.uv.sources]
+        idna = { index = "custom" }
+
+        [[tool.uv.index]]
+        name = "custom"
+        url = "https://example.com/simple"
+        explicit = true
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Scoped override for `anyio` cannot use an explicit index for `idna`; scoped overrides currently support version specifiers only
+    ");
+
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.exclude-dependencies`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_excludes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2293,13 +2686,16 @@ fn lock_project_with_excludes() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
 /// Lock a project with `uv.tool.constraint-dependencies`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2355,6 +2751,7 @@ fn lock_project_with_constraints() -> Result<()> {
 }
 
 /// Lock a project with `uv.tool.constraint-dependencies` that reference `tool.uv.sources`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_constraint_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2413,6 +2810,7 @@ fn lock_project_with_constraint_sources() -> Result<()> {
 }
 
 /// Lock a project with `uv.tool.build-constraint-dependencies`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_build_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2498,6 +2896,7 @@ fn lock_project_with_build_constraints() -> Result<()> {
 }
 
 /// Lock a project with `uv.tool.build-constraint-dependencies` that reference `tool.uv.sources`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_project_with_build_constraint_sources() -> Result<()> {
     let context = uv_test::test_context!("3.9");
@@ -2554,6 +2953,7 @@ fn lock_project_with_build_constraint_sources() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has an extra.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dependency_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2750,7 +3150,7 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
-#[cfg(feature = "test-python-eol")]
+#[cfg(all(feature = "test-universal", feature = "test-python-eol"))]
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2963,7 +3363,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 
         [package.optional-dependencies]
         socks = [
-            { name = "pysocks", marker = "python_full_version < '3.10'" },
+            { name = "pysocks" },
         ]
 
         [[package]]
@@ -3004,7 +3404,9 @@ fn lock_conditional_dependency_extra() -> Result<()> {
     //
     // ----- stderr -----
     // Resolved 7 packages in [TIME]
-    // error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    // error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    //
+    // hint: To update the lockfile, run `uv lock`.
     // "###);
 
     // Install from the lockfile.
@@ -3060,6 +3462,7 @@ fn lock_conditional_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that requests a non-existent extra.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dependency_non_existent_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3243,6 +3646,7 @@ fn lock_dependency_non_existent_extra() -> Result<()> {
 
 /// This tests a "basic" case for specifying a group that conflicts with the
 /// project itself.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_project_basic1() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3441,6 +3845,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
 }
 
 /// This tests a case where workspace members conflict with each other.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_workspace_members() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3633,6 +4038,7 @@ fn lock_conflicting_workspace_members() -> Result<()> {
 
 /// Like [`lock_conflicting_workspace_members`], but the root project depends on the conflicting
 /// workspace member
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3706,6 +4112,7 @@ fn lock_conflicting_workspace_members_depends_direct() -> Result<()> {
 
 /// Like [`lock_conflicting_workspace_members_depends_direct`], but the root project depends on the
 /// conflicting workspace member via a direct optional dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3922,6 +4329,7 @@ fn lock_conflicting_workspace_members_depends_direct_extra() -> Result<()> {
 
 /// Like [`lock_conflicting_workspace_members_depends_direct`], but the dependency is through an
 /// intermediate package without conflict.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4019,6 +4427,7 @@ fn lock_conflicting_workspace_members_depends_transitive() -> Result<()> {
 
 /// Like [`lock_conflicting_workspace_members_depends_transitive`], but the dependency is through an
 /// intermediate package without conflict.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4252,6 +4661,7 @@ fn lock_conflicting_workspace_members_depends_transitive_extra() -> Result<()> {
 
 /// This tests another "basic" case for specifying a group that conflicts with
 /// the project itself.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_project_basic2() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4457,6 +4867,7 @@ fn lock_conflicting_project_basic2() -> Result<()> {
 }
 
 /// This tests a case where we declare an extra and a group as conflicting.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_mixed() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4663,6 +5074,7 @@ fn lock_conflicting_mixed() -> Result<()> {
 }
 
 /// Show updated dependencies on `lock --upgrade`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_log() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -4833,6 +5245,7 @@ fn lock_upgrade_log() -> Result<()> {
 
 /// Show updated dependencies on `lock --upgrade`, with a package that resolves to multiple
 /// versions.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_log_multi_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5002,6 +5415,7 @@ fn lock_upgrade_log_multi_version() -> Result<()> {
 /// fork markers.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/16839>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_dry_run_multi_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5046,6 +5460,7 @@ fn lock_upgrade_dry_run_multi_version() -> Result<()> {
 /// canonical for workspace conflicts.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/18553>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_check_refresh_workspace_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5241,6 +5656,7 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
 }
 
 /// Respect the locked version in an existing lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5413,8 +5829,8 @@ fn lock_preference() -> Result<()> {
 }
 
 /// If the user includes `git+` in a `tool.uv.sources` entry, we shouldn't fail.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_git_plus_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -5499,8 +5915,8 @@ fn lock_git_plus_prefix() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_partial_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -5559,8 +5975,8 @@ fn lock_partial_git() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version >= '3.12'" },
-            { name = "sniffio", marker = "python_full_version >= '3.12'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
@@ -5575,10 +5991,10 @@ fn lock_partial_git() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-            { name = "idna", marker = "python_full_version < '3.12'" },
-            { name = "sniffio", marker = "python_full_version < '3.12'" },
-            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+            { name = "exceptiongroup", marker = "python_full_version != '3.11.*'" },
+            { name = "idna" },
+            { name = "sniffio" },
+            { name = "typing-extensions", marker = "python_full_version != '3.11.*'" },
         ]
 
         [[package]]
@@ -5663,6 +6079,7 @@ fn lock_partial_git() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/10654#issuecomment-2594022975>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsupported_tag() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5746,8 +6163,8 @@ fn lock_unsupported_tag() -> Result<()> {
 }
 
 /// Respect locked versions with `uv lock`, unless `--upgrade` is passed.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_git_sha() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -5863,6 +6280,7 @@ fn lock_git_sha() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -5982,9 +6400,9 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:3" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version < '3.8'" },
-            { name = "exceptiongroup", marker = "python_full_version < '3.8'" },
-            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+            { name = "attrs" },
+            { name = "exceptiongroup" },
+            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998, upload-time = "2023-06-02T00:20:33.301Z" }
         wheels = [
@@ -5999,9 +6417,9 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version >= '3.8'" },
-            { name = "exceptiongroup", marker = "python_full_version >= '3.8' and python_full_version < '3.11'" },
-            { name = "typing-extensions", version = "4.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8' and python_full_version < '3.11'" },
+            { name = "attrs" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", version = "4.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215, upload-time = "2023-11-30T22:19:21.117Z" }
         wheels = [
@@ -6022,8 +6440,8 @@ fn lock_requires_python() -> Result<()> {
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
-            { name = "zipp", marker = "python_full_version < '3.8'" },
+            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "zipp" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569, upload-time = "2023-06-18T21:44:35.024Z" }
         wheels = [
@@ -6038,8 +6456,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" },
-            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" },
+            { name = "attrs" },
+            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3e/fe/f7671a4fb28606ff1663bba60aff6af21b1e43a977c74c33db13cb83680f/lsprotocol-2023.0.0.tar.gz", hash = "sha256:c9d92e12a3f4ed9317d3068226592860aab5357d93cf5b2451dc244eee8f35f2", size = 69399, upload-time = "2023-11-16T18:32:44.964Z" }
         wheels = [
@@ -6056,8 +6474,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:3" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version < '3.7.9' or python_full_version >= '3.8'" },
-            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7.9'" },
+            { name = "attrs" },
+            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
             { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434, upload-time = "2024-01-09T17:21:12.625Z" }
@@ -6087,8 +6505,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:3" },
         ]
         dependencies = [
-            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7.4'" },
-            { name = "typeguard", version = "2.13.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7.4'" },
+            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "typeguard", version = "2.13.3", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8e/27/58ff0f76b379fc11a1d03e8d4b4e96fd0abb463d27709a7fb4193bcdbbc4/pygls-1.0.1.tar.gz", hash = "sha256:f3ee98ddbb4690eb5c755bc32ba7e129607f14cbd313575f33d0cea443b78cb2", size = 674546, upload-time = "2023-02-16T12:13:22.591Z" }
         wheels = [
@@ -6103,8 +6521,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
-            { name = "typeguard", version = "3.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
+            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "typeguard", version = "3.0.2", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/bb/c4/fc9c817ba0f1ad0fdbe1686bc8211a0dc2390ab11cf7780e9eeed718594b/pygls-1.0.2.tar.gz", hash = "sha256:888ed63d1f650b4fc64d603d73d37545386ec533c0caac921aed80f80ea946a4", size = 674931, upload-time = "2023-05-16T13:20:03.567Z" }
         wheels = [
@@ -6119,7 +6537,7 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.9' and python_full_version < '3.8'" },
+            { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e6/94/534c11ba5475df09542e48d751a66e0448d52bbbb92cbef5541deef7760d/pygls-1.2.1.tar.gz", hash = "sha256:04f9b9c115b622dcc346fb390289066565343d60245a424eca77cb429b911ed8", size = 45274, upload-time = "2023-11-30T14:13:28.792Z" }
         wheels = [
@@ -6134,8 +6552,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
-            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
+            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" } },
+            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e9/8d/31b50ac0879464049d744a1ddf00dc6474433eb55d40fa0c8e8510591ad2/pygls-1.3.0.tar.gz", hash = "sha256:1b44ace89c9382437a717534f490eadc6fda7c0c6c16ac1eaaf5568e345e4fb8", size = 45539, upload-time = "2024-01-29T10:55:41.909Z" }
         wheels = [
@@ -6162,8 +6580,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "importlib-metadata", marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
-            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.7.4' and python_full_version < '3.7.9'" },
+            { name = "importlib-metadata" },
+            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/af/40/3398497c6e6951c92abaf933492d6633e7ac4df0bfc9d81f304b3f977f15/typeguard-3.0.2.tar.gz", hash = "sha256:fee5297fdb28f8e9efcb8142b5ee219e02375509cd77ea9d270b5af826358d5a", size = 58171, upload-time = "2023-03-22T20:52:56.832Z" }
         wheels = [
@@ -6275,9 +6693,9 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version < '3.8'" },
-            { name = "exceptiongroup", marker = "python_full_version < '3.8'" },
-            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+            { name = "attrs" },
+            { name = "exceptiongroup" },
+            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/68/d4/27f9fd840e74d51b6d6a024d39ff495b56ffde71d28eb82758b7b85d0617/cattrs-23.1.2.tar.gz", hash = "sha256:db1c821b8c537382b2c7c66678c3790091ca0275ac486c76f3c8f3920e83c657", size = 39998, upload-time = "2023-06-02T00:20:33.301Z" }
         wheels = [
@@ -6292,9 +6710,9 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version >= '3.8'" },
-            { name = "exceptiongroup", marker = "python_full_version >= '3.8' and python_full_version < '3.11'" },
-            { name = "typing-extensions", version = "4.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8' and python_full_version < '3.11'" },
+            { name = "attrs" },
+            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+            { name = "typing-extensions", version = "4.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/1e/57/c6ccd22658c4bcb3beb3f1c262e1f170cf136e913b122763d0ddd328d284/cattrs-23.2.3.tar.gz", hash = "sha256:a934090d95abaa9e911dac357e3a8699e0b4b14f8529bcc7d2b1ad9d51672b9f", size = 610215, upload-time = "2023-11-30T22:19:21.117Z" }
         wheels = [
@@ -6315,8 +6733,8 @@ fn lock_requires_python() -> Result<()> {
         version = "6.7.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
-            { name = "zipp", marker = "python_full_version < '3.8'" },
+            { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" } },
+            { name = "zipp" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/a3/82/f6e29c8d5c098b6be61460371c2c5591f4a335923639edec43b3830650a4/importlib_metadata-6.7.0.tar.gz", hash = "sha256:1aaf550d4f73e5d6783e7acb77aec43d49da8017410afae93822cc9cca98c4d4", size = 53569, upload-time = "2023-06-18T21:44:35.024Z" }
         wheels = [
@@ -6331,8 +6749,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version < '3.8'" },
-            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+            { name = "attrs" },
+            { name = "cattrs", version = "23.1.2", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/3e/fe/f7671a4fb28606ff1663bba60aff6af21b1e43a977c74c33db13cb83680f/lsprotocol-2023.0.0.tar.gz", hash = "sha256:c9d92e12a3f4ed9317d3068226592860aab5357d93cf5b2451dc244eee8f35f2", size = 69399, upload-time = "2023-11-16T18:32:44.964Z" }
         wheels = [
@@ -6347,8 +6765,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "attrs", marker = "python_full_version >= '3.8'" },
-            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
+            { name = "attrs" },
+            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/9d/f6/6e80484ec078d0b50699ceb1833597b792a6c695f90c645fbaf54b947e6f/lsprotocol-2023.0.1.tar.gz", hash = "sha256:cc5c15130d2403c18b734304339e51242d3018a05c4f7d0f198ad6e0cd21861d", size = 69434, upload-time = "2024-01-09T17:21:12.625Z" }
         wheels = [
@@ -6375,7 +6793,7 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
+            { name = "lsprotocol", version = "2023.0.0", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e6/94/534c11ba5475df09542e48d751a66e0448d52bbbb92cbef5541deef7760d/pygls-1.2.1.tar.gz", hash = "sha256:04f9b9c115b622dcc346fb390289066565343d60245a424eca77cb429b911ed8", size = 45274, upload-time = "2023-11-30T14:13:28.792Z" }
         wheels = [
@@ -6390,8 +6808,8 @@ fn lock_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
-            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
+            { name = "cattrs", version = "23.2.3", source = { registry = "https://pypi.org/simple" } },
+            { name = "lsprotocol", version = "2023.0.1", source = { registry = "https://pypi.org/simple" } },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/e9/8d/31b50ac0879464049d744a1ddf00dc6474433eb55d40fa0c8e8510591ad2/pygls-1.3.0.tar.gz", hash = "sha256:1b44ace89c9382437a717534f490eadc6fda7c0c6c16ac1eaaf5568e345e4fb8", size = 45539, upload-time = "2024-01-29T10:55:41.909Z" }
         wheels = [
@@ -6569,6 +6987,7 @@ fn lock_requires_python() -> Result<()> {
 
 /// Lock a requirement from PyPI, ignoring any dependencies that exceed the `requires-python`
 /// upper-bound.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_upper() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
@@ -6693,7 +7112,7 @@ fn lock_requires_python_upper() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with an exact Python bound.
-#[cfg(feature = "test-python-patch")]
+#[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
 #[test]
 fn lock_requires_python_exact() -> Result<()> {
     let context = uv_test::test_context!("3.13.0");
@@ -6773,7 +7192,7 @@ fn lock_requires_python_exact() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with a compatible release Python bound.
-#[cfg(feature = "test-python-patch")]
+#[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
 #[test]
 fn lock_requires_python_compatible_specifier() -> Result<()> {
     let context = uv_test::test_context!("3.13.0");
@@ -6837,6 +7256,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
 }
 
 /// Fork, even with a single dependency, if the minimum Python version is increased.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_fork() -> Result<()> {
     let context = uv_test::test_context!("3.11").with_exclude_newer("2024-08-29T00:00:00Z");
@@ -6930,6 +7350,7 @@ fn lock_requires_python_fork() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_wheels() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
@@ -7111,6 +7532,7 @@ fn lock_requires_python_wheels() -> Result<()> {
 
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
 /// `Requires-Python` uses the equals-star syntax.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_star() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7233,6 +7655,7 @@ fn lock_requires_python_star() -> Result<()> {
 
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
 /// `Requires-Python` uses the != operator.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_not_equal() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -7312,6 +7735,7 @@ fn lock_requires_python_not_equal() -> Result<()> {
 /// Lock a requirement from PyPI, respecting the `Requires-Python` metadata. In this case,
 /// `Requires-Python` uses a pre-release specifier, but it's effectively ignored, as `>=3.11.0b1`
 /// is interpreted as equivalent to `>=3.11.0`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_pre() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7433,6 +7857,7 @@ fn lock_requires_python_pre() -> Result<()> {
 }
 
 /// Warn if `Requires-Python` does not include a lower bound.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_unbounded() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7538,6 +7963,7 @@ fn lock_requires_python_unbounded() -> Result<()> {
 }
 
 /// Error if `Requires-Python` is disjoint across the workspace.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_disjoint() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7581,6 +8007,7 @@ fn lock_requires_python_disjoint() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_maximum_version() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7743,6 +8170,7 @@ fn lock_requires_python_maximum_version() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_fewest_versions() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7856,6 +8284,7 @@ fn lock_requires_python_fewest_versions() -> Result<()> {
 /// However, `python_full_version` should use PubGrub semantics, as (e.g.)
 /// `python_full_version >= '3.10' or python_full_version < '3.10'` will actually exclude versions
 /// like `3.10.0b0`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_python_version_marker_complement() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -7987,6 +8416,7 @@ fn lock_python_version_marker_complement() -> Result<()> {
 }
 
 /// Lock the development dependencies for a project.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8108,6 +8538,7 @@ fn lock_dev() -> Result<()> {
 }
 
 /// Lock a package that's included both conditionally and unconditionally in the lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conditional_unconditional() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8186,6 +8617,7 @@ fn lock_conditional_unconditional() -> Result<()> {
 }
 
 /// Lock a package that's included twice with different markers.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8382,6 +8814,7 @@ fn lock_relative_and_absolute_paths() -> Result<()> {
 }
 
 /// Check PEP 508 URL handling when they contain variables
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_pep508_urls_with_vars() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8713,6 +9146,7 @@ fn lock_index_absolute_path_from_config() -> Result<()> {
 }
 
 /// Lock a project that includes cyclic dependencies.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_cycles() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8916,6 +9350,7 @@ fn lock_cycles() -> Result<()> {
 }
 
 /// Ensures that stale lockfile metadata is detected.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_new_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9189,6 +9624,7 @@ fn lock_new_extras() -> Result<()> {
 /// Ensure that the installer rejects invalid hashes from the lockfile.
 ///
 /// In this case, the hashes for `idna` have all been incremented by one in the left-most digit.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_hash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9263,7 +9699,9 @@ fn lock_invalid_hash() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Install from the lockfile.
@@ -9291,6 +9729,7 @@ fn lock_invalid_hash() -> Result<()> {
 /// Ensure that we can install from a lockfile when the index switches hash algorithms.
 /// First lock and sync with SHA256 hashes, then switch to SHA512 and lock/sync again
 /// without clearing the cache.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_mixed_hashes() -> Result<()> {
     let context = uv_test::test_context!("3.13");
@@ -9508,6 +9947,7 @@ fn lock_mixed_hashes() -> Result<()> {
 }
 
 /// Lock with an index which serves zstd-compressed wheels.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_zstd_wheel() -> Result<()> {
     use serde_json::json;
@@ -9635,6 +10075,7 @@ async fn lock_zstd_wheel() -> Result<()> {
 }
 
 /// Vary the `--resolution-mode`, and ensure that the lockfile is updated.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_resolution_mode() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9815,6 +10256,7 @@ fn lock_resolution_mode() -> Result<()> {
 
 /// Lock a requirement from PyPI, filtering out wheels that target an ABI that is non-overlapping
 /// with the `Requires-Python` constraint.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_requires_python_no_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9847,6 +10289,7 @@ fn lock_requires_python_no_wheels() -> Result<()> {
 
 /// In this case, a package is included twice at the same version, but pointing to different direct
 /// URLs.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_same_version_multiple_urls() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -9934,8 +10377,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform != 'darwin'" },
-            { name = "sniffio", marker = "sys_platform != 'darwin'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952, upload-time = "2021-04-20T14:02:14.75Z" }
         wheels = [
@@ -9950,8 +10393,8 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "idna", marker = "sys_platform == 'darwin'" },
-            { name = "sniffio", marker = "sys_platform == 'darwin'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload-time = "2023-05-27T11:12:46.688Z" }
         wheels = [
@@ -9966,7 +10409,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+            { name = "anyio", version = "3.7.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
@@ -9980,7 +10423,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
+            { name = "anyio", version = "3.0.0", source = { registry = "https://pypi.org/simple" } },
         ]
 
         [package.metadata]
@@ -10037,6 +10480,7 @@ fn lock_same_version_multiple_urls() -> Result<()> {
 
 /// When locking with `--resolution-mode=lowest`, we should warn on unbounded direct
 /// dependencies.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsafe_lowest() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10080,6 +10524,7 @@ fn lock_unsafe_lowest() -> Result<()> {
 }
 
 /// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclusion() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10177,6 +10622,7 @@ fn lock_exclusion() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/9832#issuecomment-2539121761>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_relative_lock_deserialization() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10279,6 +10725,7 @@ fn lock_relative_lock_deserialization() -> Result<()> {
 }
 
 /// Lock a workspace member with a non-workspace source.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_workspace_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10333,6 +10780,7 @@ fn lock_non_workspace_source() -> Result<()> {
 }
 
 /// Lock a workspace member with a non-workspace source.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_workspace_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10387,6 +10835,7 @@ fn lock_no_workspace_source() -> Result<()> {
 ///
 /// Lock a workspace with a member that also supports standalone installation via platform-specific
 /// path sources.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10503,6 +10952,7 @@ fn lock_workspace_member_with_standalone_path_source() -> Result<()> {
 }
 
 /// Lock a workspace with a member that's a peer to the root.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_peer_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10607,7 +11057,91 @@ fn lock_peer_member() -> Result<()> {
     Ok(())
 }
 
+/// Lock a workspace with a member whose directory contains a URL fragment delimiter.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_workspace_member_with_fragment_delimiter() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["member"]
+
+        [tool.uv.workspace]
+        members = ["member#x"]
+
+        [tool.uv.sources]
+        member = { workspace = true }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("member#x")
+        .child("pyproject.toml")
+        .write_str(
+            r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#,
+        )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        members = [
+            "member",
+            "project",
+        ]
+
+        [[package]]
+        name = "member"
+        version = "0.1.0"
+        source = { editable = "member#x" }
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "member" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "member", editable = "member#x" }]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Lock a workspace in which a member defines an explicit index that requires authentication.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10752,6 +11286,7 @@ async fn lock_index_workspace_member() -> Result<()> {
 
 /// Ensure that development dependencies are omitted for non-workspace members. Below, `bar` depends
 /// on `foo`, but `bar/uv.lock` should omit `anyio`, but should include `typing-extensions`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dev_transitive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -10930,6 +11465,7 @@ fn lock_dev_transitive() -> Result<()> {
 }
 
 /// Avoid persisting registry credentials in `uv.lock`.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_redact_http() -> Result<()> {
     // This test in particular seems to prompt a link mode warning
@@ -11128,6 +11664,7 @@ async fn lock_redact_http() -> Result<()> {
 }
 
 /// Test that packages aren't unnecessarily updated when an index URL contains a username.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_index_url_username_change_no_update() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11205,8 +11742,8 @@ fn lock_index_url_username_change_no_update() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -11290,8 +11827,8 @@ fn lock_redact_git_pep508() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_redact_git_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -11378,8 +11915,8 @@ fn lock_redact_git_sources() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
@@ -11459,6 +11996,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_redact_index_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
@@ -11554,6 +12092,7 @@ async fn lock_redact_index_sources() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_redact_url_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_link_mode_warning();
@@ -11643,6 +12182,7 @@ async fn lock_redact_url_sources() -> Result<()> {
 }
 
 /// Pass credentials for a named index via environment variables.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_env_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11734,6 +12274,7 @@ async fn lock_env_credentials() -> Result<()> {
 /// Test solving for packages that are pinned to separate indexes in the same realm.
 /// This requires the credentials to be cached at the URL-level instead of the realm-level, or
 /// credentials for one index will be used for both indexes and the request will fail.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11782,6 +12323,7 @@ async fn lock_multiple_indexes_same_realm_different_credentials() -> Result<()> 
 
 // Same as [`lock_multiple_indexes_same_realm_different_credentials`], but with trailing slashes
 // on the index URL
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11829,6 +12371,7 @@ async fn lock_multiple_indexes_same_realm_different_credentials_trailing_slash()
 }
 
 /// Resolve against an index that uses relative links.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_relative_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -11921,6 +12464,7 @@ async fn lock_relative_index() -> Result<()> {
 }
 
 /// Lock a package that's excluded from the parent workspace, but depends on that parent.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12153,6 +12697,7 @@ fn lock_no_sources() -> Result<()> {
 }
 
 /// Lock a project that has an existing lockfile with a deprecated schema.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_migrate() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12296,6 +12841,7 @@ fn lock_migrate() -> Result<()> {
 }
 
 /// Upgrade a specific package with `--upgrade-package`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12579,6 +13125,7 @@ fn lock_upgrade_package() -> Result<()> {
 }
 
 /// Upgrade all packages in a dependency group with `--upgrade-group`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12638,6 +13185,7 @@ fn lock_upgrade_group() -> Result<()> {
 }
 
 /// `--upgrade-group` only upgrades direct dependencies of the group, not transitive dependencies.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_group_transitive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12751,6 +13299,7 @@ fn lock_upgrade_group_transitive() -> Result<()> {
 
 /// `--upgrade-group` works for projects without a `[project]` table (e.g., virtual workspace
 /// roots), where dependency groups are stored in the lock manifest rather than on a package.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_group_no_project_table() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12805,6 +13354,7 @@ fn lock_upgrade_group_no_project_table() -> Result<()> {
 }
 
 /// Check that we discard the fork marker from the lockfile when using `--upgrade`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_upgrade_drop_fork_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12851,6 +13401,7 @@ fn lock_upgrade_drop_fork_markers() -> Result<()> {
 }
 
 /// Warn when there are missing bounds on transitive dependencies with `--resolution lowest`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12882,6 +13433,7 @@ fn lock_warn_missing_transitive_lower_bounds() -> Result<()> {
 }
 
 /// Lock a local wheel via `--find-links`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_local_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -12996,6 +13548,7 @@ fn lock_find_links_local_wheel() -> Result<()> {
 }
 
 /// Prefer an explicit index over any `--find-links` entries.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_ignore_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13117,6 +13670,7 @@ fn lock_find_links_ignore_explicit_index() -> Result<()> {
 
 /// Ensure that `[[tool.uv.index]]` entries with `format = "flat"` can use relative paths in the
 /// `url` field.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_relative_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13233,6 +13787,7 @@ fn lock_find_links_relative_url() -> Result<()> {
 }
 
 /// Lock a local source distribution via `--find-links`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_local_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13345,6 +13900,7 @@ fn lock_find_links_local_sdist() -> Result<()> {
 }
 
 /// Lock a wheel over HTTP via `--find-links`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_http_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13373,6 +13929,8 @@ fn lock_find_links_http_wheel() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     ");
+
+    assert!(context.cache_dir.child("flat-index-v3").is_dir());
 
     let lock = context.read("uv.lock");
 
@@ -13437,6 +13995,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
 }
 
 /// Lock a source distribution over HTTP via `--find-links`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_http_sdist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13529,6 +14088,7 @@ fn lock_find_links_http_sdist() -> Result<()> {
 }
 
 /// Use an explicit `--find-links` index.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13635,6 +14195,7 @@ fn lock_find_links_explicit_index() -> Result<()> {
 }
 
 /// Use the same index priority rules, interchangeably, for `--find-links` and Simple API indexes.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_higher_priority_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13726,6 +14287,7 @@ fn lock_find_links_higher_priority_index() -> Result<()> {
 }
 
 /// Use the same index priority rules, interchangeably, for `--find-links` and Simple API indexes.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_find_links_lower_priority_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -13834,6 +14396,7 @@ fn lock_find_links_lower_priority_index() -> Result<()> {
 }
 
 /// Lock against a local directory laid out as a PEP 503-compatible index.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_local_index() -> Result<()> {
     let context = uv_test::test_context!("3.13");
@@ -13981,6 +14544,7 @@ fn lock_local_index() -> Result<()> {
 /// `anyio`).
 ///
 /// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sources_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14105,6 +14669,7 @@ fn lock_sources_url() -> Result<()> {
 }
 
 /// Skip direct URL freshness checks while offline without skipping mutable transitive sources.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14167,7 +14732,9 @@ fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -14178,6 +14745,7 @@ fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
 /// `anyio`).
 ///
 /// When resolving, we should ignore the `tool.uv.sources` and instead pull in `anyio` from PyPI.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sources_archive() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14314,6 +14882,7 @@ fn lock_sources_archive() -> Result<()> {
 /// `anyio`).
 ///
 /// When resolving, we should respect the `tool.uv.sources` and pull in the stub `anyio`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_sources_source_tree() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14433,6 +15002,7 @@ fn lock_sources_source_tree() -> Result<()> {
 
 /// Lock a project in which a given dependency is requested from two different members, once as
 /// editable, and once as non-editable. This should trigger a conflicting URL error.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14589,6 +15159,7 @@ fn lock_editable() -> Result<()> {
 
 /// Lock a project in which a given dependency is requested from two different members, once as
 /// editable, and once as non-editable.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_mixed_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14824,6 +15395,7 @@ fn lock_mixed_extras() -> Result<()> {
 
 /// Lock a project in which a given dependency is requested from two different members, once as
 /// editable, and once as non-editable.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_transitive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -14999,8 +15571,8 @@ fn lock_transitive_extra() -> Result<()> {
 
 /// If a source is provided via `tool.uv.sources` _and_ a URL is provided in `project.dependencies`,
 /// we accept the source in `tool.uv.sources`, unless `--no-sources` is provided.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_mismatched_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15113,8 +15685,8 @@ fn lock_mismatched_sources() -> Result<()> {
 /// version is satisfied.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/4604>
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_mismatched_versions() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15200,8 +15772,8 @@ fn lock_mismatched_versions() -> Result<()> {
 }
 
 /// Test that `--no-sources-package` allows selectively disabling sources for specific packages.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_no_sources_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15305,8 +15877,8 @@ fn lock_no_sources_package() -> Result<()> {
 }
 
 /// Test that `--no-sources-package` works with multiple packages.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_no_sources_package_multiple() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15423,8 +15995,8 @@ fn lock_no_sources_package_multiple() -> Result<()> {
 }
 
 /// Test that `--no-sources` takes precedence over `--no-sources-package`.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_no_sources_with_no_sources_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15533,8 +16105,8 @@ fn lock_no_sources_with_no_sources_package() -> Result<()> {
 }
 
 /// Test that `UV_NO_SOURCES_PACKAGE` environment variable works.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_no_sources_package_env_var() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -15643,6 +16215,7 @@ fn lock_no_sources_package_env_var() -> Result<()> {
 
 /// This checks that overlapping marker expressions with disjoint
 /// version constraints fails to resolve.
+#[cfg(feature = "test-universal")]
 #[test]
 fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15675,6 +16248,7 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
 }
 
 /// Checks the output of `uv lock --check` when there isn't a lock
+#[cfg(feature = "test-universal")]
 #[test]
 fn check_no_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15703,6 +16277,7 @@ fn check_no_lock() -> Result<()> {
 }
 
 /// Checks the output of `uv lock --check` when the lock is outdated
+#[cfg(feature = "test-universal")]
 #[test]
 fn check_outdated_lock() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15758,7 +16333,9 @@ fn check_outdated_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Providing both `--check` and `--locked` is okay
@@ -15770,7 +16347,9 @@ fn check_outdated_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--check` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -15779,6 +16358,7 @@ fn check_outdated_lock() -> Result<()> {
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
+#[cfg(feature = "test-universal")]
 #[test]
 fn normalize_false_marker_dependency_groups() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15848,6 +16428,7 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
 /// This checks that markers that normalize to 'false', which are serialized
 /// to the lockfile as `python_full_version < '0'`, get read back as false.
 /// Otherwise `uv lock --check` will always fail.
+#[cfg(feature = "test-universal")]
 #[test]
 fn normalize_false_marker_requires_dist() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -15912,6 +16493,7 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
 }
 
 /// Change indexes between locking operations.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_change_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16036,6 +16618,7 @@ async fn lock_change_index() -> Result<()> {
 
 /// Lock a `pyproject.toml`, add a remove a workspace member, and ensure that the lockfile is
 /// updated on the next run.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_remove_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16189,7 +16772,9 @@ fn lock_remove_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -16291,7 +16876,9 @@ fn lock_remove_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -16338,6 +16925,7 @@ fn lock_remove_member() -> Result<()> {
 ///
 /// This test would fail if we didn't write the list of workspace members to the lockfile, since
 /// we wouldn't be able to determine that a new member was added.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_add_member_with_build_system() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16436,7 +17024,9 @@ fn lock_add_member_with_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
@@ -16550,6 +17140,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_add_member_without_build_system() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -16644,7 +17235,9 @@ fn lock_add_member_without_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run with `--offline`. This should also fail, during the resolve phase.
@@ -16780,7 +17373,9 @@ fn lock_add_member_without_build_system() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -16886,6 +17481,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
 /// Lock a `pyproject.toml`, then add a dependency that's already included in the resolution.
 /// In theory, we shouldn't need to re-resolve, but based on our current strategy, we don't accept
 /// the existing lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_redundant_add_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17006,7 +17602,9 @@ fn lock_redundant_add_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -17087,6 +17685,7 @@ fn lock_redundant_add_member() -> Result<()> {
 
 /// Lock a `pyproject.toml`, add a new constraint, and ensure that the lockfile is updated on the
 /// next run.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_new_constraints() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17204,7 +17803,9 @@ fn lock_new_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -17285,6 +17886,7 @@ fn lock_new_constraints() -> Result<()> {
 
 /// Lock a `pyproject.toml`, add a new constraint, and ensure that the lockfile is updated on the
 /// next run.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_remove_member_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17414,7 +18016,9 @@ fn lock_remove_member_non_project() -> Result<()> {
     ----- stderr -----
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -17454,6 +18058,7 @@ fn lock_remove_member_non_project() -> Result<()> {
 
 /// Lock a `pyproject.toml`, then rename the project, and ensure that the lockfile is updated on
 /// the next run.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_rename_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17545,7 +18150,9 @@ fn lock_rename_project() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-run without `--locked`.
@@ -17601,6 +18208,7 @@ fn lock_rename_project() -> Result<()> {
 }
 
 /// Test backwards compatibility for `[package.metadata]`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_missing_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17743,6 +18351,7 @@ fn lock_missing_metadata() -> Result<()> {
 /// accidentally renamed to `package.dependency-groups` in v0.4.27, which is technically out of
 /// compliance with our lockfile versioning policy. In v0.4.28, we renamed it back to
 /// `package.dev-dependencies`, with backwards compatibility for `package.dependency-groups`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dev_dependencies_alias() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -17890,6 +18499,7 @@ fn lock_dev_dependencies_alias() -> Result<()> {
 
 /// Lock a `pyproject.toml`, reorder the dependencies, and ensure that the lockfile is _not_ updated
 /// on the next run.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_reorder() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18021,6 +18631,7 @@ fn lock_reorder() -> Result<()> {
 }
 
 /// Ensure that `requires-python` bounds are correctly narrowed in the presence of upper-bound caps.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_narrowed_python_version_upper() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18091,7 +18702,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         version = "0.1.0"
         source = { directory = "dependency" }
         dependencies = [
-            { name = "iniconfig", marker = "python_full_version >= '3.10'" },
+            { name = "iniconfig" },
         ]
 
         [package.metadata]
@@ -18111,7 +18722,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "dependency", marker = "python_full_version >= '3.10'" },
+            { name = "dependency" },
         ]
 
         [package.metadata]
@@ -18133,6 +18744,7 @@ fn lock_narrowed_python_version_upper() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_narrowed_python_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18211,7 +18823,7 @@ fn lock_narrowed_python_version() -> Result<()> {
         version = "0.1.0"
         source = { directory = "dependency" }
         dependencies = [
-            { name = "iniconfig", marker = "python_full_version < '3.9' or python_full_version >= '3.11'" },
+            { name = "iniconfig" },
         ]
 
         [package.metadata]
@@ -18260,6 +18872,7 @@ fn lock_narrowed_python_version() -> Result<()> {
 /// our `requires-python` constraint.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/6059>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_unnecessary_python_forks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18373,6 +18986,7 @@ fn lock_exclude_unnecessary_python_forks() -> Result<()> {
 }
 
 /// Lock with a user-provided constraint on the space of supported environments.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_constrained_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18428,11 +19042,11 @@ fn lock_constrained_environment() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "sys_platform != 'win32'" },
-            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
-            { name = "packaging", marker = "sys_platform != 'win32'" },
-            { name = "pathspec", marker = "sys_platform != 'win32'" },
-            { name = "platformdirs", marker = "sys_platform != 'win32'" },
+            { name = "click" },
+            { name = "mypy-extensions" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "platformdirs" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
         wheels = [
@@ -18492,7 +19106,7 @@ fn lock_constrained_environment() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "black", marker = "sys_platform != 'win32'" },
+            { name = "black" },
         ]
 
         [package.metadata]
@@ -18567,7 +19181,9 @@ fn lock_constrained_environment() -> Result<()> {
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -18691,6 +19307,7 @@ fn lock_constrained_environment() -> Result<()> {
 
 /// Lock with a user-provided constraint on the space of supported environments, using a
 /// non-project workspace root.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_constrained_environment_non_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18759,11 +19376,11 @@ fn lock_constrained_environment_non_project() -> Result<()> {
         version = "24.3.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "click", marker = "sys_platform != 'win32'" },
-            { name = "mypy-extensions", marker = "sys_platform != 'win32'" },
-            { name = "packaging", marker = "sys_platform != 'win32'" },
-            { name = "pathspec", marker = "sys_platform != 'win32'" },
-            { name = "platformdirs", marker = "sys_platform != 'win32'" },
+            { name = "click" },
+            { name = "mypy-extensions" },
+            { name = "packaging" },
+            { name = "pathspec" },
+            { name = "platformdirs" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", hash = "sha256:a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f", size = 634292, upload-time = "2024-03-15T19:35:43.699Z" }
         wheels = [
@@ -18778,7 +19395,7 @@ fn lock_constrained_environment_non_project() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "child" }
         dependencies = [
-            { name = "black", marker = "sys_platform != 'win32'" },
+            { name = "black" },
         ]
 
         [package.metadata]
@@ -18857,6 +19474,7 @@ fn lock_constrained_environment_non_project() -> Result<()> {
 }
 
 /// User-provided constraints must be disjoint.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_overlapping_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -18890,6 +19508,7 @@ fn lock_overlapping_environment() -> Result<()> {
 }
 
 /// Lock a non-project workspace root with forked dev dependencies.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_fork() -> Result<()> {
     let context = uv_test::test_context!("3.10");
@@ -18958,8 +19577,8 @@ fn lock_non_project_fork() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version >= '3.11'" },
-            { name = "sniffio", marker = "python_full_version >= '3.11'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d3/e6/901a94731af20e7109415525666cb3753a2bd1edd19616c2730448dffd0d/anyio-2.2.0.tar.gz", hash = "sha256:4a41c5b3a65ed92e469d51b6fba3779301850ea2e352afcf9e36c46f21ee14a9", size = 97217, upload-time = "2021-02-26T23:59:13.525Z" }
         wheels = [
@@ -18974,10 +19593,10 @@ fn lock_non_project_fork() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
-            { name = "idna", marker = "python_full_version < '3.11'" },
-            { name = "sniffio", marker = "python_full_version < '3.11'" },
-            { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+            { name = "exceptiongroup" },
+            { name = "idna" },
+            { name = "sniffio" },
+            { name = "typing-extensions" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
@@ -19092,6 +19711,7 @@ fn lock_non_project_fork() -> Result<()> {
 }
 
 /// Lock a non-project workspace root with a conditional dependency.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_conditional() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19197,6 +19817,7 @@ fn lock_non_project_conditional() -> Result<()> {
 }
 
 /// Lock a non-project workspace root with `dependency-groups`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_group() -> Result<()> {
     let context = uv_test::test_context!("3.10");
@@ -19343,6 +19964,7 @@ fn lock_non_project_group() -> Result<()> {
 /// Here instead of leaning on `tool.uv.workspace` we use the
 /// officially blessed "pyproject.toml with no `[project]` that
 /// declares `[dependency-groups]`".
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_group_standard() -> Result<()> {
     let context = uv_test::test_context!("3.10");
@@ -19434,6 +20056,7 @@ fn lock_non_project_group_standard() -> Result<()> {
 }
 
 /// Lock a non-project workspace root with `tool.uv.sources`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19519,6 +20142,7 @@ fn lock_non_project_sources() -> Result<()> {
 }
 
 /// Lock a non-project workspace root with conflicts declared between members.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_member_conflicts() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19698,6 +20322,7 @@ fn lock_non_project_member_conflicts() -> Result<()> {
 
 /// Locking a non-project workspace root should reject conflicts that omit
 /// `package = ...`, since there is no root project name to infer.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_non_project_member_conflicts_missing_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19747,6 +20372,7 @@ fn lock_non_project_member_conflicts_missing_package() -> Result<()> {
 }
 
 /// `coverage` defines a `toml` extra, but it doesn't enable any dependencies after Python 3.11.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dropped_dev_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19864,6 +20490,7 @@ fn lock_dropped_dev_extra() -> Result<()> {
 }
 
 /// Lock with an empty (but existent) `tool.uv.dev-dependencies` group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_empty_dev_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -19972,6 +20599,7 @@ fn lock_empty_dev_dependencies() -> Result<()> {
 }
 
 /// Lock with an empty (but existent) `dependency-groups` group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_empty_dependency_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20076,6 +20704,7 @@ fn lock_empty_dependency_group() -> Result<()> {
 }
 
 /// Add and remove an empty dependency group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_add_empty_dependency_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20169,7 +20798,9 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock the project.
@@ -20251,7 +20882,9 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock the project.
@@ -20315,6 +20948,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
 }
 
 /// Use a trailing slash on the declared index.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_trailing_slash_index_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20439,6 +21073,7 @@ fn lock_trailing_slash_index_url() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20477,15 +21112,16 @@ fn lock_invalid_index() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 31
-      |
-    9 |         iniconfig = { index = "internal proxy" }
-      |                               ^^^^^^^^^^^^^^^^
-    Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
+          |
+        9 |         iniconfig = { index = "internal proxy" }
+          |                               ^^^^^^^^^^^^^^^^
+        Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (` `) in: `internal proxy`
     "#);
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20593,6 +21229,7 @@ fn lock_explicit_index() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_explicit_default_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20758,6 +21395,7 @@ fn lock_explicit_default_index() -> Result<()> {
 }
 
 /// Error when an explicit index does not have a name.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unnamed_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20792,16 +21430,17 @@ fn lock_unnamed_explicit_index() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
+          |
+        8 |         [[tool.uv.index]]
+          |         ^^^^^^^^^^^^^^^^^
+        An index with `explicit = true` requires a `name`: https://test.pypi.org/simple
     ");
 
     Ok(())
 }
 
 /// Error when an index cache-control override is not a valid HTTP header value.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_index_cache_control() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20824,7 +21463,7 @@ fn lock_invalid_index_cache_control() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -20833,21 +21472,22 @@ fn lock_invalid_index_cache_control() -> Result<()> {
     warning: Failed to parse `pyproject.toml` during settings discovery:
       TOML parse error at line 11, column 9
          |
-      11 |         cache-control.api = \"\"\"
+      11 |         cache-control.api = """
          |         ^^^^^^^^^^^^^
       `cache-control.api` must be a valid HTTP header value
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 11, column 9
-       |
-    11 |         cache-control.api = \"\"\"
-       |         ^^^^^^^^^^^^^
-    `cache-control.api` must be a valid HTTP header value
-    ");
+           |
+        11 |         cache-control.api = """
+           |         ^^^^^^^^^^^^^
+        `cache-control.api` must be a valid HTTP header value
+    "#);
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -20927,6 +21567,7 @@ async fn lock_named_index() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_default_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21059,6 +21700,7 @@ fn lock_default_index() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_named_index_cli() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -21151,6 +21793,7 @@ fn lock_named_index_cli() -> Result<()> {
 
 /// If a named index is referenced in `tool.uv.sources` but only defined in `uv.toml`, we should
 /// provide a hint that the index was found in a configuration file.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_named_index_config_file_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21199,6 +21842,7 @@ fn lock_named_index_config_file_hint() -> Result<()> {
 /// If a named index is referenced in `tool.uv.sources` but only defined in a user-level `uv.toml`
 /// (e.g., `~/.config/uv/uv.toml`), we should provide a hint that the index was found in a
 /// configuration file.
+#[cfg(feature = "test-universal")]
 #[test]
 #[cfg_attr(
     windows,
@@ -21253,6 +21897,7 @@ fn lock_named_index_user_config_file_hint() -> Result<()> {
 }
 
 /// If a name is reused, within a single file, we should raise an error.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_repeat_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21284,16 +21929,17 @@ fn lock_repeat_named_index() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    duplicate index name `pytorch`
+          |
+        8 |         [[tool.uv.index]]
+          |         ^^^^^^^^^^^^^^^^^
+        duplicate index name `pytorch`
     ");
 
     Ok(())
 }
 
 /// If multiple indexes are marked as default within a single file, we should raise an error.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_default_indexes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21327,16 +21973,17 @@ fn lock_multiple_default_indexes() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [[tool.uv.index]]
-      |         ^^^^^^^^^^^^^^^^^
-    found multiple indexes with `default = true`; only one index may be marked as default
+          |
+        8 |         [[tool.uv.index]]
+          |         ^^^^^^^^^^^^^^^^^
+        found multiple indexes with `default = true`; only one index may be marked as default
     ");
 
     Ok(())
 }
 
 /// If a name is defined in both the workspace root and the member, prefer the index in the member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_repeat_named_index_member() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -21451,6 +22098,7 @@ fn lock_repeat_named_index_member() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unique_named_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21526,6 +22174,7 @@ fn lock_unique_named_index() -> Result<()> {
 
 /// If a name is reused, the higher-priority index should "overwrite" the lower-priority index.
 /// This includes names passed in via the CLI.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_repeat_named_index_cli() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -21694,6 +22343,7 @@ fn lock_repeat_named_index_cli() -> Result<()> {
 /// index on other platforms.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/11776>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_named_index_overlap() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -21779,6 +22429,7 @@ fn lock_named_index_overlap() -> Result<()> {
 }
 
 /// Lock a project with `package = false`, making it a virtual project.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_explicit_virtual_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22006,6 +22657,7 @@ fn lock_explicit_virtual_project() -> Result<()> {
 }
 
 /// Lock a project that is implicitly virtual (by way of omitting `build-system`).
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_implicit_virtual_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22229,6 +22881,7 @@ fn lock_implicit_virtual_project() -> Result<()> {
 
 /// Lock a project that has a path dependency that is implicitly non-virtual (despite
 /// omitting `build-system`).
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_implicit_package_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22390,6 +23043,7 @@ fn lock_implicit_package_path() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflicting_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22420,6 +23074,7 @@ fn lock_conflicting_environment() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_split_python_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22544,6 +23199,7 @@ fn lock_split_python_environment() -> Result<()> {
 /// Correctly narrow the Python requirement when upper bounds are present.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/6911>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_python_upper_bound() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -22657,7 +23313,7 @@ fn lock_python_upper_bound() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
             { name = "click" },
-            { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
+            { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9' or python_full_version >= '3.13'" },
             { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9' and python_full_version < '3.13'" },
             { name = "onnxruntime" },
             { name = "python-dotenv" },
@@ -22769,8 +23425,8 @@ fn lock_python_upper_bound() -> Result<()> {
         dependencies = [
             { name = "coloredlogs" },
             { name = "flatbuffers" },
-            { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
-            { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+            { name = "numpy", version = "1.24.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9' or python_full_version >= '3.13'" },
+            { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9' and python_full_version < '3.13'" },
             { name = "packaging" },
             { name = "protobuf" },
             { name = "sympy" },
@@ -22920,6 +23576,7 @@ fn lock_python_upper_bound() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/7876>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_simplified_environments() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -23037,6 +23694,7 @@ fn lock_simplified_environments() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dependency_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23275,8 +23933,8 @@ fn lock_dependency_metadata() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_dependency_metadata_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -23397,6 +24055,7 @@ fn lock_dependency_metadata_git() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_strip_fragment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23481,6 +24140,7 @@ fn lock_strip_fragment() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_request_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23525,6 +24185,7 @@ fn lock_request_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_duplicate_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23558,10 +24219,10 @@ fn lock_duplicate_sources() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 9
-      |
-    9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
-      |         ^^^^^^^^^^^^^^^^
-    duplicate key
+          |
+        9 |         python-multipart = { url = "https://files.pythonhosted.org/packages/c0/3e/9fbfd74e7f5b54f653f7ca99d44ceb56e718846920162165061c4c22b71a/python_multipart-0.0.8-py3-none-any.whl" }
+          |         ^^^^^^^^^^^^^^^^
+        duplicate key
     "#);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -23586,15 +24247,16 @@ fn lock_duplicate_sources() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 7, column 9
-      |
-    7 |         [tool.uv.sources]
-      |         ^^^^^^^^^^^^^^^^^
-    duplicate sources for package `python-multipart`
+          |
+        7 |         [tool.uv.sources]
+          |         ^^^^^^^^^^^^^^^^^
+        duplicate sources for package `python-multipart`
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_project_table() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23640,6 +24302,7 @@ fn lock_invalid_project_table() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_missing_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23662,15 +24325,16 @@ fn lock_missing_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-      |
-    1 | [project]
-      | ^^^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
+          |
+        1 | [project]
+          | ^^^^^^^^^
+        `pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_missing_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23693,15 +24357,16 @@ fn lock_missing_version() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 1, column 1
-      |
-    1 | [project]
-      | ^^^^^^^^^
-    `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
+          |
+        1 | [project]
+          | ^^^^^^^^^
+        `pyproject.toml` is using the `[project]` table, but the required `project.version` field is neither set nor present in the `project.dynamic` list
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsupported_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23793,6 +24458,7 @@ fn lock_unsupported_version() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/7618>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_change_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -23852,8 +24518,8 @@ fn lock_change_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version < '3.13'" },
-            { name = "sniffio", marker = "python_full_version < '3.13'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d3/e6/901a94731af20e7109415525666cb3753a2bd1edd19616c2730448dffd0d/anyio-2.2.0.tar.gz", hash = "sha256:4a41c5b3a65ed92e469d51b6fba3779301850ea2e352afcf9e36c46f21ee14a9", size = 97217, upload-time = "2021-02-26T23:59:13.525Z" }
         wheels = [
@@ -23868,8 +24534,8 @@ fn lock_change_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version >= '3.13'" },
-            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/28/99/2dfd53fd55ce9838e6ff2d4dac20ce58263798bd1a0dbe18b3a9af3fcfce/anyio-3.7.1.tar.gz", hash = "sha256:44a3c9aba0f5defa43261a8b3efb97891f2bd7d804e0e1f56419befa1adfc780", size = 142927, upload-time = "2023-07-05T16:45:02.294Z" }
         wheels = [
@@ -23973,8 +24639,8 @@ fn lock_change_requires_python() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version == '3.12.*'" },
-            { name = "sniffio", marker = "python_full_version == '3.12.*'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/d3/e6/901a94731af20e7109415525666cb3753a2bd1edd19616c2730448dffd0d/anyio-2.2.0.tar.gz", hash = "sha256:4a41c5b3a65ed92e469d51b6fba3779301850ea2e352afcf9e36c46f21ee14a9", size = 97217, upload-time = "2021-02-26T23:59:13.525Z" }
         wheels = [
@@ -23989,8 +24655,8 @@ fn lock_change_requires_python() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "idna", marker = "python_full_version >= '3.13'" },
-            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "idna" },
+            { name = "sniffio" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/28/99/2dfd53fd55ce9838e6ff2d4dac20ce58263798bd1a0dbe18b3a9af3fcfce/anyio-3.7.1.tar.gz", hash = "sha256:44a3c9aba0f5defa43261a8b3efb97891f2bd7d804e0e1f56419befa1adfc780", size = 142927, upload-time = "2023-07-05T16:45:02.294Z" }
         wheels = [
@@ -24037,6 +24703,7 @@ fn lock_change_requires_python() -> Result<()> {
 }
 
 /// Retrieve credentials for a named index from the keyring.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_keyring_credentials() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
@@ -24134,6 +24801,7 @@ async fn lock_keyring_credentials() -> Result<()> {
 }
 
 /// Get credentials from the keyring with `explicit = true` and `authenticate = always`
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_keyring_explicit_always() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
@@ -24222,6 +24890,7 @@ async fn lock_keyring_explicit_always() -> Result<()> {
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always`
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
@@ -24329,6 +24998,7 @@ async fn lock_keyring_credentials_always_authenticate_fetches_username() -> Resu
 
 /// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
 /// always` — but the keyring version installed does not support `--mode creds`
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
     let keyring_context = uv_test::test_context!("3.12");
@@ -24386,6 +25056,7 @@ async fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Resu
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -24491,6 +25162,7 @@ fn lock_multiple_sources() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_conflict() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -24502,7 +25174,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
+        dependencies = 1
 
         [tool.uv.sources]
         iniconfig = [
@@ -24528,6 +25200,7 @@ fn lock_multiple_sources_conflict() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_no_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -24563,6 +25236,7 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -24639,7 +25313,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform == 'win32'" },
+            { name = "markupsafe" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", upload-time = "2025-01-29T22:50:57.275Z" },
@@ -24653,7 +25327,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform != 'win32'" },
+            { name = "markupsafe" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", upload-time = "2025-01-29T22:50:57.275Z" },
@@ -24704,6 +25378,7 @@ fn lock_multiple_sources_index_disjoint_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_mixed() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -24776,7 +25451,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform == 'win32'" },
+            { name = "markupsafe" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/Jinja2-3.1.3-py3-none-any.whl", hash = "sha256:7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa", upload-time = "2025-01-29T22:50:57.275Z" },
@@ -24790,7 +25465,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform != 'win32'" },
+            { name = "markupsafe" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/31/80/3a54838c3fb461f6fec263ebf3a3a41771bd05190238de3486aae8540c36/jinja2-3.1.4-py3-none-any.whl", hash = "sha256:bc5dd2abb727a5319567b7a813e6a2e7318c39f4f487cfe6c89c6f9c7d25197d" },
@@ -24848,6 +25523,7 @@ fn lock_multiple_sources_index_mixed() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_non_total() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -24954,6 +25630,7 @@ fn lock_multiple_sources_index_non_total() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_explicit() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25020,7 +25697,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform != 'win32'" },
+            { name = "markupsafe" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ed/55/39036716d19cab0747a5020fc7e907f362fbf48c984b14e62127f7e68e5d/jinja2-3.1.4.tar.gz", hash = "sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369", size = 240245, upload-time = "2024-05-05T23:42:02.455Z" }
         wheels = [
@@ -25035,7 +25712,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "markupsafe", marker = "sys_platform == 'win32'" },
+            { name = "markupsafe" },
         ]
         sdist = { url = "https://test-files.pythonhosted.org/packages/ed/55/39036716d19cab0747a5020fc7e907f362fbf48c984b14e62127f7e68e5d/jinja2-3.1.4.tar.gz", hash = "sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369", size = 240245, upload-time = "2024-05-05T23:41:55.462Z" }
         wheels = [
@@ -25111,6 +25788,7 @@ fn lock_multiple_sources_index_explicit() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_non_total() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25218,6 +25896,7 @@ fn lock_multiple_sources_non_total() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_respect_marker() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25297,6 +25976,7 @@ fn lock_multiple_sources_respect_marker() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25384,6 +26064,7 @@ fn lock_multiple_sources_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25438,6 +26119,7 @@ fn lock_multiple_sources_index_overlapping_extras() -> Result<()> {
 }
 
 /// Sources will be ignored when an `extra` is applied, but references a non-existent extra.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_index_with_missing_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25478,6 +26160,7 @@ fn lock_multiple_index_with_missing_extra() -> Result<()> {
 
 /// Sources will be ignored when an `extra` is applied, but the dependency isn't in an optional
 /// group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_index_with_absent_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25520,6 +26203,7 @@ fn lock_multiple_index_with_absent_extra() -> Result<()> {
 }
 
 /// Sources will be ignored when a `group` is applied, but references a non-existent group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_index_with_missing_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25560,6 +26244,7 @@ fn lock_multiple_index_with_missing_group() -> Result<()> {
 
 /// Sources will be ignored when a `group` is applied, but the dependency isn't in a dependency
 /// group.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_multiple_index_with_absent_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -25601,6 +26286,7 @@ fn lock_multiple_index_with_absent_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dry_run() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25668,6 +26354,7 @@ fn lock_dry_run() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dry_run_noop() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25731,6 +26418,7 @@ fn lock_dry_run_noop() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_include() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -25915,6 +26603,7 @@ fn lock_group_include() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26039,6 +26728,7 @@ fn lock_group_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_includes_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26204,6 +26894,7 @@ fn lock_group_includes_requires_python() -> Result<()> {
 }
 
 /// Referring to a dependency-group with group-requires-python that does not exist
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_requires_undefined_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26238,6 +26929,7 @@ fn lock_group_requires_undefined_group() -> Result<()> {
 }
 
 /// The legacy dev-dependencies cannot be referred to by group-requires-python
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_requires_dev_dep() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26272,6 +26964,7 @@ fn lock_group_requires_dev_dep() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26401,6 +27094,7 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_include_cycle() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26434,6 +27128,7 @@ fn lock_group_include_cycle() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_include_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26469,6 +27164,7 @@ fn lock_group_include_dev() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_include_missing() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26500,6 +27196,7 @@ fn lock_group_include_missing() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_invalid_entry_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26527,8 +27224,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     error: Project `project` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+        invalid!
+               ^
     "#);
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r#"
@@ -26540,13 +27237,14 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     error: Project `project` has malformed dependency groups
       Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
-    invalid!
-           ^
+        invalid!
+               ^
     "#);
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_invalid_entry_group_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26573,15 +27271,16 @@ fn lock_group_invalid_entry_group_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 16
-      |
-    9 |         foo = [{include-group = "invalid!"}]
-      |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    Not a valid package or extra name: "invalid!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+          |
+        9 |         foo = [{include-group = "invalid!"}]
+          |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        Not a valid package or extra name: "invalid!". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
     "#);
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26609,15 +27308,16 @@ fn lock_group_invalid_duplicate_group_name() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 8, column 9
-      |
-    8 |         [dependency-groups]
-      |         ^^^^^^^^^^^^^^^^^^^
-    duplicate dependency group: `foo-bar`
+          |
+        8 |         [dependency-groups]
+          |         ^^^^^^^^^^^^^^^^^^^
+        duplicate dependency group: `foo-bar`
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_invalid_entry_table() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26649,6 +27349,7 @@ fn lock_group_invalid_entry_table() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_include_with_extra_key() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26681,6 +27382,7 @@ fn lock_group_include_with_extra_key() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_invalid_entry_type() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26707,15 +27409,16 @@ fn lock_group_invalid_entry_type() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 33
-      |
-    9 |         foo = [{include-group = true}]
-      |                                 ^^^^
-    invalid type: boolean `true`, expected a string
+          |
+        9 |         foo = [{include-group = true}]
+          |                                 ^^^^
+        invalid type: boolean `true`, expected a string
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_empty_entry_table() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26742,15 +27445,16 @@ fn lock_group_empty_entry_table() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 16
-      |
-    9 |         foo = [{}]
-      |                ^^
-    missing field `include-group`
+          |
+        9 |         foo = [{}]
+          |                ^^
+        missing field `include-group`
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_group_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -26968,8 +27672,8 @@ fn lock_group_workspace() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_transitive_git() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -27112,6 +27816,7 @@ fn lock_transitive_git() -> Result<()> {
 }
 
 /// Lock a package with a dynamic version.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -27223,6 +27928,7 @@ fn lock_dynamic_version() -> Result<()> {
 }
 
 /// Lock a package with a dynamic version and dynamic dependencies.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -27334,6 +28040,7 @@ fn lock_dynamic_version_dependencies() -> Result<()> {
 
 /// Validating a lockfile with a dynamic version (but static dependencies) shouldn't require
 /// building the package.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_no_build() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -27400,6 +28107,7 @@ fn lock_dynamic_version_no_build() -> Result<()> {
 }
 
 /// Lock a package that depends on a package with a dynamic version using a `workspace` source.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -27591,6 +28299,7 @@ fn lock_dynamic_version_workspace_member() -> Result<()> {
 
 /// Lock a package that depends on a package with a dynamic version using a `path` source (as
 /// opposed to a workspace).
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_path_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -27768,6 +28477,7 @@ fn lock_dynamic_version_path_dependency() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/10776>
 ///
 /// N.B. `hatchling` "flattens" recursive extras.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -27922,6 +28632,7 @@ fn lock_dynamic_version_self_extra_hatchling() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/10776>
 ///
 /// N.B. `setuptools` does not "flatten" recursive extras.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -28080,6 +28791,7 @@ fn lock_dynamic_version_self_extra_setuptools() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/11047>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_built_cache() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28201,6 +28913,7 @@ fn lock_dynamic_built_cache() -> Result<()> {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/11047>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_shared_build_dependency() -> Result<()> {
     let context = uv_test::test_context!("3.13").with_exclude_newer("2025-01-28T00:00:00Z");
@@ -28283,9 +28996,9 @@ fn lock_shared_build_dependency() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "pyyaml", marker = "python_full_version < '3.9'" },
-            { name = "typing-extensions", marker = "python_full_version < '3.9'" },
-            { name = "typing-inspect", marker = "python_full_version < '3.9'" },
+            { name = "pyyaml" },
+            { name = "typing-extensions" },
+            { name = "typing-inspect" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/81/ef/610498b5e982d9dd64f2af8422ece1be44a946a8dbda15d08087e0e1ff08/libcst-1.1.0.tar.gz", hash = "sha256:0acbacb9a170455701845b7e940e2d7b9519db35a86768d86330a0b0deae1086", size = 764691, upload-time = "2023-10-06T02:50:16.255Z" }
         wheels = [
@@ -28329,7 +29042,7 @@ fn lock_shared_build_dependency() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "pyyaml", marker = "python_full_version >= '3.9'" },
+            { name = "pyyaml" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/f4/ec/d24c0ad33838dfbfe20a760b301d529c63cef32f8b91dae380c97f8bf127/libcst-1.6.0.tar.gz", hash = "sha256:e80ecdbe3fa43b3793cae8fa0b07a985bd9a693edbe6e9d076f5422ecadbf0db", size = 776146, upload-time = "2025-01-10T11:29:19.648Z" }
         wheels = [
@@ -28464,8 +29177,8 @@ fn lock_shared_build_dependency() -> Result<()> {
         version = "0.9.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "mypy-extensions", marker = "python_full_version < '3.9'" },
-            { name = "typing-extensions", marker = "python_full_version < '3.9'" },
+            { name = "mypy-extensions" },
+            { name = "typing-extensions" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/dc/74/1789779d91f1961fa9438e9a8710cdae6bd138c80d7303996933d117264a/typing_inspect-0.9.0.tar.gz", hash = "sha256:b23fc42ff6f6ef6954e4852c1fb512cdd18dbea03134f91f856a95ccc9461f78", size = 13825, upload-time = "2023-05-24T20:25:47.612Z" }
         wheels = [
@@ -28489,6 +29202,7 @@ fn lock_shared_build_dependency() -> Result<()> {
 }
 
 /// Re-lock after converting a package from dynamic to static.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_dynamic_to_static() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28580,7 +29294,9 @@ fn lock_dynamic_to_static() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -28619,6 +29335,7 @@ fn lock_dynamic_to_static() -> Result<()> {
 }
 
 /// Re-lock after converting a package from static to dynamic.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_static_to_dynamic() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28711,7 +29428,9 @@ fn lock_static_to_dynamic() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -28748,6 +29467,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_bump_static_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28813,7 +29533,9 @@ fn lock_bump_static_version() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -28851,6 +29573,7 @@ fn lock_bump_static_version() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_prod() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28908,6 +29631,7 @@ fn lock_derivation_chain_prod() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -28966,6 +29690,7 @@ fn lock_derivation_chain_extra() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_group() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29026,6 +29751,7 @@ fn lock_derivation_chain_group() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_derivation_chain_extended() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29099,6 +29825,7 @@ fn lock_derivation_chain_extended() -> Result<()> {
 
 /// The project itself is marked as an editable dependency, but under the wrong name. The project
 /// itself isn't a package.
+#[cfg(feature = "test-universal")]
 #[test]
 fn mismatched_name_self_editable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29134,6 +29861,7 @@ fn mismatched_name_self_editable() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_relative_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29236,6 +29964,7 @@ fn lock_relative_project() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_recursive_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29345,6 +30074,7 @@ fn lock_recursive_extra() -> Result<()> {
 /// ```
 /// uv pip install dist/pymatgen-2024.10.3.tar.gz pymatgen[ci,optional] --resolution=lowest
 /// ```
+#[cfg(feature = "test-universal")]
 #[test]
 fn no_lowest_warning_with_name_and_url() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29382,6 +30112,7 @@ fn no_lowest_warning_with_name_and_url() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_build_static_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29479,6 +30210,7 @@ fn lock_no_build_static_metadata() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_no_build_dynamic_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29507,6 +30239,7 @@ fn lock_no_build_dynamic_metadata() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_compatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29607,6 +30340,7 @@ fn lock_self_compatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_exact() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29707,6 +30441,7 @@ fn lock_self_exact() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29737,6 +30472,7 @@ fn lock_self_incompatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_extra_to_extra_compatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29841,6 +30577,7 @@ fn lock_self_extra_to_extra_compatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29874,6 +30611,7 @@ fn lock_self_extra_to_same_extra_incompatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -29908,6 +30646,7 @@ fn lock_self_extra_to_other_extra_incompatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_extra_compatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30012,6 +30751,7 @@ fn lock_self_extra_compatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_extra_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30045,6 +30785,7 @@ fn lock_self_extra_incompatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_marker_compatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30145,6 +30886,7 @@ fn lock_self_marker_compatible() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_self_marker_incompatible() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30177,6 +30919,7 @@ fn lock_self_marker_incompatible() -> Result<()> {
 
 /// When resolving `PyQt5-Qt5`, we choose the latest version, even though it doesn't support
 /// Windows. This may change in the future.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_split_on_windows() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -30274,8 +31017,8 @@ fn lock_split_on_windows() -> Result<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn lock_missing_git_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -30307,6 +31050,7 @@ fn lock_missing_git_prefix() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_arm() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30372,7 +31116,7 @@ fn lock_arm() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'arm64'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -30384,6 +31128,7 @@ fn lock_arm() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_x86_64() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30450,7 +31195,7 @@ fn lock_x86_64() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'x86_64'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -30462,6 +31207,7 @@ fn lock_x86_64() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_x86() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30525,7 +31271,7 @@ fn lock_x86() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "platform_machine == 'i686'" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -30537,6 +31283,7 @@ fn lock_x86() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30646,12 +31393,15 @@ fn lock_script() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_script_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30791,6 +31541,7 @@ fn lock_script_path() -> Result<()> {
 ///
 /// `uv lock --script` should invalidate a script lockfile when a local editable dependency's
 /// `pyproject.toml` changes.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_script_editable_path_dependency_change() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -30964,6 +31715,7 @@ fn lock_script_editable_path_dependency_change() -> Result<()> {
 }
 
 /// `uv lock --script` should add a PEP 723 tag, if it doesn't exist already.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_script_initialize() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_filtered_missing_file_error();
@@ -31012,6 +31764,7 @@ fn lock_script_initialize() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_pytorch_cpu() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -32012,6 +32765,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 /// in the PyTorch forks.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_pytorch_index_preferences() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -32667,6 +33421,7 @@ fn lock_pytorch_index_preferences() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_intel_mac() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -32861,7 +33616,7 @@ fn lock_intel_mac() -> Result<()> {
         version = "9.1.0.70"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "nvidia-cublas-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
@@ -32872,7 +33627,7 @@ fn lock_intel_mac() -> Result<()> {
         version = "11.2.1.3"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "nvidia-nvjitlink-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/27/94/3266821f65b92b3138631e9c8e7fe1fb513804ac934485a8d05776e1dd43/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f083fc24912aa410be21fa16d157fed2055dab1cc4b6934a0e03cba69eb242b9", size = 211459117, upload-time = "2024-04-03T20:57:40.402Z" },
@@ -32891,9 +33646,9 @@ fn lock_intel_mac() -> Result<()> {
         version = "11.6.1.9"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-cublas-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-            { name = "nvidia-cusparse-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "nvidia-cublas-cu12" },
+            { name = "nvidia-cusparse-cu12" },
+            { name = "nvidia-nvjitlink-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/3a/e1/5b9089a4b2a4790dfdea8b3a006052cfecff58139d5a4e34cb1a51df8d6f/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_x86_64.whl", hash = "sha256:19e33fa442bcfd085b3086c4ebf7e8debc07cfe01e11513cc6d332fd918ac260", size = 127936057, upload-time = "2024-04-03T20:58:28.735Z" },
@@ -32904,7 +33659,7 @@ fn lock_intel_mac() -> Result<()> {
         version = "12.3.1.170"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "nvidia-nvjitlink-cu12" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/db/f7/97a9ea26ed4bbbfc2d470994b8b4f338ef663be97b8f677519ac195e113d/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_x86_64.whl", hash = "sha256:ea4f11a2904e2a8dc4b1833cc1b5181cde564edd0d5cd33e3c168eff2d1863f1", size = 207454763, upload-time = "2024-04-03T20:58:59.995Z" },
@@ -32975,12 +33730,12 @@ fn lock_intel_mac() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "filelock", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "fsspec", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "jinja2", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "networkx", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "sympy", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-            { name = "typing-extensions", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "sympy" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/3f/14/e105b8ef6d324e789c1589e95cb0ab63f3e07c2216d68b1178b7c21b7d2a/torch-2.2.2-cp311-none-macosx_10_9_x86_64.whl", hash = "sha256:95b9b44f3bcebd8b6cd8d37ec802048c872d9c567ba52c894bba90863a439059", size = 150796474, upload-time = "2024-03-27T21:09:29.142Z" },
@@ -32996,10 +33751,10 @@ fn lock_intel_mac() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "filelock", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-            { name = "fsspec", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-            { name = "jinja2", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-            { name = "networkx", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
             { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-cuda-cupti-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-cuda-nvrtc-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
@@ -33012,10 +33767,10 @@ fn lock_intel_mac() -> Result<()> {
             { name = "nvidia-nccl-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
             { name = "nvidia-nvtx-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "setuptools", marker = "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform != 'darwin')" },
-            { name = "sympy", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "setuptools", marker = "python_full_version >= '3.12'" },
+            { name = "sympy" },
             { name = "triton", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
-            { name = "typing-extensions", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/d1/35/e8b2daf02ce933e4518e6f5682c72fd0ed66c15910ea1fb4168f442b71c4/torch-2.5.1-cp311-cp311-manylinux1_x86_64.whl", hash = "sha256:de5b7d6740c4b636ef4db92be922f0edc425b65ed78c5076c43c42d362a45457", size = 906474467, upload-time = "2024-10-29T17:38:49.832Z" },
@@ -33034,7 +33789,7 @@ fn lock_intel_mac() -> Result<()> {
         version = "3.1.0"
         source = { registry = "https://pypi.org/simple" }
         dependencies = [
-            { name = "filelock", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+            { name = "filelock" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/86/17/d9a5cf4fcf46291856d1e90762e36cbabd2a56c7265da0d1d9508c8e3943/triton-3.1.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f34f6e7885d1bf0eaaf7ba875a5f0ce6f3c13ba98f9503651c1e6dc6757ed5c", size = 209506424, upload-time = "2024-10-14T16:05:42.337Z" },
@@ -33056,6 +33811,7 @@ fn lock_intel_mac() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_pytorch_local_preference() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -33332,13 +34088,13 @@ fn lock_pytorch_local_preference() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "filelock", marker = "sys_platform == 'darwin'" },
-            { name = "fsspec", marker = "sys_platform == 'darwin'" },
-            { name = "jinja2", marker = "sys_platform == 'darwin'" },
-            { name = "networkx", marker = "sys_platform == 'darwin'" },
-            { name = "setuptools", marker = "sys_platform == 'darwin'" },
-            { name = "sympy", marker = "sys_platform == 'darwin'" },
-            { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "setuptools" },
+            { name = "sympy" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0-cp312-none-macosx_11_0_arm64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
@@ -33353,13 +34109,13 @@ fn lock_pytorch_local_preference() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "filelock", marker = "sys_platform != 'darwin'" },
-            { name = "fsspec", marker = "sys_platform != 'darwin'" },
-            { name = "jinja2", marker = "sys_platform != 'darwin'" },
-            { name = "networkx", marker = "sys_platform != 'darwin'" },
-            { name = "setuptools", marker = "sys_platform != 'darwin'" },
-            { name = "sympy", marker = "sys_platform != 'darwin'" },
-            { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
+            { name = "filelock" },
+            { name = "fsspec" },
+            { name = "jinja2" },
+            { name = "networkx" },
+            { name = "setuptools" },
+            { name = "sympy" },
+            { name = "typing-extensions" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.6.0%2Bcpu-cp312-cp312-linux_x86_64.whl", upload-time = "2025-01-29T22:50:59.085Z" },
@@ -33408,6 +34164,7 @@ fn lock_pytorch_local_preference() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn windows_arm() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -33479,7 +34236,7 @@ fn windows_arm() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "pywin32", marker = "platform_machine == 'AMD64' and sys_platform == 'win32'" },
+            { name = "pywin32", marker = "sys_platform == 'win32'" },
         ]
 
         [package.metadata]
@@ -33491,6 +34248,7 @@ fn windows_arm() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn windows_amd64_required() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -33566,6 +34324,7 @@ fn windows_amd64_required() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn windows_arm64_required() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -33639,6 +34398,7 @@ fn windows_arm64_required() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_empty_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -33722,7 +34482,9 @@ fn lock_empty_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -33758,7 +34520,9 @@ fn lock_empty_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -33830,6 +34594,7 @@ fn lock_empty_extra() -> Result<()> {
 
 /// The fork markers in the lockfile don't cover the supported environments (here: universal). We
 /// need to discard the lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_invalid_fork_markers() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -33909,6 +34674,7 @@ fn lock_invalid_fork_markers() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_omit_wheels_exclude_newer() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
@@ -34000,6 +34766,7 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
 }
 
 /// Check that we hint if the resolution failed in a different Python version.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflict_for_disjoint_python_version() -> Result<()> {
     let context = uv_test::test_context!("3.9");
@@ -34058,7 +34825,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 }
 
 /// Check that we hint if the resolution failed for a different platform.
-#[cfg(feature = "test-python-patch")]
+#[cfg(all(feature = "test-universal", feature = "test-python-patch"))]
 #[test]
 fn lock_requires_python_empty_lock_file() -> Result<()> {
     // N.B. These versions were selected based on what was
@@ -34242,6 +35009,7 @@ fn lock_requires_python_empty_lock_file() -> Result<()> {
 }
 
 /// Check that we hint if the resolution failed for a different platform.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_conflict_for_disjoint_platform() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34305,6 +35073,7 @@ fn lock_conflict_for_disjoint_platform() -> Result<()> {
 
 /// Add a package with an `--index` URL with no trailing slash while an index with the same URL
 /// exists with a trailing slash in the `pyproject.toml`.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34438,6 +35207,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_not_index_argument() -> Resu
 
 /// Run `uv lock --locked` with a lockfile with trailing slashes on the index URL but a
 /// `pyproject.toml` without a trailing slash on the index URL.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34523,7 +35293,9 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -34531,6 +35303,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
 
 /// Run `uv lock --locked` with `pyproject.toml` with trailing slashes on the index URL but a
 /// lockfile without trailing slashes on the index URL.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34616,7 +35389,9 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -34624,6 +35399,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
 
 /// Run `uv lock --locked` with a lockfile and `pyproject.toml` with trailing slashes on the index
 /// URL.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34714,6 +35490,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_and_pyproject_toml() -> Resul
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_trailing_slash_find_links() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34809,7 +35586,9 @@ fn lock_trailing_slash_find_links() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.lock(), @"
@@ -34860,6 +35639,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_prefix_match() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34889,6 +35669,7 @@ fn lock_prefix_match() -> Result<()> {
 }
 
 /// Regression test for <https://github.com/astral-sh/uv/issues/14231>.
+#[cfg(feature = "test-universal")]
 #[test]
 fn test_tilde_equals_python_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34920,6 +35701,7 @@ fn test_tilde_equals_python_version() -> Result<()> {
 }
 
 /// Test that a configured exclude-newer value can be disabled via the CLI.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_disable_cli() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -34970,6 +35752,7 @@ fn lock_exclude_newer_disable_cli() -> Result<()> {
 }
 
 /// Test that a configured exclude-newer value can be disabled via the environment.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_disable_environment() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35018,6 +35801,7 @@ fn lock_exclude_newer_disable_environment() -> Result<()> {
 }
 
 /// Test that exclude-newer can be disabled in configuration.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_disable_config() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35066,6 +35850,7 @@ fn lock_exclude_newer_disable_config() -> Result<()> {
 }
 
 /// Test that exclude-newer-package can be disabled for specific packages using `false`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_package_disable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35154,6 +35939,7 @@ fn lock_exclude_newer_package_disable() -> Result<()> {
 }
 
 /// Test that exclude-newer-package is properly serialized in the lockfile.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_package() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35298,6 +36084,7 @@ fn lock_exclude_newer_package() -> Result<()> {
 /// Test that the resolver emits a hint when all versions are excluded by `--exclude-newer`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18014>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35337,6 +36124,7 @@ fn lock_exclude_newer_hint() -> Result<()> {
 /// Regression test for:
 /// - <https://github.com/astral-sh/uv/issues/16813>
 /// - <https://github.com/astral-sh/uv/issues/18799>
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_exclude_newer_index_disable() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35422,6 +36210,7 @@ async fn lock_exclude_newer_index_disable() -> Result<()> {
 }
 
 /// Test that an index can set its own `exclude-newer` value, and package overrides still win.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_exclude_newer_index_value() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35519,6 +36308,7 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
 /// even though older versions of the same package are still available.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18949>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35558,6 +36348,7 @@ fn lock_exclude_newer_hint_pinned_version() -> Result<()> {
 /// release upper bound is excluded by `--exclude-newer`.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/19266>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35595,6 +36386,7 @@ fn lock_exclude_newer_hint_compatible_release() -> Result<()> {
 
 /// Test that lockfile validation includes explicit indexes from path dependencies.
 /// <https://github.com/astral-sh/uv/issues/11419>
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35673,6 +36465,7 @@ async fn lock_path_dependency_explicit_index() -> Result<()> {
 
 /// Test that lockfile validation includes explicit indexes from path dependencies
 /// defined in a non-root workspace member.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35773,6 +36566,7 @@ async fn lock_path_dependency_explicit_index_workspace_member() -> Result<()> {
 
 /// Test that lockfile validation works correctly when path dependency has
 /// both explicit and non-explicit indexes.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_path_dependency_mixed_indexes() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35855,6 +36649,7 @@ async fn lock_path_dependency_mixed_indexes() -> Result<()> {
 }
 
 /// Test that path dependencies without an index don't affect validation.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_path_dependency_no_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -35919,6 +36714,7 @@ fn lock_path_dependency_no_index() -> Result<()> {
 /// child's `requires-python` is stricter than the root but compatible with the marker.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/18199>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_path_dependency_marker_gated_requires_python() -> Result<()> {
     // Use Python 3.9 as the interpreter to reproduce the issue: the installed Python (3.9)
@@ -35976,6 +36772,7 @@ fn lock_path_dependency_marker_gated_requires_python() -> Result<()> {
 }
 
 /// Test that a nested path dependency with an explicit index validates correctly.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36071,6 +36868,7 @@ async fn lock_nested_path_dependency_explicit_index() -> Result<()> {
 }
 
 /// Test that validating circular path dependency indexes doesn't cause an infinite loop.
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_circular_path_dependency_explicit_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36150,6 +36948,7 @@ async fn lock_circular_path_dependency_explicit_index() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_android() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-06-01T00:00:00Z");
@@ -36216,7 +37015,7 @@ fn lock_android() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "deltachat-rpc-server", marker = "sys_platform == 'android'" },
+            { name = "deltachat-rpc-server" },
         ]
 
         [package.metadata]
@@ -36249,6 +37048,7 @@ fn lock_android() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_required_intersection() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36325,7 +37125,7 @@ fn lock_required_intersection() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "numpy", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+            { name = "numpy" },
         ]
 
         [package.metadata]
@@ -36358,6 +37158,7 @@ fn lock_required_intersection() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_refresh() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36585,6 +37386,7 @@ fn lock_refresh() -> Result<()> {
 }
 
 /// Ensure conflicts on virtual packages (such as markers) give good error messages.
+#[cfg(feature = "test-universal")]
 #[test]
 fn collapsed_error_with_marker_packages() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36620,6 +37422,7 @@ fn collapsed_error_with_marker_packages() -> Result<()> {
 }
 
 /// <https://github.com/astral-sh/uv/issues/16148>
+#[cfg(feature = "test-universal")]
 #[test]
 fn no_warning_without_and_with_lower_bound() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36650,6 +37453,7 @@ fn no_warning_without_and_with_lower_bound() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36679,6 +37483,7 @@ fn lock_unsupported_wheel_url_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -36721,6 +37526,7 @@ fn lock_unsupported_wheel_url_supported_platform() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     let context = uv_test::test_context!("3.11");
@@ -36753,6 +37559,7 @@ fn lock_unsupported_wheel_url_required_platform() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36841,6 +37648,7 @@ fn lock_required_environment_cycle_reports_resolution_error() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -36906,6 +37714,7 @@ fn lock_supported_environment_wheel_only_package_requires_compatible_wheels() ->
 /// above the tag's version. When `tool.uv.environments` constrains to a specific Python version
 /// (e.g., 3.12), the resolver should recognize that a `cp37-abi3` wheel covers that environment
 /// rather than treating the `cp37` tag as an exact Python 3.7 requirement.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_supported_environment_abi3_wheel() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -36996,7 +37805,7 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "abi3-package", marker = "python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux'" },
+            { name = "abi3-package" },
         ]
 
         [package.metadata]
@@ -37024,6 +37833,7 @@ fn lock_supported_environment_abi3_wheel() -> Result<()> {
 /// it's defined in a dependency group or the top-level `project.dependencies` field.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/16843>
+#[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_group() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -37064,16 +37874,17 @@ async fn lock_check_multiple_default_indexes_explicit_assignment_dependency_grou
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 13, column 9
-       |
-    13 |         [[tool.uv.index]]
-       |         ^^^^^^^^^^^^^^^^^
-    found multiple indexes with `default = true`; only one index may be marked as default
+           |
+        13 |         [[tool.uv.index]]
+           |         ^^^^^^^^^^^^^^^^^
+        found multiple indexes with `default = true`; only one index may be marked as default
     ");
 
     Ok(())
 }
 
 /// Do not panic with `u64::MAX` causing an `u64::MAX + 1` overflow.
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -37106,6 +37917,7 @@ fn lock_tilde_equal_version_u64_max_rejected() -> Result<()> {
 /// Test that `uv lock --frozen` and `UV_FROZEN=1` show a warning.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/12783>
+#[cfg(feature = "test-universal")]
 #[test]
 fn lock_frozen_warning() -> Result<()> {
     let context = uv_test::test_context!("3.12");

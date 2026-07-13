@@ -85,9 +85,9 @@ impl CompatibleDist<'_> {
     pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
         match self {
             Self::InstalledDist(_) => None,
-            Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
-            Self::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
-            Self::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+            Self::SourceDist { sdist, .. } => sdist.file.requires_python.as_deref(),
+            Self::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_deref(),
+            Self::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_deref(),
         }
     }
 

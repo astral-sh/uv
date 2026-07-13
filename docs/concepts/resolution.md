@@ -405,16 +405,82 @@ requirements on `pydantic`, replacing them with the override. In the above examp
 
 While constraints can only _reduce_ the set of acceptable versions for a package, overrides can
 _expand_ the set of acceptable versions, providing an escape hatch for erroneous upper version
-bounds. As with constraints, overrides do not add a dependency on the package and only take effect
-if the package is requested in a direct or transitive dependency.
+bounds. As with constraints, global overrides do not add a dependency on the package and only take
+effect if the package is requested in a direct or transitive dependency.
 
 In a `pyproject.toml`, use `tool.uv.override-dependencies` to define a list of overrides. In the
 pip-compatible interface, the `--override` option can be used to pass files with the same format as
 constraints files.
 
+By default, an override applies to every requirement for the named dependency, including direct
+requirements. An override can instead be scoped to the dependencies of a particular package version
+by using an inline table:
+
+```toml
+[tool.uv]
+override-dependencies = [
+    "foo>1",
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["foo>2"] },
+]
+```
+
+In this example, `foo>1` is the global override, while `foo>2` replaces requirements for `foo`
+declared by `bar==0.0.5`. If `bar` does not declare a dependency on `foo`, the scoped override adds
+it. Other dependencies declared by `bar` are unchanged. The `version` field in `package` can be
+omitted to apply the scoped overrides to all versions of `bar`. A version-specific entry takes
+precedence over an all-versions entry, and a scoped override takes precedence over a global override
+for the same dependency.
+
+Scoped overrides currently support registry version specifiers only. Direct URL and path sources,
+including Git sources, and explicit indexes are not supported.
+
+Pre-release and yanked-version permissions are determined before uv knows which scoped overrides
+will apply. As a result, an explicit pre-release or yanked-version pin in any scoped override opts
+that package into the corresponding candidate-selection behavior for the entire resolution, even if
+the scope is not selected.
+
 If multiple overrides are provided for the same package, they must be differentiated with
 [markers](#platform-markers). If a package has a dependency with a marker, it is replaced
 unconditionally when using overrides — it does not matter if the marker evaluates to true or false.
+
+## Dependency exclusions
+
+Dependency exclusions remove packages from the dependency graph. By default, an exclusion applies to
+every requirement for the named dependency, including direct requirements:
+
+```toml
+[tool.uv]
+exclude-dependencies = ["foo"]
+```
+
+An exclusion can instead be scoped to the dependencies of a particular package version:
+
+```toml
+[tool.uv]
+exclude-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["foo"] },
+]
+```
+
+In this example, requirements for `foo` declared by `bar==0.0.5` are removed, while requirements for
+`foo` from other packages are unchanged. The `version` field in `package` can be omitted to apply
+the scoped exclusions to all versions of `bar`. A version-specific entry takes precedence over an
+all-versions entry.
+
+Scoped exclusions can be combined with scoped overrides to replace one dependency with another:
+
+```toml
+[tool.uv]
+override-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["pytorch-lightning"] },
+]
+exclude-dependencies = [
+    { package = { name = "bar", version = "0.0.5" }, dependencies = ["lightning"] },
+]
+```
+
+If the same dependency is both overridden and excluded in a matching scope, the exclusion takes
+precedence.
 
 ## Dependency metadata
 

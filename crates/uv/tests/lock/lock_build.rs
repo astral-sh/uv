@@ -291,7 +291,7 @@ fn lock_build_dependencies() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -962,6 +962,7 @@ fn lock_build_dependencies_distinguish_editable_and_wheel_builds() -> Result<()>
         requires = []
         backend-path = ["."]
         build-backend = "build_backend"
+
         "#,
     )?;
     context.temp_dir.child("build_backend.py").write_str(
@@ -1262,7 +1263,7 @@ fn lock_build_dependencies_preference() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     let lock_second = context.read("uv.lock");
@@ -2091,7 +2092,7 @@ fn lock_build_dependencies_multiple_packages() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -2336,7 +2337,7 @@ fn lock_build_dependencies_upgrade() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -2557,7 +2558,7 @@ fn lock_build_dependencies_exclude_newer() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -3264,16 +3265,12 @@ fn lock_build_dependencies_static_metadata_captures_hook_requirements() -> Resul
     )?;
     dep_dir.child("build_backend.py").write_str(
         r#"
-from importlib.metadata import PackageNotFoundError, version
+from importlib.metadata import version
 from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_wheel(config_settings=None):
-    try:
-        version("helper")
-    except PackageNotFoundError:
-        return ["helper"]
-    raise RuntimeError("helper is installed before the backend hook runs")
+    return ["helper"]
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     if version("helper") != "0.1.0":
@@ -3446,7 +3443,9 @@ def get_requires_for_build_wheel(config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -3531,7 +3530,9 @@ def get_requires_for_build_wheel(config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -3621,13 +3622,15 @@ def get_requires_for_build_wheel(config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
 }
 
-/// Verify that frozen builds reject backend hook requirements that differ from the lock.
+/// Verify that frozen builds reject changed backend hook requirements and replay removed ones.
 #[test]
 fn lock_build_dependencies_static_metadata_revalidates_hook_requirements() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -3674,10 +3677,11 @@ from pathlib import Path
 from zipfile import ZipFile
 
 def get_requires_for_build_wheel(config_settings=None):
-    return [f"helper=={os.environ['UV_TEST_HELPER_VERSION']}"]
+    helper_version = os.environ["UV_TEST_HELPER_VERSION"]
+    return [f"helper=={helper_version}"] if helper_version else []
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    if version("helper") != os.environ["UV_TEST_HELPER_VERSION"]:
+    if version("helper") != (os.environ["UV_TEST_HELPER_VERSION"] or "0.1.0"):
         raise RuntimeError("unexpected helper version")
     filename = "dep-0.1.0-py3-none-any.whl"
     with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
@@ -3759,6 +3763,387 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 
     hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
+
+    // The hook no longer reports `helper`, but the frozen build must still replay the complete
+    // environment captured in the lock before invoking the backend.
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Verify that enabling or changing a locked build environment invalidates stale built wheels.
+#[test]
+fn lock_build_dependencies_invalidate_built_wheel_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("helper-0.2.0-py3-none-any.whl"),
+        "helper",
+        "0.2.0",
+    )?;
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(
+        zip.write_entry_whole(
+            entry,
+            r#"
+import os
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return [f"helper=={os.environ['UV_TEST_HELPER_VERSION']}"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", f"HELPER = {version('helper')!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#
+            .as_bytes(),
+        ),
+    )?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(entry, b""))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep-0.1.0.zip" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .env("UV_TEST_HELPER_VERSION", "0.2.0")
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .env("UV_TEST_HELPER_VERSION", "0.2.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "HELPER = '0.2.0'\n"
+    );
+
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.1.0")
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.1.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "HELPER = '0.1.0'\n"
+    );
+
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.2.0")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert!(
+        package_section(&lock, "dep").contains(r#"{ name = "helper", version = "0.2.0" }"#),
+        "{lock}"
+    );
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_HELPER_VERSION", "0.2.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "HELPER = '0.2.0'\n"
+    );
+
+    Ok(())
+}
+
+/// Verify that changing a nested source build environment invalidates the outer built wheel.
+#[test]
+fn lock_build_dependencies_invalidate_nested_built_wheel_cache() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("tool-0.1.0-py3-none-any.whl"),
+        "tool",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("tool-0.2.0-py3-none-any.whl"),
+        "tool",
+        "0.2.0",
+    )?;
+
+    let helper_dir = context.temp_dir.child("helper");
+    helper_dir.create_dir_all()?;
+    helper_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "helper"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+
+        [tool.uv]
+        cache-keys = [{ file = "helper-value.txt" }]
+        "#,
+    )?;
+    helper_dir.child("helper-value.txt").write_str("first")?;
+    helper_dir.child("build_backend.py").write_str(
+        r#"
+import os
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return [f"tool=={os.environ['UV_TEST_TOOL_VERSION']}"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "helper-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        value = Path(__file__).with_name("helper-value.txt").read_text()
+        wheel.writestr("helper/__init__.py", f"TOOL = {version('tool')!r}\nVALUE = {value!r}\n")
+        wheel.writestr(
+            "helper-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: helper\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "helper-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("helper-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(&format!(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ {}"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+        Url::from_directory_path(helper_dir.path()).expect("valid helper URL")
+    ))?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+from helper import TOOL, VALUE
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", f"TOOL = {TOOL!r}\nVALUE = {VALUE!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_TOOL_VERSION", "0.1.0")
+        .assert()
+        .success();
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_TOOL_VERSION", "0.1.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "TOOL = '0.1.0'\nVALUE = 'first'\n"
+    );
+
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_TOOL_VERSION", "0.2.0")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    assert!(
+        package_section(&lock, "helper").contains(r#"{ name = "tool", version = "0.2.0" }"#),
+        "{lock}"
+    );
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_TOOL_VERSION", "0.2.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "TOOL = '0.2.0'\nVALUE = 'first'\n"
+    );
+
+    helper_dir.child("helper-value.txt").write_str("second")?;
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_TOOL_VERSION", "0.2.0")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "TOOL = '0.2.0'\nVALUE = 'second'\n"
+    );
 
     Ok(())
 }
@@ -5190,7 +5575,9 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -5302,7 +5689,9 @@ fn lock_build_dependencies_extra_build_dependencies_invalidate_find_links() -> R
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -5374,7 +5763,7 @@ fn lock_build_dependencies_use_project_python_range() -> Result<()> {
     error: Failed to resolve requirements from `build-system.requires`
       Caused by: No solution found when resolving: `setuptools>=42`, `builder @ file://[TEMP_DIR]/builder`
       Caused by: Because the requested Python version (>=3.8) does not satisfy Python>=3.12 and builder==0.1.0 depends on Python>=3.12, we can conclude that builder==0.1.0 cannot be used.
-    And because only builder==0.1.0 is available and you require builder, we can conclude that your requirements are unsatisfiable.
+        And because only builder==0.1.0 is available and you require builder, we can conclude that your requirements are unsatisfiable.
 
     hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., builder==0.1.0 only supports >=3.12). Consider using a more restrictive `requires-python` value (like >=3.12).
     ");
@@ -5752,6 +6141,99 @@ fn lock_build_dependencies_default_backend_cache_records_each_package() -> Resul
     Ok(())
 }
 
+/// Verify that frozen default-backend builds replay each package's captured hook requirements.
+#[test]
+fn lock_build_dependencies_default_backend_cache_replays_each_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+
+    for (name, helper) in [("dep-a", "helper-a"), ("dep-b", "helper-b")] {
+        write_wheel(
+            &links_dir.child(format!(
+                "{}-0.1.0-py3-none-any.whl",
+                helper.replace('-', "_")
+            )),
+            helper,
+            "0.1.0",
+        )?;
+
+        let dep_dir = context.temp_dir.child(name);
+        dep_dir.create_dir_all()?;
+        dep_dir.child("setup.py").write_str(&format!(
+            r#"
+import os
+import sys
+from importlib.metadata import version
+from setuptools import setup
+
+if "bdist_wheel" in sys.argv and version("{helper}") != "0.1.0":
+    raise RuntimeError("{name} expected {helper}")
+
+setup(
+    name="{name}",
+    version="0.1.0",
+    setup_requires=["{helper}==0.1.0"] if os.environ["UV_TEST_CAPTURE_SETUP_REQUIRES"] == "1" else [],
+)
+"#
+        ))?;
+    }
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep-a", "dep-b"]
+
+        [tool.uv.sources]
+        dep-a = { path = "dep-a" }
+        dep-b = { path = "dep-b" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_CAPTURE_SETUP_REQUIRES", "1"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    for (name, helper) in [("dep-a", "helper-a"), ("dep-b", "helper-b")] {
+        let dep = package_section(&lock, name);
+        assert!(
+            dep.contains(&format!(r#"{{ name = "{helper}", version = "0.1.0" }}"#)),
+            "{dep}"
+        );
+    }
+
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--frozen")
+        .arg("--reinstall")
+        .arg("--no-cache")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .env("UV_TEST_CAPTURE_SETUP_REQUIRES", "0")
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// Verify that target platform markers do not constrain cached implicit
 /// backend build roots, which must be usable by the build host.
 #[test]
@@ -5952,7 +6434,9 @@ def get_requires_for_build_wheel(config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     let lock = context.read("uv.lock");
@@ -6043,7 +6527,7 @@ fn lock_build_dependencies_static_directory_lowers_build_sources() -> Result<()>
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -6147,6 +6631,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         build-only = true
         build-dependencies = []
         sdist = { hash = "sha256:[HASH]" }
+
+        [package.metadata]
+        build-system = { build-backend = "build_backend", backend-path = ["."] }
+        build-requires = []
         "#);
     });
 
@@ -6161,7 +6649,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 1 package in [TIME]
     ");
 
     Ok(())
@@ -6322,7 +6810,9 @@ fn lock_build_dependencies_static_directory_lowered_sources_invalidate() -> Resu
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -6636,24 +7126,14 @@ fn lock_build_dependencies_fork() -> Result<()> {
         version = 2
         revision = 4
         requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'linux'",
+            "sys_platform == 'win32'",
+            "sys_platform != 'linux' and sys_platform != 'win32'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
-
-        [[resolution]]
-        id = "runtime:0"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'linux'" }
-
-        [[resolution]]
-        id = "runtime:1"
-        kind = "runtime"
-        target = { marker = "sys_platform == 'win32'" }
-
-        [[resolution]]
-        id = "runtime:2"
-        kind = "runtime"
-        target = { marker = "sys_platform != 'linux' and sys_platform != 'win32'" }
 
         [[resolution]]
         id = "build:calver:wheel:bootstrap:[BUILD-ID]"
@@ -7197,7 +7677,7 @@ fn lock_build_dependencies_fork() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 15 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     Ok(())
@@ -7824,7 +8304,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 15 packages in [TIME]
+    Resolved 3 packages in [TIME]
     ");
 
     // Verify sync works (the shared package should be installed once).
@@ -7834,7 +8314,7 @@ fn lock_build_dependencies_shared_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 15 packages in [TIME]
+    Resolved 3 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
@@ -8057,7 +8537,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // Change build-system.requires to add `wheel`.
@@ -8089,7 +8569,9 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Re-lock without `--locked` to pick up the new `build-system.requires`.
@@ -8116,7 +8598,7 @@ fn lock_build_dependencies_stale_build_requires() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     // Verify the lock file records the updated `build-requires`.
@@ -8375,7 +8857,9 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     dep_dir.child("pyproject.toml").write_str(
@@ -8423,7 +8907,9 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -8573,7 +9059,9 @@ def get_requires_for_build_wheel(config_settings=None):
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -8893,7 +9381,7 @@ fn lock_build_dependencies_dynamic_version_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)
@@ -8936,7 +9424,7 @@ fn lock_build_dependencies_no_build_disables_locking() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 
@@ -9109,7 +9597,9 @@ fn lock_build_dependencies_no_build_relocks_without_no_build() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -9345,7 +9835,7 @@ fn lock_build_dependencies_static_sdist_lowers_build_sources() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -9478,7 +9968,136 @@ fn lock_build_dependencies_static_sdist_build_requires_invalidate() -> Result<()
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    Ok(())
+}
+
+/// Verify that changing build requirements in a mutable direct URL source archive invalidates
+/// the locked build environment, while an offline check can still reuse the captured metadata.
+#[tokio::test]
+async fn lock_build_dependencies_direct_url_sdist_build_requires_invalidate() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    write_wheel(
+        &links_dir.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &links_dir.child("helper-0.2.0-py3-none-any.whl"),
+        "helper",
+        "0.2.0",
+    )?;
+
+    let source_dist = context.temp_dir.child("dep-0.1.0.zip");
+    let write_source_dist = |helper_version: &str| -> Result<Vec<u8>> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+        let pyproject_toml = format!(
+            r#"
+                [project]
+                name = "dep"
+                version = "0.1.0"
+                requires-python = ">=3.12"
+
+                [build-system]
+                requires = ["helper=={helper_version}"]
+                backend-path = ["."]
+                build-backend = "build_backend"
+                "#
+        );
+        block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        let entry = ZipEntryBuilder::new("dep-0.1.0/dep/__init__.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        let archive = block_on(zip.close())?;
+        fs_err::write(source_dist.path(), &archive)?;
+        Ok(archive)
+    };
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(write_source_dist("0.1.0")?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["dep @ {}/dep-0.1.0.zip"]
+            "#,
+            server.uri()
+        ))?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let dep = package_section(&lock, "dep");
+    assert!(dep.contains(r#"source = { url = "http://"#), "{dep}");
+    assert!(dep.contains(r#"build-requires = [{ name = "helper", specifier = "==0.1.0" }]"#));
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path("/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(write_source_dist("0.2.0")?))
+        .mount(&server)
+        .await;
+
+    // An offline freshness check cannot inspect the updated archive and should keep using the
+    // build-system metadata captured in the lockfile.
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--locked")
+        .arg("--offline")
+        .arg("--no-cache")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--locked")
+        .arg("--no-cache"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
@@ -9836,7 +10455,9 @@ fn lock_build_dependencies_no_build_package_skips_selected() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context
@@ -10045,7 +10666,9 @@ fn lock_build_dependencies_no_build_package_relocks_implicit_default_backend() -
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     context
@@ -10138,7 +10761,9 @@ fn lock_build_dependencies_no_build_package_relocks_find_links_sdist() -> Result
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     context
@@ -11002,7 +11627,7 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     let missing_url = Url::from_directory_path(context.temp_dir.child("missing").path()).unwrap();
@@ -11066,7 +11691,7 @@ fn lock_build_dependencies_build_only_source_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 6 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
@@ -11258,7 +11883,7 @@ fn lock_build_dependencies_on_then_off_no_churn() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 2 packages in [TIME]
     ");
 
     let lock_without_feature = context.read("uv.lock");
@@ -11354,7 +11979,7 @@ fn lock_build_dependencies_on_then_off_forced_rewrite() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(lock, @r#"
-        version = 2
+        version = 1
         revision = 3
         requires-python = ">=3.12"
 

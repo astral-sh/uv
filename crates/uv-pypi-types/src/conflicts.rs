@@ -154,7 +154,8 @@ impl Conflicts {
         };
         // Propagate canonical items through the graph and populate substitutions.
         for node in topo_nodes {
-            for neighbor_idx in graph.neighbors(node).collect::<Vec<_>>() {
+            let mut neighbors = graph.neighbors(node).detach();
+            while let Some(neighbor_idx) = neighbors.next_node(&graph) {
                 let mut neighbor_canonical_items = Vec::new();
                 if let Some(canonical_items) = graph.node_weight(node) {
                     let neighbor_item = node_conflict_items
@@ -185,8 +186,6 @@ impl Conflicts {
             for conflict_set in conflict_sets
                 .iter()
                 .filter(|set| set.contains_item(&canonical_item))
-                .cloned()
-                .collect::<Vec<_>>()
             {
                 for sub in &subs {
                     let new_set = conflict_set

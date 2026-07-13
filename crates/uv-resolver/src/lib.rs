@@ -1,5 +1,5 @@
 pub use dependency_mode::DependencyMode;
-pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
+pub use error::{ErrorTree, NoSolutionError, NoSolutionHeader, ResolveError};
 pub use exclude_newer::{
     ExcludeNewer, ExcludeNewerChange, ExcludeNewerOverrideChange, ExcludeNewerPackage,
     ExcludeNewerPackageChange, ExcludeNewerPackageEntry, ExcludeNewerValueChange,
@@ -9,9 +9,9 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    BuildDependency, Installable, Lock, LockError, LockVersion, Metadata, Package, PackageMap,
-    PylockToml, PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest,
-    SatisfiesResult, TreeDisplay, VERSION, cyclonedx_json,
+    BuildDependency, DependencySelection, Installable, Lock, LockError, LockVersion, Metadata,
+    Package, PackageMap, PylockToml, PylockTomlError, PylockTomlErrorKind, RequirementsTxtExport,
+    ResolverManifest, SatisfiesResult, SelectedDependency, TreeDisplay, VERSION, cyclonedx_json,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
@@ -28,7 +28,8 @@ pub use resolver::{
     Reporter as ResolverReporter, Resolver, ResolverEnvironment, ResolverProvider,
     VersionsResponse, WheelMetadataResult,
 };
-pub use universal_marker::{ConflictMarker, UniversalMarker};
+pub(crate) use universal_marker::ConflictMarker;
+pub use universal_marker::UniversalMarker;
 pub use upgrade::UpgradePackages;
 pub use uv_distribution_types::{ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue};
 pub use version_map::VersionMap;

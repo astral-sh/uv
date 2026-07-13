@@ -6,7 +6,6 @@
 //!
 //! Then lowers them into a dependency specification.
 
-#[cfg(feature = "schemars")]
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -21,7 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
-use uv_configuration::GitLfsSetting;
+use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
@@ -85,33 +84,30 @@ pub struct PyProjectToml {
     #[serde(skip)]
     pub raw: String,
 
-    /// The `[build-system]` table, as specified in PEP 518.
+    /// Used to determine whether a `build-system` section is present.
     #[serde(default, skip_serializing)]
-    pub build_system: Option<BuildSystem>,
+    build_system: Option<serde::de::IgnoredAny>,
 }
 
 impl PyProjectToml {
     /// Parse a `PyProjectToml` from a raw TOML string.
     #[instrument("toml::from_str workspace", skip_all, fields(path = %_path.as_ref().display()))]
     pub fn from_string(raw: String, _path: impl AsRef<Path>) -> Result<Self, PyprojectTomlError> {
-        let sources_wire =
-            toml::from_str::<PyProjectTomlSourcesWire>(&raw).map_err(PyprojectTomlError::Toml)?;
-        let sources = sources_wire
-            .tool
-            .and_then(|tool| tool.uv)
-            .and_then(|uv| uv.sources)
-            .map(ToolUvSources::try_from)
-            .transpose()?;
-
-        let mut pyproject: Self = toml::from_str(&raw).map_err(PyprojectTomlError::Toml)?;
-        if let Some(sources) = sources {
-            let tool_uv = pyproject
-                .tool
-                .as_mut()
-                .and_then(|tool| tool.uv.as_mut())
-                .expect("tool.uv must exist when tool.uv.sources is present");
-            tool_uv.sources = Some(sources);
-        }
+        let pyproject: Self = match toml::from_str(&raw) {
+            Ok(pyproject) => pyproject,
+            Err(error) => {
+                // Preserve the more specific source error if both parses would fail.
+                let sources = toml::from_str::<PyProjectTomlSourcesWire>(&raw)
+                    .map_err(PyprojectTomlError::Toml)?
+                    .tool
+                    .and_then(|tool| tool.uv)
+                    .and_then(|uv| uv.sources);
+                if let Some(sources) = sources {
+                    ToolUvSources::try_from(sources)?;
+                }
+                return Err(PyprojectTomlError::Toml(error));
+            }
+        };
 
         Ok(Self { raw, ..pyproject })
     }
@@ -176,81 +172,6 @@ impl Eq for PyProjectToml {}
 impl AsRef<[u8]> for PyProjectToml {
     fn as_ref(&self) -> &[u8] {
         self.raw.as_bytes()
-    }
-}
-
-/// The `[build-system]` table as specified in PEP 518.
-///
-/// See <https://peps.python.org/pep-0518/>.
-#[derive(Deserialize, Debug, Clone, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
-#[serde(rename_all = "kebab-case")]
-pub struct BuildSystem {
-    /// PEP 508 dependencies required to execute the build system.
-    pub requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    /// A string naming a Python object that will be used to perform the build.
-    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
-    pub build_backend: Option<String>,
-    /// A list of directories containing the in-tree build backend.
-    #[cfg_attr(test, serde(skip_serializing_if = "Option::is_none"))]
-    pub backend_path: Option<BackendPath>,
-}
-
-/// The `backend-path` field in a `[build-system]` table.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(Serialize))]
-pub struct BackendPath(Vec<String>);
-
-impl BackendPath {
-    /// Return an iterator over the backend paths.
-    pub fn iter(&self) -> impl Iterator<Item = &str> {
-        self.0.iter().map(String::as_str)
-    }
-
-    /// Return the backend paths.
-    pub fn into_inner(self) -> Vec<String> {
-        self.0
-    }
-}
-
-impl<'de> Deserialize<'de> for BackendPath {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct StringOrVec;
-
-        impl<'de> serde::de::Visitor<'de> for StringOrVec {
-            type Value = Vec<String>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("list of strings")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                // Allow exactly `backend-path = "."`, as used in `flit_core==2.3.0`.
-                if value == "." {
-                    Ok(vec![".".to_string()])
-                } else {
-                    Err(serde::de::Error::invalid_value(
-                        serde::de::Unexpected::Str(value),
-                        &self,
-                    ))
-                }
-            }
-
-            fn visit_seq<S>(self, sequence: S) -> Result<Self::Value, S::Error>
-            where
-                S: SeqAccess<'de>,
-            {
-                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(sequence))
-            }
-        }
-
-        deserializer.deserialize_any(StringOrVec).map(BackendPath)
     }
 }
 
@@ -364,6 +285,9 @@ where
     Ok(indexes)
 }
 
+/// An override dependency before source lowering.
+pub type OverrideDependency = Override<uv_pep508::Requirement<VerbatimParsedUrl>>;
+
 // NOTE(charlie): When adding fields to this struct, mark them as ignored on `Options` in
 // `crates/uv-settings/src/settings.rs`.
 #[derive(Deserialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
@@ -388,7 +312,6 @@ pub struct ToolUv {
             pydantic = { path = "/path/to/pydantic", editable = true }
         "#
     )]
-    #[serde(default, deserialize_with = "ignore_tool_uv_sources")]
     pub sources: Option<ToolUvSources>,
 
     /// The indexes to use when resolving dependencies.
@@ -533,27 +456,33 @@ pub struct ToolUv {
     /// own; instead, the package must be requested elsewhere in the project's first-party or
     /// transitive dependencies.
     ///
+    /// Overrides can be limited to the dependencies declared by a specific package version by
+    /// using a table with `package` and `dependencies`. The `package` table identifies the package
+    /// whose dependencies will be overridden by `name` and, optionally, `version`. If `version` is
+    /// omitted, the overrides apply to all versions of that package. Requirements in `dependencies`
+    /// replace dependencies with the same name and add dependencies that are not declared by the
+    /// package. Dependencies not listed in `dependencies` are left unchanged.
+    ///
+    /// Scoped overrides currently support registry version specifiers only. Direct URL and path
+    /// sources, including Git sources, and explicit indexes are not supported.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
-        )
-    )]
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
-            # Always install Werkzeug 2.3.0, regardless of whether transitive dependencies request
-            # a different version.
-            override-dependencies = ["werkzeug==2.3.0"]
+            override-dependencies = [
+                # Always install Werkzeug 2.3.0.
+                "werkzeug==2.3.0",
+                # Use itsdangerous 2.1.2 when requested by Flask 3.0.0.
+                { package = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous==2.1.2"] },
+            ]
         "#
     )]
-    pub(crate) override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub(crate) override_dependencies: Option<Vec<OverrideDependency>>,
 
     /// Dependencies to exclude when resolving the project's dependencies.
     ///
@@ -565,26 +494,28 @@ pub struct ToolUv {
     /// it's requested by transitive dependencies. This can be useful for removing optional
     /// dependencies or working around packages with broken dependencies.
     ///
+    /// Exclusions can be limited to the dependencies declared by a specific package version by
+    /// using a table with `package` and `dependencies`. The `package` table identifies the package
+    /// whose dependencies will be excluded by `name` and, optionally, `version`. If `version` is
+    /// omitted, the exclusions apply to all versions of that package. A version-specific entry
+    /// takes precedence over an all-versions entry.
+    ///
     /// !!! note
     ///     In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from
     ///     the `pyproject.toml` at the workspace root, and will ignore any declarations in other
     ///     workspace members or `uv.toml` files.
-    #[cfg_attr(
-        feature = "schemars",
-        schemars(
-            with = "Option<Vec<String>>",
-            description = "Package names to exclude, e.g., `werkzeug`, `numpy`."
-        )
-    )]
     #[option(
         default = "[]",
-        value_type = "list[str]",
+        value_type = "list[str | dict]",
         example = r#"
             # Exclude Werkzeug from being installed, even if transitive dependencies request it.
-            exclude-dependencies = ["werkzeug"]
+            exclude-dependencies = [
+                "werkzeug",
+                { package = { name = "flask", version = "3.0.0" }, dependencies = ["itsdangerous"] },
+            ]
         "#
     )]
-    pub(crate) exclude_dependencies: Option<Vec<PackageName>>,
+    pub(crate) exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     /// Constraints to apply when resolving the project's dependencies.
     ///
@@ -775,14 +706,6 @@ pub struct ToolUv {
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolUvSources(BTreeMap<PackageName, Sources>);
-
-fn ignore_tool_uv_sources<'de, D>(deserializer: D) -> Result<Option<ToolUvSources>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    serde::de::IgnoredAny::deserialize(deserializer)?;
-    Ok(None)
-}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
@@ -1829,18 +1752,15 @@ impl Source {
             RequirementSource::Registry { index: Some(_), .. } => {
                 return Ok(None);
             }
-            RequirementSource::Registry { index: None, .. } => {
-                if let Some(index) = index {
-                    Self::Registry {
-                        index,
-                        marker: MarkerTree::TRUE,
-                        extra: None,
-                        group: None,
-                    }
-                } else {
-                    return Ok(None);
+            RequirementSource::Registry { index: None, .. } if let Some(index) = index => {
+                Self::Registry {
+                    index,
+                    marker: MarkerTree::TRUE,
+                    extra: None,
+                    group: None,
                 }
             }
+            RequirementSource::Registry { index: None, .. } => return Ok(None),
             RequirementSource::Path { install_path, .. } => Self::Path {
                 editable: None,
                 package: None,
@@ -2014,14 +1934,14 @@ pub enum DependencyType {
 
 impl DependencyType {
     /// Return the TOML table name(s) for this dependency type.
-    pub fn toml_table_name(&self) -> String {
+    pub fn toml_table_name(&self) -> Cow<'_, str> {
         match self {
-            Self::Production => "`project.dependencies`".to_string(),
+            Self::Production => Cow::Borrowed("`project.dependencies`"),
             Self::Dev => {
-                "`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`".to_string()
+                Cow::Borrowed("`tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`")
             }
-            Self::Optional(extra) => format!("`project.optional-dependencies.{extra}`"),
-            Self::Group(group) => format!("`dependency-groups.{group}`"),
+            Self::Optional(extra) => Cow::Owned(format!("`project.optional-dependencies.{extra}`")),
+            Self::Group(group) => Cow::Owned(format!("`dependency-groups.{group}`")),
         }
     }
 }
@@ -2064,5 +1984,30 @@ impl OptionsMetadata for BuildBackendSettingsSchema {
         Self: Sized + 'static,
     {
         BuildBackendSettings::metadata()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyProjectToml;
+
+    #[test]
+    fn malformed_build_system_is_still_a_package() -> Result<(), Box<dyn std::error::Error>> {
+        let pyproject = PyProjectToml::from_string(
+            r#"
+            [project]
+            name = "example"
+            version = "0.1.0"
+
+            [build-system]
+            requires = "setuptools"
+            backend-path = 42
+            "#
+            .to_string(),
+            "pyproject.toml",
+        )?;
+
+        assert!(pyproject.is_package(true));
+        Ok(())
     }
 }

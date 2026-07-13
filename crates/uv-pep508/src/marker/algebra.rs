@@ -192,11 +192,11 @@ impl InternerGuard<'_> {
             } => match key {
                 MarkerValueVersion::ImplementationVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::ImplementationVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 MarkerValueVersion::PythonFullVersion => (
                     Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    Edges::from_versions(&versions, operator),
+                    Edges::from_versions(versions, operator),
                 ),
                 // Normalize `python_version` markers to `python_full_version` nodes.
                 MarkerValueVersion::PythonVersion => {
@@ -524,12 +524,16 @@ impl InternerGuard<'_> {
         }
     }
 
-    // Restrict the output of a given boolean variable in the tree.
+    // Restrict the output of selected boolean variables in the tree.
     //
     // If the provided function `f` returns a `Some` boolean value, the tree will be simplified
-    // with the assumption that the given variable is restricted to that value. If the function
+    // with the assumption that each variable is restricted to that value. If the function
     // returns `None`, the variable will not be affected.
-    pub(crate) fn restrict(&mut self, i: NodeId, f: &impl Fn(&Variable) -> Option<bool>) -> NodeId {
+    pub(crate) fn restrict_by(
+        &mut self,
+        i: NodeId,
+        f: &impl Fn(&Variable) -> Option<bool>,
+    ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
         }
@@ -540,13 +544,106 @@ impl InternerGuard<'_> {
                 // Restrict this variable to the given output by merging it
                 // with the relevant child.
                 let node = if value { high } else { low };
-                return self.restrict(node.negate(i), f);
+                return self.restrict_by(node.negate(i), f);
             }
         }
 
         // Restrict all nodes recursively.
-        let children = node.children.map(i, |node| self.restrict(node, f));
+        let children = node.children.map(i, |node| self.restrict_by(node, f));
         self.create_node(node.var.clone(), children)
+    }
+
+    /// Restrict a marker by assuming that another marker is true.
+    ///
+    /// The returned marker is equivalent to `value` wherever `assumption` is true. Its value
+    /// outside of `assumption` is unspecified, which lets us eliminate decisions that are only
+    /// needed to restate the assumption.
+    pub(crate) fn restrict(&mut self, value: NodeId, assumption: NodeId) -> NodeId {
+        let mut cache = FxHashMap::default();
+        self.restrict_cached(value, assumption, &mut cache)
+    }
+
+    fn restrict_cached(
+        &mut self,
+        value: NodeId,
+        assumption: NodeId,
+        cache: &mut FxHashMap<(NodeId, NodeId), NodeId>,
+    ) -> NodeId {
+        if assumption.is_true() || matches!(value, NodeId::TRUE | NodeId::FALSE) {
+            return value;
+        }
+        if assumption.is_false() {
+            return NodeId::FALSE;
+        }
+        if value == assumption {
+            return NodeId::TRUE;
+        }
+        if value == assumption.not() {
+            return NodeId::FALSE;
+        }
+        if let Some(&result) = cache.get(&(value, assumption)) {
+            return result;
+        }
+
+        let value_node = self.shared.node(value);
+        let assumption_node = self.shared.node(assumption);
+        let result = match value_node.var.cmp(&assumption_node.var) {
+            Ordering::Less => {
+                let children = value_node.children.map(value, |value| {
+                    self.restrict_cached(value, assumption, cache)
+                });
+                self.create_node(value_node.var.clone(), children)
+            }
+            Ordering::Greater => {
+                // The value does not depend on this variable. Existentially quantify it out of the
+                // assumption, and continue with the remaining variables.
+                let mut quantified_assumption = NodeId::FALSE;
+                for child in assumption_node.children.nodes() {
+                    quantified_assumption =
+                        self.or(quantified_assumption, child.negate(assumption));
+                }
+                self.restrict_cached(value, quantified_assumption, cache)
+            }
+            Ordering::Equal => {
+                // Split both trees into matching ranges. Replace any ranges that are unreachable
+                // under the assumption with the first reachable child, simplifying them out of the
+                // resulting marker.
+                let mut fallback = None;
+                value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            NodeId::FALSE
+                        } else {
+                            let result = self.restrict_cached(value, assumption, cache);
+                            fallback.get_or_insert(result);
+                            result
+                        }
+                    },
+                );
+                let Some(fallback) = fallback else {
+                    return NodeId::FALSE;
+                };
+                let children = value_node.children.apply(
+                    value,
+                    &assumption_node.children,
+                    assumption,
+                    |value, assumption| {
+                        if assumption.is_false() {
+                            fallback
+                        } else {
+                            self.restrict_cached(value, assumption, cache)
+                        }
+                    },
+                );
+                self.create_node(value_node.var.clone(), children)
+            }
+        };
+
+        cache.insert((value, assumption), result);
+        result
     }
 
     /// Returns a new tree where the only nodes remaining are non-`extra`
@@ -1312,15 +1409,10 @@ impl Edges {
     }
 
     /// Returns an [`Edges`] where values in the given range are `true`.
-    fn from_versions(versions: &[Version], operator: ContainerOperator) -> Self {
+    fn from_versions(versions: Vec<Version>, operator: ContainerOperator) -> Self {
         let mut range: Ranges<Version> = versions
-            .iter()
-            .map(|version| {
-                (
-                    Bound::Included(version.clone()),
-                    Bound::Included(version.clone()),
-                )
-            })
+            .into_iter()
+            .map(|version| (Bound::Included(version.clone()), Bound::Included(version)))
             .collect();
 
         if operator == ContainerOperator::NotIn {
@@ -1341,13 +1433,13 @@ impl Edges {
 
         // Add the `true` edges.
         for (start, end) in range.iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::TRUE));
         }
 
         // Add the `false` edges.
         for (start, end) in range.complement().iter() {
-            let range = Ranges::from_range_bounds((start.clone(), end.clone()));
+            let range = Ranges::from_range_bounds((start.cloned(), end.cloned()));
             edges.push((range, NodeId::FALSE));
         }
 

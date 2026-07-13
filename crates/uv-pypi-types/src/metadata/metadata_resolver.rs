@@ -244,7 +244,9 @@ impl ResolutionMetadata {
                                 .iter()
                                 .map(|requires_dist| LenientRequirement::from_str(requires_dist))
                                 .map_ok(Requirement::from)
-                                .map_ok(move |requirement| requirement.with_extra_marker(extras))
+                                .map_ok(move |requirement| {
+                                    requirement.with_extra_marker(extras.clone())
+                                })
                         })
                     }),
             )

@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -216,7 +217,7 @@ impl HashStrategy {
                 }
                 UnresolvedRequirement::Unnamed(requirement) => {
                     // Direct URLs are always allowed.
-                    VersionId::from_parsed_url(&requirement.url.parsed_url)
+                    VersionId::from_parsed_url(requirement.url.parsed_url.clone())
                 }
             };
 
@@ -378,7 +379,10 @@ impl HashStrategy {
                 location,
                 subdirectory,
                 ..
-            } => Some(VersionId::from_archive(location, subdirectory.as_deref())),
+            } => Some(VersionId::from_archive(
+                location.clone(),
+                subdirectory.clone().map(Path::into_path_buf),
+            )),
             RequirementSource::GitDirectory {
                 git, subdirectory, ..
             } => Some(VersionId::from_git(git, subdirectory.as_deref())),

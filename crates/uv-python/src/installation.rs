@@ -11,6 +11,7 @@ use uv_fs::Simplified;
 use uv_warnings::warn_user;
 
 use uv_cache::Cache;
+use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_client::{BaseClient, BaseClientBuilder};
 use uv_pep440::{Prerelease, Version};
 use uv_platform::{Arch, Libc, Os, Platform};
@@ -49,7 +50,7 @@ impl PythonInstallation {
 
     /// Return a new installation with the given [`PythonSource`].
     #[must_use]
-    pub(crate) fn with_source(self, source: PythonSource) -> Self {
+    fn with_source(self, source: PythonSource) -> Self {
         Self { source, ..self }
     }
 
@@ -164,6 +165,7 @@ impl PythonInstallation {
             .download_and_warn_if_outdated_prerelease(
                 request,
                 client_builder,
+                cache,
                 python_downloads_json_url,
             )
             .await?;
@@ -193,6 +195,7 @@ impl PythonInstallation {
                     .download_and_warn_if_outdated_prerelease(
                         request,
                         client_builder,
+                        cache,
                         python_downloads_json_url,
                     )
                     .await?;
@@ -215,9 +218,8 @@ impl PythonInstallation {
             return Err(err);
         };
 
-        let download_list_client = client_builder.build()?;
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
                 .await?;
 
         let downloads_enabled = preference.allows_managed()
@@ -529,15 +531,15 @@ impl PythonInstallation {
         &self,
         request: &PythonRequest,
         client_builder: &BaseClientBuilder<'_>,
+        cache: &Cache,
         python_downloads_json_url: Option<&str>,
     ) -> Result<(), Error> {
         if !self.should_check_outdated_prerelease_warning(request) {
             return Ok(());
         }
 
-        let download_list_client = client_builder.build()?;
         let download_list =
-            ManagedPythonDownloadList::new(&download_list_client, python_downloads_json_url)
+            ManagedPythonDownloadList::new(client_builder, cache, python_downloads_json_url)
                 .await?;
         self.warn_if_outdated_prerelease(request, &download_list);
 
@@ -553,13 +555,13 @@ pub enum PythonInstallationKeyError {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonInstallationKey {
-    pub(crate) implementation: LenientImplementationName,
-    pub(crate) major: u8,
-    pub(crate) minor: u8,
-    pub(crate) patch: u8,
-    pub(crate) prerelease: Option<Prerelease>,
-    pub(crate) platform: Platform,
-    pub(crate) variant: PythonVariant,
+    pub(super) implementation: LenientImplementationName,
+    pub(super) major: u8,
+    pub(super) minor: u8,
+    pub(super) patch: u8,
+    pub(super) prerelease: Option<Prerelease>,
+    pub(super) platform: Platform,
+    pub(super) variant: PythonVariant,
 }
 
 impl PythonInstallationKey {
@@ -712,6 +714,12 @@ impl fmt::Display for PythonInstallationKey {
             variant,
             self.platform
         )
+    }
+}
+
+impl CacheKey for PythonInstallationKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
     }
 }
 
@@ -885,6 +893,12 @@ impl Hash for PythonInstallationMinorVersionKey {
         self.0.minor.hash(state);
         self.0.platform.hash(state);
         self.0.variant.hash(state);
+    }
+}
+
+impl CacheKey for PythonInstallationMinorVersionKey {
+    fn cache_key(&self, state: &mut CacheKeyHasher) {
+        self.hash(state);
     }
 }
 

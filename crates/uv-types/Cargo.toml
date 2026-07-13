@@ -1,6 +1,6 @@
 [package]
 name = "uv-types"
-version = "0.0.57"
+version = "0.0.61"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -17,6 +17,8 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
+uv-cache-key = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
@@ -35,6 +37,9 @@ anyhow = { workspace = true }
 papaya = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+petgraph = { workspace = true }
 
 [features]
 default = []

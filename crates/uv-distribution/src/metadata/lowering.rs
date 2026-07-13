@@ -183,7 +183,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                &git,
+                                git,
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -431,7 +431,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                &git,
+                                git,
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -679,7 +679,7 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
 
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
-    git: &DisplaySafeUrl,
+    git: DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
     path: Option<PathBuf>,
     rev: Option<String>,
@@ -727,8 +727,7 @@ fn git_source(
     }
     let url = VerbatimUrl::from_url(url);
 
-    let repository = git.clone();
-    let git = GitUrl::from_fields(repository, reference, None, lfs)?;
+    let git = GitUrl::from_fields(git, reference, None, lfs)?;
 
     if let Some(path) = path {
         let ext = match DistExtension::from_path(&path) {

@@ -1,6 +1,6 @@
 [package]
 name = "uv-dispatch"
-version = "0.0.57"
+version = "0.0.61"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -20,6 +20,7 @@ workspace = true
 uv-build-backend = { workspace = true }
 uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
+uv-cache-info = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }

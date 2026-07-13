@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use pubgrub::{DerivationTree, Derived, External, Map, Range, Ranges, Term};
+use pubgrub::{DerivationTree, Derived, External, Map, Ranges, Term};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
 
@@ -14,7 +14,7 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LocalVersionSlice, LowerBound, Version};
+use uv_pep440::{LowerBound, Version};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
@@ -27,7 +27,7 @@ use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{
-    PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter,
+    PubGrubHint, PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter, Range,
     report_derivation_tree,
 };
 use crate::python_requirement::PythonRequirement;
@@ -154,6 +154,9 @@ impl uv_errors::Hint for ResolveError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::NoSolution(no_solution) => uv_errors::Hint::hints(no_solution.as_ref()),
+            Self::Client(error) => uv_errors::Hint::hints(error),
+            Self::Distribution(error) => uv_errors::Hint::hints(error),
+            Self::Dependencies(error, ..) => uv_errors::Hint::hints(error.as_ref()),
             _ => uv_errors::Hints::none(),
         }
     }
@@ -517,24 +520,24 @@ impl NoSolutionError {
             |external| match external {
                 external @ External::NotRoot(_, _) => Some(DerivationTree::External(external)),
                 External::NoVersions(package, versions) => {
-                    if SentinelRange::from(&versions).is_complement() {
+                    if versions.is_local_version_complement() {
                         return None;
                     }
 
-                    let versions = SentinelRange::from(&versions).strip();
+                    let versions = versions.without_local_version_sentinels();
                     Some(DerivationTree::External(External::NoVersions(
                         package, versions,
                     )))
                 }
                 External::FromDependencyOf(package1, versions1, package2, versions2) => {
-                    let versions1 = SentinelRange::from(&versions1).strip();
-                    let versions2 = SentinelRange::from(&versions2).strip();
+                    let versions1 = versions1.without_local_version_sentinels();
+                    let versions2 = versions2.without_local_version_sentinels();
                     Some(DerivationTree::External(External::FromDependencyOf(
                         package1, versions1, package2, versions2,
                     )))
                 }
                 External::Custom(package, versions, reason) => {
-                    let versions = SentinelRange::from(&versions).strip();
+                    let versions = versions.without_local_version_sentinels();
                     Some(DerivationTree::External(External::Custom(
                         package, versions, reason,
                     )))
@@ -547,10 +550,10 @@ impl NoSolutionError {
                     .map(|(package, term)| {
                         let term = match term {
                             Term::Positive(versions) => {
-                                Term::Positive(SentinelRange::from(&versions).strip())
+                                Term::Positive(versions.without_local_version_sentinels())
                             }
                             Term::Negative(versions) => {
-                                Term::Negative(SentinelRange::from(&versions).strip())
+                                Term::Negative(versions.without_local_version_sentinels())
                             }
                         };
                         (package, term)
@@ -565,6 +568,65 @@ impl NoSolutionError {
             },
         )
         .expect("derivation tree should contain at least one term")
+    }
+
+    /// Shrinks widened version sets in the derivation tree back onto the known versions.
+    ///
+    /// The resolver widens the version set on the depending side of a dependency
+    /// incompatibility to the largest interval containing the same known versions
+    /// ([`Ranges::widen_versions`]), keeping version sets small during resolution. The widened
+    /// bounds are misleading in error messages, e.g., `a>1.5.2,<2.0.0` when `a 1.5.3` is the only
+    /// version in that interval. Shrink the depending side and positive terms back: a set
+    /// containing all known versions of a package becomes the full range ("all versions of a");
+    /// otherwise, bounded ends are narrowed to inclusive bounds on the known versions they
+    /// contain while unbounded ends are preserved. Dependency requests (the depended-on side and
+    /// negative terms) are shown as requested.
+    pub(crate) fn narrow_widened_sets(
+        derivation_tree: ErrorTree,
+        known_versions: &FxHashMap<PackageName, Arc<[Version]>>,
+    ) -> ErrorTree {
+        let narrow = |package: &PubGrubPackage, set: Range<Version>| -> Range<Version> {
+            let Some(versions) = package
+                .name_no_root()
+                .and_then(|name| known_versions.get(name))
+                .filter(|versions| !versions.is_empty())
+            else {
+                return set;
+            };
+            if versions.iter().all(|version| set.contains(version)) {
+                Range::full()
+            } else {
+                set.narrow_versions(versions)
+            }
+        };
+
+        map_derivation_tree(
+            derivation_tree,
+            |external| match external {
+                External::FromDependencyOf(package1, versions1, package2, versions2) => {
+                    let versions1 = narrow(&package1, versions1);
+                    DerivationTree::External(External::FromDependencyOf(
+                        package1, versions1, package2, versions2,
+                    ))
+                }
+                external => DerivationTree::External(external),
+            },
+            |mut metadata, cause1, cause2| {
+                metadata.terms = metadata
+                    .terms
+                    .into_iter()
+                    .map(|(package, term)| {
+                        let term = match term {
+                            Term::Positive(versions) => Term::Positive(narrow(&package, versions)),
+                            term @ Term::Negative(_) => term,
+                        };
+                        (package, term)
+                    })
+                    .collect();
+
+                derived_tree(metadata, cause1, cause2)
+            },
+        )
     }
 
     /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
@@ -595,9 +657,9 @@ impl NoSolutionError {
         minimum
     }
 
-    /// Initialize a [`NoSolutionHeader`] for this error.
-    pub fn header(&self) -> NoSolutionHeader {
-        NoSolutionHeader::new(self.env.clone())
+    /// Return the [`ResolverEnvironment`] that caused the failure.
+    pub fn environment(&self) -> &ResolverEnvironment {
+        &self.env
     }
 
     /// Get the packages that are involved in this error.
@@ -1267,134 +1329,6 @@ fn drop_root_dependency_on_project(tree: ErrorTree, project: &PackageName) -> Er
         .into_inner()
 }
 
-/// A version range that may include local version sentinels (`+[max]`).
-#[derive(Debug)]
-pub struct SentinelRange<'range>(&'range Range<Version>);
-
-impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
-    fn from(range: &'range Range<Version>) -> Self {
-        Self(range)
-    }
-}
-
-impl SentinelRange<'_> {
-    /// Returns `true` if the range appears to be, e.g., `>=1.0.0, <1.0.0+[max]`.
-    pub(crate) fn is_sentinel(&self) -> bool {
-        self.0.iter().all(|(lower, upper)| {
-            let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
-                return false;
-            };
-            if !lower.local().is_empty() {
-                return false;
-            }
-            if upper.local() != LocalVersionSlice::Max {
-                return false;
-            }
-            *lower == upper.clone().without_local()
-        })
-    }
-
-    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]` (i.e., a sentinel
-    /// range with the non-local version removed).
-    fn is_complement(&self) -> bool {
-        self.0.iter().all(|(lower, upper)| {
-            let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
-                return false;
-            };
-            if !lower.local().is_empty() {
-                return false;
-            }
-            if upper.local() != LocalVersionSlice::Max {
-                return false;
-            }
-            *lower == upper.clone().without_local()
-        })
-    }
-
-    /// Remove local versions sentinels (`+[max]`) from the version ranges.
-    pub fn strip(&self) -> Ranges<Version> {
-        self.0
-            .iter()
-            .map(|(lower, upper)| Self::strip_sentinel(lower.clone(), upper.clone()))
-            .collect()
-    }
-
-    /// Remove local versions sentinels (`+[max]`) from the interval.
-    fn strip_sentinel(
-        mut lower: Bound<Version>,
-        mut upper: Bound<Version>,
-    ) -> (Bound<Version>, Bound<Version>) {
-        match (&lower, &upper) {
-            (Bound::Unbounded, Bound::Unbounded) => {}
-            (Bound::Unbounded, Bound::Included(v)) => {
-                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    upper = Bound::Included(v.clone().without_local());
-                }
-            }
-            (Bound::Unbounded, Bound::Excluded(v)) => {
-                // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    upper = Bound::Excluded(v.clone().without_local());
-                }
-            }
-            (Bound::Included(v), Bound::Unbounded) => {
-                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-            }
-            (Bound::Included(v), Bound::Included(b)) => {
-                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                if b.local() == LocalVersionSlice::Max {
-                    upper = Bound::Included(b.clone().without_local());
-                }
-            }
-            (Bound::Included(v), Bound::Excluded(b)) => {
-                // `>=1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-                // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                if b.local() == LocalVersionSlice::Max {
-                    upper = Bound::Included(b.clone().without_local());
-                }
-            }
-            (Bound::Excluded(v), Bound::Unbounded) => {
-                // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-            }
-            (Bound::Excluded(v), Bound::Included(b)) => {
-                // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-                // `<=1.0.0+[max]` is equivalent to `<=1.0.0`
-                if b.local() == LocalVersionSlice::Max {
-                    upper = Bound::Included(b.clone().without_local());
-                }
-            }
-            (Bound::Excluded(v), Bound::Excluded(b)) => {
-                // `>1.0.0+[max]` is equivalent to `>1.0.0`
-                if v.local() == LocalVersionSlice::Max {
-                    lower = Bound::Excluded(v.clone().without_local());
-                }
-                // `<1.0.0+[max]` is equivalent to `<1.0.0`
-                if b.local() == LocalVersionSlice::Max {
-                    upper = Bound::Excluded(b.clone().without_local());
-                }
-            }
-        }
-        (lower, upper)
-    }
-}
-
 /// A prefix match, e.g., `==2.4.*`, which is desugared to a range like `>=2.4.dev0,<2.5.dev0`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PrefixMatch<'a> {
@@ -1406,7 +1340,7 @@ impl<'a> PrefixMatch<'a> {
     ///
     /// Prefix matches are desugared to (e.g.) `>=2.4.dev0,<2.5.dev0`, but we want to render them
     /// as `==2.4.*` in error messages.
-    pub(crate) fn from_range(lower: &'a Bound<Version>, upper: &'a Bound<Version>) -> Option<Self> {
+    pub(crate) fn from_range(lower: Bound<&'a Version>, upper: Bound<&'a Version>) -> Option<Self> {
         let Bound::Included(lower) = lower else {
             return None;
         };
@@ -1468,7 +1402,7 @@ pub struct NoSolutionHeader {
 
 impl NoSolutionHeader {
     /// Create a new [`NoSolutionHeader`] with the given [`ResolverEnvironment`].
-    fn new(env: ResolverEnvironment) -> Self {
+    pub fn new(env: ResolverEnvironment) -> Self {
         Self { env, context: None }
     }
 
@@ -1608,7 +1542,7 @@ fn simplify_range(
     let versions = included_versions.get(name)?;
 
     // If this is a full range, there's nothing to simplify
-    if range == &Range::full() {
+    if range.encoded_versions() == &Ranges::full() {
         return None;
     }
 
@@ -1640,20 +1574,22 @@ fn simplify_range(
     });
 
     // Simplify the range, as implemented in PubGrub
-    Some(range.simplify(versions.iter().filter(|version| {
-        // If there are pre-releases in the range segments, we need to include pre-releases
-        if any_prerelease {
-            return true;
-        }
+    Some(Range::from_versions(range.simplify(
+        versions.iter().filter(|version| {
+            // If there are pre-releases in the range segments, we need to include pre-releases
+            if any_prerelease {
+                return true;
+            }
 
-        // If pre-releases are not allowed, filter out pre-releases
-        if prereleases_not_allowed && version.any_prerelease() {
-            return false;
-        }
+            // If pre-releases are not allowed, filter out pre-releases
+            if prereleases_not_allowed && version.any_prerelease() {
+                return false;
+            }
 
-        // Otherwise, include the version
-        true
-    })))
+            // Otherwise, include the version
+            true
+        }),
+    )))
 }
 
 #[cfg(test)]

@@ -14,9 +14,9 @@ use uv_distribution::{
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
-    BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error, ExtraBuildRequires,
-    ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name, PackageConfigSettings,
-    RequirementSource, Resolution, ResolvedDist, SourceDist,
+    BuildableSource, BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error,
+    ExtraBuildRequires, ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name,
+    PackageConfigSettings, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -24,7 +24,7 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCom
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_redacted::DisplaySafeUrl;
-use uv_types::HashStrategy;
+use uv_types::{BuildPackageKey, HashStrategy, LockedBuildResolutions};
 
 use crate::satisfies::RequirementSatisfaction;
 use crate::{InstallationStrategy, SitePackages};
@@ -235,12 +235,26 @@ impl uv_errors::Hint for IncompatibleWheelError {
 #[derive(Debug)]
 pub struct Planner<'a> {
     resolution: &'a Resolution,
+    locked_build_resolutions: Option<&'a LockedBuildResolutions>,
 }
 
 impl<'a> Planner<'a> {
     /// Set the requirements use in the [`Plan`].
     pub fn new(resolution: &'a Resolution) -> Self {
-        Self { resolution }
+        Self {
+            resolution,
+            locked_build_resolutions: None,
+        }
+    }
+
+    /// Set the locked build resolutions used to validate source distributions.
+    #[must_use]
+    pub fn with_locked_build_resolutions(
+        mut self,
+        resolutions: &'a LockedBuildResolutions,
+    ) -> Self {
+        self.locked_build_resolutions = Some(resolutions);
+        self
     }
 
     /// Partition a set of requirements into those that should be linked from the cache, those that
@@ -308,6 +322,35 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
+            let locked_build_resolution = self
+                .locked_build_resolutions
+                .and_then(|resolutions| {
+                    let ResolvedDist::Installable {
+                        dist: distribution, ..
+                    } = dist
+                    else {
+                        return None;
+                    };
+                    let Dist::Source(source) = distribution.as_ref() else {
+                        return None;
+                    };
+                    let package = BuildPackageKey::from_source_dist(
+                        distribution.name().clone(),
+                        BuildableSource::Dist(source).version().cloned(),
+                        Some(source),
+                    );
+                    resolutions
+                        .cache_key(
+                            &package,
+                            config_settings,
+                            config_settings_package,
+                            extra_build_requires,
+                            extra_build_variables,
+                        )
+                        .transpose()
+                })
+                .transpose()?;
+
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
                 || dist
@@ -338,6 +381,7 @@ impl<'a> Planner<'a> {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
+                            locked_build_resolution.as_deref(),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -396,24 +440,19 @@ impl<'a> Planner<'a> {
                 continue;
             }
 
+            // The built-wheel indexes cannot distinguish legacy entries from entries built with
+            // a locked environment. Let the distribution database select the correctly sharded
+            // wheel instead.
+            if locked_build_resolution.is_some() {
+                debug!("Using locked build environment for source distribution: {dist}");
+                remote.push(dist.clone());
+                continue;
+            }
+
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
-                    if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
-                        if *entry.index().url() != wheel.best_wheel().index {
-                            return None;
-                        }
-                        if entry.dist().filename != wheel.best_wheel().filename {
-                            return None;
-                        }
-                        if entry.is_built() && no_build {
-                            return None;
-                        }
-                        if !entry.is_built() && no_binary {
-                            return None;
-                        }
-                        Some(entry.dist())
-                    }) {
+                    if let Some(distribution) = registry_index.wheel(wheel, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
@@ -457,7 +496,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
+                                        parsed_url: wheel.to_parsed_url(),
                                         verbatim: wheel.url.clone(),
                                     },
                                     hashes: archive.hashes,
@@ -526,7 +565,7 @@ impl<'a> Planner<'a> {
                                         let cached_dist = CachedDirectUrlDist {
                                             filename: wheel.filename.clone(),
                                             url: VerbatimParsedUrl {
-                                                parsed_url: wheel.parsed_url(),
+                                                parsed_url: wheel.to_parsed_url(),
                                                 verbatim: wheel.url.clone(),
                                             },
                                             hashes: archive.hashes,
@@ -590,7 +629,7 @@ impl<'a> Planner<'a> {
                                 let cached_dist = CachedDirectUrlDist {
                                     filename: wheel.filename.clone(),
                                     url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
+                                        parsed_url: wheel.to_parsed_url(),
                                         verbatim: wheel.url.clone(),
                                     },
                                     hashes: archive.hashes,
@@ -607,24 +646,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if let Some(distribution) = registry_index.get(sdist.name()).find_map(|entry| {
-                        if *entry.index().url() != sdist.index {
-                            return None;
-                        }
-                        if entry.dist().filename.name != sdist.name {
-                            return None;
-                        }
-                        if entry.dist().filename.version != sdist.version {
-                            return None;
-                        }
-                        if entry.is_built() && no_build {
-                            return None;
-                        }
-                        if !entry.is_built() && no_binary {
-                            return None;
-                        }
-                        Some(entry.dist())
-                    }) {
+                    if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
@@ -636,7 +658,10 @@ impl<'a> Planner<'a> {
                     match built_index.url(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_url_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.to_parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!("URL source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -661,7 +686,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_path(sdist)? {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_git_path_dist(sdist);
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                parsed_url: sdist.to_parsed_url(),
+                                verbatim: sdist.url.clone(),
+                            });
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -679,7 +707,10 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git_directory(sdist) {
                         if wheel.filename().name == sdist.name {
-                            let cached_dist = wheel.into_git_dist(sdist);
+                            let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                parsed_url: sdist.to_parsed_url(),
+                                verbatim: sdist.url.clone(),
+                            });
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -703,7 +734,10 @@ impl<'a> Planner<'a> {
                     match built_index.path(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_path_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.to_parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!("Path source requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -734,7 +768,10 @@ impl<'a> Planner<'a> {
                     match built_index.directory(sdist) {
                         Ok(Some(wheel)) => {
                             if wheel.filename().name == sdist.name {
-                                let cached_dist = wheel.into_directory_dist(sdist);
+                                let cached_dist = wheel.into_url_dist(VerbatimParsedUrl {
+                                    parsed_url: sdist.to_parsed_url(),
+                                    verbatim: sdist.url.clone(),
+                                });
                                 debug!(
                                     "Directory source requirement already cached: {cached_dist}"
                                 );
@@ -939,7 +976,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
@@ -975,7 +1012,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version
@@ -1011,7 +1048,7 @@ mod tests {
             Arch::X86_64,
         );
         let tags = Tags::from_env(
-            &platform,
+            platform,
             (3, 14),   // python_version
             "cpython", // implementation_name
             (3, 14),   // implementation_version

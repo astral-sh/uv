@@ -9891,7 +9891,7 @@ fn add_shadowed_name() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver==1.6.13, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
@@ -9905,13 +9905,8 @@ fn add_shadowed_name() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of dagster-webserver are available:
-              dagster-webserver<=1.6.11
-              dagster-webserver==1.6.12
-              dagster-webserver==1.6.13
-          and dagster-webserver==1.6.11 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.12 depends on your project.
-          And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
-          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because dagster-webserver==1.6.11 depends on your project and dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<=1.6.12 depends on your project.
+          And because dagster-webserver>=1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
     hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
@@ -11255,36 +11250,122 @@ fn add_index_without_trailing_slash() -> Result<()> {
 fn add_index_with_existing_relative_path_index() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let project = context.temp_dir.child("project");
+    project.create_dir_all()?;
+    let pyproject_toml = project.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "./links-alias"
+        format = "flat"
     "#})?;
 
-    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
-    let packages = context.temp_dir.child("test-index");
+    // Create a non-empty flat index.
+    let packages = project.child("test-index");
     packages.create_dir_all()?;
+    packages.child("placeholder").touch()?;
+    uv_fs::create_symlink(packages.path(), project.child("links-alias").path())?;
 
-    let wheel_src = context
-        .workspace_root
-        .join("test/links/ok-1.0.0-py3-none-any.whl");
-    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
-    fs_err::copy(&wheel_src, &wheel_dst)?;
-
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("./test-index"), @"
+    let index = format!("local={}", packages.path().display());
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen").arg("--project").arg(project.path()).arg("--index").arg(index), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + iniconfig==2.0.0
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     ");
+
+    let pyproject_toml = fs_err::read_to_string(project.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+        ]
+
+        [[tool.uv.index]]
+        name = "local"
+        url = "file://[TEMP_DIR]/project/test-index"
+        format = "flat"
+
+        [tool.uv.sources]
+        iniconfig = { index = "local" }
+        "#);
+    });
+
+    Ok(())
+}
+
+/// Add an index with an existing relative path to a script outside the working directory.
+#[test]
+fn add_index_with_existing_relative_path_in_script() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let scripts = context.temp_dir.child("scripts");
+    scripts.create_dir_all()?;
+    let script = scripts.child("main.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "./links"
+        # format = "flat"
+        # ///
+    "#})?;
+
+    let packages = context.temp_dir.child("links");
+    packages.create_dir_all()?;
+    let wheel_src = context
+        .workspace_root
+        .join("test/links/ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, packages.child("ok-1.0.0-py3-none-any.whl"))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--frozen").arg("--script").arg(script.path()).arg("--index").arg("local=./links"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `--frozen` is a no-op for Python scripts with inline metadata, which always run in isolation
+    ");
+
+    let script = fs_err::read_to_string(script.path())?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(script, @r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = [
+        #     "iniconfig",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "local"
+        # url = "file://[TEMP_DIR]/links"
+        # format = "flat"
+        #
+        # [tool.uv.sources]
+        # iniconfig = { index = "local" }
+        # ///
+        "#);
+    });
 
     Ok(())
 }
@@ -13391,8 +13472,8 @@ fn add_unsupported_git_scheme() {
     ----- stderr -----
     error: Failed to parse: `git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef`
       Caused by: Unsupported Git URL scheme `fantasy:` in `fantasy://ferris/dreams/of/urls` (expected one of `https:`, `ssh:`, or `file:`)
-    git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ");
 }
 
@@ -13713,8 +13794,8 @@ async fn lock_forbidden_index_with_available_package() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because idna was not found in the package registry and anyio==4.3.0 depends on idna>=2.8, we can conclude that anyio==4.3.0 cannot be used.
-          And because only anyio==4.3.0 is available and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because idna was not found in the package registry and all versions of anyio depend on idna>=2.8, we can conclude that all versions of anyio cannot be used.
+          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
     hint: An index (http://[LOCALHOST]/) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.
     ");
@@ -13835,10 +13916,10 @@ async fn add_invalid_ignore_error_code() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 9, column 22
-      |
-    9 | ignore-error-codes = [401, 403, 1234]
-      |                      ^^^^^^^^^^^^^^^^
-    1234 is not a valid HTTP status code
+          |
+        9 | ignore-error-codes = [401, 403, 1234]
+          |                      ^^^^^^^^^^^^^^^^
+        1234 is not a valid HTTP status code
     "
     );
 
@@ -13869,12 +13950,12 @@ fn add_invalid_requires_python() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 4, column 19
-      |
-    4 | requires-python = "3.12"
-      |                   ^^^^^^
-    Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
-    3.12
-    ^^^^
+          |
+        4 | requires-python = "3.12"
+          |                   ^^^^^^
+        Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+        3.12
+        ^^^^
     "#);
 
     Ok(())
@@ -14039,6 +14120,50 @@ async fn add_auth_policy_never_with_url_credentials() -> Result<()> {
     ----- stderr -----
     error: Failed to fetch: `http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl`
       Caused by: HTTP status client error (401 Unauthorized) for url (http://[LOCALHOST]/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+    "
+    );
+
+    Ok(())
+}
+
+/// In authentication "never", client errors that are configured to be ignored should allow the
+/// resolver to try another version.
+#[tokio::test]
+async fn add_auth_policy_never_with_url_credentials_ignored() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&formatdoc!(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "{proxy_auth_uri}/basic-auth/simple"
+        authenticate = "never"
+        ignore-error-codes = [401]
+        default = true
+        "#,
+        proxy_auth_uri = proxy.authenticated_uri("public", "heron")
+    ))?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because only anyio==4.3.0 is available and anyio==4.3.0 could not be fetched from the network (`401 Unauthorized`), we can conclude that all versions of anyio cannot be used.
+          And because your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Metadata for `anyio` (v4.3.0) could not be fetched; the server returned: `401 Unauthorized`
+    hint: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing
     "
     );
 

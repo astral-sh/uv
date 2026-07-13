@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
@@ -34,9 +35,7 @@ use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::{
-    InMemoryIndex, MetadataResponse, Options, PythonRequirement, ResolveError, VersionsResponse,
-};
+use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
 /// The output of a successful resolution.
 ///
@@ -129,13 +128,13 @@ impl ResolverOutput {
     /// Create a new [`ResolverOutput`] from the resolved PubGrub state.
     pub(crate) fn from_state(
         resolutions: &[Resolution],
-        requirements: &[Requirement],
-        constraints: &Constraints,
-        overrides: &Overrides,
+        requirements: Vec<Requirement>,
+        constraints: Constraints,
+        overrides: Overrides,
         preferences: &Preferences,
         index: &InMemoryIndex,
         git: &GitResolver,
-        python: &PythonRequirement,
+        requires_python: RequiresPython,
         conflicts: &Conflicts,
         resolution_strategy: &ResolutionStrategy,
         options: Options,
@@ -188,9 +187,6 @@ impl ResolverOutput {
             }
         }
 
-        // Extract the `Requires-Python` range, if provided.
-        let requires_python = python.target().clone();
-
         let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
             // In the case of a singleton marker, we only include it if it's not
             // always true. Otherwise, we keep our `fork_markers` empty as there
@@ -230,18 +226,18 @@ impl ResolverOutput {
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&graph, &mut diagnostics, constraints, overrides);
+            report_missing_lower_bounds(&graph, &mut diagnostics, &constraints, &overrides);
         }
 
         let output = Self {
             graph,
             requires_python,
-            diagnostics,
-            requirements: requirements.to_vec(),
-            constraints: constraints.clone(),
-            overrides: overrides.clone(),
-            options,
             fork_markers,
+            diagnostics,
+            requirements,
+            constraints,
+            overrides,
+            options,
         };
 
         // We only do conflicting distribution detection when no
@@ -764,25 +760,9 @@ impl ResolverOutput {
         self,
         markers: Option<&MarkerEnvironment>,
     ) -> uv_distribution_types::Resolution {
-        self.into_resolution(true, markers)
-    }
-
-    fn into_resolution(
-        self,
-        allow_universal: bool,
-        markers: Option<&MarkerEnvironment>,
-    ) -> uv_distribution_types::Resolution {
         let Self {
-            graph,
-            diagnostics,
-            fork_markers,
-            ..
+            graph, diagnostics, ..
         } = self;
-
-        assert!(
-            allow_universal || fork_markers.is_empty(),
-            "universal resolutions are not supported"
-        );
 
         let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
         let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -870,14 +850,24 @@ impl ResolverOutput {
         uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
     }
 
+    /// Returns an iterator over the base distributions in the graph.
+    pub(crate) fn base_dists(&self) -> impl Iterator<Item = (NodeIndex, &AnnotatedDist)> {
+        self.graph
+            .node_indices()
+            .filter_map(move |node_index| match &self.graph[node_index] {
+                ResolutionGraphNode::Root => None,
+                ResolutionGraphNode::Dist(dist) => dist.is_base().then_some((node_index, dist)),
+            })
+    }
+
     /// Return the number of distinct packages in the graph.
     pub fn len(&self) -> usize {
-        self.dists().filter(|dist| dist.is_base()).count()
+        self.base_dists().count()
     }
 
     /// Return `true` if there are no packages in the graph.
     pub fn is_empty(&self) -> bool {
-        !self.dists().any(AnnotatedDist::is_base)
+        self.base_dists().next().is_none()
     }
 
     /// Returns `true` if the graph contains the given package.
@@ -991,10 +981,11 @@ impl ResolverOutput {
             let MetadataResponse::Found(archive, ..) = &*res else {
                 panic!("Every package should have metadata: {metadata_id:?}")
             };
-            for req in self
-                .constraints
-                .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
-            {
+            for req in self.constraints.apply(self.overrides.apply_for(
+                &dist.name,
+                &dist.version,
+                archive.metadata.requires_dist.iter(),
+            )) {
                 add_marker_params_from_tree(req.marker, &mut seen_marker_values);
             }
         }
@@ -1125,7 +1116,74 @@ impl Display for ConflictingDistributionError {
 /// single version of each package to be present in the graph.
 impl From<ResolverOutput> for uv_distribution_types::Resolution {
     fn from(output: ResolverOutput) -> Self {
-        output.into_resolution(false, None)
+        let ResolverOutput {
+            graph,
+            diagnostics,
+            fork_markers,
+            ..
+        } = output;
+
+        assert!(
+            fork_markers.is_empty(),
+            "universal resolutions are not supported"
+        );
+
+        let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
+        let mut inverse = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
+
+        // Create the root node.
+        let root = transformed.add_node(Node::Root);
+
+        // Re-add the nodes to the reduced graph.
+        for index in graph.node_indices() {
+            let ResolutionGraphNode::Dist(dist) = &graph[index] else {
+                continue;
+            };
+            if dist.is_base() {
+                inverse.insert(
+                    &dist.name,
+                    transformed.add_node(Node::Dist {
+                        dist: dist.dist.clone(),
+                        hashes: dist.hashes.clone(),
+                        install: true,
+                    }),
+                );
+            }
+        }
+
+        // Re-add the edges to the reduced graph.
+        for edge in graph.edge_indices() {
+            let (source, target) = graph.edge_endpoints(edge).unwrap();
+
+            match (&graph[source], &graph[target]) {
+                (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
+                    let target = inverse[&target_dist.name()];
+                    transformed.update_edge(root, target, Edge::Prod);
+                }
+                (
+                    ResolutionGraphNode::Dist(source_dist),
+                    ResolutionGraphNode::Dist(target_dist),
+                ) => {
+                    let source = inverse[&source_dist.name()];
+                    let target = inverse[&target_dist.name()];
+
+                    let edge = if let Some(extra) = source_dist.extra.as_ref() {
+                        Edge::Optional(extra.clone())
+                    } else if let Some(group) = source_dist.group.as_ref() {
+                        Edge::Dev(group.clone())
+                    } else {
+                        Edge::Prod
+                    };
+
+                    transformed.add_edge(source, target, edge);
+                }
+                _ => {
+                    unreachable!("root should not contain incoming edges");
+                }
+            }
+        }
+
+        Self::new(transformed).with_diagnostics(diagnostics)
     }
 }
 
@@ -1179,13 +1237,15 @@ fn has_lower_bound(
 
         // Get all individual specifier for the current package and check if any has a lower
         // bound.
-        for requirement in metadata
-            .requires_dist
-            .iter()
-            // These bounds sources are missing from the graph.
-            .chain(metadata.dependency_groups.values().flatten())
-            .chain(constraints.requirements())
-            .chain(overrides.requirements())
+        for requirement in overrides
+            .apply_for(
+                neighbor_dist.name(),
+                &neighbor_dist.version,
+                metadata.requires_dist.iter(),
+            )
+            .chain(overrides.apply(metadata.dependency_groups.values().flatten()))
+            // Constraints are missing from the graph.
+            .chain(constraints.requirements().map(Cow::Borrowed))
         {
             if requirement.name != *package_name {
                 continue;

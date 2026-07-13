@@ -15,6 +15,8 @@ use assert_fs::{
 use indoc::indoc;
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
+#[cfg(windows)]
+use uv_fs::Simplified;
 use uv_fs::copy_dir_all;
 use uv_static::EnvVars;
 
@@ -6376,33 +6378,30 @@ fn tool_install_removed_python() {
 
     // Simulate the tool's interpreter disappearing without copying an arbitrary system prefix
     // like `/usr` into the test directory.
-    #[cfg(unix)]
-    {
-        let tool_python = tool_root.child("bin").child("python");
-        fs_err::remove_file(&tool_python).unwrap();
-        fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
-            .unwrap();
-    }
-
-    #[cfg(windows)]
-    {
-        use uv_fs::Simplified;
-
-        let pyvenv_cfg = tool_root.child("pyvenv.cfg");
-        let broken_home = context.temp_dir.join("missing-python");
-        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
-        let contents = contents
-            .lines()
-            .map(|line| {
-                if line.starts_with("home = ") {
-                    format!("home = {}", broken_home.simplified_display())
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+    cfg_select! {
+        unix => {
+            let tool_python = tool_root.child("bin").child("python");
+            fs_err::remove_file(&tool_python).unwrap();
+            fs_err::os::unix::fs::symlink(context.temp_dir.join("missing-python"), &tool_python)
+                .unwrap();
+        },
+        windows => {
+            let pyvenv_cfg = tool_root.child("pyvenv.cfg");
+            let broken_home = context.temp_dir.join("missing-python");
+            let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+            let contents = contents
+                .lines()
+                .map(|line| {
+                    if line.starts_with("home = ") {
+                        format!("home = {}", broken_home.simplified_display())
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs_err::write(&pyvenv_cfg, format!("{contents}\n")).unwrap();
+        },
     }
 
     // Reinstalling should skip the broken Python install.
@@ -6428,4 +6427,303 @@ fn tool_install_removed_python() {
      + platformdirs==4.2.0
     Installed 2 executables: black, blackd
     ");
+}
+
+#[test]
+fn tool_install_locks_are_preview() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let links = context.workspace_root.join("test/links");
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    lock_path.assert(predicate::path::missing());
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(&links)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" },
+        ]
+        "#);
+    });
+}
+
+#[test]
+fn tool_install_lock_supports_local_wheel() {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    for _ in 0..2 {
+        context
+            .tool_install()
+            .arg(&wheel)
+            .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+            .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+            .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+            .env(EnvVars::PATH, bin_dir.as_os_str())
+            .assert()
+            .success();
+    }
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("tools/simple-launcher/uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        requirements = [{ name = "simple-launcher", path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }]
+
+        [[package]]
+        name = "simple-launcher"
+        version = "0.1.0"
+        source = { path = "[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl" }
+        wheels = [
+            { filename = "simple_launcher-0.1.0-py3-none-any.whl", hash = "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4" },
+        ]
+        "#);
+    });
+}
+
+#[test]
+fn tool_install_lock_verifies_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+
+    context
+        .tool_install()
+        .arg(&wheel)
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    let lock_path = tool_dir.child("simple-launcher").child("uv.lock");
+    let lock = fs_err::read_to_string(&lock_path)?;
+    lock_path.write_str(&lock.replace(
+        "sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4",
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    ))?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(&wheel)
+        .arg("--force")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to read `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+      ╰─▶ Hash mismatch for `simple-launcher @ file://[WORKSPACE]/test/links/simple_launcher-0.1.0-py3-none-any.whl`
+
+          Expected:
+            sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+          Computed:
+            sha256:5327e0bb67cdb46800999de6dcf034bf0a5335702883494af0d8b7f6ca48cee4
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_lock_refreshes_local_directory_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("simple-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        simple-launcher = "simple_launcher:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    let local_package_src = local_package.child("src").child("simple_launcher");
+    local_package_src.create_dir_all()?;
+    local_package_src
+        .child("__init__.py")
+        .write_str("def main(): pass\n")?;
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&format!(
+        "simple-launcher @ {}\n",
+        local_package.path().display()
+    ))?;
+
+    context
+        .tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    `simple-launcher` is already installed
+    ");
+
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        version = "2.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        simple-launcher = "simple_launcher:main"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("simple-launcher")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - simple-launcher==1.0.0 (from file://[TEMP_DIR]/simple-launcher)
+     + simple-launcher==2.0.0 (from file://[TEMP_DIR]/simple-launcher)
+    Installed 1 executable: simple-launcher
+    ");
+
+    Ok(())
+}
+
+/// Ensure that changing a constraint invalidates an otherwise reusable tool lock.
+#[test]
+fn tool_install_lock_revalidates_changed_constraints() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("platformdirs>=4\n")?;
+
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    constraints_txt.write_str("platformdirs<4\n")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--constraints")
+        .arg(constraints_txt.as_os_str())
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     - platformdirs==4.2.0
+     + platformdirs==3.11.0
+    Installed 2 executables: black, blackd
+    ");
+
+    Ok(())
 }

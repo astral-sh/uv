@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{fmt, io};
+use std::{fmt, io, iter};
 
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
@@ -26,7 +26,8 @@ use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, Index, IndexLocations,
     PackageConfigSettings, Requirement, SourceDist,
 };
-use uv_fs::{Simplified, relative_to};
+use uv_errors::{ErrorOptions, Hint, Hints, write_error_chain_with_options};
+use uv_fs::{Simplified, normalize_path, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -39,6 +40,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildStack, HashStrategy, SourceTreeEditablePolicy};
+use uv_warnings::warn_user;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -50,7 +52,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverSettings;
 
 #[derive(Debug, Error)]
-enum Error {
+pub(crate) enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
@@ -98,16 +100,37 @@ enum Error {
     VersionMismatch(Version, Version),
 }
 
-/// Collect hints from a build [`Error`] by inspecting its inner types.
-fn collect_build_hints(err: &Error) -> uv_errors::Hints<'_> {
-    use uv_errors::Hint;
-    match err {
-        Error::BuildBackend(err) => err.hints(),
-        Error::BuildFrontend(err) => err.hints(),
-        Error::BuildDispatch(err) => err.hints(),
-        Error::Project(err) => err.hints(),
-        Error::Operations(err) => err.hints(),
-        _ => uv_errors::Hints::none(),
+impl Hint for Error {
+    fn hints(&self) -> Hints<'_> {
+        match self {
+            Self::BuildBackend(err) => err.hints(),
+            Self::BuildFrontend(err) => err.hints(),
+            Self::BuildDispatch(err) => err.hints(),
+            Self::Project(err) => err.hints(),
+            Self::Operations(err) => err.hints(),
+            Self::Extract(uv_extract::Error::Tar(err)) => {
+                // TODO(konsti): astral-tokio-tar should use a proper error instead of
+                // encoding everything in strings
+                // NOTE(ww): We check for both messages below because they indicate
+                // different external extraction scenarios; the first is for any
+                // absolute path outside of the target directory, and the second
+                // is specifically for symlinks that point outside.
+                if err.to_string().contains("/bin/python")
+                    && std::error::Error::source(err).is_some_and(|err| {
+                        let err = err.to_string();
+                        err.ends_with("outside of the target directory")
+                            || err.ends_with("external symlinks are not allowed")
+                    })
+                {
+                    Hints::from(
+                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
+                    )
+                } else {
+                    Hints::none()
+                }
+            }
+            _ => Hints::none(),
+        }
     }
 }
 
@@ -275,6 +298,20 @@ async fn build_impl(
     )
     .await;
 
+    // Limit to the stable version range.
+    let min_version = Version::from_str(uv_version::version()).unwrap();
+    debug_assert!(
+        min_version.release()[0] == 0,
+        "migrate to major version bumps"
+    );
+    let max_version = Version::new(
+        [0, min_version.release()[1] + 1]
+            .into_iter()
+            // Add trailing zeroes to match the version length, to use the same style
+            // as `--bounds`.
+            .chain(iter::repeat_n(0, min_version.release().len() - 2)),
+    );
+
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
         if matches!(src, Source::File(_)) {
@@ -299,10 +336,10 @@ async fn build_impl(
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>={min_version},<{max_version}\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
                 "build-system".green(),
-                "setuptools".cyan(),
+                "uv_build".cyan(),
                 pyproject_toml.user_display().cyan()
             ));
         }
@@ -344,9 +381,9 @@ async fn build_impl(
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
             return Err(anyhow::anyhow!(
-                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"uv_build>={min_version},<{max_version}\"]\nbuild-backend = \"uv_build\"\n```",
                 name.cyan(),
-                "setuptools".cyan(),
+                "uv_build".cyan(),
                 "build-system".green(),
                 pyproject_toml.user_display().cyan()
             ));
@@ -356,6 +393,21 @@ async fn build_impl(
     } else {
         vec![AnnotatedSource::from(src)]
     };
+
+    // Build backends can include arbitrary files from the source directory in the distribution.
+    // Warn if the active cache is within the source since cache contents may be included in the
+    // build.
+    for source in &packages {
+        if let Source::Directory(source_dir) = &source.source
+            && is_path_within(cache.root(), source_dir)
+        {
+            warn_user!(
+                "The cache directory `{}` is inside the build source directory `{}` and may be included in distributions",
+                cache.root().user_display(),
+                source_dir.user_display()
+            );
+        }
+    }
 
     let results: Vec<_> = futures::future::join_all(packages.into_iter().map(|source| {
         let future = build_package(
@@ -413,53 +465,13 @@ async fn build_impl(
                 }
             }
             Err(err) => {
-                #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-                #[error("Failed to build `{source}`", source = source.cyan())]
-                #[diagnostic()]
-                struct Diagnostic {
-                    source: String,
-                    #[source]
-                    cause: anyhow::Error,
-                    #[help]
-                    help: Option<String>,
-                }
-
-                let help = if let Error::Extract(uv_extract::Error::Tar(err)) = &err {
-                    // TODO(konsti): astral-tokio-tar should use a proper error instead of
-                    // encoding everything in strings
-                    // NOTE(ww): We check for both messages below because the both indicate
-                    // different external extraction scenarios; the first is for any
-                    // absolute path outside of the target directory, and the second
-                    // is specifically for symlinks that point outside.
-                    if err.to_string().contains("/bin/python")
-                        && std::error::Error::source(err).is_some_and(|err| {
-                            let err = err.to_string();
-                            err.ends_with("outside of the target directory")
-                                || err.ends_with("external symlinks are not allowed")
-                        })
-                    {
-                        Some(
-                            "This file seems to be part of a virtual environment. Virtual environments must be excluded from source distributions."
-                                .to_string(),
-                        )
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
-
-                let hints = collect_build_hints(&err).into_owned();
-                let report = miette::Report::new(Diagnostic {
-                    source: source.to_string(),
-                    cause: err.into(),
-                    help,
-                });
-                anstream::eprint!("{report:?}");
-                anstream::eprint!("{hints}");
-                if !hints.is_empty() {
-                    anstream::eprintln!();
-                }
+                let err = anyhow::Error::from(err).context(format!("Failed to build `{source}`"));
+                let hints = crate::commands::diagnostics::hints_for_error(&err);
+                write_error_chain_with_options(
+                    err.as_ref(),
+                    hints,
+                    ErrorOptions::default().with_stream(printer.stderr_important()),
+                )?;
 
                 success = false;
             }
@@ -581,7 +593,7 @@ async fn build_package(
             build_constraints
                 .iter()
                 .map(|entry| (&entry.requirement, entry.hashes.as_slice())),
-            Some(&interpreter.resolver_marker_environment()),
+            Some(&interpreter.to_resolver_marker_environment()),
             hash_checking,
         )?
     } else {
@@ -1239,6 +1251,19 @@ impl Source<'_> {
             Self::Directory(path) => path,
         }
     }
+}
+
+/// Return `true` if `path` is within `directory`, resolving symlinks when possible.
+fn is_path_within(path: &Path, directory: &Path) -> bool {
+    if let Ok(path) = fs_err::canonicalize(path)
+        && let Ok(directory) = fs_err::canonicalize(directory)
+    {
+        return path.starts_with(directory);
+    }
+
+    let path = normalize_path(path);
+    let directory = normalize_path(directory);
+    path.starts_with(directory.as_ref())
 }
 
 /// We run all builds in parallel, so we wait until all builds are done to show the success messages

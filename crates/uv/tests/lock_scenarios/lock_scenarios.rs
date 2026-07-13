@@ -789,13 +789,9 @@ fn conflict_in_fork() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (markers: sys_platform == 'os2'):
-      ╰─▶ Because only b==1.0.0 is available and b==1.0.0 depends on d==1, we can conclude that all versions of b depend on d==1.
-          And because c==1.0.0 depends on d==2 and only c==1.0.0 is available, we can conclude that all versions of b and all versions of c are incompatible.
-          And because a==1.0.0 depends on b and c, we can conclude that a==1.0.0 cannot be used.
-          And because only the following versions of a{sys_platform == 'os2'} are available:
-              a{sys_platform == 'os2'}==1.0.0
-              a{sys_platform == 'os2'}>=2
-          and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because all versions of c depend on d==2 and all versions of b depend on d==1, we can conclude that all versions of b and all versions of c are incompatible.
+          And because a<=1.0.0 depends on b, we can conclude that a<=1.0.0 and all versions of c are incompatible.
+          And because a<=1.0.0 depends on c and your project depends on a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
 
     hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
     "
@@ -999,7 +995,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
-            { name = "d", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "d", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" } },
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:e86cc7db081c964c8874d032149c4e84b3f23563c517beb7bedfa875a8f9f4ce", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1011,7 +1007,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
-            { name = "d", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "d", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" } },
         ]
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:bc02a5bce314ce38dbd74b2132c25979a09f132c32808726ea3c9a793bd125a9", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1668,8 +1664,8 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
-            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:7e3d8e97204e1ea461ae625819c340a5a762b70f34421d4f9721bb7b607a0a93", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1696,7 +1692,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "c", marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
+            { name = "c" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:7bbe7def4bbd23115cf653d246419c773afd3c1b3e6ba94f19acbc1742f51d08", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -1867,8 +1863,8 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
-            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:7e3d8e97204e1ea461ae625819c340a5a762b70f34421d4f9721bb7b607a0a93", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2055,8 +2051,8 @@ fn fork_marker_inherit_combined() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy' and sys_platform == 'darwin'" },
-            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython' and sys_platform == 'darwin'" },
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'pypy'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "implementation_name == 'cpython'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:7e3d8e97204e1ea461ae625819c340a5a762b70f34421d4f9721bb7b607a0a93", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2236,7 +2232,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "b", marker = "sys_platform == 'linux'" },
+            { name = "b" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:1f9238da44c4971ded49abeb4dffd96c319bea753e2b61e4d095cc9110896d13", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2383,7 +2379,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             { target = "runtime:0" },
         ]
         dependencies = [
-            { name = "b", marker = "sys_platform == 'darwin'" },
+            { name = "b" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:3f8ff2b2832415dfda5a576afabc2f8b0e93e0e7a0ee9064b2f9c0a6488c1320", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -2407,7 +2403,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
-            { name = "c", marker = "sys_platform == 'darwin'" },
+            { name = "c" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:0e68acfea0cd703f2fa3e0a3b12f71228a0a6f5befc5df7f5f907a4cd153a90e", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3292,7 +3288,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on c<2.0.0 and b==1.0.0 depends on c>=2.0.0, we can conclude that b==1.0.0 and a{sys_platform == 'linux'}==1.0.0 are incompatible.
+      ╰─▶ Because all versions of b depend on c>=2.0.0 and all versions of a depend on c<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
           And because your project depends on a{sys_platform == 'linux'}==1.0.0 and b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
@@ -3364,7 +3360,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because a==1.0.0 depends on c{sys_platform == 'linux'}<2.0.0 and b==1.0.0 depends on c{sys_platform == 'darwin'}>=2.0.0, we can conclude that a==1.0.0 and b==1.0.0 are incompatible.
+      ╰─▶ Because all versions of b depend on c{sys_platform == 'darwin'}>=2.0.0 and all versions of a depend on c{sys_platform == 'linux'}<2.0.0, we can conclude that all versions of a and all versions of b are incompatible.
           And because your project depends on a==1.0.0 and b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "
     );
@@ -3698,7 +3694,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
-            { name = "fork-if-not-forked", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "fork-if-not-forked", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" } },
         ]
         sdist = { url = "http://[LOCALHOST]/files/fork_if_not_forked_proxy-1.0.0.tar.gz", hash = "sha256:1da9ee55735388976535cfd2ae143c8b9e21b9dd5f01ce9521a4a095a5e9e258", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4047,8 +4043,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             { target = "runtime:1" },
         ]
         dependencies = [
-            { name = "d", marker = "sys_platform != 'linux'" },
-            { name = "reject-cleaver-1", marker = "sys_platform != 'linux'" },
+            { name = "d" },
+            { name = "reject-cleaver-1" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/bar-1.0.0.tar.gz", hash = "sha256:7433981e897b2fdbefc4ccc713282a03663dbe9b7468658a702af1d01d241e27", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4109,7 +4105,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
-            { name = "c", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "c", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" } },
         ]
         sdist = { url = "http://[LOCALHOST]/files/d-1.0.0.tar.gz", hash = "sha256:ef58b0f5f8f9c4d7e7864a36f86ad96ca8cee734095b3e6512ae8c395380ee41", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4535,8 +4531,8 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             { target = "runtime:2" },
         ]
         dependencies = [
-            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'darwin' and sys_platform == 'illumos'" },
-            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'linux' and sys_platform == 'illumos'" },
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'darwin'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "os_name == 'linux'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:1073194686665f5b1459914275b353a20eafca9d9aa550f4c493aa0aceba119a", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -5382,7 +5378,7 @@ fn marker_variants_have_different_extras() -> Result<()> {
 
         [package.optional-dependencies]
         binary = [
-            { name = "psycopg-binary", marker = "implementation_name != 'pypy' and platform_python_implementation != 'PyPy'" },
+            { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
         ]
 
         [[package]]

@@ -37,7 +37,9 @@ use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
+use uv_configuration::{
+    DependencyGroups, ExcludeDependency, NoBinary, NoBuild, Override, PackageOverride,
+};
 use uv_distribution_types::{Index, Requirement};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
@@ -48,7 +50,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pypi_types::PyProjectToml;
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement, SourceCache};
-use uv_scripts::Pep723Metadata;
+use uv_scripts::{OverrideDependency, Pep723Metadata};
 use uv_warnings::warn_user;
 
 use crate::{RequirementsSource, SourceTree};
@@ -63,8 +65,10 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The overrides that have already been lowered to named requirements.
+    pub override_dependencies: Vec<Override<Requirement>>,
     /// The excludes for the project.
-    pub excludes: Vec<PackageName>,
+    pub excludes: Vec<ExcludeDependency>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -130,25 +134,32 @@ impl RequirementsSpecification {
                 })
                 .unwrap_or_default();
 
-            let overrides = tool_uv
+            let override_dependencies = tool_uv
                 .override_dependencies
                 .as_ref()
-                .map(|dependencies| {
-                    dependencies
-                        .iter()
-                        .map(|dependency| {
-                            UnresolvedRequirementSpecification::from(Requirement::from(
-                                dependency.to_owned(),
-                            ))
-                        })
-                        .collect::<Vec<UnresolvedRequirementSpecification>>()
+                .into_iter()
+                .flatten()
+                .map(|dependency| match dependency {
+                    OverrideDependency::Requirement(requirement) => {
+                        Override::Requirement(Requirement::from(requirement.clone()))
+                    }
+                    OverrideDependency::Package(package) => Override::Package(PackageOverride {
+                        package: package.package.clone(),
+                        dependencies: package
+                            .dependencies
+                            .iter()
+                            .cloned()
+                            .map(Requirement::from)
+                            .collect(),
+                    }),
                 })
-                .unwrap_or_default();
+                .collect();
 
             Self {
                 requirements,
                 constraints,
-                overrides,
+                override_dependencies,
+                excludes: tool_uv.exclude_dependencies.clone().unwrap_or_default(),
                 index_url: tool_uv
                     .top_level
                     .index_url
@@ -544,6 +555,9 @@ impl RequirementsSpecification {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
+            spec.excludes.extend(source.excludes);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
 
@@ -566,7 +580,8 @@ impl RequirementsSpecification {
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
@@ -604,7 +619,8 @@ impl RequirementsSpecification {
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
@@ -625,10 +641,13 @@ impl RequirementsSpecification {
             let source = Self::from_source_with_cache(source, client_builder, &mut cache).await?;
             spec.overrides.extend(source.requirements);
             spec.overrides.extend(source.overrides);
+            spec.override_dependencies
+                .extend(source.override_dependencies);
 
             if let Some(index_url) = source.index_url {
                 if let Some(existing) = spec.index_url
-                    && CanonicalUrl::new(index_url.url()) != CanonicalUrl::new(existing.url())
+                    && CanonicalUrl::new(index_url.url().clone())
+                        != CanonicalUrl::new(existing.url().clone())
                 {
                     return Err(anyhow::anyhow!(
                         "Multiple index URLs specified: `{existing}` vs. `{index_url}`",
@@ -649,7 +668,8 @@ impl RequirementsSpecification {
             for req_spec in source.requirements {
                 match req_spec.requirement {
                     UnresolvedRequirement::Named(requirement) => {
-                        spec.excludes.push(requirement.name);
+                        spec.excludes
+                            .push(ExcludeDependency::Dependency(requirement.name));
                     }
                     UnresolvedRequirement::Unnamed(requirement) => {
                         return Err(anyhow::anyhow!(
@@ -685,7 +705,7 @@ impl RequirementsSpecification {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
-        excludes: Vec<PackageName>,
+        excludes: Vec<ExcludeDependency>,
     ) -> Self {
         Self {
             requirements: requirements

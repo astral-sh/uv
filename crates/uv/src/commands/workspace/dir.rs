@@ -30,12 +30,9 @@ pub(crate) async fn dir(
 
     let dir = match package_name {
         None => workspace.install_path(),
+        Some(package) if let Some(project) = workspace.packages().get(&package) => project.root(),
         Some(package) => {
-            if let Some(p) = workspace.packages().get(&package) {
-                p.root()
-            } else {
-                bail!("Package `{package}` not found in workspace.")
-            }
+            bail!("Package `{package}` not found in workspace.")
         }
     };
 

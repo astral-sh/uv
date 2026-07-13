@@ -44,6 +44,7 @@ impl RequirementSatisfaction {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        locked_build_resolution: Option<&str>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -51,20 +52,21 @@ impl RequirementSatisfaction {
         );
 
         // If the distribution was built with other settings, it is out of date.
-        if distribution.build_info().is_some_and(|dist_build_info| {
+        if distribution.build_info().is_some() || locked_build_resolution.is_some() {
             let config_settings =
                 config_settings_for(name, config_settings, config_settings_package);
             let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
             let extra_build_variables = extra_build_variables_for(name, extra_build_variables);
             let build_info = BuildInfo::from_settings(
-                &config_settings,
-                extra_build_requires,
-                extra_build_variables,
-            );
-            dist_build_info != &build_info
-        }) {
-            debug!("Build info mismatch for {name}: {distribution}");
-            return Self::OutOfDate;
+                config_settings.into_owned(),
+                extra_build_requires.to_vec(),
+                extra_build_variables.cloned(),
+            )
+            .with_locked_build_resolution(locked_build_resolution.map(str::to_owned));
+            if distribution.build_info() != Some(&build_info) {
+                debug!("Build info mismatch for {name}: {distribution}");
+                return Self::OutOfDate;
+            }
         }
 
         // Filter out already-installed packages.
@@ -130,9 +132,9 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 }
 
-                if !CanonicalUrl::parse(installed_url)
-                    .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
-                {
+                if !CanonicalUrl::parse(installed_url).is_ok_and(|installed_url| {
+                    installed_url == CanonicalUrl::new(requested_url.clone())
+                }) {
                     return Self::Mismatch;
                 }
 

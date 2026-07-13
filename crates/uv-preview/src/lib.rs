@@ -1,8 +1,9 @@
 use std::borrow::Cow;
+#[cfg(any(test, feature = "testing"))]
+use std::ops::BitOr;
 use std::sync::{Mutex, OnceLock};
 use std::{
     fmt::{Debug, Display, Formatter},
-    ops::BitOr,
     str::FromStr,
 };
 
@@ -258,7 +259,11 @@ pub enum PreviewFeature {
     VenvSafeClear = 1 << 32,
     Check = 1 << 33,
     PackagedInit = 1 << 34,
-    LockBuildDependencies = 1 << 35,
+    CentralizedProjectEnvs = 1 << 35,
+    ToolInstallLocks = 1 << 36,
+    WorkspaceListScripts = 1 << 37,
+    NoDistutilsPatch = 1 << 38,
+    LockBuildDependencies = 1 << 39,
 }
 
 impl PreviewFeature {
@@ -300,6 +305,10 @@ impl PreviewFeature {
             Self::VenvSafeClear => "venv-safe-clear",
             Self::Check => "check-command",
             Self::PackagedInit => "packaged-init",
+            Self::CentralizedProjectEnvs => "centralized-project-envs",
+            Self::ToolInstallLocks => "tool-install-locks",
+            Self::WorkspaceListScripts => "workspace-list-scripts",
+            Self::NoDistutilsPatch => "no-distutils-patch",
             Self::LockBuildDependencies => "lock-build-dependencies",
         }
     }
@@ -355,6 +364,10 @@ impl FromStr for PreviewFeature {
             "venv-safe-clear" => Self::VenvSafeClear,
             "check" | "check-command" => Self::Check,
             "packaged-init" => Self::PackagedInit,
+            "centralized-project-envs" => Self::CentralizedProjectEnvs,
+            "tool-install-locks" => Self::ToolInstallLocks,
+            "workspace-list-scripts" => Self::WorkspaceListScripts,
+            "no-distutils-patch" => Self::NoDistutilsPatch,
             "lock-build-dependencies" => Self::LockBuildDependencies,
             _ => return Err(PreviewFeatureParseError),
         })
@@ -438,7 +451,8 @@ impl Debug for Preview {
 }
 
 impl Preview {
-    pub fn new(flags: &[PreviewFeature]) -> Self {
+    #[cfg(any(test, feature = "testing"))]
+    fn new(flags: &[PreviewFeature]) -> Self {
         Self {
             flags: flags.iter().copied().fold(BitFlags::empty(), BitOr::bitor),
         }
@@ -551,6 +565,9 @@ mod tests {
         assert!(preview.is_enabled(PreviewFeature::JsonOutput));
         assert_eq!(preview.flags.bits().count_ones(), 2);
 
+        let preview = Preview::from_str("tool-install-locks").unwrap();
+        assert!(preview.is_enabled(PreviewFeature::ToolInstallLocks));
+
         // Test with whitespace
         let preview = Preview::from_str("pylock , add-bounds").unwrap();
         assert!(preview.is_enabled(PreviewFeature::Pylock));
@@ -597,6 +614,10 @@ mod tests {
         assert_eq!(PreviewFeature::PythonUpgrade.as_str(), "python-upgrade");
         assert_eq!(PreviewFeature::JsonOutput.as_str(), "json-output");
         assert_eq!(PreviewFeature::Pylock.as_str(), "pylock");
+        assert_eq!(
+            PreviewFeature::ToolInstallLocks.as_str(),
+            "tool-install-locks"
+        );
         assert_eq!(PreviewFeature::AddBounds.as_str(), "add-bounds");
         assert_eq!(
             PreviewFeature::PackageConflicts.as_str(),
@@ -663,6 +684,18 @@ mod tests {
         assert_eq!(PreviewFeature::VenvSafeClear.as_str(), "venv-safe-clear");
         assert_eq!(PreviewFeature::Audit.as_str(), "audit-command");
         assert_eq!(PreviewFeature::Check.as_str(), "check-command");
+        assert_eq!(
+            PreviewFeature::CentralizedProjectEnvs.as_str(),
+            "centralized-project-envs"
+        );
+        assert_eq!(
+            PreviewFeature::WorkspaceListScripts.as_str(),
+            "workspace-list-scripts"
+        );
+        assert_eq!(
+            PreviewFeature::NoDistutilsPatch.as_str(),
+            "no-distutils-patch"
+        );
         assert_eq!(
             PreviewFeature::LockBuildDependencies.as_str(),
             "lock-build-dependencies"

@@ -15,7 +15,8 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, NoBinary, NoBuild, NoSources, Reinstall, Upgrade,
+    ExcludeDependency, ExtrasSpecification, NoBinary, NoBuild, NoSources, Override,
+    PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
@@ -59,7 +60,7 @@ use crate::commands::project::{
     WorkspacePython, init_script_python_requirement, script_extra_build_requires,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
+use crate::commands::{ExitStatus, ScriptPath, UvError, diagnostics, pip};
 use crate::printer::Printer;
 use crate::settings::{FrozenSource, LockCheck, LockCheckSource, ResolverSettings};
 
@@ -277,16 +278,10 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        // Handle them here so we return exit code 1 instead of bubbling up as an error (exit code 2).
-        Err(err @ ProjectError::LockMismatch(..)) => {
-            writeln!(printer.stderr(), "{}", err.to_string().bold())?;
-            Ok(ExitStatus::Failure)
-        }
-        Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::with_system_certs(client_builder.system_certs())
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
+        Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
+            .report(err)
+            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
 }
@@ -536,12 +531,40 @@ async fn do_lock(
         sources,
         client_builder.credentials_cache(),
     )?;
-    let overrides = target.lower(
-        overrides,
-        index_locations,
-        sources,
-        client_builder.credentials_cache(),
-    )?;
+    let overrides = {
+        let mut lowered_overrides = Vec::new();
+        for entry in overrides {
+            match entry {
+                Override::Requirement(requirement) => {
+                    lowered_overrides.extend(
+                        target
+                            .lower(
+                                vec![requirement],
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_iter()
+                            .map(Override::Requirement),
+                    );
+                }
+                Override::Package(package) => {
+                    lowered_overrides.push(Override::Package(PackageOverride {
+                        package: package.package,
+                        dependencies: target
+                            .lower(
+                                package.dependencies.into_vec(),
+                                index_locations,
+                                sources,
+                                client_builder.credentials_cache(),
+                            )?
+                            .into_boxed_slice(),
+                    }));
+                }
+            }
+        }
+        lowered_overrides
+    };
     let constraints = target.lower(
         constraints,
         index_locations,
@@ -804,7 +827,7 @@ async fn do_lock(
     let build_preferences = existing_lock
         .as_ref()
         .map(|lock| {
-            let mut build_preferences = lock.build_dependency_preferences();
+            let mut build_preferences = lock.build_dependency_preferences(target.install_path());
             if !upgrade.is_none() {
                 let upgrade_packages = UpgradePackages::for_workspace(lock, upgrade);
                 for preferences in build_preferences.values_mut() {
@@ -1019,7 +1042,7 @@ async fn do_lock(
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.
-            logger.on_complete(lock.len(), start, printer)?;
+            logger.on_complete(lock.runtime_packages().count(), start, printer)?;
 
             Ok(LockResult::Unchanged(lock))
         }
@@ -1100,11 +1123,8 @@ async fn do_lock(
                     .map(NameRequirementSpecification::from)
                     .chain(external)
                     .collect(),
-                overrides
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect(),
+                Vec::new(),
+                overrides.clone(),
                 excludes.clone(),
                 source_trees,
                 // The root is always null in workspaces, it "depends on" the projects
@@ -1602,10 +1622,25 @@ async fn resolve_all_possible_builds(
         let re_resolve_build_requirements = seen_before && marker_widened;
 
         let dist = Dist::Source(source_dist.clone());
-        let hash_policy = build_hasher.get(&dist);
-        database
-            .get_or_build_wheel_metadata(&dist, hash_policy)
-            .await?;
+        let extra_build_dependencies = build_dispatch
+            .extra_build_requires()
+            .get(&key.name)
+            .cloned()
+            .unwrap_or_default();
+        let direct_build = extra_build_dependencies.is_empty()
+            && database
+                .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
+                .await?;
+
+        if !direct_build && resolve_backend_hook_requirements {
+            database
+                .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
+                .await?;
+        } else {
+            database
+                .get_or_build_wheel_metadata(&dist, build_hasher.get(&dist))
+                .await?;
+        }
 
         let build_resolutions = build_dispatch.build_resolutions();
         let mut graph = if re_resolve_build_requirements {
@@ -1615,17 +1650,7 @@ async fn resolve_all_possible_builds(
                 .get(&build_graph_key)
                 .or_else(|| build_resolutions.get(&bootstrap_graph_key))
         };
-        let extra_build_dependencies = build_dispatch
-            .extra_build_requires()
-            .get(&key.name)
-            .cloned()
-            .unwrap_or_default();
-
         if graph.is_none() {
-            let direct_build = extra_build_dependencies.is_empty()
-                && database
-                    .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
-                    .await?;
             let build_system = if direct_build {
                 None
             } else {
@@ -1635,15 +1660,6 @@ async fn resolve_all_possible_builds(
             };
             let has_explicit_build_system = build_system.is_some();
             let build_requirements = build_system.map(|build_system| build_system.requires);
-
-            if !direct_build && resolve_backend_hook_requirements {
-                database
-                    .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
-                    .await?;
-                graph = build_resolutions
-                    .get(&build_graph_key)
-                    .or_else(|| build_resolutions.get(&bootstrap_graph_key));
-            }
 
             if graph.is_none()
                 && let Some(mut requirements) = build_requirements
@@ -1770,7 +1786,7 @@ fn executor_artifact_environments(markers: &MarkerEnvironment) -> SupportedEnvir
 }
 
 #[derive(Debug)]
-enum ValidatedLock {
+pub(crate) enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
     Unusable(Lock),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
@@ -1785,7 +1801,7 @@ enum ValidatedLock {
 
 impl ValidatedLock {
     /// Validate a [`Lock`] against the workspace requirements.
-    async fn validate<Context: BuildContext>(
+    pub(crate) async fn validate<Context: BuildContext>(
         lock: Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
@@ -1794,8 +1810,8 @@ impl ValidatedLock {
         requirements: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
-        overrides: &[Requirement],
-        excludes: &[PackageName],
+        overrides: &[Override<Requirement>],
+        excludes: &[ExcludeDependency],
         build_constraints: &[Requirement],
         extra_build_requires: &uv_distribution_types::ExtraBuildRequires,
         build_settings: Option<&str>,
@@ -2209,9 +2225,21 @@ impl ValidatedLock {
         }
     }
 
+    /// Return whether the existing lock satisfies the current inputs.
+    #[must_use]
+    pub(crate) fn is_satisfied(&self) -> bool {
+        matches!(self, Self::Satisfies(_))
+    }
+
+    /// Return whether the existing lock can provide version preferences.
+    #[must_use]
+    pub(crate) fn is_usable(&self) -> bool {
+        !matches!(self, Self::Unusable(_))
+    }
+
     /// Convert the [`ValidatedLock`] into a [`Lock`].
     #[must_use]
-    fn into_lock(self) -> Lock {
+    pub(crate) fn into_lock(self) -> Lock {
         match self {
             Self::Unusable(lock) => lock,
             Self::Satisfies(lock) => lock,

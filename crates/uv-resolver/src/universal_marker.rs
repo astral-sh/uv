@@ -430,19 +430,14 @@ impl std::fmt::Debug for UniversalMarker {
 /// This encapsulates the encoding of extras and groups into PEP 508
 /// markers.
 #[derive(Default, Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct ConflictMarker {
+pub(crate) struct ConflictMarker {
     marker: MarkerTree,
 }
 
 impl ConflictMarker {
     /// A constant conflict marker that always evaluates to `true`.
-    pub const TRUE: Self = Self {
+    pub(crate) const TRUE: Self = Self {
         marker: MarkerTree::TRUE,
-    };
-
-    /// A constant conflict marker that always evaluates to `false`.
-    pub const FALSE: Self = Self {
-        marker: MarkerTree::FALSE,
     };
 
     /// Creates a new conflict marker from the declared conflicts provided.
@@ -474,7 +469,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the production
     /// dependencies for the given package are activated.
-    pub fn project(package: &PackageName) -> Self {
+    pub(crate) fn project(package: &PackageName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_project(package));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -484,7 +479,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given extra for the
     /// given package is activated.
-    pub fn extra(package: &PackageName, extra: &ExtraName) -> Self {
+    pub(crate) fn extra(package: &PackageName, extra: &ExtraName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_extra(package, extra));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -494,7 +489,7 @@ impl ConflictMarker {
 
     /// Create a conflict marker that is true only when the given group for the
     /// given package is activated.
-    pub fn group(package: &PackageName, group: &GroupName) -> Self {
+    pub(crate) fn group(package: &PackageName, group: &GroupName) -> Self {
         let operator = uv_pep508::ExtraOperator::Equal;
         let name = uv_pep508::MarkerValueExtra::Extra(encode_package_group(package, group));
         let expr = uv_pep508::MarkerExpression::Extra { operator, name };
@@ -504,7 +499,7 @@ impl ConflictMarker {
 
     /// Returns a new conflict marker that is the negation of this one.
     #[must_use]
-    pub fn negate(self) -> Self {
+    pub(crate) fn negate(self) -> Self {
         Self {
             marker: self.marker.negate(),
         }
@@ -513,7 +508,7 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the union of `self` and
     /// `other`.
     #[must_use]
-    pub fn or(self, other: Self) -> Self {
+    pub(crate) fn or(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.or(other.marker);
         Self { marker }
@@ -522,19 +517,19 @@ impl ConflictMarker {
     /// Returns a new conflict marker corresponding to the intersection of
     /// `self` and `other`.
     #[must_use]
-    pub fn and(self, other: Self) -> Self {
+    pub(crate) fn and(self, other: Self) -> Self {
         let mut marker = self.marker;
         marker.and(other.marker);
         Self { marker }
     }
 
     /// Returns true if this conflict marker will always evaluate to `true`.
-    pub fn is_true(self) -> bool {
+    pub(crate) fn is_true(self) -> bool {
         self.marker.is_true()
     }
 
     /// Returns true if this conflict marker will always evaluate to `false`.
-    pub fn is_false(self) -> bool {
+    pub(crate) fn is_false(self) -> bool {
         self.marker.is_false()
     }
 

@@ -31,9 +31,7 @@ pub trait Reporter: Send + Sync {
 impl dyn Reporter {
     /// Converts this reporter to a [`uv_git::Reporter`].
     pub(crate) fn into_git_reporter(self: Arc<dyn Reporter>) -> Arc<dyn uv_git::Reporter> {
-        Arc::new(Facade {
-            reporter: self.clone(),
-        })
+        Arc::new(Facade { reporter: self })
     }
 }
 

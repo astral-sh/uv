@@ -178,10 +178,10 @@
       }
     },
     "exclude-dependencies": {
-      "description": "Package names to exclude, e.g., `werkzeug`, `numpy`.",
+      "description": "Dependencies to exclude when resolving the project's dependencies.\n\nExcludes are used to prevent a package from being selected during resolution,\nregardless of whether it's requested by any other package. When a package is excluded,\nit will be omitted from the dependency list entirely.\n\nIncluding a package as an exclusion will prevent it from being installed, even if\nit's requested by transitive dependencies. This can be useful for removing optional\ndependencies or working around packages with broken dependencies.\n\nExclusions can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be excluded by `name` and, optionally, `version`. If `version` is\nomitted, the exclusions apply to all versions of that package. A version-specific entry\ntakes precedence over an all-versions entry.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `exclude-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/ExcludeDependency"
       }
     },
     "exclude-newer": {
@@ -348,7 +348,7 @@
       }
     },
     "no-build": {
-      "description": "Don't build source distributions.\n\nWhen enabled, resolving will not run arbitrary Python code. The cached wheels of\nalready-built source distributions will be reused, but operations that require building\ndistributions will exit with an error.",
+      "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.",
       "type": ["boolean", "null"]
     },
     "no-build-isolation": {
@@ -400,10 +400,10 @@
       "type": ["boolean", "null"]
     },
     "override-dependencies": {
-      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "description": "Overrides to apply when resolving the project's dependencies.\n\nOverrides are used to force selection of a specific version of a package, regardless of the\nversion requested by any other package, and regardless of whether choosing that version\nwould typically constitute an invalid resolution.\n\nWhile constraints are _additive_, in that they're combined with the requirements of the\nconstituent packages, overrides are _absolute_, in that they completely replace the\nrequirements of any constituent packages.\n\nIncluding a package as an override will _not_ trigger installation of the package on its\nown; instead, the package must be requested elsewhere in the project's first-party or\ntransitive dependencies.\n\nOverrides can be limited to the dependencies declared by a specific package version by\nusing a table with `package` and `dependencies`. The `package` table identifies the package\nwhose dependencies will be overridden by `name` and, optionally, `version`. If `version` is\nomitted, the overrides apply to all versions of that package. Requirements in `dependencies`\nreplace dependencies with the same name and add dependencies that are not declared by the\npackage. Dependencies not listed in `dependencies` are left unchanged.\n\nScoped overrides currently support registry version specifiers only. Direct URL and path\nsources, including Git sources, and explicit indexes are not supported.\n\n!!! note\n    In `uv lock`, `uv sync`, and `uv run`, uv will only read `override-dependencies` from\n    the `pyproject.toml` at the workspace root, and will ignore any declarations in other\n    workspace members or `uv.toml` files.",
       "type": ["array", "null"],
       "items": {
-        "type": "string"
+        "$ref": "#/definitions/Override"
       }
     },
     "package": {
@@ -594,6 +594,10 @@
   },
   "additionalProperties": false,
   "not": {
+    "properties": {
+      "preview": {},
+      "preview-features": {}
+    },
     "required": ["preview", "preview-features"]
   },
   "definitions": {
@@ -853,6 +857,17 @@
       "type": "string",
       "format": "uri"
     },
+    "ExcludeDependency": {
+      "description": "An exclusion, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageExclusion"
+        },
+        {
+          "$ref": "#/definitions/PackageName"
+        }
+      ]
+    },
     "ExcludeNewerOverride": {
       "oneOf": [
         {
@@ -1009,7 +1024,7 @@
           "default": "simple"
         },
         "ignore-error-codes": {
-          "description": "Status codes that uv should ignore when deciding whether\nto continue searching in the next index after a failure.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
+          "description": "Status codes that uv should ignore when deciding whether to continue resolution after a\nrequest to this index fails.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nignore-error-codes = [401, 403]\n```",
           "type": ["array", "null"],
           "default": null,
           "items": {
@@ -1164,12 +1179,55 @@
         }
       ]
     },
+    "Override": {
+      "description": "An override, either global or scoped to a specific package version.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PackageOverride"
+        },
+        {
+          "$ref": "#/definitions/Requirement"
+        }
+      ]
+    },
     "PackageConfigSettings": {
       "description": "Settings to pass to PEP 517 build backends on a per-package basis.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettings"
       }
+    },
+    "PackageExclusion": {
+      "description": "A set of exclusions that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PackageName"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageExclusionTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageExclusionTarget": {
+      "description": "The package and optional version selected by a [`PackageExclusion`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\nFor example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
@@ -1179,6 +1237,38 @@
       "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
+    "PackageOverride": {
+      "description": "An override that applies to the dependencies of a specific package version.",
+      "type": "object",
+      "properties": {
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Requirement"
+          }
+        },
+        "package": {
+          "$ref": "#/definitions/PackageOverrideTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["package", "dependencies"]
+    },
+    "PackageOverrideTarget": {
+      "description": "The package and optional version selected by a [`PackageOverride`].",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/PackageName"
+        },
+        "version": {
+          "description": "PEP 440-style package version, e.g., `1.2.3`",
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name"]
     },
     "PipGroupName": {
       "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>.\nIf <path> is omitted it defaults to \"pyproject.toml\".",
@@ -1420,7 +1510,7 @@
           }
         },
         "no-build": {
-          "description": "Don't build source distributions.\n\nWhen enabled, resolving will not run arbitrary Python code. The cached wheels of\nalready-built source distributions will be reused, but operations that require building\ndistributions will exit with an error.\n\nAlias for `--only-binary :all:`.",
+          "description": "Don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution will exit with an error. uv may\nstill build editable requirements, and their build backends may run arbitrary Python code.\n\nAlias for `--only-binary :all:`.",
           "type": ["boolean", "null"]
         },
         "no-build-isolation": {
@@ -1480,7 +1570,7 @@
           "type": ["boolean", "null"]
         },
         "only-binary": {
-          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, resolving will not run code from the given packages. The cached wheels of already-built\nsource distributions will be reused, but operations that require building distributions will\nexit with an error.\n\nMultiple packages may be provided. Disable binaries for all packages with `:all:`.\nClear previously specified packages with `:none:`.",
+          "description": "Only use pre-built wheels; don't build source distributions.\n\nWhen enabled, uv will reuse cached wheels from previously built source distributions, but\noperations that require building a source distribution for the given packages will exit\nwith an error. uv may still build editable requirements, and their build backends may run\narbitrary Python code.\n\nMultiple packages may be provided. Disable binaries for all packages with `:all:`.\nClear previously specified packages with `:none:`.",
           "type": ["array", "null"],
           "items": {
             "$ref": "#/definitions/PackageNameSpecifier"
@@ -1673,7 +1763,12 @@
             "malware-check",
             "venv-safe-clear",
             "check-command",
-            "packaged-init"
+            "packaged-init",
+            "centralized-project-envs",
+            "tool-install-locks",
+            "workspace-list-scripts",
+            "no-distutils-patch",
+            "lock-build-dependencies"
           ]
         },
         {
@@ -2402,6 +2497,11 @@
           "description": "Use the CPU-only PyTorch index.",
           "type": "string",
           "const": "cpu"
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 13.2.",
+          "type": "string",
+          "const": "cu132"
         },
         {
           "description": "Use the PyTorch index for CUDA 13.0.",

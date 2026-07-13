@@ -1050,9 +1050,8 @@ impl TargetTriple {
     ///
     /// The returned [`MarkerEnvironment`] will preserve the base environment's Python version
     /// markers, but override its platform markers.
-    pub fn markers(self, base: &MarkerEnvironment) -> MarkerEnvironment {
-        base.clone()
-            .with_os_name(self.os_name())
+    pub fn markers(self, base: MarkerEnvironment) -> MarkerEnvironment {
+        base.with_os_name(self.os_name())
             .with_platform_machine(self.platform_machine())
             .with_platform_system(self.platform_system())
             .with_sys_platform(self.sys_platform())

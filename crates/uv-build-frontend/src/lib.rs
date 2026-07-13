@@ -39,7 +39,7 @@ use uv_fs::{LockedFile, LockedFileMode};
 use uv_fs::{PythonExt, Simplified};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::VerbatimParsedUrl;
+use uv_pypi_types::{BackendPath, BuildSystem, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{
@@ -48,7 +48,6 @@ use uv_types::{
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
-use uv_workspace::pyproject::BackendPath;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -87,18 +86,6 @@ struct Project {
     /// Specifies which fields listed by PEP 621 were intentionally unspecified so another tool
     /// can/will provide such metadata dynamically.
     dynamic: Option<Vec<String>>,
-}
-
-/// The `[build-system]` section of a pyproject.toml as specified in PEP 517.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-struct BuildSystem {
-    /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    /// A string naming a Python object that will be used to perform the build.
-    build_backend: Option<String>,
-    /// Specifies that backend code is hosted in-tree, this key contains a list of directories.
-    backend_path: Option<BackendPath>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -494,6 +481,8 @@ impl SourceBuild {
         Ok(
             if pep517_backend.requirements == DEFAULT_BACKEND.requirements
                 && extra_build_dependencies.is_empty()
+                && !package
+                    .is_some_and(|package| build_context.has_locked_build_resolution(package))
             {
                 let mut resolution = source_build_context.default_resolution.lock().await;
                 if let Some(resolved_requirements) = &*resolution {

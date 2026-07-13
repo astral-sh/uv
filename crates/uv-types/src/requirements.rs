@@ -1,5 +1,6 @@
 use uv_distribution_types::{Requirement, Resolution};
-use uv_normalize::ExtraName;
+use uv_normalize::{ExtraName, PackageName};
+use uv_pep440::Version;
 
 use crate::{BuildResolutionGraph, HashStrategy};
 
@@ -54,6 +55,10 @@ impl ResolvedRequirements {
 /// including their unevaluated markers.
 #[derive(Debug, Clone)]
 pub struct RequestedRequirements {
+    /// The package that requested the requirements.
+    package: PackageName,
+    /// The version of the package that requested the requirements.
+    version: Version,
     /// The set of extras included on the originating requirement.
     extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
@@ -64,12 +69,30 @@ pub struct RequestedRequirements {
 
 impl RequestedRequirements {
     /// Instantiate a [`RequestedRequirements`] with the given `extras` and `requirements`.
-    pub fn new(extras: Box<[ExtraName]>, requirements: Box<[Requirement]>, direct: bool) -> Self {
+    pub fn new(
+        package: PackageName,
+        version: Version,
+        extras: Box<[ExtraName]>,
+        requirements: Box<[Requirement]>,
+        direct: bool,
+    ) -> Self {
         Self {
+            package,
+            version,
             extras,
             requirements,
             direct,
         }
+    }
+
+    /// Return the package that requested the requirements.
+    pub fn package(&self) -> &PackageName {
+        &self.package
+    }
+
+    /// Return the package version that requested the requirements.
+    pub fn version(&self) -> &Version {
+        &self.version
     }
 
     /// Return the extras that were included on the originating requirement.

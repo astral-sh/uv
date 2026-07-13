@@ -889,7 +889,7 @@ pub enum CacheCommand {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(alias = "clear")]
     Clean(CleanArgs),
-    /// Prune all unreachable objects from the cache.
+    /// Prune dangling cache entries and cached environments.
     Prune(PruneArgs),
     /// Show the cache directory.
     ///
@@ -1626,9 +1626,9 @@ pub struct PipCompileArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -1660,9 +1660,10 @@ pub struct PipCompileArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -1987,9 +1988,9 @@ pub struct PipSyncArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2021,9 +2022,10 @@ pub struct PipSyncArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -2372,9 +2374,9 @@ pub struct PipInstallArgs {
 
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[arg(
@@ -2406,9 +2408,10 @@ pub struct PipInstallArgs {
 
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`. Clear
     /// previously specified packages with `:none:`.
@@ -6427,9 +6430,10 @@ pub struct ToolUpgradeArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -7286,9 +7290,9 @@ pub struct RefreshArgs {
 pub struct BuildOptionsArgs {
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     #[arg(
         long,
         env = EnvVars::UV_NO_BUILD,
@@ -7500,9 +7504,10 @@ pub struct InstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -8001,9 +8006,10 @@ pub struct ResolverInstallerArgs {
     /// in which start time is critical, such as CLI applications and Docker containers, this option
     /// can be enabled to trade longer installation times for faster start times.
     ///
-    /// When enabled, uv will process the entire site-packages directory (including packages that
-    /// are not being modified by the current operation) for consistency. Like pip, it will also
-    /// ignore errors.
+    /// When enabled, install operations (e.g., `uv pip install`) will compile installed or
+    /// reinstalled Python files. Commands that perform a sync operation (e.g., `uv sync` or `uv
+    /// run`) will process the entire site-packages directory including packages that are not being
+    /// modified.
     #[arg(
         long,
         alias = "compile",
@@ -8375,6 +8381,10 @@ pub struct WorkspaceListArgs {
     /// Show paths instead of names.
     #[arg(long)]
     pub paths: bool,
+
+    /// List all standalone scripts with inline metadata in the workspace.
+    #[arg(long)]
+    pub scripts: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and

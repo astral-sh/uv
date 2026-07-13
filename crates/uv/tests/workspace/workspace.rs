@@ -5,9 +5,12 @@ use std::path::PathBuf;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
+#[cfg(feature = "test-universal")]
 use assert_fs::prelude::FileTouch;
 use indoc::indoc;
-use insta::{assert_json_snapshot, assert_snapshot};
+use insta::assert_json_snapshot;
+#[cfg(feature = "test-universal")]
+use insta::assert_snapshot;
 use serde::{Deserialize, Serialize};
 
 use uv_test::{copy_dir_ignore, make_project, uv_snapshot};
@@ -583,8 +586,8 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 }
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -757,6 +760,7 @@ struct Package {
 ///
 /// We have a main workspace with packages `a` and `b`, and a second workspace with `c`, `d` and
 /// `e`. We have `a -> b`, `b -> c`, `c -> d`. `e` should not be installed.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -853,6 +857,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
 }
 
 /// Ensure that workspace discovery skips an empty directory that matches a member glob.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_empty_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -896,6 +901,7 @@ fn workspace_empty_member() -> Result<()> {
 }
 
 /// Ensure that workspace discovery skips directories that only contain gitignored files.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_gitignored_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -964,6 +970,7 @@ fn workspace_gitignored_member() -> Result<()> {
 
 /// Ensure that workspace discovery skips directories that only contain gitignored
 /// files even if they're nested inside non-ignored directories.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_gitignored_member_in_subdirectory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1039,6 +1046,7 @@ fn workspace_gitignored_member_in_subdirectory() -> Result<()> {
 
 /// Ensure that workspace discovery skips directories that only contain files ignored via
 /// `.ignore` (not just `.gitignore`).
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_ignored_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1107,6 +1115,7 @@ fn workspace_ignored_member() -> Result<()> {
 
 /// Ensure that workspace discovery still errors for non-empty, non-gitignored directories
 /// missing a `pyproject.toml`.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_nonempty_member_no_pyproject() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1156,6 +1165,7 @@ fn workspace_nonempty_member_no_pyproject() -> Result<()> {
 }
 
 /// Ensure that workspace discovery ignores hidden directories.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_hidden_files() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1212,6 +1222,7 @@ fn workspace_hidden_files() -> Result<()> {
 }
 
 /// Ensure that workspace discovery accepts valid hidden directories.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_hidden_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1278,6 +1289,7 @@ fn workspace_hidden_member() -> Result<()> {
 }
 
 /// Ensure that workspace discovery accepts valid hidden directories.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_non_included_member() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1341,6 +1353,7 @@ fn workspace_non_included_member() -> Result<()> {
 ///
 /// In such cases, relative paths should be resolved relative to the workspace root, rather than
 /// relative to the member.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_inherit_sources() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1574,8 +1587,8 @@ fn workspace_inherit_sources() -> Result<()> {
 }
 
 /// Tests error messages when a workspace member's dependencies cannot be resolved.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1630,8 +1643,8 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1698,8 +1711,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// two other member's.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1781,8 +1794,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's optional dependencies.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1851,8 +1864,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
 
 /// Tests error messages when a workspace member's dependencies conflict with
 /// another member's development dependencies.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1922,8 +1935,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
 
 /// Tests error messages when a workspace member's name shadows a dependency of
 /// another member.
+#[cfg(all(feature = "test-pypi", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-pypi")]
 fn workspace_member_name_shadows_dependencies() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -1995,6 +2008,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 ///
 /// Each package is its own workspace. We put the other projects into a separate directory `libs` so
 /// the paths don't line up by accident.
+#[cfg(feature = "test-universal")]
 #[test]
 fn test_path_hopping() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2054,8 +2068,8 @@ fn test_path_hopping() -> Result<()> {
 /// `c` is a package in a git workspace, and it has a workspace dependency to `d`. Check that we
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2129,8 +2143,8 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 /// `workspace-member-in-subdir` is a package in a git workspace, and it has a workspace dependency
 /// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
 /// to a git dependency without a subdirectory and not relative to the checkout directory.
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2202,8 +2216,8 @@ fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
 /// checkout's root package.
 ///
 /// See: <https://github.com/astral-sh/uv/pull/18311#discussion_r3340828264>
+#[cfg(all(feature = "test-git", feature = "test-universal"))]
 #[test]
-#[cfg(feature = "test-git")]
 fn transitive_dep_in_git_workspace_with_cache_inside_workspace() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -2384,6 +2398,7 @@ fn workspace_members_with_leading_dot_slash() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_members_with_parent_directory() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2429,6 +2444,7 @@ fn workspace_members_with_parent_directory() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_members_with_complex_relative_paths() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -2478,6 +2494,7 @@ fn workspace_members_with_complex_relative_paths() -> Result<()> {
 ///
 /// Uses `--verbose` to exercise the `debug!` log path, which previously panicked on
 /// `.unwrap()` when the `[project]` section was missing.
+#[cfg(feature = "test-universal")]
 #[test]
 fn workspace_unmanaged_member_no_project() -> Result<()> {
     let context = uv_test::test_context!("3.12");

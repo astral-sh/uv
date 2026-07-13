@@ -100,7 +100,9 @@ impl<T> ForkMap<T> {
     /// Returns `true` if the map contains any values for a package that are compatible with the
     /// given fork.
     pub(crate) fn contains(&self, package_name: &PackageName, env: &ResolverEnvironment) -> bool {
-        !self.get(package_name, env).is_empty()
+        self.0
+            .get(package_name)
+            .is_some_and(|values| values.iter().any(|entry| entry.scope.matches(env)))
     }
 
     /// Returns `true` if the map contains any values for a package.

@@ -21,13 +21,7 @@ impl GlobDirFilter {
     /// The filter matches if any of the globs matches.
     ///
     /// See <https://github.com/BurntSushi/ripgrep/discussions/2927> for the error returned.
-    pub fn from_globs(globs: &[Glob]) -> Result<Self, globset::Error> {
-        let mut glob_set_builder = GlobSetBuilder::new();
-        for glob in globs {
-            glob_set_builder.add(glob.clone());
-        }
-        let glob_set = glob_set_builder.build()?;
-
+    pub fn from_globs(globs: Vec<Glob>) -> Result<Self, globset::Error> {
         let regexes: Vec<_> = globs
             .iter()
             .map(|glob| {
@@ -41,6 +35,12 @@ impl GlobDirFilter {
                     .replace('/', &main_separator)
             })
             .collect();
+
+        let mut glob_set_builder = GlobSetBuilder::new();
+        for glob in globs {
+            glob_set_builder.add(glob);
+        }
+        let glob_set = glob_set_builder.build()?;
 
         let dfa_builder = dfa::dense::Builder::new()
             .syntax(
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn match_directory() {
         let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
-        let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
+        let matcher = GlobDirFilter::from_globs(patterns.into_iter().collect()).unwrap();
         assert!(matcher.match_directory(&Path::new("path1").join("dir1")));
         assert!(matcher.match_directory(&Path::new("path2").join("dir2")));
         assert!(matcher.match_directory(&Path::new("path3").join("dir3")));
@@ -170,7 +170,7 @@ mod tests {
             fs_err::File::create(file).unwrap();
         }
         let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
-        let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
+        let matcher = GlobDirFilter::from_globs(patterns.into_iter().collect()).unwrap();
 
         // Test the prefix filtering
         let visited: Vec<_> = WalkDir::new(dir.path())
@@ -229,7 +229,7 @@ mod tests {
         }
         let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
 
-        let include_matcher = GlobDirFilter::from_globs(&patterns).unwrap();
+        let include_matcher = GlobDirFilter::from_globs(patterns.into_iter().collect()).unwrap();
 
         let walkdir_root = dir.path();
         let mut matches: Vec<_> = WalkDir::new(walkdir_root)

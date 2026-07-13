@@ -1,10 +1,12 @@
 pub(crate) use crate::pubgrub::dependencies::{DependencySource, PubGrubDependency};
 pub(crate) use crate::pubgrub::package::{PubGrubPackage, PubGrubPackageInner, PubGrubPython};
 pub(crate) use crate::pubgrub::priority::{PubGrubPriorities, PubGrubPriority, PubGrubTiebreaker};
+pub(crate) use crate::pubgrub::range::Range;
 pub use crate::pubgrub::report::PubGrubHint;
 pub(crate) use crate::pubgrub::report::{PubGrubReportFormatter, report as report_derivation_tree};
 
 mod dependencies;
 mod package;
 mod priority;
+mod range;
 mod report;

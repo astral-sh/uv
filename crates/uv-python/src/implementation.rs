@@ -29,7 +29,7 @@ pub enum LenientImplementationName {
 
 impl ImplementationName {
     /// Return the full implementation name.
-    pub(crate) const fn long_name(self) -> &'static str {
+    pub const fn long_name(self) -> &'static str {
         match self {
             Self::CPython => "cpython",
             Self::PyPy => "pypy",
@@ -39,7 +39,7 @@ impl ImplementationName {
     }
 
     /// Return the abbreviated implementation name, if one exists.
-    pub(crate) const fn short_name(self) -> Option<&'static str> {
+    pub const fn short_name(self) -> Option<&'static str> {
         match self {
             Self::CPython => Some("cp"),
             Self::PyPy => Some("pp"),

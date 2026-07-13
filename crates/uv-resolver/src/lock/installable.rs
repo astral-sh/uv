@@ -9,15 +9,20 @@ use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::ExtrasSpecificationWithDefaults;
-use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
+use uv_configuration::{
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification,
+    ExtrasSpecificationWithDefaults, InstallOptions,
+};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_normalize::{DefaultExtras, ExtraName, GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictKind, ConflictSet, ResolverMarkerEnvironment};
 
-use crate::lock::{Dependency, HashedDist, LockErrorKind, Package, TagPolicy};
-use crate::{Lock, LockError};
+use crate::lock::{
+    Dependency, DependencySelectionContext, HashedDist, LockErrorKind, Package, PackageId,
+    SelectedDependency, TagPolicy,
+};
+use crate::{Lock, LockError, UniversalMarker};
 
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,
@@ -30,6 +35,32 @@ fn newly_activated_extras<'lock>(
             (!activated_extras.contains(&key)).then_some(key)
         })
         .collect()
+}
+
+/// Record another condition under which a locked package and optional extra are reachable.
+///
+/// Returns `true` when the combined reachability changed.
+fn add_reachability<'lock>(
+    reachability: &mut FxHashMap<(&'lock PackageId, Option<&'lock ExtraName>), UniversalMarker>,
+    key: (&'lock PackageId, Option<&'lock ExtraName>),
+    marker: UniversalMarker,
+) -> bool {
+    match reachability.entry(key) {
+        Entry::Occupied(mut entry) => {
+            let mut combined = *entry.get();
+            combined.or(marker);
+            if combined == *entry.get() {
+                false
+            } else {
+                entry.insert(combined);
+                true
+            }
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(marker);
+            true
+        }
+    }
 }
 
 pub trait Installable<'lock> {
@@ -75,6 +106,7 @@ pub trait Installable<'lock> {
             self,
             &roots,
             true,
+            DependencySelectionContext::None,
             marker_env,
             tags,
             extras,
@@ -164,6 +196,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         &self,
         roots: &[&Package],
         include_manifest: bool,
+        selection_context: DependencySelectionContext<'lock>,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
         extras: &ExtrasSpecificationWithDefaults,
@@ -177,13 +210,25 @@ trait InstallableExt<'lock>: Installable<'lock> {
 
         let mut queue: VecDeque<(&Package, Option<&ExtraName>)> = VecDeque::new();
         let mut seen = FxHashSet::default();
+        let mut conflict_reachability = FxHashMap::default();
         let mut activated_projects: Vec<&PackageName> = vec![];
         let mut activated_extras: Vec<(&PackageName, &ExtraName)> = vec![];
         let mut activated_groups: Vec<(&PackageName, &GroupName)> = vec![];
-        let validate_conflicts = !include_manifest && !self.lock().conflicts().is_empty();
+        let has_conflicts = !self.lock().conflicts().is_empty();
+        let validate_conflicts = !include_manifest && has_conflicts;
         let mut dependencies_for_conflict_validation = vec![];
 
         let root = petgraph.add_node(Node::Root);
+
+        match selection_context {
+            DependencySelectionContext::None => {}
+            DependencySelectionContext::Production(project) => {
+                activated_projects.push(project);
+            }
+            DependencySelectionContext::Group(project, group) => {
+                activated_groups.push((project, group));
+            }
+        }
 
         // Determine the set of activated extras and groups, from the root.
         //
@@ -192,7 +237,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
         // marker. But at that point, we don't know the full set of activated extras; this is only
         // computed below. We somehow need to add the dependency groups _after_ we've computed all
         // enabled extras, but the groups themselves could depend on the set of enabled extras.
-        if !self.lock().conflicts().is_empty() {
+        if has_conflicts {
             for dist in roots.iter().copied() {
                 // Track the activated extras.
                 if groups.prod() {
@@ -236,8 +281,18 @@ trait InstallableExt<'lock>: Installable<'lock> {
             if groups.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
+                add_reachability(
+                    &mut conflict_reachability,
+                    (&dist.id, None),
+                    UniversalMarker::TRUE,
+                );
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                     queue.push_back((dist, Some(extra)));
+                    add_reachability(
+                        &mut conflict_reachability,
+                        (&dist.id, Some(extra)),
+                        UniversalMarker::TRUE,
+                    );
                 }
             }
 
@@ -318,10 +373,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 );
 
                 // Push its dependencies on the queue.
+                add_reachability(
+                    &mut conflict_reachability,
+                    (&dep.package_id, None),
+                    dep.complexified_marker,
+                );
                 if seen.insert((&dep.package_id, None)) {
                     queue.push_back((dep_dist, None));
                 }
                 for extra in &dep.extra {
+                    add_reachability(
+                        &mut conflict_reachability,
+                        (&dep.package_id, Some(extra)),
+                        dep.complexified_marker,
+                    );
                     if seen.insert((&dep.package_id, Some(extra))) {
                         queue.push_back((dep_dist, Some(extra)));
                     }
@@ -360,10 +425,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 petgraph.add_edge(root, index, Edge::Prod);
 
                 // Push its dependencies on the queue.
+                add_reachability(
+                    &mut conflict_reachability,
+                    (&dist.id, None),
+                    UniversalMarker::TRUE,
+                );
                 if seen.insert((&dist.id, None)) {
                     queue.push_back((dist, None));
                 }
                 for extra in &dependency.extras {
+                    add_reachability(
+                        &mut conflict_reachability,
+                        (&dist.id, Some(extra)),
+                        UniversalMarker::TRUE,
+                    );
                     if seen.insert((&dist.id, Some(extra))) {
                         queue.push_back((dist, Some(extra)));
                     }
@@ -436,10 +511,20 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 petgraph.add_edge(root, index, Edge::Dev(group.clone()));
 
                 // Push its dependencies on the queue.
+                add_reachability(
+                    &mut conflict_reachability,
+                    (&dist.id, None),
+                    UniversalMarker::TRUE,
+                );
                 if seen.insert((&dist.id, None)) {
                     queue.push_back((dist, None));
                 }
                 for extra in &dependency.extras {
+                    add_reachability(
+                        &mut conflict_reachability,
+                        (&dist.id, Some(extra)),
+                        UniversalMarker::TRUE,
+                    );
                     if seen.insert((&dist.id, Some(extra))) {
                         queue.push_back((dist, Some(extra)));
                     }
@@ -475,12 +560,16 @@ trait InstallableExt<'lock>: Installable<'lock> {
         // Of course, we don't need to do this at all if there aren't any
         // conflicts. In which case, we skip all of this and just do the one
         // traversal below.
-        if !self.lock().conflicts().is_empty() {
+        if has_conflicts {
             let mut activated_extras_set: BTreeSet<(&PackageName, &ExtraName)> =
                 activated_extras.iter().copied().collect();
             let mut queue = queue.clone();
-            let mut seen = seen.clone();
+            let mut reachability = conflict_reachability;
             while let Some((package, extra)) = queue.pop_front() {
+                let Some(parent_reachability) = reachability.get(&(&package.id, extra)).copied()
+                else {
+                    continue;
+                };
                 let deps = if let Some(extra) = extra {
                     Either::Left(
                         package
@@ -496,9 +585,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     if !dep.is_runtime_edge() {
                         continue;
                     }
+                    let mut dep_reachability = dep.complexified_marker;
+                    dep_reachability.and(parent_reachability);
                     let additional_activated_extras =
                         newly_activated_extras(dep, &activated_extras);
-                    if !dep.complexified_marker.evaluate(
+                    if !dep_reachability.evaluate(
                         marker_env,
                         activated_projects.iter().copied(),
                         activated_extras
@@ -509,25 +600,13 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     ) {
                         continue;
                     }
-                    // It is, I believe, possible to be here for a dependency that
-                    // will ultimately not be included in the final resolution.
-                    // Specifically, carrying on from the example in the comments
-                    // above, we might visit `torch` first and thus not know if
-                    // the `cpu` feature is enabled or not, and thus, the marker
-                    // evaluation above will pass.
-                    //
-                    // So is this a problem? Well, this is the main reason why we
-                    // do two graph traversals. On the second traversal below, we
-                    // will have seen all of the enabled extras, and so `torch`
-                    // will be excluded.
-                    //
-                    // But could this lead to a bigger list of activated extras
-                    // than we actually have? I believe that is indeed possible,
-                    // but I think it is only a problem if it leads to extras that
-                    // *conflict* with one another being simultaneously enabled.
-                    // However, after this first traversal, we check our set of
-                    // accumulated extras to ensure that there are no conflicts. If
-                    // there are, we raise an error. ---AG
+                    // The dependency can still be visited provisionally before all activated
+                    // extras are known. The second traversal below will exclude it once those
+                    // extras are available. Crucially, `dep_reachability` includes the conditions
+                    // required to reach the parent package: dependency markers may have been
+                    // simplified under those conditions and cannot stand alone during this
+                    // preliminary traversal. Otherwise, an unreachable package could activate an
+                    // extra and cause the conflict check below to report a false positive.
 
                     for key in additional_activated_extras {
                         activated_extras_set.insert(key);
@@ -535,11 +614,19 @@ trait InstallableExt<'lock>: Installable<'lock> {
                     }
                     let dep_dist = self.lock().find_by_id(&dep.package_id);
                     // Push its dependencies on the queue.
-                    if seen.insert((&dep.package_id, None)) {
+                    if add_reachability(
+                        &mut reachability,
+                        (&dep.package_id, None),
+                        dep_reachability,
+                    ) {
                         queue.push_back((dep_dist, None));
                     }
                     for extra in &dep.extra {
-                        if seen.insert((&dep.package_id, Some(extra))) {
+                        if add_reachability(
+                            &mut reachability,
+                            (&dep.package_id, Some(extra)),
+                            dep_reachability,
+                        ) {
                             queue.push_back((dep_dist, Some(extra)));
                         }
                     }
@@ -650,6 +737,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 .keys()
                 .map(|package_id| &package_id.name)
                 .collect::<FxHashSet<_>>();
+            let selection_context_package = selection_context.package();
 
             // The environment and conflict state are shared by every dependency, so repeated
             // markers have the same result.
@@ -660,7 +748,9 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 }
                 let mut marker = dependency.complexified_marker;
                 for item in self.lock().conflicts().iter().flat_map(ConflictSet::iter) {
-                    if !subgraph_packages.contains(item.package()) {
+                    if selection_context_package != Some(item.package())
+                        && !subgraph_packages.contains(item.package())
+                    {
                         continue;
                     }
 
@@ -725,6 +815,56 @@ impl<'lock> Installable<'lock> for LockedPackages<'lock> {
 }
 
 impl Lock {
+    /// Materialize a direct dependency selection from this lock.
+    ///
+    /// Like [`Self::to_resolution`], this materializes the selected dependency's subgraph. It also
+    /// preserves the extras activated by the direct edge and the project production or group
+    /// context used to select a conflict fork.
+    pub fn to_resolution_from_dependency<'lock>(
+        &'lock self,
+        install_path: &'lock Path,
+        dependency: &SelectedDependency<'lock>,
+        project_name: Option<&'lock PackageName>,
+        marker_env: &ResolverMarkerEnvironment,
+        tags: &Tags,
+        build_options: &BuildOptions,
+        install_options: &InstallOptions,
+    ) -> Result<Resolution, LockError> {
+        let selected_package = dependency.package();
+        let Some(index) = self.by_id.get(&selected_package.id) else {
+            return Err(LockErrorKind::RootPackageMissingFromLock {
+                id: selected_package.id.clone(),
+            }
+            .into());
+        };
+        let Some(package) = self.packages.get(*index) else {
+            return Err(LockErrorKind::RootPackageMissingFromLock {
+                id: selected_package.id.clone(),
+            }
+            .into());
+        };
+        let extras = ExtrasSpecification::from_extra(dependency.extras().cloned().collect())
+            .with_defaults(DefaultExtras::default());
+        let groups = DependencyGroupsWithDefaults::none();
+
+        LockedPackages {
+            lock: self,
+            install_path,
+            project_name,
+        }
+        .to_resolution_from_packages(
+            &[package],
+            false,
+            dependency.context(),
+            marker_env,
+            tags,
+            &extras,
+            &groups,
+            build_options,
+            install_options,
+        )
+    }
+
     /// Materialize the exact dependency subgraph reachable from concrete locked `roots`.
     ///
     /// Each root must be a [`Package`] from this lock. Unlike [`Installable::to_resolution`], this
@@ -779,6 +919,7 @@ impl Lock {
         .to_resolution_from_packages(
             &concrete_roots,
             false,
+            DependencySelectionContext::None,
             marker_env,
             tags,
             extras,
@@ -792,6 +933,7 @@ impl Lock {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::str::FromStr;
     use std::sync::LazyLock;
 
     use petgraph::visit::EdgeRef;
@@ -806,7 +948,7 @@ mod tests {
 
     static TAGS: LazyLock<Tags> = LazyLock::new(|| {
         Tags::from_env(
-            &Platform::new(
+            Platform::new(
                 Os::Macos {
                     major: 14,
                     minor: 0,
@@ -1015,6 +1157,64 @@ provides-extras = ["cpu", "gpu"]
         .expect("valid lock")
     }
 
+    fn dependency_selection_lock() -> Lock {
+        toml::from_str(
+            r#"
+version = 1
+revision = 3
+requires-python = ">=3.11"
+conflicts = [[
+    { package = "project", group = "dev" },
+    { package = "project", group = "other" },
+]]
+
+[[package]]
+name = "contextual-dev-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/contextual_dev_dependency-1.0.0.tar.gz", hash = "sha256:1111111111111111111111111111111111111111111111111111111111111111" }
+
+[[package]]
+name = "contextual-other-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/contextual_other_dependency-1.0.0.tar.gz", hash = "sha256:2222222222222222222222222222222222222222222222222222222222222222" }
+
+[[package]]
+name = "optional-dependency"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+sdist = { url = "https://example.com/optional_dependency-1.0.0.tar.gz", hash = "sha256:3333333333333333333333333333333333333333333333333333333333333333" }
+
+[[package]]
+name = "project"
+version = "1.0.0"
+source = { virtual = "." }
+
+[package.dependency-groups]
+dev = [{ name = "tool", extra = ["cli"] }]
+other = [{ name = "tool" }]
+
+[[package]]
+name = "tool"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+dependencies = [
+    { name = "contextual-dev-dependency", marker = "extra == 'group-7-project-dev'" },
+    { name = "contextual-other-dependency", marker = "extra == 'group-7-project-other'" },
+]
+sdist = { url = "https://example.com/tool-1.0.0.tar.gz", hash = "sha256:4444444444444444444444444444444444444444444444444444444444444444" }
+
+[package.optional-dependencies]
+cli = [{ name = "optional-dependency" }]
+
+[package.metadata]
+provides-extras = ["cli"]
+"#,
+        )
+        .expect("valid lock")
+    }
+
     fn package<'lock>(lock: &'lock Lock, name: &str, version: &str) -> &'lock Package {
         lock.packages()
             .iter()
@@ -1067,6 +1267,31 @@ provides-extras = ["cpu", "gpu"]
             &BuildOptions::default(),
             &InstallOptions::default(),
         )
+    }
+
+    fn materialize_selected_dependency(lock: &Lock, group: &str) -> Resolution {
+        let project_name = PackageName::from_str("project").expect("valid package name");
+        let dependency_name = PackageName::from_str("tool").expect("valid package name");
+        let group = GroupName::from_str(group).expect("valid group name");
+        let selection = lock
+            .dependency_selection(
+                Some(&project_name),
+                &dependency_name,
+                DARWIN_MARKERS.markers(),
+            )
+            .expect("unique dependency selection");
+        let dependency = selection.group(&group).expect("group dependency");
+
+        lock.to_resolution_from_dependency(
+            Path::new("."),
+            dependency,
+            Some(&project_name),
+            &DARWIN_MARKERS,
+            &TAGS,
+            &BuildOptions::default(),
+            &InstallOptions::default(),
+        )
+        .expect("valid resolution")
     }
 
     struct OverridingInstallable<'lock> {
@@ -1275,6 +1500,54 @@ provides-extras = ["cpu", "gpu"]
                 "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
                 "runtime==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> cpu-backend==1.0.0 (install: true, hashes: sha256:[HASH])",
                 "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> runtime==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
+        });
+    }
+
+    #[test]
+    fn materializes_selected_dependency_extras() {
+        let resolution = materialize_selected_dependency(&dependency_selection_lock(), "dev");
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "contextual-dev-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "optional-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+            [
+                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Optional(ExtraName(\"cli\"))--> optional-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> contextual-dev-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+        )
+        "#);
+        });
+    }
+
+    #[test]
+    fn materializes_selected_dependency_project_conflict_context() {
+        let resolution = materialize_selected_dependency(&dependency_selection_lock(), "other");
+
+        insta::with_settings!({
+            filters => [(r"sha256:[0-9a-f]{64}", "sha256:[HASH]")],
+        }, {
+            insta::assert_debug_snapshot!(graph_snapshot(&resolution), @r#"
+        (
+            [
+                "contextual-other-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "root",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+            ],
+            [
+                "root --Prod--> tool==1.0.0 (install: true, hashes: sha256:[HASH])",
+                "tool==1.0.0 (install: true, hashes: sha256:[HASH]) --Prod--> contextual-other-dependency==1.0.0 (install: true, hashes: sha256:[HASH])",
             ],
         )
         "#);

@@ -18,12 +18,13 @@ use tracing::{debug, instrument, trace};
 use uv_build_backend::check_direct_build;
 use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
+use uv_cache_info::CacheInfoError;
 use uv_client::RegistryClient;
 use uv_configuration::{
     BuildKind, BuildOptions, Constraints, HashCheckingMode, IndexStrategy, NoSources, Overrides,
     Reinstall,
 };
-use uv_configuration::{BuildOutput, Concurrency};
+use uv_configuration::{BuildOutput, Concurrency, Excludes};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -47,7 +48,7 @@ use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences,
     BuildResolutionGraphKey, BuildResolutionStage, BuildResolutions, BuildStack,
     EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildDependency, LockedBuildResolution,
-    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy,
+    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy, build_keys_match,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -252,6 +253,11 @@ impl<'a> BuildDispatch<'a> {
         self
     }
 
+    /// Return the locked build resolutions used when installing source distributions.
+    pub fn locked_build_resolutions(&self) -> &LockedBuildResolutions {
+        &self.locked_build_resolutions
+    }
+
     /// Set the build dependency preferences from a previous lock file.
     ///
     /// Used during `uv lock` so the resolver prefers previously locked build dep
@@ -373,16 +379,22 @@ impl<'a> BuildDispatch<'a> {
         package: &BuildPackageKey,
         stage: BuildResolutionStage,
     ) -> Option<BuildResolutionGraphKey> {
-        self.build_resolution_contexts
+        let contexts = self
+            .build_resolution_contexts
             .lock()
-            .expect("build resolution context lock poisoned")
-            .get(package)
-            .and_then(|contexts| {
-                contexts
-                    .get(&stage)
-                    .or_else(|| contexts.get(&BuildResolutionStage::Build))
-                    .cloned()
-            })
+            .expect("build resolution context lock poisoned");
+        let package_contexts = contexts.get(package).or_else(|| {
+            let mut matching = contexts
+                .iter()
+                .filter(|(candidate, _)| build_keys_match(candidate, package))
+                .map(|(_, contexts)| contexts);
+            let first = matching.next()?;
+            matching.next().is_none().then_some(first)
+        })?;
+        package_contexts
+            .get(&stage)
+            .or_else(|| package_contexts.get(&BuildResolutionStage::Build))
+            .cloned()
     }
 
     fn universal_environments_for_package(
@@ -422,7 +434,7 @@ impl<'a> BuildDispatch<'a> {
         resolution: &LockedBuildResolution,
         requirements: &[Requirement],
     ) -> bool {
-        let markers = self.interpreter.resolver_marker_environment();
+        let markers = self.interpreter.to_resolver_marker_environment();
         requirements
             .iter()
             .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
@@ -432,47 +444,6 @@ impl<'a> BuildDispatch<'a> {
                     .iter()
                     .any(|dependency| locked_dependency_satisfies(requirement, dependency))
             })
-    }
-
-    fn locked_initial_resolution(
-        &self,
-        resolution: &LockedBuildResolution,
-        requirements: &[Requirement],
-    ) -> Option<Resolution> {
-        let direct_dependencies = resolution
-            .bootstrap_direct_dependencies()
-            .unwrap_or_else(|| resolution.direct_dependencies());
-        let markers = self.interpreter.resolver_marker_environment();
-        let initial_requirements = resolution.initial_requirements().unwrap_or(requirements);
-        let mut selected = Resolution::default();
-        for initial_requirement in initial_requirements
-            .iter()
-            .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
-        {
-            let dependency = direct_dependencies
-                .iter()
-                .find(|dependency| locked_dependency_satisfies(initial_requirement, dependency))
-                .or_else(|| {
-                    // Match-runtime requirements are source-matched when replay begins, while
-                    // the stored initial requirement retains its original registry source. Use
-                    // current requirements only to find the source-matched counterpart of a
-                    // locked initial root; otherwise mutable source changes could bypass the lock.
-                    requirements
-                        .iter()
-                        .filter(|requirement| {
-                            requirement.name == initial_requirement.name
-                                && requirement.extras == initial_requirement.extras
-                                && requirement.evaluate_markers(Some(&markers), &[])
-                        })
-                        .find_map(|requirement| {
-                            direct_dependencies.iter().find(|dependency| {
-                                locked_dependency_satisfies(requirement, dependency)
-                            })
-                        })
-                })?;
-            selected.extend(dependency.resolution());
-        }
-        Some(selected)
     }
 }
 
@@ -600,6 +571,23 @@ impl BuildContext for BuildDispatch<'_> {
         self.extra_build_variables
     }
 
+    fn has_locked_build_resolution(&self, package: &BuildPackageKey) -> bool {
+        self.locked_build_resolutions.get(package).is_some()
+    }
+
+    fn locked_build_resolution_cache_key(
+        &self,
+        package: &BuildPackageKey,
+    ) -> Result<Option<String>, CacheInfoError> {
+        self.locked_build_resolutions.cache_key(
+            package,
+            self.config_settings,
+            self.config_settings_package,
+            self.extra_build_requires,
+            self.extra_build_variables,
+        )
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -613,35 +601,32 @@ impl BuildContext for BuildDispatch<'_> {
             BuildResolutionStage::Bootstrap
         };
 
-        // If we have a suitable locked build resolution for this package, return it directly
-        // without running the resolver. Backend hook requirements are validated separately from
-        // `build-system.requires`, which remains fixed by a frozen lock.
+        // If we have a locked build resolution for this package, replay the complete build
+        // environment without running the resolver. Backend hook requirements are validated
+        // separately from `build-system.requires`, which remains fixed by a frozen lock.
         if let Some(package) = package
             && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
         {
-            let resolution = if let Some(requirements) = validate_locked_requirements {
-                if !self.locked_resolution_satisfies(locked_resolution, requirements) {
-                    return Err(BuildDispatchError::Anyhow(anyhow::anyhow!(
-                        "The build requirements returned by the backend for `{}` do not match the locked build environment",
-                        package.name
-                    )));
-                }
-                Some(locked_resolution.resolution().clone())
-            } else {
-                self.locked_initial_resolution(locked_resolution, requirements)
-            };
-            if let Some(resolution) = resolution {
-                debug!(
-                    "Using locked build resolution for `{}=={:?}` (skipping resolver)",
-                    package.name, package.version
-                );
-                let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
-                    .map_err(anyhow::Error::from)?;
-                return Ok(ResolvedRequirements::new(resolution, hasher));
+            if let Some(requirements) = validate_locked_requirements
+                && !self.locked_resolution_satisfies(locked_resolution, requirements)
+            {
+                return Err(BuildDispatchError::Anyhow(anyhow::anyhow!(
+                    "The build requirements returned by the backend for `{}` do not match the locked build environment",
+                    package.name
+                )));
             }
+
+            debug!(
+                "Using locked build resolution for `{}=={:?}` (skipping resolver)",
+                package.name, package.version
+            );
+            let resolution = locked_resolution.resolution().clone();
+            let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
+                .map_err(anyhow::Error::from)?;
+            return Ok(ResolvedRequirements::new(resolution, hasher));
         }
 
-        let marker_env = self.interpreter.resolver_marker_environment();
+        let marker_env = self.interpreter.to_resolver_marker_environment();
         let python_requirement = if self.universal_build_resolution {
             if let Some(requires_python) = self.universal_build_requires_python.clone() {
                 PythonRequirement::from_marker_environment(&marker_env, requires_python)
@@ -699,10 +684,12 @@ impl BuildContext for BuildDispatch<'_> {
             .augment_with_requirements(requirements.iter())
             .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
+        let excludes = Excludes::default();
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
             &overrides,
+            &excludes,
             &hasher,
             &self.shared_state.index,
             DistributionDatabase::new(
@@ -837,21 +824,23 @@ impl BuildContext for BuildDispatch<'_> {
             remote,
             reinstalls,
             extraneous: _,
-        } = Planner::new(resolution).build(
-            site_packages,
-            InstallationStrategy::Permissive,
-            &Reinstall::default(),
-            self.build_options,
-            hasher,
-            self.index_locations,
-            self.config_settings,
-            self.config_settings_package,
-            self.extra_build_requires(),
-            self.extra_build_variables,
-            self.cache(),
-            venv,
-            tags,
-        )?;
+        } = Planner::new(resolution)
+            .with_locked_build_resolutions(&self.locked_build_resolutions)
+            .build(
+                site_packages,
+                InstallationStrategy::Permissive,
+                &Reinstall::default(),
+                self.build_options,
+                hasher,
+                self.index_locations,
+                self.config_settings,
+                self.config_settings_package,
+                self.extra_build_requires(),
+                self.extra_build_variables,
+                self.cache(),
+                venv,
+                tags,
+            )?;
 
         // Nothing to do.
         if remote.is_empty() && cached.is_empty() && reinstalls.is_empty() {

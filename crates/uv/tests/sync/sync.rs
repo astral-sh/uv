@@ -14,6 +14,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+use uv_test::packse::PackseServer;
 
 use uv_test::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 
@@ -252,7 +253,30 @@ fn locked() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Quiet mode suppresses the resolution summary, but preserves the user-facing failure.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+
+    // Silent mode suppresses the final error too.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--quiet").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
     ");
 
     let updated = context.read("uv.lock");
@@ -712,7 +736,9 @@ fn sync_json() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Test that JSON output is shown even with --quiet flag
@@ -2964,9 +2990,11 @@ fn sync_extra_build_dependencies_sources_from_child() -> Result<()> {
 
 #[test]
 fn sync_build_dependencies_module_error_hints() -> Result<()> {
+    let server =
+        PackseServer::new("prereleases/package-prerelease-specified-only-final-available.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -2986,7 +3014,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         import sys
 
         from hatchling.build import *
-        import anyio
+        import a
     "})?;
     child.child("src/child/__init__.py").touch()?;
 
@@ -3005,7 +3033,7 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync(), @r#"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3020,16 +3048,16 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
           Traceback (most recent call last):
             File "<string>", line 8, in <module>
             File "[TEMP_DIR]/child/build_backend.py", line 4, in <module>
-              import anyio
-          ModuleNotFoundError: No module named 'anyio'
+              import a
+          ModuleNotFoundError: No module named 'a'
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
-    hint: This error likely indicates that `child@0.1.0` depends on `anyio`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `anyio` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
+    hint: This error likely indicates that `child@0.1.0` depends on `a`, but doesn't declare it as a build dependency. If `child` is a first-party package, consider adding `a` to its `build-system.requires`. Otherwise, either add it to your `pyproject.toml` under:
 
     [tool.uv.extra-build-dependencies]
-    child = ["anyio"]
+    child = ["a"]
 
-    or `uv pip install anyio` into the environment and re-run with `--no-build-isolation`.
+    or `uv pip install a` into the environment and re-run with `--no-build-isolation`.
     "#);
 
     // Adding `extra-build-dependencies` should solve the issue
@@ -3044,11 +3072,11 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = ["anyio"]
+        child = ["a"]
     "#})?;
 
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3065,13 +3093,13 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
         import sys
 
         from hatchling.build import *
-        import anyio
+        import a
         import sklearn
     "})?;
 
     context.venv().arg("--clear").assert().success();
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall"), @r#"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3097,34 +3125,6 @@ fn sync_build_dependencies_module_error_hints() -> Result<()> {
 
     or `uv pip install scikit-learn` into the environment and re-run with `--no-build-isolation`.
     "#);
-
-    // Adding `extra-build-dependencies` should solve the issue
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "parent"
-        version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["child"]
-
-        [tool.uv.sources]
-        child = { path = "child" }
-
-        [tool.uv.extra-build-dependencies]
-        child = ["anyio", "scikit-learn"]
-    "#})?;
-
-    context.venv().arg("--clear").assert().success();
-    uv_snapshot!(context.filters(), context.sync(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-    ");
 
     Ok(())
 }
@@ -4760,10 +4760,10 @@ fn sync_default_groups_gibberish() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 14, column 26
-       |
-    14 |         default-groups = "gibberish"
-       |                          ^^^^^^^^^^^
-    default-groups must be "all" or a ["list", "of", "groups"]
+           |
+        14 |         default-groups = "gibberish"
+           |                          ^^^^^^^^^^^
+        default-groups must be "all" or a ["list", "of", "groups"]
     "#);
 
     Ok(())
@@ -8422,6 +8422,7 @@ fn no_build() -> Result<()> {
 
 #[test]
 fn no_build_error() -> Result<()> {
+    let server = PackseServer::new("wheels/no-wheels.toml");
     let context = uv_test::test_context!("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -8431,59 +8432,64 @@ fn no_build_error() -> Result<()> {
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["django_allauth==0.51.0"]
+        dependencies = ["a==1.0.0"]
         "#,
     )?;
 
-    context.lock().assert().success();
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build-package").arg("django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build-package").arg("a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--no-build"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "1"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD_PACKAGE, "a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 19 packages in [TIME]
-    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    Resolved 2 packages in [TIME]
+    error: Distribution `a==1.0.0 @ registry+http://[LOCALHOST]/simple/` can't be installed because it is marked as `--no-build` but has no binary distribution
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env(EnvVars::UV_NO_BUILD, "django-allauth"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--reinstall").env(EnvVars::UV_NO_BUILD, "a"), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'django-allauth' for '--no-build': value was not a boolean
+    error: invalid value 'a' for '--no-build': value was not a boolean
 
     For more information, try '--help'.
     ");
@@ -12320,7 +12326,9 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     let updated = context.read("uv.lock");
@@ -12635,7 +12643,9 @@ fn sync_locked_script() -> Result<()> {
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     Resolved 4 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
@@ -12738,7 +12748,9 @@ fn sync_locked_script() -> Result<()> {
     Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
@@ -13617,7 +13629,9 @@ fn sync_build_constraints() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     // Changing the build constraints should lead to a re-resolve.
@@ -13640,6 +13654,7 @@ fn sync_build_constraints() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/12434>
 #[test]
 fn sync_workspace_member_build_constraints() -> Result<()> {
+    let server = PackseServer::new("simple/single-package.toml");
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-03-24T19:00:00Z")
         .with_filtered_counts();
@@ -13677,7 +13692,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
         name = "child"
         version = "0.1.0"
         requires-python = ">=3.12"
-        dependencies = ["json-merge-patch"]
+        dependencies = ["a"]
 
         [build-system]
         requires = ["uv_build>=0.7,<10000"]
@@ -13690,7 +13705,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
         .child("__init__.py")
         .touch()?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--no-binary-package").arg("json-merge-patch"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--no-binary-package").arg("a"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13699,8 +13714,8 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     + a==2.0.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + json-merge-patch==0.2
     ");
 
     let lock = context.read("uv.lock");
@@ -13712,7 +13727,7 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     fs_err::remove_dir_all(&context.cache_dir)?;
     fs_err::remove_dir_all(&context.venv)?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("json-merge-patch"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).arg("--package").arg("child").arg("--locked").arg("--no-binary-package").arg("a"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13723,8 +13738,8 @@ fn sync_workspace_member_build_constraints() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
+     + a==2.0.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + json-merge-patch==0.2
     ");
 
     Ok(())
@@ -15092,9 +15107,11 @@ fn sync_does_not_remove_empty_virtual_environment_directory() -> Result<()> {
 /// Test that build dependencies respect locked versions from the lockfile.
 #[test]
 fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
+    let server =
+        PackseServer::new("prereleases/package-prerelease-specified-only-final-available.toml");
     let context = uv_test::test_context!("3.12").with_filtered_counts();
 
-    // Write a test package that arbitrarily requires `anyio` at build time
+    // Write a test package that arbitrarily requires `a` at build time
     let child = context.temp_dir.child("child");
     child.create_dir_all()?;
     let child_pyproject_toml = child.child("pyproject.toml");
@@ -15102,55 +15119,55 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "anyio"]
+        requires = ["hatchling", "a"]
         backend-path = ["."]
         build-backend = "build_backend"
     "#})?;
 
-    // Create a build backend that checks for a specific version of anyio
+    // Create a build backend that checks for a specific version of a
     let build_backend = child.child("build_backend.py");
     build_backend.write_str(indoc! {r#"
         import os
         import sys
         from hatchling.build import *
 
-        expected_version = os.environ.get("EXPECTED_ANYIO_VERSION", "")
+        expected_version = os.environ.get("EXPECTED_A_VERSION", "")
         if not expected_version:
-            print("`EXPECTED_ANYIO_VERSION` not set", file=sys.stderr)
+            print("`EXPECTED_A_VERSION` not set", file=sys.stderr)
             sys.exit(1)
 
         try:
-            import anyio
+            import a
         except ModuleNotFoundError:
-            print("Missing `anyio` module", file=sys.stderr)
+            print("Missing `a` module", file=sys.stderr)
             sys.exit(1)
 
         from importlib.metadata import version
-        anyio_version = version("anyio")
+        a_version = version("a")
 
-        if not anyio_version.startswith(expected_version):
-            print(f"Expected `anyio` version {expected_version} but got {anyio_version}", file=sys.stderr)
+        if not a_version.startswith(expected_version):
+            print(f"Expected `a` version {expected_version} but got {a_version}", file=sys.stderr)
             sys.exit(1)
 
-        print(f"Found expected `anyio` version {anyio_version}", file=sys.stderr)
+        print(f"Found expected `a` version {a_version}", file=sys.stderr)
     "#})?;
     child.child("src/child/__init__.py").touch()?;
 
-    // Create a project that will resolve to a non-latest version of `anyio`
+    // Create a project that will resolve to a non-latest version of `a`
     let parent = &context.temp_dir;
     let pyproject_toml = parent.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.lock(), @"
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15164,15 +15181,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
     "#})?;
 
     // Ensure our build backend is checking the version correctly
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "3.0"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.1"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15184,30 +15201,30 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 3.0 but got 4.3.0
+          Expected `a` version 0.1 but got 0.3.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    // Now constrain the `anyio` build dependency to match the runtime
+    // Now constrain the `a` build dependency to match the runtime
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
-    // The child should be built with anyio 4.0
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    // The child should be built with a 0.2.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()).env("EXPECTED_A_VERSION", "0.2"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15216,30 +15233,28 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + anyio==4.0.0
+     + a==0.2.0
      + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + idna==3.6
-     + sniffio==1.3.1
     ");
 
-    // Change the constraints on anyio
+    // Change the constraints on a.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<3.8", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.2", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
-    // The child should be rebuilt with anyio 3.7, without `--reinstall`
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.0"), @"
+    // The child should be rebuilt with a 0.1, without `--reinstall`.
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15251,15 +15266,15 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
       ╰─▶ Call to `build_backend.build_wheel` failed (exit status: 1)
 
           [stderr]
-          Expected `anyio` version 4.0 but got 3.7.1
+          Expected `a` version 0.2 but got 0.1.0
 
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     hint: Build failures usually indicate a problem with the package or the build environment
     ");
 
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "3.7"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.1"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -15269,8 +15284,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     - anyio==4.0.0
-     + anyio==3.7.1
+     - a==0.2.0
+     + a==0.1.0
      ~ child==0.1.0 (from file://[TEMP_DIR]/child)
     ");
 
@@ -15279,14 +15294,14 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<3.8", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.2", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio", match-runtime = true }]
+        child = [{ requirement = "a", match-runtime = true }]
     "#})?;
 
     // And an incompatible constraint in the child project
@@ -15294,17 +15309,17 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "child"
         version = "0.1.0"
-        requires-python = ">=3.9"
+        requires-python = ">=3.12"
 
         [build-system]
-        requires = ["hatchling", "anyio>3.8,<4.2"]
+        requires = ["hatchling", "a>0.15,<0.3"]
         backend-path = ["."]
         build-backend = "build_backend"
     "#})?;
 
     // This should fail
-    uv_snapshot!(context.filters(), context.sync()
-        .arg("--reinstall-package").arg("child").env(EnvVars::EXPECTED_ANYIO_VERSION, "4.1"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url())
+        .arg("--reinstall-package").arg("child").env("EXPECTED_A_VERSION", "0.2"), @"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15313,8 +15328,8 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
     Resolved [N] packages in [TIME]
       × Failed to build `child @ file://[TEMP_DIR]/child`
       ├─▶ Failed to resolve requirements from `build-system.requires` and `extra-build-dependencies`
-      ├─▶ No solution found when resolving: `hatchling`, `anyio>3.8, <4.2`, `anyio==3.7.1 (index: https://pypi.org/simple)`
-      ╰─▶ Because you require anyio>3.8,<4.2 and anyio==3.7.1, we can conclude that your requirements are unsatisfiable.
+      ├─▶ No solution found when resolving: `hatchling`, `a<0.3, >0.15`, `a==0.1.0 (index: http://[LOCALHOST]/simple/)`
+      ╰─▶ you require a<0.3 and a>0.15, which are incompatible
 
     hint: `child` was included because `parent` (v0.1.0) depends on `child`
     ");
@@ -15324,24 +15339,24 @@ fn sync_build_dependencies_respect_locked_versions() -> Result<()> {
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.9"
-        dependencies = ["anyio<4.1", "child"]
+        requires-python = ">=3.12"
+        dependencies = ["a<0.3", "child"]
 
         [tool.uv.sources]
         child = { path = "child" }
 
         [tool.uv.extra-build-dependencies]
-        child = [{ requirement = "anyio>4", match-runtime = true }]
+        child = [{ requirement = "a>0.1", match-runtime = true }]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.sync(), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--index-url").arg(server.index_url()), @"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `anyio>4`
+    error: Dependencies marked with `match-runtime = true` cannot include version specifiers, but found: `a>0.1`
     ");
 
     Ok(())
@@ -17012,10 +17027,10 @@ fn sync_fails_ambiguous_url() -> Result<()> {
 
     error: Failed to parse: `pyproject.toml`
       Caused by: TOML parse error at line 10, column 15
-       |
-    10 |         url = "https://user/name:password@domain/a/b/c"
-       |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
+           |
+        10 |         url = "https://user/name:password@domain/a/b/c"
+           |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ambiguous user/pass authority in URL (not percent-encoded?): https:***@domain/a/b/c
     "#);
 
     Ok(())

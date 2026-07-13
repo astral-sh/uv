@@ -153,9 +153,9 @@ cargo fmt --all
 uvx ruff format .
 
 # Markdown, YAML, and other files (requires Node.js)
-npx prettier --write .
+npx prettier@3.9.0 --write .
 # or in Docker
-docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier --write .
+docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
 ```
 
 ## Linting

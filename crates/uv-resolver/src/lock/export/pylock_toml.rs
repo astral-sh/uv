@@ -40,7 +40,6 @@ use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array, is_wheel_unreachable};
-use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
@@ -390,13 +389,7 @@ impl<'lock> PylockToml {
 
         // Convert each node to a `pylock.toml`-style package.
         let mut packages = Vec::with_capacity(resolution.graph.node_count());
-        for node_index in resolution.graph.node_indices() {
-            let ResolutionGraphNode::Dist(node) = &resolution.graph[node_index] else {
-                continue;
-            };
-            if !node.is_base() {
-                continue;
-            }
+        for (node_index, node) in resolution.base_dists() {
             let ResolvedDist::Installable { dist, version } = &node.dist else {
                 continue;
             };
@@ -1028,7 +1021,10 @@ impl<'lock> PylockToml {
             };
             doc.insert("attestation-identities", value(attestation_identities));
         }
-        if !self.packages.is_empty() {
+        if self.packages.is_empty() {
+            // `packages` is a required key in PEP 751, even when empty.
+            doc.insert("packages", value(Array::new()));
+        } else {
             let mut packages = ArrayOfTables::new();
             for dist in &self.packages {
                 packages.push(dist.to_toml()?);
@@ -1388,7 +1384,7 @@ impl PylockTomlPackage {
         };
         Some(ResolvedRepositoryReference {
             reference: RepositoryReference {
-                url: RepositoryUrl::new(url),
+                url: RepositoryUrl::new(url.clone()),
                 reference,
             },
             sha: vcs.commit_id,

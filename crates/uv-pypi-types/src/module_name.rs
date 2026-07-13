@@ -27,7 +27,7 @@ pub enum ModuleNameParseError {
 }
 
 impl ModuleName {
-    pub fn new(module: impl Into<Box<str>>) -> Result<Self, ModuleNameParseError> {
+    fn new(module: impl Into<Box<str>>) -> Result<Self, ModuleNameParseError> {
         let module = module.into();
         if module.is_empty() {
             return Err(ModuleNameParseError::Empty);

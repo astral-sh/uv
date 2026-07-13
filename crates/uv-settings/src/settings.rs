@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, IndexStrategy, KeyringProviderType, PackageNameSpecifier, ProxyUrl, Reinstall,
-    RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
 };
 use uv_distribution_types::{
     ConfigSettings, ExtraBuildVariables, Index, IndexUrl, IndexUrlError, Origin,
@@ -27,7 +27,7 @@ use uv_resolver::{
     serialize_exclude_newer_package_with_spans,
 };
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::ExtraBuildDependencies;
+use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
@@ -146,10 +146,10 @@ pub struct Options {
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub override_dependencies: Option<Vec<OverrideDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub exclude_dependencies: Option<Vec<uv_normalize::PackageName>>,
+    pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
@@ -1134,9 +1134,9 @@ pub struct ResolverInstallerSchema {
     pub reinstall_package: Option<Vec<PackageName>>,
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1437,9 +1437,9 @@ pub struct PipOptions {
     pub keyring_provider: Option<KeyringProviderType>,
     /// Don't build source distributions.
     ///
-    /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
-    /// already-built source distributions will be reused, but operations that require building
-    /// distributions will exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution will exit with an error. uv may
+    /// still build editable requirements, and their build backends may run arbitrary Python code.
     ///
     /// Alias for `--only-binary :all:`.
     #[option(
@@ -1467,9 +1467,10 @@ pub struct PipOptions {
     pub no_binary: Option<Vec<PackageNameSpecifier>>,
     /// Only use pre-built wheels; don't build source distributions.
     ///
-    /// When enabled, resolving will not run code from the given packages. The cached wheels of already-built
-    /// source distributions will be reused, but operations that require building distributions will
-    /// exit with an error.
+    /// When enabled, uv will reuse cached wheels from previously built source distributions, but
+    /// operations that require building a source distribution for the given packages will exit
+    /// with an error. uv may still build editable requirements, and their build backends may run
+    /// arbitrary Python code.
     ///
     /// Multiple packages may be provided. Disable binaries for all packages with `:all:`.
     /// Clear previously specified packages with `:none:`.
@@ -2523,8 +2524,8 @@ struct OptionsWire {
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
-    override_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    exclude_dependencies: Option<Vec<PackageName>>,
+    override_dependencies: Option<Vec<OverrideDependency>>,
+    exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
     environments: Option<SupportedEnvironments>,
@@ -2923,6 +2924,10 @@ impl schemars::JsonSchema for PreviewOption {
         schema.insert(
             "not".to_string(),
             schemars::json_schema!({
+                "properties": {
+                    "preview": {},
+                    "preview-features": {},
+                },
                 "required": ["preview", "preview-features"],
             })
             .into(),

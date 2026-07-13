@@ -140,9 +140,10 @@ uv provides a few different mechanisms for removing entries from the cache:
 - `uv cache clean` removes _all_ cache entries from the cache directory, clearing it out entirely.
 - `uv cache clean ruff` removes all cache entries for the `ruff` package, useful for invalidating
   the cache for a single or finite set of packages.
-- `uv cache prune` removes all _unused_ cache entries. For example, the cache directory may contain
-  entries created in previous uv versions that are no longer necessary and can be safely removed.
-  `uv cache prune` is safe to run periodically, to keep the cache directory clean.
+- `uv cache prune` removes all _unused_ cache entries and all centralized project environments. For
+  example, the cache directory may contain entries created in previous uv versions that are no
+  longer necessary and can be safely removed. Centralized project environments are recreated as
+  needed. `uv cache prune` is safe to run periodically, to keep the cache directory clean.
 
 uv blocks cache-modifying operations while other uv commands are running. By default, those
 `uv cache` commands have a 5 min timeout waiting for other uv processes to terminate to avoid

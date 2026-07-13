@@ -1,11 +1,16 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::iter;
 use std::sync::Arc;
 
-use uv_distribution_types::IncompatibleDist;
+use reqwest::StatusCode;
+
+use uv_distribution_types::{IncompatibleDist, Requirement, RequirementSource};
+use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::{AbiTag, Tags};
 
+use crate::pubgrub::Range;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 
 /// The reason why a package or a version cannot be used.
@@ -26,6 +31,63 @@ impl Display for UnavailableReason {
     }
 }
 
+/// A requirement whose version specifiers resolve to an empty range.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnsatisfiableRequirement {
+    name: PackageName,
+    extras: Box<[ExtraName]>,
+    version_specifiers: VersionSpecifiers,
+}
+
+impl UnsatisfiableRequirement {
+    /// Preserve a requirement whose specifiers collapse to an empty PubGrub range.
+    ///
+    /// PubGrub ranges do not retain the specifiers that produced them, but the original
+    /// requirement is needed to explain the conflict in the resolution report.
+    pub(crate) fn from_requirement(requirement: &Requirement) -> Option<Self> {
+        let RequirementSource::Registry { specifier, .. } = &requirement.source else {
+            return None;
+        };
+        (Range::from(specifier.clone()) == Range::empty()).then(|| Self {
+            name: requirement.name.clone(),
+            extras: requirement.extras.clone(),
+            version_specifiers: specifier.clone(),
+        })
+    }
+
+    fn fmt_package(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.name, f)?;
+        if !self.extras.is_empty() {
+            f.write_str("[")?;
+            for (index, extra) in self.extras.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(",")?;
+                }
+                Display::fmt(extra, f)?;
+            }
+            f.write_str("]")?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for UnsatisfiableRequirement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (index, specifier) in self.version_specifiers.iter().enumerate() {
+            if index > 0 {
+                f.write_str(" and ")?;
+            }
+            self.fmt_package(f)?;
+            Display::fmt(specifier, f)?;
+        }
+        if self.version_specifiers.len() > 1 {
+            f.write_str(", which are incompatible")
+        } else {
+            f.write_str(", which does not allow any versions")
+        }
+    }
+}
+
 /// The package version is unavailable and cannot be used. Unlike [`MetadataUnavailable`], this
 /// applies to a single version of the package.
 ///
@@ -33,6 +95,8 @@ impl Display for UnavailableReason {
 /// the source and we want to merge unavailable messages across versions.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum UnavailableVersion {
+    /// The version has a dependency whose version specifiers resolve to an empty range.
+    UnsatisfiableDependency(UnsatisfiableRequirement),
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
     /// The wheel metadata was found, but could not be parsed.
@@ -46,41 +110,51 @@ pub enum UnavailableVersion {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers),
+    /// The network request failed with the given status code.
+    Network(StatusCode),
 }
 
 impl UnavailableVersion {
-    fn message(&self) -> String {
+    fn message(&self) -> Cow<'static, str> {
         match self {
-            Self::IncompatibleDist(invalid_dist) => format!("{invalid_dist}"),
-            Self::InvalidMetadata => "invalid metadata".into(),
-            Self::InconsistentMetadata => "inconsistent metadata".into(),
-            Self::InvalidStructure => "an invalid package format".into(),
-            Self::Offline => "to be downloaded from a registry".into(),
+            Self::UnsatisfiableDependency(requirement) => Cow::Owned(requirement.to_string()),
+            Self::IncompatibleDist(invalid_dist) => Cow::Owned(format!("{invalid_dist}")),
+            Self::InvalidMetadata => Cow::Borrowed("invalid metadata"),
+            Self::InconsistentMetadata => Cow::Borrowed("inconsistent metadata"),
+            Self::InvalidStructure => Cow::Borrowed("an invalid package format"),
+            Self::Offline => Cow::Borrowed("to be downloaded from a registry"),
             Self::RequiresPython(requires_python) => {
-                format!("Python {requires_python}")
+                Cow::Owned(format!("Python {requires_python}"))
             }
+            Self::Network(status) => Cow::Owned(status.to_string()),
         }
     }
 
     pub(crate) fn singular_message(&self) -> String {
         match self {
+            Self::UnsatisfiableDependency(requirement) => {
+                format!("depends on {requirement}")
+            }
             Self::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
             Self::InvalidMetadata => format!("has {self}"),
             Self::InconsistentMetadata => format!("has {self}"),
             Self::InvalidStructure => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
+            Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 
     pub(crate) fn plural_message(&self) -> String {
         match self {
+            Self::UnsatisfiableDependency(requirement) => format!("depend on {requirement}"),
             Self::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
             Self::InvalidMetadata => format!("have {self}"),
             Self::InconsistentMetadata => format!("have {self}"),
             Self::InvalidStructure => format!("have {self}"),
             Self::Offline => format!("need {self}"),
             Self::RequiresPython(..) => format!("require {self}"),
+            Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 
@@ -90,6 +164,7 @@ impl UnavailableVersion {
         requires_python: Option<AbiTag>,
     ) -> Option<String> {
         match self {
+            Self::UnsatisfiableDependency(_) => None,
             Self::IncompatibleDist(invalid_dist) => {
                 invalid_dist.context_message(tags, requires_python)
             }
@@ -98,13 +173,14 @@ impl UnavailableVersion {
             Self::InvalidStructure => None,
             Self::Offline => None,
             Self::RequiresPython(..) => None,
+            Self::Network(..) => None,
         }
     }
 }
 
 impl Display for UnavailableVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.message())
+        f.write_str(self.message().as_ref())
     }
 }
 
@@ -118,6 +194,7 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
             MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
                 Self::RequiresPython(requires_python.clone())
             }
+            MetadataUnavailable::Network(status) => Self::Network(*status),
         }
     }
 }
@@ -158,16 +235,19 @@ pub enum UnavailablePackage {
     InvalidMetadata(UnavailableErrorChain),
     /// The package has an invalid structure.
     InvalidStructure(UnavailableErrorChain),
+    /// The network request failed with the given status code.
+    Network(StatusCode),
 }
 
 impl UnavailablePackage {
-    fn message(&self) -> &'static str {
+    fn message(&self) -> Cow<'static, str> {
         match self {
-            Self::NoIndex => "not found in the provided package locations",
-            Self::Offline => "not found in the cache",
-            Self::NotFound => "not found in the package registry",
-            Self::InvalidMetadata(_) => "invalid metadata",
-            Self::InvalidStructure(_) => "an invalid package format",
+            Self::NoIndex => Cow::Borrowed("not found in the provided package locations"),
+            Self::Offline => Cow::Borrowed("not found in the cache"),
+            Self::NotFound => Cow::Borrowed("not found in the package registry"),
+            Self::InvalidMetadata(_) => Cow::Borrowed("invalid metadata"),
+            Self::InvalidStructure(_) => Cow::Borrowed("an invalid package format"),
+            Self::Network(status) => Cow::Owned(status.to_string()),
         }
     }
 
@@ -178,13 +258,14 @@ impl UnavailablePackage {
             Self::NotFound => format!("was {self}"),
             Self::InvalidMetadata(_) => format!("has {self}"),
             Self::InvalidStructure(_) => format!("has {self}"),
+            Self::Network(_) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 }
 
 impl Display for UnavailablePackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.message())
+        f.write_str(self.message().as_ref())
     }
 }
 
@@ -204,6 +285,7 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }
+            MetadataUnavailable::Network(status) => Self::Network(*status),
         }
     }
 }

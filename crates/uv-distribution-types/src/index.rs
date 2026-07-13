@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use http::HeaderValue;
+use http::{HeaderValue, StatusCode};
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
@@ -206,8 +206,8 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
-    /// Status codes that uv should ignore when deciding whether
-    /// to continue searching in the next index after a failure.
+    /// Status codes that uv should ignore when deciding whether to continue resolution after a
+    /// request to this index fails.
     ///
     /// ```toml
     /// [[tool.uv.index]]
@@ -518,6 +518,15 @@ impl Index {
         } else {
             IndexStatusCodeStrategy::from_index_url(self.url.url())
         }
+    }
+
+    /// Return whether the given status code is explicitly ignored for this index.
+    pub(crate) fn ignores_error_code(&self, status_code: StatusCode) -> bool {
+        self.ignore_error_codes.as_ref().is_some_and(|codes| {
+            codes
+                .iter()
+                .any(|ignored_status_code| **ignored_status_code == status_code)
+        })
     }
 
     /// Return the cache control header for file requests to this index, if any.

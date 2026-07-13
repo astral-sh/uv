@@ -7,6 +7,7 @@ use anyhow::Result;
 use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
+use uv_cache_info::CacheInfoError;
 use uv_configuration::{BuildKind, BuildOptions, BuildOutput, NoSources};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
@@ -146,6 +147,19 @@ pub trait BuildContext {
     /// Get the extra build variables.
     fn extra_build_variables(&self) -> &ExtraBuildVariables;
 
+    /// Whether a complete locked build resolution is available for the package.
+    fn has_locked_build_resolution(&self, _package: &BuildPackageKey) -> bool {
+        false
+    }
+
+    /// Return a stable cache key for the complete locked build resolution, if available.
+    fn locked_build_resolution_cache_key(
+        &self,
+        _package: &BuildPackageKey,
+    ) -> Result<Option<String>, CacheInfoError> {
+        Ok(None)
+    }
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
     ///
     /// If a package key is provided, the resolver may use previously stored
@@ -235,10 +249,21 @@ pub trait SourceBuildTrait {
     ) -> impl Future<Output = Result<String, AnyErrorBuild>> + 'a;
 }
 
-/// A wrapper for [`uv_installer::SitePackages`]
+/// Provides access to installed distributions during resolution.
 pub trait InstalledPackagesProvider: Clone + Send + Sync + 'static {
     fn iter(&self) -> impl Iterator<Item = &InstalledDist>;
     fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist>;
+}
+
+impl<Provider: InstalledPackagesProvider> InstalledPackagesProvider for Option<Provider> {
+    fn iter(&self) -> impl Iterator<Item = &InstalledDist> {
+        self.as_ref().into_iter().flat_map(Provider::iter)
+    }
+
+    fn get_packages(&self, name: &PackageName) -> Vec<&InstalledDist> {
+        self.as_ref()
+            .map_or_else(Vec::new, |provider| provider.get_packages(name))
+    }
 }
 
 /// An [`InstalledPackagesProvider`] with no packages in it.

@@ -1,6 +1,6 @@
 [package]
 name = "uv-resolver"
-version = "0.0.57"
+version = "0.0.61"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -62,6 +62,7 @@ owo-colors = { workspace = true }
 percent-encoding = { workspace = true }
 petgraph = { workspace = true }
 pubgrub = { workspace = true }
+reqwest = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
 same-file = { workspace = true }

@@ -197,12 +197,12 @@ impl Interpreter {
     }
 
     /// Return the [`ResolverMarkerEnvironment`] for this Python executable.
-    pub fn resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
+    pub fn to_resolver_marker_environment(&self) -> ResolverMarkerEnvironment {
         ResolverMarkerEnvironment::from(self.markers().clone())
     }
 
     /// Returns the [`PythonInstallationKey`] for this interpreter.
-    pub(crate) fn key(&self) -> PythonInstallationKey {
+    pub fn key(&self) -> PythonInstallationKey {
         PythonInstallationKey::new(
             LenientImplementationName::from(self.implementation_name()),
             self.python_major(),
@@ -247,7 +247,7 @@ impl Interpreter {
     pub fn tags(&self) -> Result<&Tags, TagsError> {
         if self.tags.get().is_none() {
             let tags = Tags::from_env(
-                self.platform(),
+                self.platform().clone(),
                 self.python_tuple(),
                 self.implementation_name(),
                 self.implementation_tuple(),

@@ -5,7 +5,8 @@ use tracing::debug;
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
+    EnvironmentResolution, EnvironmentSpecification, PlatformState, ProjectError,
+    resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -14,14 +15,14 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, Constraints, TargetTriple};
+use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
 use uv_distribution_types::{
     BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
-use uv_types::SourceTreeEditablePolicy;
+use uv_types::{HashStrategy, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
@@ -115,6 +116,21 @@ struct CachedEnvironmentDist {
     cache_info: Option<CacheInfo>,
 }
 
+fn cached_environment_resolution_hash(
+    resolution_hash: String,
+    hash_strategy: &HashStrategy,
+) -> String {
+    match hash_strategy {
+        // Preserve existing cache identities for environments materialized without verification.
+        HashStrategy::None | HashStrategy::Generate(_) => resolution_hash,
+        // Never reuse an environment materialized without hash verification for a lock-backed
+        // resolution with the same distributions and expected hashes.
+        HashStrategy::Verify(_) | HashStrategy::Require(_) => {
+            hash_digest(&("verify", resolution_hash))
+        }
+    }
+}
+
 impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
@@ -140,6 +156,7 @@ impl CachedEnvironment {
         let resolution = Resolution::from(
             resolve_environment(
                 spec,
+                EnvironmentResolution::Specific,
                 &interpreter,
                 python_platform,
                 SourceTreeEditablePolicy::Project,
@@ -159,6 +176,7 @@ impl CachedEnvironment {
 
         Self::from_resolution(
             &resolution,
+            HashStrategy::default(),
             build_constraints,
             &interpreter,
             settings,
@@ -174,18 +192,50 @@ impl CachedEnvironment {
         .await
     }
 
-    /// Get or create a [`CachedEnvironment`] from an existing [`Resolution`].
+    /// Get or create a [`CachedEnvironment`] from a lock-backed [`Resolution`].
     ///
     /// Prefer [`Self::from_spec`] when starting from unresolved requirements; it selects the base
     /// interpreter and resolves the requirements for that interpreter before delegating here.
     ///
-    /// This method is intended for callers that already have a concrete [`Resolution`], and
-    /// performs environment reuse or creation and installation without invoking the resolver.
-    /// `interpreter` must be the base interpreter for which `resolution` was produced. In
-    /// particular, callers materializing a universal lock must derive its markers and tags from
-    /// the same interpreter.
-    pub(crate) async fn from_resolution(
+    /// This method verifies the hashes recorded in `resolution`. `interpreter` must be the base
+    /// interpreter for which `resolution` was produced. In particular, callers materializing a
+    /// universal lock must derive its markers and tags from the same interpreter.
+    pub(crate) async fn from_locked_resolution(
         resolution: &Resolution,
+        build_constraints: Constraints,
+        interpreter: &Interpreter,
+        settings: &ResolverInstallerSettings,
+        client_builder: &BaseClientBuilder<'_>,
+        state: &PlatformState,
+        install: Box<dyn InstallLogger>,
+        installer_metadata: bool,
+        concurrency: &Concurrency,
+        cache: &Cache,
+        printer: Printer,
+        preview: Preview,
+    ) -> Result<Self, ProjectError> {
+        let hash_strategy = HashStrategy::from_resolution(resolution, HashCheckingMode::Verify)?;
+        Self::from_resolution(
+            resolution,
+            hash_strategy,
+            build_constraints,
+            interpreter,
+            settings,
+            client_builder,
+            state,
+            install,
+            installer_metadata,
+            concurrency,
+            cache,
+            printer,
+            preview,
+        )
+        .await
+    }
+
+    async fn from_resolution(
+        resolution: &Resolution,
+        hash_strategy: HashStrategy,
         build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
@@ -224,7 +274,7 @@ impl CachedEnvironment {
                     .distribution_id()
                     .cmp(&right.dist.distribution_id())
             });
-            hash_digest(&distributions)
+            cached_environment_resolution_hash(hash_digest(&distributions), &hash_strategy)
         };
 
         // Construct a hash for the environment.
@@ -269,6 +319,7 @@ impl CachedEnvironment {
         sync_environment(
             venv,
             resolution,
+            hash_strategy,
             Modifications::Exact,
             build_constraints,
             settings.into(),
@@ -334,5 +385,28 @@ impl CachedEnvironment {
             );
             Ok(base_interpreter)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use uv_types::HashStrategy;
+
+    use super::{cached_environment_resolution_hash, hash_digest};
+
+    #[test]
+    fn verified_cached_environment_uses_separate_resolution_hash() {
+        let resolution_hash = hash_digest(&["ty==0.0.17"]);
+        let unverified =
+            cached_environment_resolution_hash(resolution_hash.clone(), &HashStrategy::None);
+        let verified = cached_environment_resolution_hash(
+            resolution_hash.clone(),
+            &HashStrategy::Verify(Arc::default()),
+        );
+
+        assert_eq!(unverified, resolution_hash);
+        assert_ne!(verified, unverified);
     }
 }

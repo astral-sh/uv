@@ -553,7 +553,7 @@ async fn determine_requires_python(
                 (requires_python, python_pin)
             }
             python_request @ PythonRequest::Version(VersionRequest::Range(specifiers, variant)) => {
-                let requires_python = RequiresPython::from_specifiers(specifiers);
+                let requires_python = RequiresPython::from_specifiers(specifiers.clone());
 
                 let python_pin = if pin_python {
                     let interpreter = PythonInstallation::find_or_download(
