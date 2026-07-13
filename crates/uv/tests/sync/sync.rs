@@ -5394,7 +5394,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Excluding a non-existing extra when requesting all extras should fail.
@@ -5405,7 +5405,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     Ok(())
@@ -5435,7 +5435,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Excluding a non-existing extra when requesting all extras should fail.
@@ -5446,7 +5446,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     Ok(())
@@ -5657,7 +5657,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    error: Extra `async` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Unless we sync from the child directory.
@@ -5757,7 +5757,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    error: Extra `async` is not defined in the `optional-dependencies` table for `other`
     ");
 
     Ok(())
