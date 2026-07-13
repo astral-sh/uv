@@ -615,7 +615,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
     }
 
-    let workspace_cache = WorkspaceCache::default();
+    // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
+    // resolved cache has the same root.
+    let workspace_cache = if cache.root() == discovery_cache.root() {
+        workspace_cache
+    } else {
+        WorkspaceCache::default()
+    };
 
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
