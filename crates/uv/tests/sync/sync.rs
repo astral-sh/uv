@@ -339,6 +339,19 @@ fn frozen() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // A no-op frozen sync should determine the installation plan without constructing a registry
+    // client, so the `uv_client::base_client` debug target emits no messages.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::RUST_LOG, "uv_client::base_client=debug"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 3 packages in [TIME]
+    ");
+
     Ok(())
 }
 
