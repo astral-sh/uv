@@ -793,6 +793,8 @@ impl<'env> TreeDisplay<'env> {
                                 self.lock.find_by_id(package_id),
                                 Some(edge.weight()),
                             ),
+                            marker: UniversalMarker::TRUE,
+                            reached_via_dependency_group: false,
                         };
                         nodes.insert(state.index);
                         if distances.insert(state.clone(), 0).is_none() {
@@ -805,6 +807,12 @@ impl<'env> TreeDisplay<'env> {
                         index: *root,
                         expanded_extras: self
                             .expanded_extras(self.lock.find_by_id(package_id), None),
+                        marker: if self.invert {
+                            self.conflict_marker
+                        } else {
+                            UniversalMarker::TRUE
+                        },
+                        reached_via_dependency_group: false,
                     };
                     nodes.insert(state.index);
                     if distances.insert(state.clone(), 0).is_none() {
@@ -816,17 +824,44 @@ impl<'env> TreeDisplay<'env> {
 
         while let Some(source) = queue.pop_front() {
             let distance = distances[&source];
-            if distance >= self.depth {
+            if distance >= self.depth || self.invert && source.reached_via_dependency_group {
                 continue;
             }
 
             for edge in self.graph.edges_directed(source.index, Direction::Outgoing) {
-                if !self.invert
-                    && let Edge::Optional(required_extra, ..) = edge.weight()
-                    && !source.expanded_extras.contains(required_extra)
-                {
-                    continue;
-                }
+                let edge_kind = edge.weight();
+                let marker = if self.invert {
+                    // If the path to the target requires an extra on this package, only follow
+                    // consumers that activate that extra.
+                    if !source.expanded_extras.is_empty()
+                        && edge_kind.extras().is_none_or(|extras| {
+                            !source
+                                .expanded_extras
+                                .iter()
+                                .all(|extra| extras.contains(extra))
+                        })
+                    {
+                        continue;
+                    }
+
+                    // Do not join incoming and outgoing edges that cannot coexist in the same
+                    // universal marker environment.
+                    let mut marker = source.marker;
+                    marker.and(edge_kind.marker());
+                    if marker.is_false() {
+                        continue;
+                    }
+                    marker
+                } else {
+                    // Only include extra-conditional dependencies if the activating extra is
+                    // enabled in the current context.
+                    if let Edge::Optional(required_extra, ..) = edge_kind
+                        && !source.expanded_extras.contains(required_extra)
+                    {
+                        continue;
+                    }
+                    UniversalMarker::TRUE
+                };
 
                 let target = edge.target();
                 if matches!(self.graph[target], Node::Root) {
@@ -840,6 +875,8 @@ impl<'env> TreeDisplay<'env> {
                     index: target,
                     expanded_extras: self
                         .expanded_extras(self.lock.find_by_id(package_id), Some(edge.weight())),
+                    marker,
+                    reached_via_dependency_group: self.invert && edge_kind.is_dev(),
                 };
                 nodes.insert(state.index);
                 edges.insert(edge.id());
@@ -864,6 +901,8 @@ struct JsonTraversal {
 struct JsonTraversalNode<'env> {
     index: NodeIndex,
     expanded_extras: BTreeSet<&'env ExtraName>,
+    marker: UniversalMarker,
+    reached_via_dependency_group: bool,
 }
 
 /// A JSON representation of the output of `uv tree`.
