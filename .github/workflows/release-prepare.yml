@@ -70,13 +70,35 @@ jobs:
             git -c core.hooksPath=/dev/null commit --only --message "Rewrite changelog" -- CHANGELOG.md
           fi
 
-      - name: "Create Pull Request"
+      - name: "Create or update Pull Request"
         run: |
           branch="$(git branch --show-current)"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:"$branch"
-          gh pr create \
-            --base main \
-            --head "$branch" \
-            --fill-first
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          remote_branch="$(git ls-remote --refs origin "refs/heads/$branch" | cut -f1)"
+          if [ -n "$remote_branch" ]; then
+            git push \
+              --force-with-lease="refs/heads/$branch:$remote_branch" \
+              "$remote" \
+              HEAD:"$branch"
+          else
+            git push "$remote" HEAD:"$branch"
+          fi
+
+          pull_request="$(
+            gh pr list \
+              --base main \
+              --head "$branch" \
+              --state open \
+              --json url \
+              --jq '.[0].url'
+          )"
+          if [ -n "$pull_request" ]; then
+            printf '%s\n' "$pull_request"
+          else
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --fill-first
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
