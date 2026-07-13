@@ -24,3 +24,14 @@ enabled = true
 "files.pythonhosted.org" = "allow"
 "github.com" = "allow"
 "pypi.org" = "allow"
+
+[permissions.pull-request-labels]
+description = "Read-only pull request label analysis with GitHub API access."
+extends = ":read-only"
+
+[permissions.pull-request-labels.network]
+enabled = true
+
+[permissions.pull-request-labels.network.domains]
+"api.github.com" = "allow"
+"github.com" = "allow"
