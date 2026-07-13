@@ -6927,7 +6927,7 @@ impl Package {
                 };
                 uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
-            Source::Registry(RegistrySource::Url(url)) => {
+            Source::Registry(source @ RegistrySource::Url(url)) => {
                 let Some(ref sdist) = self.sdist else {
                     return Ok(None);
                 };
@@ -6978,11 +6978,15 @@ impl Package {
                     file,
                     ext,
                     index,
-                    wheels: vec![],
+                    wheels: self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
+                        .collect::<Result<_, _>>()?,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
-            Source::Registry(RegistrySource::Path(path)) => {
+            Source::Registry(source @ RegistrySource::Path(path)) => {
                 let Some(ref sdist) = self.sdist else {
                     return Ok(None);
                 };
@@ -7054,7 +7058,11 @@ impl Package {
                     file,
                     ext,
                     index,
-                    wheels: vec![],
+                    wheels: self
+                        .wheels
+                        .iter()
+                        .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
+                        .collect::<Result<_, _>>()?,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }

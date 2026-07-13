@@ -23,7 +23,7 @@ use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
     BuiltDist, DependencyMetadata, Dist, ExtraBuildRequires, HashGeneration, Index, IndexLocations,
     Name, NameRequirementSpecification, PackageConfigSettings, Requirement, RequiresPython,
-    ResolvedDist, SourceDist, UnresolvedRequirementSpecification,
+    ResolvedDist, SourceDist, UnresolvedRequirementSpecification, implied_markers,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
@@ -33,6 +33,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
     MarkerValueVersion,
 };
+use uv_platform_tags::{AbiTag, PlatformTag};
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1376,11 +1377,20 @@ fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<Source
     };
 
     match dist.as_ref() {
+        Dist::Source(SourceDist::Registry(source_dist)) => {
+            // A selected source distribution proves none of its available wheels were usable.
+            let mut source_dist = source_dist.clone();
+            source_dist.wheels.clear();
+            Some(SourceDist::Registry(source_dist))
+        }
         Dist::Source(source_dist) => Some(source_dist.clone()),
-        Dist::Built(BuiltDist::Registry(built_dist)) => built_dist
-            .sdist
-            .as_ref()
-            .map(|sdist| SourceDist::Registry(sdist.clone())),
+        Dist::Built(BuiltDist::Registry(built_dist)) => built_dist.sdist.as_ref().map(|sdist| {
+            let mut sdist = sdist.clone();
+            // Only the selected wheel is known to be usable in this build resolution.
+            sdist.wheels.clear();
+            sdist.wheels.push(built_dist.best_wheel().clone());
+            SourceDist::Registry(sdist)
+        }),
         Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_)) => None,
     }
 }
@@ -1540,10 +1550,27 @@ async fn resolve_all_possible_builds(
         // A registry source distribution can be selected as a fallback on a target where none of
         // the locked wheels are compatible, even if the runtime resolution selected a wheel in
         // every environment it considered.
-        // TODO: Avoid resolving backend hooks when the locked wheels cover every reachable target,
-        // while accounting for `--no-binary` policies that can force the source distribution.
-        let resolve_backend_hook_requirements =
-            solve_marker.is_some() || matches!(&source_dist, SourceDist::Registry(_));
+        let resolve_backend_hook_requirements = match &source_dist {
+            SourceDist::Registry(source_dist) => {
+                let mut wheel_coverage = MarkerTree::FALSE;
+                for wheel in &source_dist.wheels {
+                    if wheel.filename.abi_tags().contains(&AbiTag::None)
+                        && wheel.filename.platform_tags().contains(&PlatformTag::Any)
+                    {
+                        wheel_coverage.or(implied_markers(&wheel.filename));
+                    }
+                }
+
+                let mut uncovered = lock.requires_python().to_marker_tree();
+                if let Some(solve_marker) = solve_marker {
+                    uncovered.and(solve_marker);
+                }
+                uncovered.and(wheel_coverage.negate());
+
+                build_options.no_binary_package(&source_dist.name) || !uncovered.is_false()
+            }
+            _ => solve_marker.is_some(),
+        };
         let target_marker = context_marker.filter(|marker| !marker.is_true());
         let nested_context_marker = match (build_markers.get(&key).copied(), context_marker) {
             (Some(build_marker), Some(context_marker)) => {
@@ -1636,7 +1663,9 @@ async fn resolve_all_possible_builds(
             database
                 .resolve_static_build_requirements(&source_dist, build_hasher.get(&dist))
                 .await?;
-        } else {
+        } else if direct_build || !matches!(&source_dist, SourceDist::Registry(_)) {
+            // Dynamic registry metadata can execute backend hooks even when the source is
+            // unreachable; its static build system is captured below without building metadata.
             database
                 .get_or_build_wheel_metadata(&dist, build_hasher.get(&dist))
                 .await?;

@@ -11130,7 +11130,9 @@ async fn sync_filters_locked_build_resolutions_to_selected_wheels() -> Result<()
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    uv_snapshot!(filters, context
         .lock()
         .arg("--preview-features")
         .arg("lock-build-dependencies")
@@ -11316,7 +11318,6 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
 /// Verify that backend hooks are not called for a registry sdist when a
 /// universal wheel makes it unreachable.
 #[tokio::test]
-#[ignore = "TODO: determine registry sdist reachability before resolving backend hooks"]
 async fn lock_build_dependencies_skip_unreachable_registry_sdist_hooks() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -11336,8 +11337,8 @@ async fn lock_build_dependencies_skip_unreachable_registry_sdist_hooks() -> Resu
         br#"
         [project]
         name = "dep"
-        version = "0.1.0"
-        requires-python = ">=3.12"
+        dynamic = ["version"]
+        requires-python = ">=3.12,<4"
 
         [build-system]
         requires = []
@@ -11390,7 +11391,7 @@ def get_requires_for_build_wheel(config_settings=None):
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,<4"
         dependencies = ["dep==0.1.0"]
         "#,
     )?;
@@ -11398,11 +11399,27 @@ def get_requires_for_build_wheel(config_settings=None):
     context
         .lock()
         .arg("--index-url")
-        .arg(index_url)
+        .arg(&index_url)
         .arg("--preview-features")
         .arg("lock-build-dependencies")
         .assert()
         .success();
+
+    // Forcing source distributions makes the hook reachable even with a universal wheel.
+    let output = context
+        .lock()
+        .arg("--index-url")
+        .arg(index_url)
+        .arg("--no-binary-package")
+        .arg("dep")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .output()?;
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("unreachable source distribution hook was called")
+    );
 
     Ok(())
 }
@@ -11447,7 +11464,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         [project]
         name = "trouble"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,<4"
 
         [build-system]
         requires = []
@@ -11475,8 +11492,8 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         r#"
             [project]
             name = "nested"
-            version = "0.1.0"
-            requires-python = ">=3.12"
+            dynamic = ["version"]
+            requires-python = ">=3.12,<4"
 
             [build-system]
             requires = ["trouble @ {trouble_url}"]
@@ -11486,7 +11503,10 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     );
     block_on(zip.write_entry_whole(entry, pyproject_toml.as_bytes()))?;
     let entry = ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
-    let nested_backend = backend("nested");
+    let nested_backend = backend("nested").replace(
+        "    return []",
+        r#"    raise RuntimeError("unreachable nested source distribution hook was called")"#,
+    );
     block_on(zip.write_entry_whole(entry, nested_backend.as_bytes()))?;
     fs_err::write(nested_source_dist.path(), block_on(zip.close())?)?;
 
@@ -11530,7 +11550,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         [project]
         name = "parent"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,<4"
 
         [build-system]
         requires = ["nested==0.1.0"]
@@ -11547,7 +11567,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,<4"
         dependencies = ["parent"]
 
         [tool.uv.sources]
@@ -11555,7 +11575,9 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    uv_snapshot!(filters, context
         .lock()
         .arg("--preview-features")
         .arg("lock-build-dependencies")
@@ -11593,6 +11615,179 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Installed 1 package in [TIME]
      + parent==0.1.0 (from file://[TEMP_DIR]/parent)
     ");
+
+    Ok(())
+}
+
+/// Verify that an excluded universal wheel does not hide the hook requirements of a selected
+/// source distribution inside a locked build environment.
+#[tokio::test]
+async fn lock_build_dependencies_capture_excluded_nested_sdist_hooks() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    write_wheel(
+        &artifacts.child("nested-0.1.0-py3-none-any.whl"),
+        "nested",
+        "0.1.0",
+    )?;
+    write_wheel(
+        &artifacts.child("helper-0.1.0-py3-none-any.whl"),
+        "helper",
+        "0.1.0",
+    )?;
+
+    let nested_source_dist = artifacts.child("nested-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("nested-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+        [project]
+        name = "nested"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    ))?;
+    let entry = ZipEntryBuilder::new("nested-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+from importlib.metadata import version
+from pathlib import Path
+from zipfile import ZipFile
+
+def get_requires_for_build_wheel(config_settings=None):
+    return ["helper==0.1.0"]
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    if version("helper") != "0.1.0":
+        raise RuntimeError("helper is unavailable")
+    filename = "nested-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("nested/__init__.py", "")
+        wheel.writestr(
+            "nested-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: nested\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "nested-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("nested-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    ))?;
+    fs_err::write(nested_source_dist.path(), block_on(zip.close())?)?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/nested/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/nested-0.1.0-py3-none-any.whl" data-upload-time="2024-04-01T00:00:00Z">nested-0.1.0-py3-none-any.whl</a>
+                <a href="{}/files/nested-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">nested-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/helper/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"<a href="{}/files/helper-0.1.0-py3-none-any.whl" data-upload-time="2024-03-01T00:00:00Z">helper-0.1.0-py3-none-any.whl</a>"#,
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/nested-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("nested-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/nested-0.1.0.zip"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes(fs_err::read(nested_source_dist.path())?),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/helper-0.1.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(
+            artifacts.child("helper-0.1.0-py3-none-any.whl").path(),
+        )?))
+        .mount(&server)
+        .await;
+
+    let parent_dir = context.temp_dir.child("parent");
+    parent_dir.create_dir_all()?;
+    parent_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+
+        [build-system]
+        requires = ["nested==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    parent_dir.child("build_backend.py").write_str(
+        r"
+def get_requires_for_build_wheel(config_settings=None):
+    return []
+",
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<4"
+        dependencies = ["parent"]
+
+        [tool.uv.sources]
+        parent = { path = "parent" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .arg("--index-url")
+        .arg(index_url)
+        .arg("--exclude-newer")
+        .arg("2024-03-25T00:00:00Z")
+        .assert()
+        .success();
+
+    let lock = context.read("uv.lock");
+    let nested = package_section(&lock, "nested");
+    assert!(
+        nested.contains(r#"{ name = "helper", version = "0.1.0" }"#),
+        "{nested}"
+    );
 
     Ok(())
 }
