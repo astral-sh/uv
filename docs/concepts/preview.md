@@ -76,8 +76,8 @@ The following preview features are available:
 - `no-distutils-patch`: Stops installing the `_virtualenv.py` / `_virtualenv.pth` distutils
   configuration monkeypatch in virtual environments for Python 3.10 and later.
 - `json-output`: Allows `--output-format json` for various uv commands.
-- `lock-build-dependencies`: Captures isolated build dependencies in `uv.lock` so subsequent
-  locked and frozen operations can replay the selected build environment.
+- `lock-build-dependencies`: Captures isolated build dependencies in `uv.lock` so subsequent locked
+  and frozen operations can replay the selected build environment.
 - `package-conflicts`: Allows defining workspace conflicts at the package level.
 - `pylock`: Allows installing from `pylock.toml` files.
 - `python-install-default`: Allows
