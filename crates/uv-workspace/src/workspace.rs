@@ -72,7 +72,8 @@ type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
 /// * `stop_discovery_at` is only used for isolation workspaces in the cache. Otherwise, we avoid
 ///   traversing into an external cache if `cache` is accidentally included in the workspace member
 ///   glob.
-/// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
+/// * Only [`MemberDiscovery::All`] results are stored. Successful results can be reused for
+///   [`MemberDiscovery::Existing`], which discovers the same members when none are missing.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
     workspaces: Arc<FxOnceMap<PathBuf, CachedWorkspaceResult>>,
@@ -115,8 +116,22 @@ impl WorkspaceCache {
     }
 
     /// Get the cached workspace, if any, from the path to the workspace root or to a member root.
-    fn get(&self, path: &Path) -> Option<CachedWorkspaceResult> {
-        self.workspaces.get(path)
+    ///
+    /// A successful complete discovery can satisfy [`MemberDiscovery::Existing`]. Cached errors
+    /// cannot, since `Existing` intentionally tolerates missing workspace members.
+    fn get(
+        &self,
+        path: &Path,
+        member_discovery: &MemberDiscovery,
+    ) -> Option<CachedWorkspaceResult> {
+        match member_discovery {
+            MemberDiscovery::All => self.workspaces.get(path),
+            MemberDiscovery::Existing => match self.workspaces.get(path) {
+                Some(Ok(workspace)) => Some(Ok(workspace)),
+                Some(Err(_)) | None => None,
+            },
+            MemberDiscovery::None | MemberDiscovery::Ignore(_) => None,
+        }
     }
 
     /// Remove all cached workspace entries for the given workspace root. Used before modifying the
@@ -327,9 +342,7 @@ impl Workspace {
         // at the same time from different roots, both failing this check. These cases are fine, we
         // synchronize them after finding the workspace root and allow only one of them to perform
         // the full discovery.
-        if options.members == MemberDiscovery::All
-            && let Some(workspace) = workspace_cache.get(&project_path)
-        {
+        if let Some(workspace) = workspace_cache.get(&project_path, &options.members) {
             return workspace;
         }
 
@@ -1476,10 +1489,7 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
-        if options.members != MemberDiscovery::All {
-            return Ok(None);
-        }
-        let workspace = match cache.get(project_root) {
+        let workspace = match cache.get(project_root, &options.members) {
             Some(Ok(workspace)) => workspace,
             Some(Err(error)) => return Err(error),
             None => return Ok(None),
@@ -2025,9 +2035,7 @@ impl VirtualProject {
         );
 
         // Fast path: The workspace is already cached.
-        if options.members == MemberDiscovery::All
-            && let Some(workspace) = workspace_cache.get(project_root)
-        {
+        if let Some(workspace) = workspace_cache.get(project_root, &options.members) {
             let workspace = workspace?;
             let virtual_project = if let Some((project_name, _member)) = workspace
                 .packages
