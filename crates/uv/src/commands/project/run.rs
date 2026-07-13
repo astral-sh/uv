@@ -87,6 +87,7 @@ use crate::settings::{
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     project_dir: &Path,
+    no_workspace: bool,
     script: Option<Pep723Item>,
     command: Option<RunCommand>,
     requirements: Vec<RequirementsSource>,
@@ -535,7 +536,10 @@ pub(crate) async fn run(
             // the root of a virtual workspace and then switch into the selected package.
             let project = VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 &cache,
                 workspace_cache,
                 package.clone(),
@@ -545,7 +549,10 @@ pub(crate) async fn run(
         } else {
             match VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 &cache,
                 workspace_cache,
             )

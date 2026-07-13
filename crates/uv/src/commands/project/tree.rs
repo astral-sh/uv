@@ -37,6 +37,7 @@ use crate::settings::ResolverSettings;
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
+    no_workspace: bool,
     groups: DependencyGroups,
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
@@ -71,7 +72,10 @@ pub(crate) async fn tree(
     } else {
         virtual_project = VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             cache,
             &workspace_cache,
         )

@@ -34,6 +34,7 @@ pub(crate) async fn format(
     printer: Printer,
     preview: Preview,
     no_project: bool,
+    no_workspace: bool,
 ) -> Result<ExitStatus> {
     // Check if the format feature is in preview
     if !preview.is_enabled(PreviewFeature::Format) {
@@ -51,7 +52,10 @@ pub(crate) async fn format(
     } else {
         match VirtualProject::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             &cache,
             &workspace_cache,
         )

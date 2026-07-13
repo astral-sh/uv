@@ -60,6 +60,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 #[expect(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
+    no_workspace: bool,
     format: Option<ExportFormat>,
     all_packages: bool,
     package: Vec<PackageName>,
@@ -99,6 +100,7 @@ pub(crate) async fn export(
             VirtualProject::discover(
                 project_dir,
                 &DiscoveryOptions {
+                    no_workspace,
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
@@ -109,7 +111,10 @@ pub(crate) async fn export(
         } else if let [name] = package.as_slice() {
             VirtualProject::discover_with_package(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 &workspace_cache,
                 name.clone(),
@@ -118,7 +123,10 @@ pub(crate) async fn export(
         } else {
             let project = VirtualProject::discover(
                 project_dir,
-                &DiscoveryOptions::default(),
+                &DiscoveryOptions {
+                    no_workspace,
+                    ..DiscoveryOptions::default()
+                },
                 cache,
                 &workspace_cache,
             )

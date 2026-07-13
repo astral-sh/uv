@@ -78,6 +78,7 @@ impl SourcedDependencyGroups {
                     .expect("git checkout has a parent")
                     .to_path_buf()
             }),
+            no_workspace: false,
             members: if no_sources.is_none() {
                 MemberDiscovery::default()
             } else {

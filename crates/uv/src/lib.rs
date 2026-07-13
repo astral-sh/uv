@@ -297,6 +297,14 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         cli.top_level.cache_args.cache_dir.clone(),
     )?;
     let workspace_cache = WorkspaceCache::default();
+    let no_workspace = match &*cli.command {
+        Commands::Project(command) => project_no_workspace(command, &project_dir),
+        _ => false,
+    };
+    let discovery_options = DiscoveryOptions {
+        no_workspace,
+        ..DiscoveryOptions::default()
+    };
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
             .file_name()
@@ -316,7 +324,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             .combine(FilesystemOptions::system().map_err(map_settings_error)?)
     } else if let Ok(workspace) = Workspace::discover(
         &project_dir,
-        &DiscoveryOptions::default(),
+        &discovery_options,
         &discovery_cache,
         &workspace_cache,
     )
@@ -2182,6 +2190,37 @@ fn required_version_error(
     )
 }
 
+/// Return whether the command should treat the current project as a standalone project.
+fn project_no_workspace(command: &ProjectCommand, project_dir: &Path) -> bool {
+    match command {
+        // `uv init --no-workspace` controls whether the new project is added to a containing
+        // workspace; it does not change configuration discovery for the command itself.
+        ProjectCommand::Init(_) => false,
+        ProjectCommand::Run(args) => args.no_workspace,
+        ProjectCommand::Sync(args) => args.no_workspace,
+        ProjectCommand::Lock(args) => args.no_workspace,
+        ProjectCommand::Upgrade(args) => args.no_workspace,
+        // Preserve the existing `uv add --no-workspace` behavior unless the current project has
+        // its own lockfile, in which case the lockfile makes the standalone-project intent clear.
+        ProjectCommand::Add(args) => {
+            args.no_workspace
+                && args.script.is_none()
+                && args.package.is_none()
+                && project_dir
+                    .ancestors()
+                    .find(|path| path.join("pyproject.toml").is_file())
+                    .is_some_and(|path| path.join("uv.lock").is_file())
+        }
+        ProjectCommand::Remove(args) => args.no_workspace,
+        ProjectCommand::Version(args) => args.no_workspace,
+        ProjectCommand::Tree(args) => args.no_workspace,
+        ProjectCommand::Export(args) => args.no_workspace,
+        ProjectCommand::Format(args) => args.no_workspace,
+        ProjectCommand::Check(args) => args.no_workspace,
+        ProjectCommand::Audit(args) => args.no_workspace,
+    }
+}
+
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
@@ -2198,6 +2237,8 @@ async fn run_project(
     workspace_cache: &WorkspaceCache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let no_workspace = project_no_workspace(&project_command, project_dir);
+
     // Write out any resolved settings.
     macro_rules! show_settings {
         ($arg:expr) => {
@@ -2305,6 +2346,7 @@ async fn run_project(
 
             Box::pin(commands::run(
                 project_dir,
+                no_workspace,
                 script,
                 command,
                 requirements,
@@ -2367,6 +2409,7 @@ async fn run_project(
 
             Box::pin(commands::sync(
                 project_dir,
+                no_workspace,
                 args.lock_check,
                 args.frozen,
                 args.dry_run,
@@ -2430,6 +2473,7 @@ async fn run_project(
 
             Box::pin(commands::lock(
                 project_dir,
+                no_workspace,
                 args.lock_check,
                 args.frozen,
                 args.dry_run,
@@ -2463,6 +2507,7 @@ async fn run_project(
 
             Box::pin(commands::upgrade(
                 project_dir,
+                no_workspace,
                 args.package,
                 args.install_mirrors,
                 args.settings,
@@ -2569,6 +2614,7 @@ async fn run_project(
 
             Box::pin(commands::add(
                 project_dir,
+                no_workspace,
                 args.lock_check,
                 args.frozen,
                 args.active,
@@ -2639,6 +2685,7 @@ async fn run_project(
 
             Box::pin(commands::remove(
                 project_dir,
+                no_workspace,
                 args.lock_check,
                 args.frozen,
                 args.active,
@@ -2686,6 +2733,7 @@ async fn run_project(
                 args.short,
                 args.output_format,
                 project_dir,
+                no_workspace,
                 args.package,
                 explicit_project,
                 args.dry_run,
@@ -2727,6 +2775,7 @@ async fn run_project(
 
             Box::pin(commands::tree(
                 project_dir,
+                no_workspace,
                 args.groups,
                 args.lock_check,
                 args.frozen,
@@ -2772,6 +2821,7 @@ async fn run_project(
 
             commands::export(
                 project_dir,
+                no_workspace,
                 args.format,
                 args.all_packages,
                 args.package,
@@ -2827,6 +2877,7 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.no_project,
+                no_workspace,
             ))
             .await
         }
@@ -2877,6 +2928,7 @@ async fn run_project(
                 printer,
                 globals.preview,
                 args.no_project,
+                no_workspace,
                 no_config,
                 args.malware_settings,
             ))
@@ -2898,6 +2950,7 @@ async fn run_project(
 
             Box::pin(commands::audit(
                 project_dir,
+                no_workspace,
                 args.extras,
                 args.groups,
                 args.lock_check,

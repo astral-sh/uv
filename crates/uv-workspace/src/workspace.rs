@@ -72,6 +72,7 @@ type CachedWorkspaceResult = Result<Arc<Workspace>, WorkspaceError>;
 /// * `stop_discovery_at` is only used for isolation workspaces in the cache. Otherwise, we avoid
 ///   traversing into an external cache if `cache` is accidentally included in the workspace member
 ///   glob.
+/// * Workspaces discovered with `no_workspace` are not cached.
 /// * TODO(konsti): Support caching for [`MemberDiscovery`] modes that aren't `All`.
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache {
@@ -249,6 +250,8 @@ pub struct DiscoveryOptions {
     /// If you want to use it for other cases too, you need to also update the cache handling in
     /// the workspace discovery glob walking.
     pub stop_discovery_at: Option<PathBuf>,
+    /// Whether to ignore workspaces and treat the current project as a standalone project.
+    pub no_workspace: bool,
     /// The strategy to use when discovering workspace members.
     pub members: MemberDiscovery,
 }
@@ -327,7 +330,8 @@ impl Workspace {
         // at the same time from different roots, both failing this check. These cases are fine, we
         // synchronize them after finding the workspace root and allow only one of them to perform
         // the full discovery.
-        if options.members == MemberDiscovery::All
+        if !options.no_workspace
+            && options.members == MemberDiscovery::All
             && let Some(workspace) = workspace_cache.get(&project_path)
         {
             return workspace;
@@ -356,29 +360,35 @@ impl Workspace {
         }
 
         // Check if the current project is also an explicit workspace root.
-        let explicit_root = pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.workspace.as_ref())
-            .map(|workspace| {
-                (
-                    project_path.clone(),
-                    workspace.clone(),
-                    pyproject_toml.clone(),
-                )
-            });
+        let explicit_root = if options.no_workspace {
+            None
+        } else {
+            pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.workspace.as_ref())
+                .map(|workspace| {
+                    (
+                        project_path.clone(),
+                        workspace.clone(),
+                        pyproject_toml.clone(),
+                    )
+                })
+        };
 
         let (workspace_root, workspace_definition, workspace_pyproject_toml) =
             if let Some(workspace) = explicit_root {
                 // We have found the explicit root immediately.
                 workspace
-            } else if pyproject_toml.project.is_none() {
+            } else if pyproject_toml.project.is_none() && !options.no_workspace {
                 // Without a project, it can't be an implicit root
                 return Err(WorkspaceError::from(WorkspaceErrorKind::MissingProject(
                     pyproject_path,
                 )));
-            } else if let Some(workspace) = find_workspace(&project_path, options, cache).await? {
+            } else if !options.no_workspace
+                && let Some(workspace) = find_workspace(&project_path, options, cache).await?
+            {
                 // We have found an explicit root above.
                 workspace
             } else {
@@ -390,7 +400,7 @@ impl Workspace {
                 )
             };
 
-        if options.members == MemberDiscovery::All {
+        if !options.no_workspace && options.members == MemberDiscovery::All {
             // Ensure that workspace discovery runs only once for any given workspace root.
             // If two threads start at different packages at the same time, they only read their
             // package `pyproject.toml` and the workspace root `pyproject.toml` before arriving
@@ -426,7 +436,7 @@ impl Workspace {
             cache,
         )
         .await;
-        if options.members == MemberDiscovery::All {
+        if !options.no_workspace && options.members == MemberDiscovery::All {
             workspace_cache.insert(result.clone(), &workspace_root);
         }
         result
@@ -1476,7 +1486,7 @@ impl ProjectWorkspace {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Option<Self>, WorkspaceError> {
-        if options.members != MemberDiscovery::All {
+        if options.no_workspace || options.members != MemberDiscovery::All {
             return Ok(None);
         }
         let workspace = match cache.get(project_root) {
@@ -1678,20 +1688,24 @@ impl ProjectWorkspace {
         }
 
         // Check if the current project is also an explicit workspace root.
-        let mut workspace = project_pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.workspace.as_ref())
-            .map(|workspace| {
-                (
-                    project_path.to_path_buf(),
-                    workspace.clone(),
-                    project_pyproject_toml.clone(),
-                )
-            });
+        let mut workspace = if options.no_workspace {
+            None
+        } else {
+            project_pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.workspace.as_ref())
+                .map(|workspace| {
+                    (
+                        project_path.to_path_buf(),
+                        workspace.clone(),
+                        project_pyproject_toml.clone(),
+                    )
+                })
+        };
 
-        if workspace.is_none() {
+        if workspace.is_none() && !options.no_workspace {
             // The project isn't an explicit workspace root, check if we're a regular workspace
             // member by looking for an explicit workspace root above.
             workspace = find_workspace(&project_path, options, cache).await?;
@@ -1731,7 +1745,7 @@ impl ProjectWorkspace {
                 pyproject_toml: project_pyproject_toml.clone(),
             };
             let workspace = Arc::new(workspace);
-            if options.members == MemberDiscovery::All {
+            if !options.no_workspace && options.members == MemberDiscovery::All {
                 workspace_cache.insert(Ok(workspace.clone()), &project_path);
             }
             return Ok(Self {
@@ -1741,7 +1755,7 @@ impl ProjectWorkspace {
             });
         };
 
-        if options.members == MemberDiscovery::All {
+        if !options.no_workspace && options.members == MemberDiscovery::All {
             // Ensure that workspace discovery runs only once for any given workspace root.
             if let Some(workspace) = workspace_cache.register_or_wait(&workspace_root).await {
                 return workspace.map(|workspace| Self {
@@ -1766,7 +1780,7 @@ impl ProjectWorkspace {
             cache,
         )
         .await;
-        if options.members == MemberDiscovery::All {
+        if !options.no_workspace && options.members == MemberDiscovery::All {
             workspace_cache.insert(result.clone(), &workspace_root);
         }
 
@@ -2025,7 +2039,8 @@ impl VirtualProject {
         );
 
         // Fast path: The workspace is already cached.
-        if options.members == MemberDiscovery::All
+        if !options.no_workspace
+            && options.members == MemberDiscovery::All
             && let Some(workspace) = workspace_cache.get(project_root)
         {
             let workspace = workspace?;
@@ -2063,11 +2078,12 @@ impl VirtualProject {
             )
             .await?;
             Ok(Self::Project(project))
-        } else if let Some(workspace) = pyproject_toml
-            .tool
-            .as_ref()
-            .and_then(|tool| tool.uv.as_ref())
-            .and_then(|uv| uv.workspace.as_ref())
+        } else if !options.no_workspace
+            && let Some(workspace) = pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.workspace.as_ref())
         {
             // Otherwise, if it contains a `tool.uv.workspace` table, it's a non-project workspace
             // root.
@@ -2084,7 +2100,7 @@ impl VirtualProject {
                 cache,
             )
             .await;
-            if options.members == MemberDiscovery::All {
+            if !options.no_workspace && options.members == MemberDiscovery::All {
                 workspace_cache.insert(result.clone(), &project_path);
             }
             Ok(Self::NonProject(result?))
@@ -2104,7 +2120,7 @@ impl VirtualProject {
                 cache,
             )
             .await;
-            if options.members == MemberDiscovery::All {
+            if !options.no_workspace && options.members == MemberDiscovery::All {
                 workspace_cache.insert(result.clone(), &project_path);
             }
             Ok(Self::NonProject(result?))

@@ -51,6 +51,7 @@ impl BuildRequires {
     ) -> Result<Self, MetadataError> {
         let discovery = DiscoveryOptions {
             stop_discovery_at: stop_discovery_at.map(Path::to_path_buf),
+            no_workspace: false,
             members: if sources.all() {
                 MemberDiscovery::None
             } else {

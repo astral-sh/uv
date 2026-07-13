@@ -43,6 +43,7 @@ mod sarif;
 
 pub(crate) async fn audit(
     project_dir: &Path,
+    no_workspace: bool,
     extras: ExtrasSpecification,
     groups: DependencyGroups,
     lock_check: LockCheck,
@@ -89,7 +90,10 @@ pub(crate) async fn audit(
     } else {
         workspace = Workspace::discover(
             project_dir,
-            &DiscoveryOptions::default(),
+            &DiscoveryOptions {
+                no_workspace,
+                ..DiscoveryOptions::default()
+            },
             &cache,
             &workspace_cache,
         )
