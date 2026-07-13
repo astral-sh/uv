@@ -20,7 +20,9 @@ Apply these rules:
   distribution changes; and move an entry from `Enhancements` or `Other changes` to `Performance`
   only when performance is the primary intent of the local change. Move an entry from
   `Other changes` to a more specific section only when the local change unambiguously fits one. Keep
-  retained entries in `Other changes` when no established section fits.
+  retained entries in `Other changes` when no established section fits and they describe user- or
+  ecosystem-relevant maintenance, such as MSRV or toolchain updates and public API compatibility for
+  downstream integrations.
 - Treat the generated wording as source material, not a preferred baseline. Rewrite retained entries
   to make them clearer, more precise, and more user-facing. Expand internal shorthand and add
   missing context when supported by the local changes. Preserve the original meaning and do not
