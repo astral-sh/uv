@@ -15,7 +15,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use crate::{Error, Prompt};
-use uv_fs::{CWD, Simplified, cachedir};
+use uv_fs::{CWD, Simplified, cachedir, escape_for_python};
 use uv_platform_tags::Os;
 use uv_preview::PreviewFeature;
 use uv_pypi_types::Scheme;
@@ -457,25 +457,6 @@ pub(crate) fn create(
         compile_error!("Only Windows and Unix are supported")
     }
 
-    // because activate.xsh embeds values into Python syntax,
-    // this turns Rust strings into valid Python/xonsh string literals
-    let python_string_literal = |value: &str| -> String {
-        let mut literal = String::with_capacity(value.len() + 2);
-        literal.push('"');
-        for character in value.chars() {
-            match character {
-                '\\' => literal.push_str(r"\\"),
-                '"' => literal.push_str(r#"\""#),
-                '\n' => literal.push_str(r"\n"),
-                '\r' => literal.push_str(r"\r"),
-                '\t' => literal.push_str(r"\t"),
-                character => literal.push(character),
-            }
-        }
-        literal.push('"');
-        literal
-    };
-
     // Add all the activate scripts for different shells
     for (name, template) in ACTIVATE_TEMPLATES {
         // csh has no way to determine its own script location, so a relocatable
@@ -513,6 +494,7 @@ pub(crate) fn create(
                 "'{}'",
                 escape_posix_for_single_quotes(location.simplified().to_str().unwrap())
             )),
+            (_, "activate.xsh") => Cow::Borrowed(r"dirname(dirname(realpath(__file__)))"),
             // Note: `activate.ps1` is already relocatable by default.
             _ => escape_posix_for_single_quotes(location.simplified().to_str().unwrap()),
         };
@@ -521,11 +503,14 @@ pub(crate) fn create(
         let activator = template
             .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
             .replace("{{ BIN_NAME }}", bin_name)
-            .replace("{{ BIN_NAME_LITERAL }}", &python_string_literal(bin_name))
+            .replace(
+                "{{ BIN_NAME_LITERAL }}",
+                &format!(r#""{}""#, escape_for_python(bin_name)),
+            )
             .replace("{{ VIRTUAL_PROMPT }}", virtual_prompt)
             .replace(
                 "{{ VIRTUAL_PROMPT_LITERAL }}",
-                &python_string_literal(virtual_prompt),
+                &format!(r#""{}""#, escape_for_python(virtual_prompt)),
             )
             .replace("{{ PATH_SEP }}", path_sep)
             .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
