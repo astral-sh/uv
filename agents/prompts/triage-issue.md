@@ -17,6 +17,18 @@ Populate `related.items` with the closest existing issues and pull requests. Exp
 evidence for every item. Leave the array empty when no meaningful relationship was found, and
 summarize the searches performed in `related.search_scope`.
 
+Set `type` to exactly one of these repository label names and explain the choice in `type_reason`:
+
+- `duplicate` when an existing issue or pull request tracks the same underlying problem or request
+  closely enough that the new issue adds no materially distinct report. This classification takes
+  precedence over the other types.
+- `bug` when existing behavior does not work as intended.
+- `enhancement` when the issue requests new functionality or an improvement to existing behavior.
+- `question` when the issue primarily asks for clarification or support.
+
+If an issue could fit multiple non-duplicate types, choose the type that best matches the primary
+maintainer action requested.
+
 Set `summary` to a concise overview of the closest items, or state that none were found.
 
 Clearly distinguish source-backed findings from hypotheses. Do not draft a public reply or claim a
