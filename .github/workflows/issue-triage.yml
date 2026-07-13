@@ -50,6 +50,7 @@ jobs:
           safety-strategy: drop-sudo
           allow-users: "*"
           prompt-file: "agents/prompts/triage-issue.md"
+          output-schema-file: "agents/schemas/issue-triage.json"
 
   report:
     needs: triage

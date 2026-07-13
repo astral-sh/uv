@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "deduplication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["likely_duplicate", "related_issues", "no_likely_duplicate"]
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "number": { "type": "integer" },
+              "url": { "type": "string" },
+              "relationship": {
+                "type": "string",
+                "enum": ["duplicate", "related"]
+              },
+              "reason": { "type": "string" }
+            },
+            "required": ["number", "url", "relationship", "reason"]
+          }
+        },
+        "search_scope": { "type": "string" }
+      },
+      "required": ["status", "issues", "search_scope"]
+    },
+    "summary": { "type": "string" },
+    "missing_information": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "relevant_paths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "suggested_labels": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_action": { "type": "string" }
+  },
+  "required": [
+    "deduplication",
+    "summary",
+    "missing_information",
+    "relevant_paths",
+    "suggested_labels",
+    "recommended_action"
+  ]
+}
