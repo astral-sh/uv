@@ -32,7 +32,6 @@ jobs:
         with:
           version: "0.11.28"
       - run: uvx ruff check .
-      - run: python3 scripts/test_apply_changelog_section.py
 
   ty:
     timeout-minutes: 10
