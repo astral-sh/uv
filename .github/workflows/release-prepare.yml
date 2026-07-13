@@ -63,7 +63,7 @@ jobs:
 
       - name: "Apply changelog rewrite"
         run: |
-          uv run scripts/apply_changelog_section.py \
+          uv run scripts/update-latest-changelog-section.py \
             CHANGELOG.md \
             "$RUNNER_TEMP/changelog-section.md"
 
