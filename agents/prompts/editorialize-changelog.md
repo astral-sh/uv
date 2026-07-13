@@ -19,10 +19,15 @@ Apply these rules:
   under `Preview features`, even when it fixes a bug; use `Python` for Python runtime or
   distribution changes; and move an entry from `Enhancements` or `Other changes` to `Performance`
   only when performance is the primary intent of the local change. Triage other entries from
-  `Other changes` into a clear user-facing section or drop them if they are internal-only.
-- Prefer the generated wording. Reword an entry only when it is unclear, misleading, or inconsistent
-  with nearby releases. Make the smallest correction necessary and do not invent or broaden claims.
-- Put the most significant user-facing entries first within each section and remove empty sections.
+  `Other changes` into a clear user-facing section or drop them if they are internal-only. Do not
+  include an `Other changes` section in the output.
+- Treat the generated wording as source material, not a preferred baseline. Rewrite retained entries
+  to make them clearer, more precise, and more user-facing. Expand internal shorthand and add
+  missing context when supported by the local changes. Preserve the original meaning and do not
+  invent or broaden claims. Avoid purely stylistic synonym changes.
+- Preserve the relative order of entries already in each section. When moving entries from
+  `Other changes`, append them to the destination section in their original order. Remove empty
+  sections.
 
 Return only the complete replacement release section, beginning with its `## ` heading. Do not
 include the next release heading, any older changelog content, a code fence, or commentary. Your
