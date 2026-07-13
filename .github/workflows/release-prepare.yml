@@ -63,7 +63,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           permission-profile: ":read-only"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/rewrite-release-changelog.md"
+          prompt-file: "agents/prompts/editorialize-changelog.md"
           output-file: "CHANGELOG.md"
 
       - name: "Commit changelog rewrite"
