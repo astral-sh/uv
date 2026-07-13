@@ -146,7 +146,9 @@ jobs:
               --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- issue-triage-preview -->"))) | .id' \
               | tail -n 1
           )"
-          jq --null-input --rawfile body "$RUNNER_TEMP/issue-triage-preview.md" '{body: $body}' \
+          jq --null-input \
+            --arg run_url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{body: "<!-- issue-triage-preview -->\n\n## Issue triage preview\n\nThe issue triage preview is available in the [workflow run summary](\($run_url))."}' \
             > "$RUNNER_TEMP/issue-triage-preview.json"
 
           if [ -n "$comment_id" ]; then
