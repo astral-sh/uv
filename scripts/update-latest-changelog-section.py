@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # ///
 
-"""Apply an editorialized changelog release section."""
+"""Replace the latest changelog section."""
 
 from __future__ import annotations
 
