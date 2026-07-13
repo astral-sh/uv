@@ -16,13 +16,14 @@ use uv_cache_info::CacheInfo;
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
+use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    BuiltDist, Dist, Identifier, Node, Resolution, ResolvedDist, SourceDist,
+    BuildableSource, BuiltDist, Dist, Identifier, Name, Node, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::PythonExt;
 use uv_preview::Preview;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildPackageKey, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
@@ -177,6 +178,7 @@ impl CachedEnvironment {
         Self::from_resolution(
             &resolution,
             HashStrategy::default(),
+            LockedBuildResolutions::default(),
             build_constraints,
             &interpreter,
             settings,
@@ -202,6 +204,7 @@ impl CachedEnvironment {
     /// universal lock must derive its markers and tags from the same interpreter.
     pub(crate) async fn from_locked_resolution(
         resolution: &Resolution,
+        locked_build_resolutions: LockedBuildResolutions,
         build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
@@ -218,6 +221,7 @@ impl CachedEnvironment {
         Self::from_resolution(
             resolution,
             hash_strategy,
+            locked_build_resolutions,
             build_constraints,
             interpreter,
             settings,
@@ -236,6 +240,7 @@ impl CachedEnvironment {
     async fn from_resolution(
         resolution: &Resolution,
         hash_strategy: HashStrategy,
+        locked_build_resolutions: LockedBuildResolutions,
         build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
@@ -274,7 +279,47 @@ impl CachedEnvironment {
                     .distribution_id()
                     .cmp(&right.dist.distribution_id())
             });
-            cached_environment_resolution_hash(hash_digest(&distributions), &hash_strategy)
+            let resolution_hash =
+                cached_environment_resolution_hash(hash_digest(&distributions), &hash_strategy);
+
+            let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
+                settings.resolver.extra_build_dependencies.clone(),
+            )
+            .into_inner();
+            let mut locked_build_resolution_hashes = resolution
+                .distributions()
+                .filter_map(|distribution| {
+                    let ResolvedDist::Installable { dist, .. } = distribution else {
+                        return None;
+                    };
+                    let Dist::Source(source) = dist.as_ref() else {
+                        return None;
+                    };
+                    let package = BuildPackageKey::from_source_dist(
+                        dist.name().clone(),
+                        BuildableSource::Dist(source).version().cloned(),
+                        Some(source),
+                    );
+                    locked_build_resolutions
+                        .cache_key(
+                            &package,
+                            &settings.resolver.config_setting,
+                            &settings.resolver.config_settings_package,
+                            &extra_build_requires,
+                            &settings.resolver.extra_build_variables,
+                        )
+                        .map(|cache_key| cache_key.map(|cache_key| (package, cache_key)))
+                        .transpose()
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(ProjectError::from)?;
+            locked_build_resolution_hashes.sort();
+
+            if locked_build_resolution_hashes.is_empty() {
+                resolution_hash
+            } else {
+                hash_digest(&(resolution_hash, locked_build_resolution_hashes))
+            }
         };
 
         // Construct a hash for the environment.
@@ -321,6 +366,7 @@ impl CachedEnvironment {
             resolution,
             hash_strategy,
             Modifications::Exact,
+            locked_build_resolutions,
             build_constraints,
             settings.into(),
             client_builder,

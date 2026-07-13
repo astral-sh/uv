@@ -24,7 +24,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::{InstalledTools, Tool};
-use uv_types::{HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -401,6 +401,7 @@ async fn upgrade_tool(
                 &resolution,
                 hash_strategy,
                 Modifications::Exact,
+                LockedBuildResolutions::default(),
                 build_constraints,
                 (&settings).into(),
                 client_builder,
@@ -474,6 +475,7 @@ async fn upgrade_tool(
                     &resolution,
                     hash_strategy,
                     Modifications::Exact,
+                    LockedBuildResolutions::default(),
                     build_constraints,
                     (&settings).into(),
                     client_builder,
@@ -514,6 +516,7 @@ async fn upgrade_tool(
             &resolution.into(),
             HashStrategy::default(),
             Modifications::Exact,
+            LockedBuildResolutions::default(),
             build_constraints,
             (&settings).into(),
             client_builder,

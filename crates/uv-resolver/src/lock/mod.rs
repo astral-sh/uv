@@ -2374,7 +2374,9 @@ impl Lock {
     /// through the `dependencies` of each transitive build dep, evaluating markers
     /// at each edge. Executor tags and markers choose compatible artifacts and
     /// evaluate locked branches; they do not select a different build record. This
-    /// is consistent with how `to_resolution()` handles regular dependencies.
+    /// is consistent with how `to_resolution()` handles regular dependencies. When
+    /// `require_locked_build_resolutions` is enabled, selected source builds without a matching
+    /// build record are rejected instead of being resolved during installation.
     pub fn all_build_resolutions(
         &self,
         resolution: &Resolution,
@@ -2383,6 +2385,7 @@ impl Lock {
         build_options: &BuildOptions,
         target_markers: &MarkerEnvironment,
         executor_markers: &MarkerEnvironment,
+        require_locked_build_resolutions: bool,
     ) -> Result<BTreeMap<BuildPackageKey, LockedBuildResolution>, LockError> {
         let package_by_id = self.package_by_id();
         let package_for_resolved_dist = |resolved_dist: &ResolvedDist| {
@@ -2428,6 +2431,15 @@ impl Lock {
                 &runtime_package_ids,
                 BuildResolutionStage::Build,
             )?;
+            if require_locked_build_resolutions
+                && !build_options.no_build_package(&key.name)
+                && build_resolution_record.is_none()
+            {
+                return Err(LockErrorKind::UncapturedBuildResolution {
+                    name: key.name.clone(),
+                }
+                .into());
+            }
             let build_dependencies = build_resolution_record
                 .map_or(package.build_dependencies.as_slice(), |resolution| {
                     resolution.dependencies.as_slice()
@@ -10674,6 +10686,14 @@ enum LockErrorKind {
         id: PackageId,
         /// The build dependency that doesn't have a corresponding package entry.
         dependency: BuildDependency,
+    },
+    /// A selected source distribution has no captured build environment.
+    #[error(
+        "The lockfile does not contain build dependencies for `{name}`; run `uv lock --preview-features lock-build-dependencies` without disabling builds for this package"
+    )]
+    UncapturedBuildResolution {
+        /// The package that requires a build resolution.
+        name: PackageName,
     },
     /// An error that occurs when a hash is expected (or not) for a particular
     /// artifact, but one was not found (or was).

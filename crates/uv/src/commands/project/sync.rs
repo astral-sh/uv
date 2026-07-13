@@ -823,6 +823,8 @@ pub(crate) async fn do_sync(
             build_options,
             &marker_env,
             venv.interpreter().markers(),
+            preview.is_enabled(PreviewFeature::LockBuildDependencies)
+                || target.lock().supports_build_dependencies(),
         )?;
         LockedBuildResolutions::new(map)
     };

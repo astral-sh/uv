@@ -50,7 +50,10 @@ use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
-use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{
+    BuildIsolation, EmptyInstalledPackages, HashStrategy, LockedBuildResolutions,
+    SourceTreeEditablePolicy,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::{ExtraBuildDependency, PyProjectToml};
@@ -2579,6 +2582,7 @@ pub(crate) async fn sync_environment(
     resolution: &Resolution,
     hasher: HashStrategy,
     modifications: Modifications,
+    locked_build_resolutions: LockedBuildResolutions,
     build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
     client_builder: &BaseClientBuilder<'_>,
@@ -2678,7 +2682,8 @@ pub(crate) async fn sync_environment(
         workspace_cache,
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_locked_build_resolutions(locked_build_resolutions);
 
     // Sync the environment.
     pip::operations::install(
