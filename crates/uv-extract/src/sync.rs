@@ -1,17 +1,25 @@
+use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::vendor::CloneableSeekableReader;
+use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::{CompressionMethod, Error, insecure_no_validate, validate_archive_member_name};
 use async_zip::base::read::seek::ZipFileReader;
 use async_zip::error::ZipError;
 use futures::executor::block_on;
 use futures::io::{AllowStdIo, AsyncReadExt, AsyncWriteExt};
 use rayon::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::warn;
 use uv_configuration::initialize_rayon_once;
 use uv_warnings::warn_user_once;
+
+#[derive(Debug)]
+struct DuplicateFileEntry {
+    file_number: usize,
+    #[cfg(unix)]
+    mode: Option<u16>,
+}
 
 /// Unzip a `.zip` archive into the target directory.
 ///
@@ -26,6 +34,11 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
     )))?;
     let directories = Mutex::new(FxHashSet::default());
     let skip_validation = insecure_no_validate();
+    let duplicate_file_entries = if skip_validation {
+        FxHashSet::default()
+    } else {
+        duplicate_file_entries_to_skip(&archive)?
+    };
     // Initialize the threadpool with the user settings.
     initialize_rayon_once();
     (0..archive.file().entries().len())
@@ -74,6 +87,10 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
                     fs_err::create_dir_all(path).map_err(Error::Io)?;
                 }
                 return Ok(None);
+            }
+
+            if duplicate_file_entries.contains(&file_number) {
+                return Ok(Some((enclosed_name, entry.uncompressed_size())));
             }
 
             if let Some(parent) = path.parent() {
@@ -157,6 +174,125 @@ pub fn unzip(reader: fs_err::File, target: &Path) -> Result<Vec<(PathBuf, u64)>,
         .collect::<Result<_, Error>>()
 }
 
+fn duplicate_file_entries_to_skip<R>(
+    archive: &ZipFileReader<AllowStdIo<CloneableSeekableReader<R>>>,
+) -> Result<FxHashSet<usize>, Error>
+where
+    R: Read + Seek + HasLength,
+{
+    let mut entries_by_path: FxHashMap<PathBuf, Vec<DuplicateFileEntry>> = FxHashMap::default();
+
+    for (file_number, entry) in archive.file().entries().iter().enumerate() {
+        let file_name = match entry.filename().as_str() {
+            Ok(file_name) => file_name,
+            Err(ZipError::StringNotUtf8) => {
+                return Err(Error::CentralDirectoryEntryNotUtf8 {
+                    index: file_number as u64,
+                });
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        validate_archive_member_name(file_name)?;
+
+        let Some(enclosed_name) = crate::stream::enclosed_name(file_name) else {
+            continue;
+        };
+
+        if entry.dir()? {
+            continue;
+        }
+
+        entries_by_path
+            .entry(enclosed_name)
+            .or_default()
+            .push(DuplicateFileEntry {
+                file_number,
+                #[cfg(unix)]
+                mode: entry.unix_permissions(),
+            });
+    }
+
+    let mut skip = FxHashSet::default();
+    for (path, entries) in entries_by_path {
+        let Some((first, rest)) = entries.split_first() else {
+            continue;
+        };
+        if rest.is_empty() {
+            continue;
+        }
+
+        #[cfg(unix)]
+        {
+            let mut expected_mode = first.mode;
+            for entry in rest {
+                if let Some(mode) = entry.mode {
+                    match expected_mode {
+                        Some(expected) if expected != mode => {
+                            return Err(Error::DuplicateExecutableFileHeader { path });
+                        }
+                        Some(_) => {}
+                        None => expected_mode = Some(mode),
+                    }
+                }
+            }
+        }
+
+        let expected_contents = read_entry_contents(archive, first.file_number, &path)?;
+        for entry in rest {
+            let contents = read_entry_contents(archive, entry.file_number, &path)?;
+            if contents != expected_contents {
+                return Err(Error::DuplicateLocalFileHeader { path });
+            }
+            skip.insert(entry.file_number);
+        }
+    }
+
+    Ok(skip)
+}
+
+fn read_entry_contents<R>(
+    archive: &ZipFileReader<AllowStdIo<CloneableSeekableReader<R>>>,
+    file_number: usize,
+    path: &Path,
+) -> Result<Vec<u8>, Error>
+where
+    R: Read + Seek + HasLength,
+{
+    let mut archive = archive.clone();
+    let entry = archive.file().entries()[file_number].clone();
+    let expected_size = entry.uncompressed_size();
+    let capacity = usize::try_from(expected_size).unwrap_or_default();
+
+    let (contents, computed_crc32) = block_on(async {
+        let mut file = archive.reader_with_entry(file_number).await?;
+        let mut contents = Vec::with_capacity(capacity);
+        file.read_to_end(&mut contents)
+            .await
+            .map_err(Error::io_or_compression)?;
+        Ok::<_, Error>((contents, file.compute_hash()))
+    })?;
+
+    let computed_size = u64::try_from(contents.len()).unwrap_or(u64::MAX);
+    if computed_size != expected_size {
+        return Err(Error::BadUncompressedSize {
+            path: path.to_path_buf(),
+            computed: computed_size,
+            expected: expected_size,
+        });
+    }
+
+    if computed_crc32 != entry.crc32() {
+        return Err(Error::BadCrc32 {
+            path: path.to_path_buf(),
+            computed: computed_crc32,
+            expected: entry.crc32(),
+        });
+    }
+
+    Ok(contents)
+}
+
 /// Extract the top-level directory from an unpacked archive.
 ///
 /// The specification says:
@@ -179,5 +315,72 @@ pub fn strip_component(source: impl AsRef<Path>) -> Result<PathBuf, Error> {
                 .map(|entry| entry.file_name())
                 .collect(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+    use std::path::Path;
+
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures::executor::block_on;
+
+    use crate::Error;
+
+    fn zip_with_entries(entries: &[(&str, &[u8])]) -> tempfile::NamedTempFile {
+        let mut writer = ZipFileWriter::new(Vec::new());
+        for (path, contents) in entries {
+            let entry = ZipEntryBuilder::new((*path).into(), Compression::Stored);
+            block_on(writer.write_entry_whole(entry, contents)).unwrap();
+        }
+        let bytes = block_on(writer.close()).unwrap();
+
+        let mut archive = tempfile::NamedTempFile::new().unwrap();
+        archive.write_all(&bytes).unwrap();
+        archive.flush().unwrap();
+        archive
+    }
+
+    #[test]
+    fn rejects_duplicate_entries_with_conflicting_contents() {
+        let archive = zip_with_entries(&[
+            ("package/data.txt", b"first"),
+            ("package/data.txt", b"second"),
+        ]);
+        let target = tempfile::TempDir::new().unwrap();
+
+        let err = super::unzip(fs_err::File::open(archive.path()).unwrap(), target.path())
+            .expect_err("conflicting duplicate entries must be rejected");
+
+        match err {
+            Error::DuplicateLocalFileHeader { path } => {
+                assert_eq!(path, Path::new("package/data.txt"));
+            }
+            err => panic!("expected duplicate local file header error, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn allows_duplicate_entries_with_matching_contents() {
+        let archive =
+            zip_with_entries(&[("package/data.txt", b"same"), ("package/data.txt", b"same")]);
+        let target = tempfile::TempDir::new().unwrap();
+
+        let files = super::unzip(fs_err::File::open(archive.path()).unwrap(), target.path())
+            .expect("matching duplicate entries should be accepted");
+
+        assert_eq!(
+            fs_err::read_to_string(target.path().join("package/data.txt")).unwrap(),
+            "same"
+        );
+        assert_eq!(
+            files,
+            vec![
+                (Path::new("package/data.txt").to_path_buf(), 4),
+                (Path::new("package/data.txt").to_path_buf(), 4),
+            ]
+        );
     }
 }
