@@ -309,6 +309,9 @@ impl<'a> Planner<'a> {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
+        let locked_build_install = self
+            .locked_build_resolutions
+            .is_some_and(|resolutions| !resolutions.is_empty());
 
         // TODO(charlie): There are a few assumptions here that are hard to spot:
         //
@@ -452,6 +455,16 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
+                    // The registry index does not validate local revision pointers. During a
+                    // locked build, let the distribution database refresh mutable artifacts.
+                    if locked_build_install
+                        && hasher.get(dist.as_ref()).is_none()
+                        && wheel.best_wheel().file.url.to_url()?.scheme() == "file"
+                    {
+                        debug!("Must revalidate local build requirement: {dist}");
+                        remote.push(dist.clone());
+                        continue;
+                    }
                     if let Some(distribution) = registry_index.wheel(wheel, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
@@ -646,6 +659,14 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
+                    if locked_build_install
+                        && hasher.get(dist.as_ref()).is_none()
+                        && sdist.file.url.to_url()?.scheme() == "file"
+                    {
+                        debug!("Must revalidate local build requirement: {dist}");
+                        remote.push(dist.clone());
+                        continue;
+                    }
                     if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));

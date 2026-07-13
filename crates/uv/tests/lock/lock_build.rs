@@ -4182,6 +4182,140 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     Ok(())
 }
 
+/// Verify that changing a hashless build wheel in a local index invalidates the outer built wheel.
+#[test]
+fn lock_build_dependencies_invalidate_mutable_build_wheel_cache() -> Result<()> {
+    fn write_helper_wheel(path: &ChildPath, value: &str) -> Result<()> {
+        let mut zip = ZipFileWriter::new(Vec::new());
+        let entry = ZipEntryBuilder::new("helper.py".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
+        let entry = ZipEntryBuilder::new(
+            "helper-0.1.0.dist-info/METADATA".into(),
+            Compression::Stored,
+        );
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Metadata-Version: 2.3\nName: helper\nVersion: 0.1.0\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-0.1.0.dist-info/WHEEL".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(
+            entry,
+            b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        ))?;
+        let entry =
+            ZipEntryBuilder::new("helper-0.1.0.dist-info/RECORD".into(), Compression::Stored);
+        block_on(zip.write_entry_whole(entry, b""))?;
+        fs_err::write(path.path(), block_on(zip.close())?)?;
+
+        Ok(())
+    }
+
+    let context = uv_test::test_context!("3.12");
+
+    let links_dir = context.temp_dir.child("links");
+    links_dir.create_dir_all()?;
+    let helper_wheel = links_dir.child("helper-0.1.0-py3-none-any.whl");
+    write_helper_wheel(&helper_wheel, "first")?;
+
+    let dep_dir = context.temp_dir.child("dep");
+    dep_dir.create_dir_all()?;
+    dep_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "dep"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper==0.1.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#,
+    )?;
+    dep_dir.child("build_backend.py").write_str(
+        r#"
+from pathlib import Path
+from zipfile import ZipFile
+
+from helper import VALUE
+
+def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+    filename = "dep-0.1.0-py3-none-any.whl"
+    with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+        wheel.writestr("dep/__init__.py", f"VALUE = {VALUE!r}\n")
+        wheel.writestr(
+            "dep-0.1.0.dist-info/METADATA",
+            "Metadata-Version: 2.3\nName: dep\nVersion: 0.1.0\n",
+        )
+        wheel.writestr(
+            "dep-0.1.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
+    return filename
+"#,
+    )?;
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep"]
+
+        [tool.uv.sources]
+        dep = { path = "dep" }
+        "#,
+    )?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    let lock = context.read("uv.lock");
+    let helper = package_section(&lock, "helper");
+    assert!(!helper.contains("hash ="), "{helper}");
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "VALUE = 'first'\n"
+    );
+
+    write_helper_wheel(&helper_wheel, "second")?;
+    context
+        .sync()
+        .arg("--find-links")
+        .arg(links_dir.path())
+        .arg("--no-index")
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+    assert_eq!(
+        fs_err::read_to_string(context.site_packages().join("dep/__init__.py"))?,
+        "VALUE = 'second'\n"
+    );
+
+    Ok(())
+}
+
 /// Verify that build-only dependency edges are retained for runtime-shared packages.
 #[test]
 fn lock_build_dependencies_merge_runtime_shared_build_edges() -> Result<()> {
@@ -5519,7 +5653,7 @@ def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     ----- stdout -----
 
     ----- stderr -----
-    Prepared 2 packages in [TIME]
+    Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + builder==1.0.0
      + dep==0.1.0 (from file://[TEMP_DIR]/dep)

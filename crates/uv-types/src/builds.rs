@@ -7,7 +7,7 @@ use papaya::{HashMap, ResizeMode};
 use uv_cache_info::{CacheInfo, CacheInfoError};
 use uv_configuration::{BuildKind, NoSources};
 use uv_distribution_types::{
-    BuildInfo, ConfigSettings, Dist, ExtraBuildRequires, ExtraBuildVariables, Name,
+    BuildInfo, BuiltDist, ConfigSettings, Dist, ExtraBuildRequires, ExtraBuildVariables, Name,
     PackageConfigSettings, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_normalize::{ExtraName, PackageName};
@@ -521,6 +521,11 @@ impl LockedBuildResolutions {
         Self(map)
     }
 
+    /// Return whether there are no locked build resolutions.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Get the pre-built resolution for a package key.
     pub fn get(&self, package: &BuildPackageKey) -> Option<&LockedBuildResolution> {
         get_unambiguous_key(&self.0, package)
@@ -543,6 +548,7 @@ impl LockedBuildResolutions {
             extra_build_requires,
             extra_build_variables,
             &mut BTreeSet::new(),
+            &mut BTreeMap::new(),
         )
     }
 
@@ -554,97 +560,169 @@ impl LockedBuildResolutions {
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
         stack: &mut BTreeSet<BuildPackageKey>,
+        memo: &mut BTreeMap<BuildPackageKey, String>,
     ) -> Result<Option<String>, CacheInfoError> {
         let Some(resolution) = self.get(package) else {
             return Ok(None);
         };
-        if !stack.insert(package.clone()) {
+        if stack.contains(package) {
             return Ok(None);
         }
+        if let Some(cache_key) = memo.get(package) {
+            return Ok(Some(cache_key.clone()));
+        }
+        stack.insert(package.clone());
 
-        let mut distributions = resolution
+        let mut distributions = Vec::new();
+        let mut bootstrap_distributions = Vec::new();
+        for (bootstrap, distribution, hashes) in resolution
             .resolution
             .hashes()
-            .map(|(distribution, hashes)| -> Result<_, CacheInfoError> {
-                let mut hashes = hashes.to_vec();
-                hashes.sort();
+            .map(|(distribution, hashes)| (false, distribution, hashes))
+            .chain(
+                resolution
+                    .bootstrap_direct_dependencies
+                    .iter()
+                    .flatten()
+                    .flat_map(|dependency| dependency.resolution().hashes())
+                    .map(|(distribution, hashes)| (true, distribution, hashes)),
+            )
+        {
+            let mut hashes = hashes.to_vec();
+            hashes.sort();
 
-                let (build_info, cache_info, nested) =
-                    if let ResolvedDist::Installable { dist, version } = distribution
-                        && let Dist::Source(source) = dist.as_ref()
-                    {
-                        let name = distribution.name();
-                        let settings = config_settings_package.get(name).map_or_else(
-                            || config_settings.clone(),
-                            |settings| settings.clone().merge(config_settings.clone()),
-                        );
-                        let build_info = BuildInfo::from_settings(
-                            settings,
-                            extra_build_requires.get(name).cloned().unwrap_or_default(),
-                            extra_build_variables.get(name).cloned(),
-                        )
-                        .cache_shard();
-                        let nested_package = BuildPackageKey::from_source_dist(
-                            name.clone(),
-                            source.version().cloned().or_else(|| version.clone()),
-                            Some(source),
-                        );
-                        let nested = self.cache_key_with_stack(
-                            &nested_package,
-                            config_settings,
-                            config_settings_package,
-                            extra_build_requires,
-                            extra_build_variables,
-                            stack,
-                        )?;
-                        let cache_info = match source {
-                            SourceDist::Path(source) => {
-                                Some(CacheInfo::from_file(&source.install_path)?)
-                            }
-                            SourceDist::Directory(source) => {
-                                Some(CacheInfo::from_directory(&source.install_path)?)
-                            }
-                            SourceDist::Registry(_)
-                            | SourceDist::DirectUrl(_)
-                            | SourceDist::GitDirectory(_)
-                            | SourceDist::GitPath(_) => None,
-                        }
-                        .as_ref()
-                        .map(uv_cache_key::hash_digest);
-                        (build_info, cache_info, nested)
-                    } else {
-                        (None, None, None)
-                    };
+            let (build_info, nested) = if let ResolvedDist::Installable { dist, version } =
+                distribution
+                && let Dist::Source(source) = dist.as_ref()
+            {
+                let name = distribution.name();
+                let settings = config_settings_package.get(name).map_or_else(
+                    || config_settings.clone(),
+                    |settings| settings.clone().merge(config_settings.clone()),
+                );
+                let build_info = BuildInfo::from_settings(
+                    settings,
+                    extra_build_requires.get(name).cloned().unwrap_or_default(),
+                    extra_build_variables.get(name).cloned(),
+                )
+                .cache_shard();
+                let nested_package = BuildPackageKey::from_source_dist(
+                    name.clone(),
+                    source.version().cloned().or_else(|| version.clone()),
+                    Some(source),
+                );
+                let nested = self.cache_key_with_stack(
+                    &nested_package,
+                    config_settings,
+                    config_settings_package,
+                    extra_build_requires,
+                    extra_build_variables,
+                    stack,
+                    memo,
+                )?;
+                (build_info, nested)
+            } else {
+                (None, None)
+            };
 
-                let (kind, filename) = match distribution {
-                    ResolvedDist::Installable { dist, .. } => (
-                        match dist.as_ref() {
-                            Dist::Built(_) => "wheel",
-                            Dist::Source(_) => "sdist",
-                        },
-                        dist.file().map(|file| file.filename.to_string()),
-                    ),
-                    ResolvedDist::Installed { .. } => ("installed", None),
-                };
+            let (artifact_url, cache_info) = match distribution {
+                ResolvedDist::Installable { dist, .. } => {
+                    locked_build_artifact_info(dist, &hashes)?
+                }
+                ResolvedDist::Installed { .. } => (None, None),
+            };
 
-                Ok((
-                    distribution.to_string(),
-                    distribution
-                        .index()
-                        .map(|index| index.without_credentials().as_ref().to_string()),
-                    hashes,
-                    kind,
-                    filename,
-                    build_info,
-                    cache_info,
-                    nested,
-                ))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            let (kind, filename) = match distribution {
+                ResolvedDist::Installable { dist, .. } => (
+                    match dist.as_ref() {
+                        Dist::Built(_) => "wheel",
+                        Dist::Source(_) => "sdist",
+                    },
+                    dist.file().map(|file| file.filename.to_string()),
+                ),
+                ResolvedDist::Installed { .. } => ("installed", None),
+            };
+
+            let entry = (
+                distribution.to_string(),
+                distribution
+                    .index()
+                    .map(|index| index.without_credentials().as_ref().to_string()),
+                hashes,
+                kind,
+                filename,
+                artifact_url,
+                build_info,
+                cache_info,
+                nested,
+            );
+            if bootstrap {
+                bootstrap_distributions.push(entry);
+            } else {
+                distributions.push(entry);
+            }
+        }
         stack.remove(package);
         distributions.sort();
-        Ok(Some(uv_cache_key::hash_digest(&distributions)))
+        bootstrap_distributions.sort();
+        let cache_key = if resolution.bootstrap_direct_dependencies.is_some() {
+            uv_cache_key::hash_digest(&("bootstrap", distributions, bootstrap_distributions))
+        } else {
+            uv_cache_key::hash_digest(&distributions)
+        };
+        memo.insert(package.clone(), cache_key.clone());
+        Ok(Some(cache_key))
     }
+}
+
+fn locked_build_artifact_info(
+    dist: &Dist,
+    hashes: &[HashDigest],
+) -> Result<(Option<String>, Option<String>), CacheInfoError> {
+    let artifact_url = dist
+        .file()
+        .map(|file| file.url.to_url())
+        .transpose()
+        .map_err(|err| {
+            CacheInfoError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, err))
+        })?;
+
+    let cache_info = match dist {
+        Dist::Source(SourceDist::Path(source)) => Some(CacheInfo::from_file(&source.install_path)?),
+        Dist::Source(SourceDist::Directory(source)) => {
+            Some(CacheInfo::from_directory(&source.install_path)?)
+        }
+        Dist::Built(BuiltDist::Path(wheel)) if hashes.is_empty() => {
+            Some(CacheInfo::from_file(&wheel.install_path)?)
+        }
+        Dist::Built(BuiltDist::Registry(_)) | Dist::Source(SourceDist::Registry(_))
+            if hashes.is_empty() =>
+        {
+            if let Some(url) = artifact_url.as_ref()
+                && url.scheme() == "file"
+            {
+                let path = url.to_file_path().map_err(|()| {
+                    CacheInfoError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Expected a file URL, but received: {url}"),
+                    ))
+                })?;
+                Some(CacheInfo::from_file(path)?)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+    .as_ref()
+    .map(uv_cache_key::hash_digest);
+
+    let artifact_url = artifact_url.map(|mut url| {
+        url.remove_credentials();
+        url.to_string()
+    });
+
+    Ok((artifact_url, cache_info))
 }
 
 /// A list of `(name, version)` pairs representing preferred build dependency versions.
@@ -853,8 +931,203 @@ mod tests {
     }
 
     #[test]
-    fn locked_build_cache_key_includes_registry_without_credentials() {
-        fn locked_resolution(index: &str, filename: &str) -> LockedBuildResolution {
+    fn locked_build_cache_key_handles_shared_nested_resolutions() {
+        fn source_dist(name: &str) -> (BuildPackageKey, ResolvedDist) {
+            let name = PackageName::from_str(name).expect("valid package name");
+            let version = Version::from_str("1.0.0").expect("valid version");
+            let filename = format!("{name}-{version}.tar.gz");
+            let source = SourceDist::Registry(RegistrySourceDist {
+                name: name.clone(),
+                version: version.clone(),
+                file: Box::new(File {
+                    dist_info_metadata: false,
+                    filename: filename.clone().into(),
+                    hashes: HashDigests::empty(),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: FileLocation::new(
+                        format!("https://files.example/{filename}").into(),
+                        &"https://files.example/".into(),
+                    ),
+                    yanked: None,
+                    zstd: None,
+                }),
+                ext: SourceDistExtension::TarGz,
+                index: IndexUrl::from_str("https://example.com/simple").expect("valid index"),
+                wheels: vec![],
+            });
+            let key = BuildPackageKey::from_source_dist(name, Some(version.clone()), Some(&source));
+            let dist = ResolvedDist::Installable {
+                dist: Arc::new(Dist::Source(source)),
+                version: Some(version),
+            };
+            (key, dist)
+        }
+
+        fn locked_resolution(dependencies: &[String]) -> LockedBuildResolution {
+            let mut graph = petgraph::graph::DiGraph::new();
+            for dependency in dependencies {
+                let (_, dist) = source_dist(dependency);
+                graph.add_node(Node::Dist {
+                    dist,
+                    hashes: HashDigests::empty(),
+                    install: true,
+                });
+            }
+            LockedBuildResolution::new(Resolution::new(graph), Vec::new(), None)
+        }
+
+        const DEPTH: usize = 24;
+        let names = |layer| {
+            [
+                format!("layer-{layer}-left"),
+                format!("layer-{layer}-right"),
+            ]
+        };
+        let package = package_key();
+        let mut resolutions = BTreeMap::from([(package.clone(), locked_resolution(&names(0)))]);
+
+        for layer in 0..DEPTH {
+            let dependencies = if layer + 1 == DEPTH {
+                Vec::new()
+            } else {
+                names(layer + 1).into()
+            };
+            for name in names(layer) {
+                let (key, _) = source_dist(&name);
+                resolutions.insert(key, locked_resolution(&dependencies));
+            }
+        }
+
+        // Each layer shares its two nested resolutions. Without per-call memoization, every
+        // layer doubles the traversal and this graph requires more than 16 million visits.
+        assert!(
+            LockedBuildResolutions::new(resolutions)
+                .cache_key(
+                    &package,
+                    &ConfigSettings::default(),
+                    &PackageConfigSettings::default(),
+                    &ExtraBuildRequires::default(),
+                    &ExtraBuildVariables::default(),
+                )
+                .expect("readable cache info")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn locked_build_cache_key_includes_bootstrap_resolution() {
+        fn bootstrap_dependency(artifact_url: &str) -> LockedBuildDependency {
+            let version = Version::from_str("1.0.0").expect("valid version");
+            let filename = "helper-1.0.0-py3-none-any.whl";
+            let dist = ResolvedDist::Installable {
+                dist: Arc::new(Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                    wheels: vec![RegistryBuiltWheel {
+                        filename: WheelFilename::from_str(filename).expect("valid wheel filename"),
+                        file: Box::new(File {
+                            dist_info_metadata: false,
+                            filename: filename.into(),
+                            hashes: HashDigests::empty(),
+                            requires_python: None,
+                            size: None,
+                            upload_time_utc_ms: None,
+                            url: FileLocation::new(
+                                format!("{artifact_url}/{filename}").into(),
+                                &format!("{artifact_url}/").into(),
+                            ),
+                            yanked: None,
+                            zstd: None,
+                        }),
+                        index: IndexUrl::from_str("https://example.com/simple")
+                            .expect("valid index"),
+                    }],
+                    best_wheel_index: 0,
+                    sdist: None,
+                }))),
+                version: Some(version),
+            };
+            let mut graph = petgraph::graph::DiGraph::new();
+            graph.add_node(Node::Dist {
+                dist: dist.clone(),
+                hashes: HashDigests::empty(),
+                install: true,
+            });
+            LockedBuildDependency::new(dist, BTreeSet::new(), Resolution::new(graph))
+        }
+
+        let package = package_key();
+        let cache_key = |bootstrap| {
+            LockedBuildResolutions::new(BTreeMap::from([(
+                package.clone(),
+                LockedBuildResolution::new(Resolution::default(), Vec::new(), None)
+                    .with_bootstrap_direct_dependencies(bootstrap),
+            )]))
+            .cache_key(
+                &package,
+                &ConfigSettings::default(),
+                &PackageConfigSettings::default(),
+                &ExtraBuildRequires::default(),
+                &ExtraBuildVariables::default(),
+            )
+            .expect("readable cache info")
+        };
+
+        assert_ne!(
+            cache_key(vec![bootstrap_dependency("https://one-files.example")]),
+            cache_key(vec![bootstrap_dependency("https://two-files.example")])
+        );
+        assert_ne!(
+            cache_key(Vec::new()),
+            LockedBuildResolutions::new(BTreeMap::from([(
+                package.clone(),
+                LockedBuildResolution::new(Resolution::default(), Vec::new(), None),
+            )]))
+            .cache_key(
+                &package,
+                &ConfigSettings::default(),
+                &PackageConfigSettings::default(),
+                &ExtraBuildRequires::default(),
+                &ExtraBuildVariables::default(),
+            )
+            .expect("readable cache info")
+        );
+
+        let staged_cache_key = |build: LockedBuildDependency, bootstrap: LockedBuildDependency| {
+            LockedBuildResolutions::new(BTreeMap::from([(
+                package.clone(),
+                LockedBuildResolution::new(build.resolution().clone(), Vec::new(), None)
+                    .with_bootstrap_direct_dependencies(vec![bootstrap]),
+            )]))
+            .cache_key(
+                &package,
+                &ConfigSettings::default(),
+                &PackageConfigSettings::default(),
+                &ExtraBuildRequires::default(),
+                &ExtraBuildVariables::default(),
+            )
+            .expect("readable cache info")
+        };
+
+        assert_ne!(
+            staged_cache_key(
+                bootstrap_dependency("https://one-files.example"),
+                bootstrap_dependency("https://two-files.example")
+            ),
+            staged_cache_key(
+                bootstrap_dependency("https://two-files.example"),
+                bootstrap_dependency("https://one-files.example")
+            )
+        );
+    }
+
+    #[test]
+    fn locked_build_cache_key_includes_registry_artifact_without_credentials() {
+        fn locked_resolution(
+            index: &str,
+            artifact_url: &str,
+            filename: &str,
+        ) -> LockedBuildResolution {
             let name = PackageName::from_str("helper").expect("valid package name");
             let version = Version::from_str("1.0.0").expect("valid version");
             let index = IndexUrl::from_str(index).expect("valid index");
@@ -866,8 +1139,8 @@ mod tests {
                 size: None,
                 upload_time_utc_ms: None,
                 url: FileLocation::new(
-                    format!("https://files.example/{filename}").into(),
-                    &"https://files.example/".into(),
+                    format!("{artifact_url}/{filename}").into(),
+                    &format!("{artifact_url}/").into(),
                 ),
                 yanked: None,
                 zstd: None,
@@ -908,10 +1181,10 @@ mod tests {
         }
 
         let package = package_key();
-        let cache_key = |index, filename, package_settings| {
+        let cache_key = |index, artifact_url, filename, package_settings| {
             LockedBuildResolutions::new(BTreeMap::from([(
                 package.clone(),
-                locked_resolution(index, filename),
+                locked_resolution(index, artifact_url, filename),
             )]))
             .cache_key(
                 &package,
@@ -932,11 +1205,13 @@ mod tests {
         assert_eq!(
             cache_key(
                 "https://user:password@one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             ),
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             )
@@ -944,11 +1219,13 @@ mod tests {
         assert_ne!(
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             ),
             cache_key(
                 "https://two.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             )
@@ -956,11 +1233,13 @@ mod tests {
         assert_ne!(
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             ),
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &custom_settings
             )
@@ -968,11 +1247,13 @@ mod tests {
         assert_ne!(
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0.tar.gz",
                 &default_settings
             ),
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0-py3-none-any.whl",
                 &default_settings
             )
@@ -980,12 +1261,56 @@ mod tests {
         assert_ne!(
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0-py3-none-any.whl",
                 &default_settings
             ),
             cache_key(
                 "https://one.example/simple",
+                "https://files.example",
                 "helper-1.0.0-py3-none-macosx_11_0_arm64.whl",
+                &default_settings
+            )
+        );
+        assert_eq!(
+            cache_key(
+                "https://one.example/simple",
+                "https://user:password@files.example",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "https://files.example",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "https://one-files.example",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "https://two-files.example",
+                "helper-1.0.0.tar.gz",
+                &default_settings
+            )
+        );
+        assert_ne!(
+            cache_key(
+                "https://one.example/simple",
+                "https://one-files.example",
+                "helper-1.0.0-py3-none-any.whl",
+                &default_settings
+            ),
+            cache_key(
+                "https://one.example/simple",
+                "https://two-files.example",
+                "helper-1.0.0-py3-none-any.whl",
                 &default_settings
             )
         );
