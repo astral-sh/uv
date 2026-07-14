@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
@@ -19,9 +20,10 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, Diagnostic, Dist, InstalledDist, InstalledVersion, LocalDist,
-    NameRequirementSpecification, Requirement, ResolutionDiagnostic, UnresolvedRequirement,
-    UnresolvedRequirementSpecification, VersionOrUrlRef,
+    CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
+    ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
+    UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
@@ -44,7 +46,9 @@ use uv_resolver::{
     Preferences, PythonRequirement, Resolver, ResolverEnvironment, ResolverOutput, UpgradePackages,
 };
 use uv_tool::InstalledTools;
-use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_types::{
+    BuildContext, HashStrategy, InFlight, InstalledPackagesProvider, LockedBuildResolutions,
+};
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -563,6 +567,108 @@ pub(crate) enum BytecodeCompilation {
     Installed,
 }
 
+/// An installation plan and the time required to create it.
+pub(crate) struct InstallationPlan {
+    plan: Plan,
+    elapsed: Duration,
+}
+
+impl InstallationPlan {
+    /// Determine the changes required to make an environment satisfy a resolution.
+    pub(crate) fn build(
+        resolution: &Resolution,
+        site_packages: SitePackages,
+        installation: InstallationStrategy,
+        reinstall: &Reinstall,
+        build_options: &BuildOptions,
+        hasher: &HashStrategy,
+        index_locations: &IndexLocations,
+        config_settings: &ConfigSettings,
+        config_settings_package: &PackageConfigSettings,
+        extra_build_requires: &ExtraBuildRequires,
+        extra_build_variables: &ExtraBuildVariables,
+        locked_build_resolutions: &LockedBuildResolutions,
+        cache: &Cache,
+        venv: &PythonEnvironment,
+        tags: &Tags,
+    ) -> Result<Self, Error> {
+        let start = Instant::now();
+        let plan = Planner::new(resolution)
+            .with_locked_build_resolutions(locked_build_resolutions)
+            .build(
+                site_packages,
+                installation,
+                reinstall,
+                build_options,
+                hasher,
+                index_locations,
+                config_settings,
+                config_settings_package,
+                extra_build_requires,
+                extra_build_variables,
+                cache,
+                venv,
+                tags,
+            )
+            .context("Failed to determine installation plan")?;
+
+        Ok(Self {
+            plan,
+            elapsed: start.elapsed(),
+        })
+    }
+
+    /// Returns `true` if executing the plan would not modify the environment.
+    pub(crate) fn is_noop(
+        &self,
+        modifications: Modifications,
+        compile: Option<BytecodeCompilation>,
+        dry_run: DryRun,
+    ) -> bool {
+        self.plan.cached.is_empty()
+            && self.plan.remote.is_empty()
+            && self.plan.reinstalls.is_empty()
+            && (self.plan.extraneous.is_empty()
+                || matches!(modifications, Modifications::Sufficient))
+            && (compile.is_none() || dry_run.enabled())
+    }
+
+    /// Complete an installation that was determined to be a no-op.
+    pub(crate) fn finish_noop(
+        self,
+        resolution: &Resolution,
+        modifications: Modifications,
+        compile: Option<BytecodeCompilation>,
+        logger: &dyn InstallLogger,
+        dry_run: DryRun,
+        printer: Printer,
+    ) -> Result<Changelog, Error> {
+        debug_assert!(self.is_noop(modifications, compile, dry_run));
+
+        let (plan, start) = self.into_parts();
+        if dry_run.enabled() {
+            report_dry_run(
+                dry_run,
+                resolution,
+                plan,
+                modifications,
+                start,
+                logger,
+                printer,
+            )
+        } else {
+            logger.on_check(resolution.len(), start, printer, dry_run)?;
+            Ok(Changelog::default())
+        }
+    }
+
+    fn into_parts(self) -> (Plan, Instant) {
+        let now = Instant::now();
+        let start = now.checked_sub(self.elapsed).unwrap_or(now);
+        (self.plan, start)
+    }
+}
+
 /// Install a set of requirements into the current environment.
 ///
 /// Returns a [`Changelog`] summarizing the changes made to the environment.
@@ -589,156 +695,200 @@ pub(crate) async fn install(
     printer: Printer,
     preview: Preview,
 ) -> Result<Changelog, Error> {
-    let start = std::time::Instant::now();
+    let plan = InstallationPlan::build(
+        resolution,
+        site_packages,
+        installation,
+        reinstall,
+        build_options,
+        hasher,
+        build_dispatch.locations(),
+        build_dispatch.config_settings(),
+        build_dispatch.config_settings_package(),
+        build_dispatch.extra_build_requires(),
+        build_dispatch.extra_build_variables(),
+        build_dispatch.locked_build_resolutions(),
+        cache,
+        venv,
+        tags,
+    )?;
 
-    // Partition into those that should be linked from the cache (`local`), those that need to be
-    // downloaded (`remote`), and those that should be removed (`extraneous`).
-    let plan = Planner::new(resolution)
-        .with_locked_build_resolutions(build_dispatch.locked_build_resolutions())
-        .build(
-            site_packages,
-            installation,
-            reinstall,
-            build_options,
-            hasher,
-            build_dispatch.locations(),
-            build_dispatch.config_settings(),
-            build_dispatch.config_settings_package(),
-            build_dispatch.extra_build_requires(),
-            build_dispatch.extra_build_variables(),
-            cache,
-            venv,
-            tags,
-        )
-        .context("Failed to determine installation plan")?;
+    plan.execute(
+        resolution,
+        modifications,
+        build_options,
+        link_mode,
+        compile,
+        hasher,
+        tags,
+        client,
+        in_flight,
+        concurrency,
+        build_dispatch,
+        cache,
+        venv,
+        logger,
+        installer_metadata,
+        dry_run,
+        printer,
+        preview,
+    )
+    .await
+}
 
-    if dry_run.enabled() {
-        return report_dry_run(
-            dry_run,
-            resolution,
-            plan,
-            modifications,
-            start,
-            logger.as_ref(),
-            printer,
-        );
-    }
+impl InstallationPlan {
+    /// Execute a previously computed installation plan.
+    pub(crate) async fn execute(
+        self,
+        resolution: &Resolution,
+        modifications: Modifications,
+        build_options: &BuildOptions,
+        link_mode: LinkMode,
+        compile: Option<BytecodeCompilation>,
+        hasher: &HashStrategy,
+        tags: &Tags,
+        client: &RegistryClient,
+        in_flight: &InFlight,
+        concurrency: &Concurrency,
+        build_dispatch: &BuildDispatch<'_>,
+        cache: &Cache,
+        venv: &PythonEnvironment,
+        logger: Box<dyn InstallLogger>,
+        installer_metadata: bool,
+        dry_run: DryRun,
+        printer: Printer,
+        preview: Preview,
+    ) -> Result<Changelog, Error> {
+        let (plan, start) = self.into_parts();
 
-    let Plan {
-        cached,
-        remote,
-        reinstalls,
-        extraneous,
-    } = plan;
+        if dry_run.enabled() {
+            return report_dry_run(
+                dry_run,
+                resolution,
+                plan,
+                modifications,
+                start,
+                logger.as_ref(),
+                printer,
+            );
+        }
 
-    // If we're in `install` mode, ignore any extraneous distributions.
-    let extraneous = match modifications {
-        Modifications::Sufficient => vec![],
-        Modifications::Exact => extraneous,
-    };
+        let Plan {
+            cached,
+            remote,
+            reinstalls,
+            extraneous,
+        } = plan;
 
-    // Nothing to do.
-    if remote.is_empty()
-        && cached.is_empty()
-        && reinstalls.is_empty()
-        && extraneous.is_empty()
-        && compile.is_none()
-    {
-        logger.on_check(resolution.len(), start, printer, dry_run)?;
-        return Ok(Changelog::default());
-    }
+        // If we're in `install` mode, ignore any extraneous distributions.
+        let extraneous = match modifications {
+            Modifications::Sufficient => vec![],
+            Modifications::Exact => extraneous,
+        };
 
-    // Partition into two sets: those that require build isolation, and those that disable it. This
-    // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
-    // `--no-build-isolation` packages "access" to the rest of the environment.
-    let (isolated_phase, shared_phase) = Plan {
-        cached,
-        remote,
-        reinstalls,
-        extraneous,
-    }
-    .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
+        // Nothing to do.
+        if remote.is_empty()
+            && cached.is_empty()
+            && reinstalls.is_empty()
+            && extraneous.is_empty()
+            && compile.is_none()
+        {
+            logger.on_check(resolution.len(), start, printer, dry_run)?;
+            return Ok(Changelog::default());
+        }
 
-    let has_isolated_phase = !isolated_phase.is_empty();
-    let has_shared_phase = !shared_phase.is_empty();
+        // Partition into two sets: those that require build isolation, and those that disable it. This
+        // is effectively a heuristic to make `--no-build-isolation` work "more often" by way of giving
+        // `--no-build-isolation` packages "access" to the rest of the environment.
+        let (isolated_phase, shared_phase) = Plan {
+            cached,
+            remote,
+            reinstalls,
+            extraneous,
+        }
+        .partition(|name| build_dispatch.build_isolation().is_isolated(Some(name)));
 
-    let mut installs = vec![];
-    let mut uninstalls = vec![];
+        let has_isolated_phase = !isolated_phase.is_empty();
+        let has_shared_phase = !shared_phase.is_empty();
 
-    // Execute the isolated-build phase.
-    if has_isolated_phase {
-        let (isolated_installs, isolated_uninstalls) = execute_plan(
-            isolated_phase,
-            None,
-            resolution,
-            build_options,
-            link_mode,
-            hasher,
-            tags,
-            client,
-            in_flight,
-            concurrency,
-            build_dispatch,
-            cache,
-            venv,
-            logger.as_ref(),
-            installer_metadata,
-            printer,
-            preview,
-        )
-        .await?;
-        installs.extend(isolated_installs);
-        uninstalls.extend(isolated_uninstalls);
-    }
+        let mut installs = vec![];
+        let mut uninstalls = vec![];
 
-    if has_shared_phase {
-        let (shared_installs, shared_uninstalls) = execute_plan(
-            shared_phase,
-            if has_isolated_phase {
-                Some(InstallPhase::Shared)
-            } else {
-                None
-            },
-            resolution,
-            build_options,
-            link_mode,
-            hasher,
-            tags,
-            client,
-            in_flight,
-            concurrency,
-            build_dispatch,
-            cache,
-            venv,
-            logger.as_ref(),
-            installer_metadata,
-            printer,
-            preview,
-        )
-        .await?;
-        installs.extend(shared_installs);
-        uninstalls.extend(shared_uninstalls);
-    }
+        // Execute the isolated-build phase.
+        if has_isolated_phase {
+            let (isolated_installs, isolated_uninstalls) = execute_plan(
+                isolated_phase,
+                None,
+                resolution,
+                build_options,
+                link_mode,
+                hasher,
+                tags,
+                client,
+                in_flight,
+                concurrency,
+                build_dispatch,
+                cache,
+                venv,
+                logger.as_ref(),
+                installer_metadata,
+                printer,
+                preview,
+            )
+            .await?;
+            installs.extend(isolated_installs);
+            uninstalls.extend(isolated_uninstalls);
+        }
 
-    if let Some(compile) = compile {
-        match compile {
-            BytecodeCompilation::All => {
-                compile_bytecode(venv, concurrency, cache, printer).await?;
-            }
-            BytecodeCompilation::Installed => {
-                let files = python_source_files_for_installs(venv, &installs);
-                compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+        if has_shared_phase {
+            let (shared_installs, shared_uninstalls) = execute_plan(
+                shared_phase,
+                if has_isolated_phase {
+                    Some(InstallPhase::Shared)
+                } else {
+                    None
+                },
+                resolution,
+                build_options,
+                link_mode,
+                hasher,
+                tags,
+                client,
+                in_flight,
+                concurrency,
+                build_dispatch,
+                cache,
+                venv,
+                logger.as_ref(),
+                installer_metadata,
+                printer,
+                preview,
+            )
+            .await?;
+            installs.extend(shared_installs);
+            uninstalls.extend(shared_uninstalls);
+        }
+
+        if let Some(compile) = compile {
+            match compile {
+                BytecodeCompilation::All => {
+                    compile_bytecode(venv, concurrency, cache, printer).await?;
+                }
+                BytecodeCompilation::Installed => {
+                    let files = python_source_files_for_installs(venv, &installs);
+                    compile_bytecode_files(files, venv, concurrency, cache, printer).await?;
+                }
             }
         }
+
+        // Construct a summary of the changes made to the environment.
+        let changelog = Changelog::from_local(installs, uninstalls);
+
+        // Notify the user of any environment modifications.
+        logger.on_complete(&changelog, printer, dry_run)?;
+
+        Ok(changelog)
     }
-
-    // Construct a summary of the changes made to the environment.
-    let changelog = Changelog::from_local(installs, uninstalls);
-
-    // Notify the user of any environment modifications.
-    logger.on_complete(&changelog, printer, dry_run)?;
-
-    Ok(changelog)
 }
 
 type PythonSourceFileIterator = Box<dyn Iterator<Item = anyhow::Result<PathBuf>>>;

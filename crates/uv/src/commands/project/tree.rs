@@ -60,11 +60,11 @@ pub(crate) async fn tree(
     concurrency: Concurrency,
     no_config: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
-    let workspace_cache = WorkspaceCache::default();
     let virtual_project;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
@@ -73,7 +73,7 @@ pub(crate) async fn tree(
             project_dir,
             &DiscoveryOptions::default(),
             cache,
-            &workspace_cache,
+            workspace_cache,
         )
         .await?;
         LockTarget::Workspace(virtual_project.workspace())
@@ -159,7 +159,7 @@ pub(crate) async fn tree(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )

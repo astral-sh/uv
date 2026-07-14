@@ -339,6 +339,19 @@ fn frozen() -> Result<()> {
      + sniffio==1.3.1
     ");
 
+    // A no-op frozen sync should determine the installation plan without constructing a registry
+    // client, so the `uv_client::base_client` debug target emits no messages.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::RUST_LOG, "uv_client::base_client=debug"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 3 packages in [TIME]
+    ");
+
     Ok(())
 }
 
@@ -1511,12 +1524,23 @@ fn sync_non_project_frozen() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    // Reuse the complete workspace discovered while resolving settings for the partial frozen
+    // discovery.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--frozen")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `foo`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/foo`
+    TRACE Processing workspace member: `bar`
+    DEBUG Adding discovered workspace member: `[TEMP_DIR]/bar`
+    DEBUG Found project root: `[TEMP_DIR]/`
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + typing-extensions==4.10.0
@@ -5394,7 +5418,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Excluding a non-existing extra when requesting all extras should fail.
@@ -5405,7 +5429,7 @@ fn sync_non_existent_extra() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     Ok(())
@@ -5435,7 +5459,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Excluding a non-existing extra when requesting all extras should fail.
@@ -5446,7 +5470,7 @@ fn sync_non_existent_extra_no_optional_dependencies() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: Extra `baz` is not defined in the project's `optional-dependencies` table
+    error: Extra `baz` is not defined in the `optional-dependencies` table for `project`
     ");
 
     Ok(())
@@ -5657,7 +5681,7 @@ fn sync_non_existent_extra_workspace_member() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    error: Extra `async` is not defined in the `optional-dependencies` table for `project`
     ");
 
     // Unless we sync from the child directory.
@@ -5757,7 +5781,7 @@ fn sync_non_existent_extra_non_project_workspace() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    error: Extra `async` is not defined in the project's `optional-dependencies` table
+    error: Extra `async` is not defined in the `optional-dependencies` table for `other`
     ");
 
     Ok(())
@@ -6067,15 +6091,30 @@ fn no_install_workspace() -> Result<()> {
 
     fs_err::remove_dir_all(&context.venv)?;
 
-    // We don't require the `pyproject.toml` for non-root members, if `--frozen` is provided.
+    // We don't require the `pyproject.toml` for non-root members, if `--frozen` is provided. The
+    // failed complete discovery while resolving settings must not prevent a fresh partial
+    // discovery from ignoring the missing member.
     fs_err::remove_file(child.join("pyproject.toml"))?;
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-install-workspace").arg("--frozen"), @"
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-install-workspace")
+        .arg("--frozen")
+        .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `child`
+    DEBUG Found project root: `[TEMP_DIR]/`
+    DEBUG Found workspace root: `[TEMP_DIR]/`
+    TRACE Discovering workspace members for: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    TRACE Processing workspace member: `child`
+    DEBUG Ignoring missing workspace member: `[TEMP_DIR]/child`
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Installed 4 packages in [TIME]

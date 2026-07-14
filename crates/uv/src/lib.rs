@@ -615,7 +615,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
     }
 
-    let workspace_cache = WorkspaceCache::default();
+    // Workspace discovery excludes the cache root, so only reuse the earlier discovery when the
+    // resolved cache has the same root.
+    let workspace_cache = if cache.root() == discovery_cache.root() {
+        workspace_cache
+    } else {
+        WorkspaceCache::default()
+    };
 
     // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
@@ -2673,8 +2679,13 @@ async fn run_project(
                 .network_settings
                 .check_refresh_conflict(&args.refresh);
 
-            // Initialize the cache.
-            let cache = cache.init().await?.with_refresh(
+            // Reading a project version only accesses `pyproject.toml` or the lockfile.
+            let cache = if args.value.is_none() && args.bump.is_empty() {
+                cache
+            } else {
+                cache.init().await?
+            }
+            .with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
@@ -2750,6 +2761,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2799,6 +2811,7 @@ async fn run_project(
                 no_config,
                 globals.quiet > 0,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -2824,6 +2837,7 @@ async fn run_project(
                 args.show_version,
                 client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.no_project,
@@ -2913,6 +2927,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.output_format,

@@ -12,8 +12,7 @@ use uv_cli::version::ProjectVersionInfo;
 use uv_cli::{VersionBump, VersionBumpSpec, VersionFormat};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    InstallOptions,
+    Concurrency, DependencyGroups, DryRun, ExtrasSpecification, InstallOptions,
 };
 use uv_fs::Simplified;
 use uv_normalize::DefaultExtras;
@@ -35,6 +34,7 @@ use crate::commands::pip::operations::Modifications;
 use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
+use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     LinkErrorReporting, ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState,
     WorkspacePython, default_dependency_groups,
@@ -122,17 +122,10 @@ pub(crate) async fn project_version(
             return Box::pin(print_frozen_version(
                 project,
                 &name,
-                project_dir,
                 frozen_source,
-                active,
-                python,
-                install_mirrors,
                 &settings,
                 client_builder,
-                python_preference,
-                python_downloads,
                 &concurrency,
-                no_config,
                 cache,
                 workspace_cache,
                 short,
@@ -474,17 +467,10 @@ fn update_project(
 async fn print_frozen_version(
     project: VirtualProject,
     name: &PackageName,
-    project_dir: &Path,
     frozen_source: FrozenSource,
-    active: Option<bool>,
-    python: Option<String>,
-    install_mirrors: PythonInstallMirrors,
     settings: &ResolverInstallerSettings,
     client_builder: BaseClientBuilder<'_>,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
     concurrency: &Concurrency,
-    no_config: bool,
     cache: &Cache,
     workspace_cache: &WorkspaceCache,
     short: bool,
@@ -492,33 +478,7 @@ async fn print_frozen_version(
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
-    // Discover the interpreter (this is the same interpreter --no-sync uses).
-    let groups = DependencyGroupsWithDefaults::none();
-    let workspace_python = WorkspacePython::from_request(
-        python.as_deref().map(PythonRequest::parse),
-        Some(project.workspace()),
-        &groups,
-        project_dir,
-        no_config,
-    )
-    .await?;
-    let interpreter = ProjectInterpreter::discover(
-        project.workspace(),
-        &groups,
-        workspace_python,
-        &client_builder,
-        python_preference,
-        python_downloads,
-        &install_mirrors,
-        false,
-        active,
-        cache,
-        printer,
-    )
-    .await?
-    .into_interpreter();
-
-    let target = AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)));
+    let target = LockTarget::Workspace(project.workspace());
 
     // Initialize any shared state.
     let state = UniversalState::default();
@@ -537,7 +497,7 @@ async fn print_frozen_version(
             printer,
             preview,
         )
-        .execute((&target).into()),
+        .execute(target),
     )
     .await
     {

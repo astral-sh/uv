@@ -236,8 +236,8 @@ pub(crate) enum ProjectError {
     )]
     MissingDefaultGroup(GroupName),
 
-    #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
-    MissingExtraProject(ExtraName),
+    #[error("Extra `{0}` is not defined in the `optional-dependencies` table for `{1}`")]
+    MissingExtraProject(ExtraName, PackageName),
 
     #[error("Extra `{0}` is not defined in any project's `optional-dependencies` table")]
     MissingExtraProjects(ExtraName),
