@@ -313,6 +313,7 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            self.unlocked_build_cache_key,
         );
         let built_index = BuiltWheelIndex::new(
             cache,
@@ -322,6 +323,7 @@ impl<'a> Planner<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            self.unlocked_build_cache_key,
         );
 
         let mut cached = vec![];
@@ -380,6 +382,7 @@ impl<'a> Planner<'a> {
                         .transpose()
                 })
                 .transpose()?;
+            let has_locked_build_resolution = build_resolution_cache_key.is_some();
             let build_resolution_cache_key = build_resolution_cache_key.or_else(|| {
                 let source_built = match dist {
                     ResolvedDist::Installable { dist, .. } => {
@@ -518,12 +521,9 @@ impl<'a> Planner<'a> {
                 continue;
             }
 
-            // The built-wheel indexes cannot distinguish legacy entries from entries built with
-            // a separately keyed build environment. Let the distribution database select the
-            // correctly sharded wheel, or revalidate any transitive build requirements, instead.
-            if build_resolution_cache_key.is_some()
-                || matches!(dist.as_ref(), Dist::Source(_)) && cache.must_revalidate_any()
-            {
+            // Locked build resolutions are keyed per source, so let the distribution database
+            // select the corresponding shard. Unlocked shards are indexed above.
+            if has_locked_build_resolution {
                 debug!("Using distribution database for source distribution: {dist}");
                 remote.push(dist.clone());
                 continue;

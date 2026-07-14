@@ -567,8 +567,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .cache()
             .freshness(
                 &CacheEntry::from_path(built_wheel.target.as_ref()),
-                None,
-                None,
+                Some(dist.name()),
+                BuildableSource::Dist(dist).source_tree(),
             )
             .map_err(Error::CacheRead)?
             .is_fresh()

@@ -29,6 +29,7 @@ pub struct BuiltWheelIndex<'a> {
     config_settings_package: &'a PackageConfigSettings,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
+    unlocked_build_cache_key: Option<&'a str>,
 }
 
 impl<'a> BuiltWheelIndex<'a> {
@@ -41,6 +42,7 @@ impl<'a> BuiltWheelIndex<'a> {
         config_settings_package: &'a PackageConfigSettings,
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
+        unlocked_build_cache_key: Option<&'a str>,
     ) -> Self {
         Self {
             cache,
@@ -50,6 +52,7 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            unlocked_build_cache_key,
         }
     }
 
@@ -86,7 +89,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_locked_build_resolution(self.unlocked_build_cache_key.map(str::to_string));
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -138,7 +142,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_locked_build_resolution(self.unlocked_build_cache_key.map(str::to_string));
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -192,7 +197,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_locked_build_resolution(self.unlocked_build_cache_key.map(str::to_string));
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -225,7 +231,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_locked_build_resolution(self.unlocked_build_cache_key.map(str::to_string));
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -270,7 +277,8 @@ impl<'a> BuiltWheelIndex<'a> {
             config_settings.into_owned(),
             extra_build_deps.to_vec(),
             extra_build_vars.cloned(),
-        );
+        )
+        .with_locked_build_resolution(self.unlocked_build_cache_key.map(str::to_string));
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))

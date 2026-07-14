@@ -96,6 +96,7 @@ pub struct RegistryWheelIndex<'a> {
     config_settings_package: &'a PackageConfigSettings,
     extra_build_requires: &'a ExtraBuildRequires,
     extra_build_variables: &'a ExtraBuildVariables,
+    unlocked_build_cache_key: Option<&'a str>,
 }
 
 impl<'a> RegistryWheelIndex<'a> {
@@ -109,6 +110,7 @@ impl<'a> RegistryWheelIndex<'a> {
         config_settings_package: &'a PackageConfigSettings,
         extra_build_requires: &'a ExtraBuildRequires,
         extra_build_variables: &'a ExtraBuildVariables,
+        unlocked_build_cache_key: Option<&'a str>,
     ) -> Self {
         Self {
             cache,
@@ -119,6 +121,7 @@ impl<'a> RegistryWheelIndex<'a> {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            unlocked_build_cache_key,
             index: FxHashMap::default(),
         }
     }
@@ -179,6 +182,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.config_settings_package,
                 self.extra_build_requires,
                 self.extra_build_variables,
+                self.unlocked_build_cache_key,
             )),
         }) as _
     }
@@ -194,6 +198,7 @@ impl<'a> RegistryWheelIndex<'a> {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        unlocked_build_cache_key: Option<&str>,
     ) -> Vec<IndexEntry<'index>> {
         let mut entries = vec![];
 
@@ -320,7 +325,8 @@ impl<'a> RegistryWheelIndex<'a> {
                         config_settings.into_owned(),
                         extra_build_deps.to_vec(),
                         extra_build_vars.cloned(),
-                    );
+                    )
+                    .with_locked_build_resolution(unlocked_build_cache_key.map(str::to_string));
                     let cache_shard = build_info
                         .cache_shard()
                         .map(|digest| cache_shard.shard(digest))

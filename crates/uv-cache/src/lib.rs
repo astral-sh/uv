@@ -325,11 +325,6 @@ impl Cache {
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
     }
 
-    /// Returns `true` if any cache entries must be revalidated given the [`Refresh`] policy.
-    pub fn must_revalidate_any(&self) -> bool {
-        !matches!(self.refresh, Refresh::None(_))
-    }
-
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
     pub fn must_revalidate_package(&self, package: &PackageName) -> bool {
         match &self.refresh {

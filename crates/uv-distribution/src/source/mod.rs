@@ -1107,7 +1107,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .freshness(
+                    &CacheEntry::from_path(file.path()),
+                    source.name(),
+                    source.source_tree(),
+                )
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -1251,7 +1255,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, None, None)
+                .freshness(&metadata_entry, source.name(), source.source_tree())
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -1550,7 +1554,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .freshness(
+                    &CacheEntry::from_path(file.path()),
+                    source.name(),
+                    source.source_tree(),
+                )
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -1669,7 +1677,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, None, None)
+                .freshness(&metadata_entry, source.name(), source.source_tree())
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -2318,7 +2326,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .freshness(
+                    &CacheEntry::from_path(file.path()),
+                    source.name(),
+                    source.source_tree(),
+                )
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -2454,7 +2466,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, None, None)
+                .freshness(&metadata_entry, source.name(), source.source_tree())
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -2833,7 +2845,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .freshness(
+                    &CacheEntry::from_path(file.path()),
+                    source.name(),
+                    source.source_tree(),
+                )
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -2956,7 +2972,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, None, None)
+                .freshness(&metadata_entry, source.name(), source.source_tree())
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -3140,7 +3156,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .freshness(
+                    &CacheEntry::from_path(file.path()),
+                    source.name(),
+                    source.source_tree(),
+                )
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -3362,7 +3382,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, None, None)
+                .freshness(&metadata_entry, source.name(), source.source_tree())
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
