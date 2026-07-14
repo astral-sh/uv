@@ -204,7 +204,6 @@ pub struct PylockToml {
     pub dependency_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub default_groups: Vec<GroupName>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
