@@ -384,6 +384,8 @@ fn frozen_build_rejects_no_build_isolation() -> Result<()> {
     ----- stderr -----
       × Failed to build `dep @ file://[TEMP_DIR]/dep`
       ╰─▶ Cannot replay locked build dependencies for `dep` without build isolation
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
 
     uv_snapshot!(context.filters(), context
@@ -403,6 +405,8 @@ fn frozen_build_rejects_no_build_isolation() -> Result<()> {
     ----- stderr -----
       × Failed to build `dep @ file://[TEMP_DIR]/dep`
       ╰─▶ Cannot replay locked build dependencies for `dep` without build isolation
+
+    hint: `dep` was included because `project` (v0.1.0) depends on `dep`
     ");
 
     Ok(())
