@@ -9,6 +9,8 @@ use url::Url;
 
 #[cfg(feature = "test-universal")]
 use uv_static::EnvVars;
+#[cfg(feature = "test-universal")]
+use uv_test::TestContext;
 use uv_test::uv_snapshot;
 
 #[test]
@@ -91,53 +93,7 @@ fn nested_dependencies() -> Result<()> {
 #[test]
 fn json_output() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-
-    context.temp_dir.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["package-a[feature]"]
-
-        [dependency-groups]
-        dev = ["package-c"]
-
-        [tool.uv.sources]
-        package-a = { path = "packages/package-a" }
-        package-c = { path = "packages/package-c" }
-        "#,
-    )?;
-
-    let package_a = context.temp_dir.child("packages/package-a");
-    package_a.create_dir_all()?;
-    package_a.child("pyproject.toml").write_str(
-        r#"
-        [project]
-        name = "package-a"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-
-        [project.optional-dependencies]
-        feature = ["package-b"]
-
-        [tool.uv.sources]
-        package-b = { path = "../package-b" }
-        "#,
-    )?;
-
-    for package in ["package-b", "package-c"] {
-        let directory = context.temp_dir.child(format!("packages/{package}"));
-        directory.create_dir_all()?;
-        directory
-            .child("pyproject.toml")
-            .write_str(&formatdoc! {r#"
-            [project]
-            name = "{package}"
-            version = "1.0.0"
-            requires-python = ">=3.12"
-        "#})?;
-    }
+    setup_json_output(&context)?;
 
     uv_snapshot!(context.filters(), context.tree()
         .arg("--preview-features")
@@ -271,7 +227,7 @@ fn json_output() -> Result<()> {
     Resolved 4 packages in [TIME]
     "#);
 
-    let output = context
+    let assert = context
         .tree()
         .arg("--preview-features")
         .arg("json-output")
@@ -279,10 +235,11 @@ fn json_output() -> Result<()> {
         .arg("json")
         .arg("--universal")
         .arg("--quiet")
-        .output()?;
-    output.clone().assert().success();
-    assert!(output.stderr.is_empty());
-    let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        .output()?
+        .assert()
+        .success();
+    assert!(assert.get_output().stderr.is_empty());
+    let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
     let package_names = report["resolution"]
         .as_object()
         .context("dependency graph resolution should be an object")?
@@ -302,6 +259,15 @@ fn json_output() -> Result<()> {
       "project"
     ]
     "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
 
     uv_snapshot!(context.filters(), context.tree()
         .arg("--preview-features")
@@ -424,6 +390,15 @@ fn json_output() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_inverted_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
 
     uv_snapshot!(context.filters(), context.tree()
         .arg("--preview-features")
@@ -557,6 +532,15 @@ fn json_output() -> Result<()> {
     Resolved 4 packages in [TIME]
     "#);
 
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn json_output_projected_members_respect_depth() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    setup_json_output(&context)?;
+
     let projected_members = |depth: Option<u8>| -> Result<Vec<String>> {
         let mut command = context.tree();
         command
@@ -571,9 +555,8 @@ fn json_output() -> Result<()> {
         if let Some(depth) = depth {
             command.arg("--depth").arg(depth.to_string());
         }
-        let output = command.output()?;
-        output.clone().assert().success();
-        let report: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let assert = command.output()?.assert().success();
+        let report: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout)?;
         report["members"]
             .as_array()
             .into_iter()
@@ -4672,6 +4655,58 @@ fn workspace_circular_dependencies() -> Result<()> {
     Resolved 2 packages in [TIME]
     "
     );
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+fn setup_json_output(context: &TestContext) -> Result<()> {
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["package-a[feature]"]
+
+        [dependency-groups]
+        dev = ["package-c"]
+
+        [tool.uv.sources]
+        package-a = { path = "packages/package-a" }
+        package-c = { path = "packages/package-c" }
+        "#,
+    )?;
+
+    let package_a = context.temp_dir.child("packages/package-a");
+    package_a.create_dir_all()?;
+    package_a.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "package-a"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.optional-dependencies]
+        feature = ["package-b"]
+
+        [tool.uv.sources]
+        package-b = { path = "../package-b" }
+        "#,
+    )?;
+
+    for package in ["package-b", "package-c"] {
+        let directory = context.temp_dir.child(format!("packages/{package}"));
+        directory.create_dir_all()?;
+        directory
+            .child("pyproject.toml")
+            .write_str(&formatdoc! {r#"
+            [project]
+            name = "{package}"
+            version = "1.0.0"
+            requires-python = ">=3.12"
+        "#})?;
+    }
 
     Ok(())
 }
