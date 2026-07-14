@@ -868,11 +868,11 @@ pub struct ResolverInstallerSchema {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
@@ -1617,11 +1617,11 @@ pub struct PipOptions {
     pub resolution: Option<ResolutionMode>,
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases,
-    /// along with first-party requirements that contain an explicit pre-release marker in the
-    /// declared specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[option(
-        default = "\"if-necessary-or-explicit\"",
+        default = "\"if-necessary\"",
         value_type = "str",
         example = r#"
             prerelease = "allow"
