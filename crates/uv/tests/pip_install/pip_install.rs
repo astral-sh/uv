@@ -296,6 +296,87 @@ fn empty_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Install using requirement-file options whose explicitly provided paths contain spaces.
+#[test]
+fn requirement_file_paths_with_spaces() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.txt").touch()?;
+
+    let requirements_dir = context.temp_dir.child("requirements with spaces");
+    requirements_dir.create_dir_all()?;
+    let constraints = requirements_dir.child("constraints.txt");
+    constraints.write_str("unused-constraint==1")?;
+    let overrides = requirements_dir.child("overrides.txt");
+    overrides.write_str("unused-override==1")?;
+    let excludes = requirements_dir.child("excludes.txt");
+    excludes.write_str("unused-exclude")?;
+    let build_constraints = requirements_dir.child("build-constraints.txt");
+    build_constraints.write_str("unused-build-constraint==1")?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .arg("--constraint")
+        .arg(constraints.path())
+        .arg("--override")
+        .arg(overrides.path())
+        .arg("--exclude")
+        .arg(excludes.path())
+        .arg("--build-constraint")
+        .arg(build_constraints.path())
+        .env(EnvVars::UV_CONSTRAINT, "missing-constraint.txt")
+        .env(EnvVars::UV_OVERRIDE, "missing-override.txt")
+        .env(EnvVars::UV_EXCLUDE, "missing-exclude.txt")
+        .env(EnvVars::UV_BUILD_CONSTRAINT, "missing-build-constraint.txt"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
+/// Install using whitespace-delimited requirement-file options from the environment.
+#[test]
+fn requirement_file_paths_from_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("requirements.txt").touch()?;
+
+    for (path, content) in [
+        ("constraint-1.txt", "unused-constraint-1==1"),
+        ("constraint-2.txt", "unused-constraint-2==1"),
+        ("override-1.txt", "unused-override-1==1"),
+        ("override-2.txt", "unused-override-2==1"),
+        ("exclude-1.txt", "unused-exclude-1"),
+        ("exclude-2.txt", "unused-exclude-2"),
+        ("build-constraint-1.txt", "unused-build-constraint-1==1"),
+        ("build-constraint-2.txt", "unused-build-constraint-2==1"),
+    ] {
+        context.temp_dir.child(path).write_str(content)?;
+    }
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("requirements.txt")
+        .env(EnvVars::UV_CONSTRAINT, "constraint-1.txt constraint-2.txt")
+        .env(EnvVars::UV_OVERRIDE, "override-1.txt override-2.txt")
+        .env(EnvVars::UV_EXCLUDE, "exclude-1.txt exclude-2.txt")
+        .env(
+            EnvVars::UV_BUILD_CONSTRAINT,
+            "build-constraint-1.txt build-constraint-2.txt",
+        ), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Requirements file `requirements.txt` does not contain any dependencies
+    Checked in [TIME]
+    "
+    );
+
+    Ok(())
+}
+
 /// Compile only distributions installed by the current operation.
 #[test]
 fn compile_bytecode_for_installed_distributions() -> Result<()> {
