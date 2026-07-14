@@ -28,11 +28,45 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout Codex Security plugin"
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: openai/plugins
+          ref: 11c74d6ba24d3a6d48f54a194cd00ef3beea18f9
+          path: .codex-security-plugin
+          sparse-checkout: |
+            .agents/plugins
+            plugins/codex-security
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: "0.11.28"
+
+      - name: "Install Codex Security plugin"
+        run: |
+          mkdir -p "$RUNNER_TEMP/codex-security"
+          curl --fail --location --silent --show-error \
+            --output "$RUNNER_TEMP/codex.tar.gz" \
+            https://github.com/openai/codex/releases/download/rust-v0.144.4/codex-x86_64-unknown-linux-musl.tar.gz
+          printf '%s  %s\n' \
+            37c985be9d89e8c4f43b3aa0594c1213eac212d30ae2b95221f08fec807515d1 \
+            "$RUNNER_TEMP/codex.tar.gz" | sha256sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/codex.tar.gz" --directory "$RUNNER_TEMP"
+          codex="$RUNNER_TEMP/codex-x86_64-unknown-linux-musl"
+
+          marketplace=.codex-security-plugin/.agents/plugins/marketplace.json
+          jq '.name = "openai-curated-ci" | .plugins |= map(select(.name == "codex-security"))' \
+            "$marketplace" > "$RUNNER_TEMP/marketplace.json"
+          mv "$RUNNER_TEMP/marketplace.json" "$marketplace"
+
+          CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin marketplace add \
+            "$GITHUB_WORKSPACE/.codex-security-plugin"
+          CODEX_HOME="$GITHUB_WORKSPACE/agents/codex" "$codex" plugin add \
+            codex-security@openai-curated-ci
 
       - name: "Collect pull request context"
         id: context
@@ -63,8 +97,10 @@ jobs:
         uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: ${{ runner.temp }}/codex-security
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: "0.144.4"
           codex-home: "agents/codex"
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
