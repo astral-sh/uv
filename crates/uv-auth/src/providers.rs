@@ -58,13 +58,13 @@ impl HuggingFaceProvider {
     }
 }
 
+/// The [`Url`] for the S3 endpoint, if set.
+static S3_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
+
 /// A provider for authentication credentials for S3 endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct S3EndpointProvider;
-
-/// The parsed S3 endpoint, if configured.
-static S3_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
 
 impl S3EndpointProvider {
     /// Returns `true` if the URL matches the configured S3 endpoint.
@@ -108,13 +108,13 @@ impl S3EndpointProvider {
     }
 }
 
+/// The [`Url`] for the GCS endpoint, if set.
+static GCS_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
+
 /// A provider for authentication credentials for GCS endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GcsEndpointProvider;
-
-/// The parsed GCS endpoint, if configured.
-static GCS_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
 
 impl GcsEndpointProvider {
     /// Returns `true` if the URL matches the configured GCS endpoint.
@@ -149,21 +149,13 @@ impl GcsEndpointProvider {
     }
 }
 
-/// Returns the configured endpoint [`Url`], if set and valid.
-fn endpoint_url(env_var: &str) -> Result<Option<Url>, ParseError> {
-    let Some(endpoint_url) = std::env::var(env_var).ok() else {
-        return Ok(None);
-    };
-    Url::parse(&endpoint_url).map(Some)
-}
+/// The [`Url`] for the Azure endpoint, if set.
+static AZURE_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
 
 /// A provider for authentication credentials for Azure endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AzureEndpointProvider;
-
-/// The parsed Azure endpoint, if configured.
-static AZURE_ENDPOINT_URL: LazyLock<Result<Option<Url>, ParseError>> =
-    LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
 
 impl AzureEndpointProvider {
     /// Returns `true` if the URL matches the configured Azure endpoint.
@@ -196,6 +188,14 @@ impl AzureEndpointProvider {
     pub(crate) fn create_signer() -> AzureDefaultSigner {
         reqsign::azure::default_signer()
     }
+}
+
+/// Returns the configured endpoint [`Url`], if set and valid.
+fn endpoint_url(env_var: &str) -> Result<Option<Url>, ParseError> {
+    let Some(endpoint_url) = std::env::var(env_var).ok() else {
+        return Ok(None);
+    };
+    Url::parse(&endpoint_url).map(Some)
 }
 
 /// Returns `true` if `url` is within the configured S3, GCS, or Azure-compatible endpoint URL.
