@@ -2716,9 +2716,29 @@ impl VersionRequest {
             && specifier.operator() == &uv_pep440::Operator::Equal
             && let Ok(request) = Self::from_str(&specifier.version().to_string())
         {
-            return request;
+            return request.with_variant(variant);
         }
         Self::Range(specifiers, variant)
+    }
+
+    /// Replace the variant on a concrete or ranged version request.
+    #[must_use]
+    fn with_variant(self, variant: PythonVariant) -> Self {
+        match self {
+            request @ (Self::Any | Self::Default) => request,
+            Self::Major(major, _) => Self::Major(major, variant),
+            Self::MajorMinor(major, minor, _) => Self::MajorMinor(major, minor, variant),
+            Self::MajorMinorPatch(major, minor, patch, _) => {
+                Self::MajorMinorPatch(major, minor, patch, variant)
+            }
+            Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
+                Self::MajorMinorPrerelease(major, minor, prerelease, variant)
+            }
+            Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, _) => {
+                Self::MajorMinorPatchPrerelease(major, minor, patch, prerelease, variant)
+            }
+            Self::Range(specifiers, _) => Self::Range(specifiers, variant),
+        }
     }
 
     /// Drop any patch or prerelease information from the version request.
@@ -4344,6 +4364,19 @@ mod tests {
             VersionRequest::from_str("==3.12.1").unwrap(),
             VersionRequest::MajorMinorPatch(3, 12, 1, PythonVariant::Default)
         );
+
+        for (request, variant) in [
+            ("==3.14t", PythonVariant::Freethreaded),
+            ("==3.14d", PythonVariant::Debug),
+            ("==3.14td", PythonVariant::FreethreadedDebug),
+            ("==3.14+gil", PythonVariant::Gil),
+            ("==3.14+gil+debug", PythonVariant::GilDebug),
+        ] {
+            assert_eq!(
+                VersionRequest::from_str(request).unwrap(),
+                VersionRequest::MajorMinor(3, 14, variant)
+            );
+        }
     }
 
     #[test]
