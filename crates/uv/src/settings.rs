@@ -3117,6 +3117,7 @@ pub(crate) struct AuditSettings {
     pub(crate) service_url: Option<String>,
     pub(crate) ignore: Vec<VulnerabilityID>,
     pub(crate) ignore_until_fixed: Vec<VulnerabilityID>,
+    pub(crate) fix: bool,
 }
 
 impl AuditSettings {
@@ -3143,6 +3144,7 @@ impl AuditSettings {
             resolver,
             ignore,
             ignore_until_fixed,
+            fix,
             service_format,
             service_url,
         } = args;
@@ -3218,6 +3220,7 @@ impl AuditSettings {
                 merged.extend(config_ignore_until_fixed);
                 merged.into_iter().map(VulnerabilityID::new).collect()
             },
+            fix: filesystem_audit.fix.unwrap_or_default() || fix,
         }
     }
 }

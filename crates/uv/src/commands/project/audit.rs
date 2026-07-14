@@ -2,6 +2,9 @@ use itertools::Itertools as _;
 use owo_colors::OwoColorize;
 use std::fmt::Write as _;
 use std::path::Path;
+use uv_audit::fix::get_fixable_dependencies;
+use uv_configuration::Upgrade;
+use uv_distribution_types::Requirement;
 
 use crate::commands::ExitStatus;
 use crate::commands::diagnostics;
@@ -66,6 +69,7 @@ pub(crate) async fn audit(
     service_url: Option<String>,
     ignore: Vec<VulnerabilityID>,
     ignore_until_fixed: Vec<VulnerabilityID>,
+    fix: bool,
 ) -> Result<ExitStatus> {
     // Check if the audit feature is in preview
     if !preview.is_enabled(PreviewFeature::Audit) {
@@ -237,7 +241,7 @@ pub(crate) async fn audit(
         .collect();
     let base_client = client_builder.clone().build()?;
 
-    let registry_client = RegistryClientBuilder::new(client_builder, cache.clone())
+    let registry_client = RegistryClientBuilder::new(client_builder.clone(), cache.clone())
         .index_locations(settings.index_locations.clone())
         .keyring(settings.keyring_provider)
         .build()?;
@@ -253,7 +257,8 @@ pub(crate) async fn audit(
                     .map(|url| url.parse().expect("invalid OSV service URL"))
                     .unwrap_or_else(|| osv::API_BASE.clone());
                 let client = CachedClient::new(base_client);
-                let service = osv::Osv::new(client, Some(osv_url), concurrency, cache.clone());
+                let service =
+                    osv::Osv::new(client, Some(osv_url), concurrency.clone(), cache.clone());
                 trace!("Auditing {n} dependencies against OSV", n = auditable.len());
                 service.query_batch(&dependencies, osv::Filter::All).await
             }
@@ -308,11 +313,50 @@ pub(crate) async fn audit(
         }
     }
 
+    // Get fixable dependencies that have a semver-compatible fix version
+    let fixable_dependencies = get_fixable_dependencies(
+        all_findings
+            .iter()
+            .filter_map(|finding| {
+                if let Finding::Vulnerability(vulnerability) = finding {
+                    Some(vulnerability.as_ref())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .as_slice(),
+    );
+
+    // Fix dependencies based on the vulnerability is "fixable"
+    if fix {
+        // Same resolver settings that have already been built, but we add the fixable dependencies as upgrade options
+        let mut fix_settings = settings.clone();
+        fix_settings.upgrade =
+            Upgrade::from_args(Some(false), fixable_dependencies.clone(), vec![])
+                .unwrap_or_default();
+        LockOperation::new(
+            mode,
+            &fix_settings,
+            &client_builder,
+            &state,
+            Box::new(DefaultResolveLogger),
+            &concurrency,
+            &cache,
+            &WorkspaceCache::default(),
+            printer,
+            preview,
+        )
+        .execute(target)
+        .await?;
+    }
+
     let display = AuditResults {
         printer,
         n_packages: auditable.len(),
         output_format,
         findings: all_findings,
+        fixable_dependencies,
         artifact_uri: {
             let lock_path = target.lock_path();
             // If we've run `uv audit --script`, we might only have an in-memory lockfile.
@@ -348,6 +392,7 @@ struct AuditResults {
     n_packages: usize,
     output_format: AuditOutputFormat,
     findings: Vec<Finding>,
+    fixable_dependencies: Vec<Requirement>,
     artifact_uri: String,
 }
 
@@ -453,7 +498,7 @@ impl AuditResults {
                     },
                 )?;
 
-                for vulnerability in vulnerabilities {
+                for vulnerability in vulnerabilities.clone() {
                     writeln!(
                         self.printer.stdout_important(),
                         "- {id}: {description}",
@@ -472,13 +517,12 @@ impl AuditResults {
                     } else {
                         writeln!(
                             self.printer.stdout_important(),
-                            "\n  Fixed in: {}\n",
-                            vulnerability
+                            "\n  Fixed in: {versions}\n",
+                            versions = vulnerability
                                 .fix_versions
                                 .iter()
                                 .map(std::string::ToString::to_string)
                                 .join(", ")
-                                .blue()
                         )?;
                     }
 
@@ -489,6 +533,19 @@ impl AuditResults {
                             link = link.as_str().blue()
                         )?;
                     }
+                }
+
+                if let Some(fix_version) = self
+                    .fixable_dependencies
+                    .iter()
+                    .find(|v| &v.name == vulnerabilities[0].dependency.name())
+                {
+                    writeln!(
+                        self.printer.stdout_important(),
+                        "  Fixed in: {fix_version}, pass {flag} to update\n",
+                        fix_version = fix_version.to_string().blue(),
+                        flag = "--fix".blue()
+                    )?;
                 }
             }
         }
