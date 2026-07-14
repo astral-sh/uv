@@ -385,6 +385,29 @@ fn uninstall_egg_info() -> Result<()> {
     Ok(())
 }
 
+/// Refuse to uninstall a versionless `.egg-info` file without the metadata required to do so safely.
+#[test]
+fn uninstall_versionless_egg_info_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let egg_info = ChildPath::new(context.site_packages()).child("demo.egg-info");
+    egg_info.write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+
+    uv_snapshot!(context.pip_uninstall().arg("demo"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Unable to uninstall `demo==1.0`. distutils-installed distributions do not include the metadata required to uninstall safely.
+    "
+    );
+
+    assert!(egg_info.exists());
+
+    Ok(())
+}
+
 fn normcase(s: &str) -> String {
     if cfg!(windows) {
         s.replace('/', "\\").to_lowercase()

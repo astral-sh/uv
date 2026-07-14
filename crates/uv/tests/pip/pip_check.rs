@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_fs::fixture::ChildPath;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
@@ -39,6 +40,29 @@ fn check_compatible_packages() -> Result<()> {
 
     ----- stderr -----
     Checked 5 packages in [TIME]
+    All installed packages are compatible
+    "
+    );
+
+    Ok(())
+}
+
+/// Check a versionless `.egg-info` file installed by distutils.
+#[test]
+fn check_versionless_egg_info_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    ChildPath::new(context.site_packages())
+        .child("demo.egg-info")
+        .write_str("Metadata-Version: 1.1\nName: demo\nVersion: 1.0\n")?;
+
+    uv_snapshot!(context.pip_check(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Checked 1 package in [TIME]
     All installed packages are compatible
     "
     );
