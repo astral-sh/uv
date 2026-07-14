@@ -36,7 +36,9 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use crate::commands::tool::common::{
+    ToolLock, remove_entrypoints, tool_environment_spec, validate_tool_lock_build_dependencies,
+};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -391,6 +393,7 @@ async fn upgrade_tool(
             python_platform,
             &settings.resolver.build_options,
         )?;
+        validate_tool_lock_build_dependencies(&resolution, preview)?;
         let hash_strategy = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         if requested_interpreter.is_some() {

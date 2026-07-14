@@ -1711,7 +1711,10 @@ fn tool_upgrade_writes_preview_lock() {
     context
         .tool_upgrade()
         .arg("simple-launcher")
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
@@ -1740,6 +1743,95 @@ fn tool_upgrade_writes_preview_lock() {
         ]
         "#);
     });
+}
+
+#[test]
+fn tool_upgrade_lock_rejects_uncaptured_build_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("source-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "source-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        source-launcher = "source_launcher:main"
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    local_package
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "source_launcher-1.0.0-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr("source_launcher/__init__.py", "def main(): pass\n")
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: source-launcher\nVersion: 1.0.0\n",
+                )
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "source_launcher-1.0.0.dist-info/entry_points.txt",
+                    "[console_scripts]\nsource-launcher = source_launcher:main\n",
+                )
+                wheel.writestr("source_launcher-1.0.0.dist-info/RECORD", "")
+            return filename
+    "#})?;
+
+    context
+        .tool_install()
+        .arg(local_package.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("source-launcher")
+        .arg("--reinstall")
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade source-launcher
+      Caused by: Locking build dependencies is not supported for tool environments; `source-launcher` must be built from source
+    ");
+
+    tool_dir
+        .child("source-launcher")
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    Ok(())
 }
 
 /// Mount a minimal package index for `simple-launcher` with a caller-provided wheel hash.

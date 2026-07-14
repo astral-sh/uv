@@ -46,7 +46,7 @@ use crate::commands::project::{
 };
 use crate::commands::tool::common::{
     ToolLock, ToolPython, finalize_tool_install, refine_interpreter, remove_entrypoints,
-    tool_environment_spec,
+    tool_environment_spec, validate_tool_lock_build_dependencies,
 };
 use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
@@ -743,6 +743,7 @@ pub(crate) async fn install(
                 )?;
                 (resolution, tool_lock)
             };
+            validate_tool_lock_build_dependencies(&resolution, preview)?;
 
             let ResolverInstallerSettings {
                 resolver:
@@ -1009,6 +1010,7 @@ pub(crate) async fn install(
                 (resolution.into(), interpreter, None)
             }
         };
+        validate_tool_lock_build_dependencies(&resolution, preview)?;
         let hash_strategy = if tool_lock.is_some() {
             HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?
         } else {

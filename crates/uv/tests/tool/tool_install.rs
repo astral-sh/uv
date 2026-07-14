@@ -6457,7 +6457,10 @@ fn tool_install_locks_are_preview() {
         .arg("--no-index")
         .arg("--find-links")
         .arg(&links)
-        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str())
@@ -6485,6 +6488,63 @@ fn tool_install_locks_are_preview() {
         ]
         "#);
     });
+}
+
+#[test]
+fn tool_install_lock_rejects_uncaptured_build_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let local_package = context.temp_dir.child("source-launcher");
+    local_package.create_dir_all()?;
+    local_package.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "source-launcher"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        source-launcher = "source_launcher:main"
+
+        [build-system]
+        requires = ["ok==1.0.0"]
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    local_package
+        .child("build_backend.py")
+        .write_str(indoc! {r#"
+        def get_requires_for_build_wheel(config_settings=None):
+            return []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(local_package.path())
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links"))
+        .env(
+            EnvVars::UV_PREVIEW_FEATURES,
+            "tool-install-locks,lock-build-dependencies",
+        )
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Locking build dependencies is not supported for tool environments; `source-launcher` must be built from source
+    ");
+
+    tool_dir
+        .child("source-launcher")
+        .child("uv.lock")
+        .assert(predicate::path::missing());
+
+    Ok(())
 }
 
 #[test]

@@ -22,8 +22,8 @@ use uv_distribution::{
     DistributionDatabase, LoweredExtraBuildDependencies, StaticMetadataDatabase,
 };
 use uv_distribution_types::{
-    DependencyMetadata, HashGeneration, Index, InstalledDist, Name, Requirement, RequiresPython,
-    Resolution, UnresolvedRequirement,
+    DependencyMetadata, Dist, HashGeneration, Index, InstalledDist, Name, Requirement,
+    RequiresPython, Resolution, ResolvedDist, UnresolvedRequirement,
 };
 use uv_errors::{ErrorWithHints, Hint, Hints};
 #[cfg(unix)]
@@ -33,7 +33,7 @@ use uv_git::GitResolver;
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_preview::Preview;
+use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
@@ -615,6 +615,32 @@ impl ToolLock {
             &InstallOptions::default(),
         )?)
     }
+}
+
+/// Reject tool locks that would need to capture a source build environment.
+pub(crate) fn validate_tool_lock_build_dependencies(
+    resolution: &Resolution,
+    preview: Preview,
+) -> anyhow::Result<()> {
+    if !preview.is_enabled(PreviewFeature::ToolInstallLocks)
+        || !preview.is_enabled(PreviewFeature::LockBuildDependencies)
+    {
+        return Ok(());
+    }
+
+    let Some(source) = resolution.distributions().find(|dist| {
+        matches!(
+            dist,
+            ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+        )
+    }) else {
+        return Ok(());
+    };
+
+    bail!(
+        "Locking build dependencies is not supported for tool environments; `{}` must be built from source",
+        source.name()
+    )
 }
 
 /// Build an environment specification for a tool, preferring versions from its existing lock when
