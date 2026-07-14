@@ -100,6 +100,8 @@ pub enum PylockTomlErrorKind {
     VcsMissingPathUrl(PackageName),
     #[error("URL must end in a valid wheel filename: `{0}`")]
     UrlMissingFilename(DisplaySafeUrl),
+    #[error("Artifact URL cannot be used to infer an index: `{0}`")]
+    InvalidArtifactUrl(UrlString),
     #[error("Path must end in a valid wheel filename: `{0}`")]
     PathMissingFilename(Box<Path>),
     #[error("Failed to convert path to URL")]
@@ -1444,7 +1446,10 @@ impl PylockTomlWheel {
             // do. In practice, the only effect here should be that we cache the wheel under a hash
             // of this URL (since we cache under the hash of the index).
             let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
-            index.path_segments_mut().unwrap().pop();
+            index
+                .path_segments_mut()
+                .map_err(|()| PylockTomlErrorKind::InvalidArtifactUrl(file_url.clone()))?
+                .pop();
             IndexUrl::from(VerbatimUrl::from_url(index))
         };
 
@@ -1602,7 +1607,10 @@ impl PylockTomlSdist {
             // do. In practice, the only effect here should be that we cache the sdist under a hash
             // of this URL (since we cache under the hash of the index).
             let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
-            index.path_segments_mut().unwrap().pop();
+            index
+                .path_segments_mut()
+                .map_err(|()| PylockTomlErrorKind::InvalidArtifactUrl(file_url.clone()))?
+                .pop();
             IndexUrl::from(VerbatimUrl::from_url(index))
         };
 
