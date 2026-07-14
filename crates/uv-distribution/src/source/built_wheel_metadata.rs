@@ -97,4 +97,9 @@ impl BuiltWheelFile {
         name.is_none_or(|name| self.filename.name == *name)
             && version.is_none_or(|version| self.filename.version == *version)
     }
+
+    /// Return the path to the cached wheel file.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
 }

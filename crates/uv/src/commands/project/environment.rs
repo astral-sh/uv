@@ -12,7 +12,7 @@ use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
 use uv_cache::{Cache, CacheBucket};
-use uv_cache_info::CacheInfo;
+use uv_cache_info::{CacheInfo, CacheInfoError};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
@@ -23,8 +23,12 @@ use uv_distribution_types::{
 };
 use uv_fs::PythonExt;
 use uv_preview::Preview;
+use uv_pypi_types::HashDigests;
 use uv_python::{Interpreter, PythonEnvironment, canonicalize_executable};
-use uv_types::{BuildPackageKey, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
+use uv_types::{
+    BuildPackageKey, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy,
+    UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_workspace::WorkspaceCache;
 
 /// An ephemeral [`PythonEnvironment`] for running an individual command.
@@ -114,7 +118,7 @@ impl From<CachedEnvironment> for PythonEnvironment {
 #[derive(Debug, Clone, Hash)]
 struct CachedEnvironmentDist {
     dist: ResolvedDist,
-    hashes: uv_pypi_types::HashDigests,
+    hashes: HashDigests,
     cache_info: Option<CacheInfo>,
 }
 
@@ -133,6 +137,12 @@ fn cached_environment_resolution_hash(
     }
 }
 
+fn normalized_cached_environment_hashes(hashes: &HashDigests) -> HashDigests {
+    let mut hashes = hashes.clone();
+    hashes.sort_unstable();
+    hashes
+}
+
 impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
@@ -140,6 +150,7 @@ impl CachedEnvironment {
         build_constraints: Constraints,
         interpreter: &Interpreter,
         python_platform: Option<&TargetTriple>,
+        source_tree_editable_policy: SourceTreeEditablePolicy,
         settings: &ResolverInstallerSettings,
         client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
@@ -161,7 +172,7 @@ impl CachedEnvironment {
                 EnvironmentResolution::Specific,
                 &interpreter,
                 python_platform,
-                SourceTreeEditablePolicy::Project,
+                source_tree_editable_policy,
                 build_constraints.clone(),
                 &settings.resolver,
                 client_builder,
@@ -182,6 +193,7 @@ impl CachedEnvironment {
             LockedBuildResolutions::default(),
             build_constraints,
             &interpreter,
+            source_tree_editable_policy,
             settings,
             client_builder,
             state,
@@ -225,6 +237,7 @@ impl CachedEnvironment {
             locked_build_resolutions,
             build_constraints,
             interpreter,
+            SourceTreeEditablePolicy::Project,
             settings,
             client_builder,
             state,
@@ -244,6 +257,7 @@ impl CachedEnvironment {
         locked_build_resolutions: LockedBuildResolutions,
         build_constraints: Constraints,
         interpreter: &Interpreter,
+        source_tree_editable_policy: SourceTreeEditablePolicy,
         settings: &ResolverInstallerSettings,
         client_builder: &BaseClientBuilder<'_>,
         state: &PlatformState,
@@ -254,6 +268,13 @@ impl CachedEnvironment {
         printer: Printer,
         preview: Preview,
     ) -> Result<Self, ProjectError> {
+        let has_source_distribution = resolution.distributions().any(|distribution| {
+            matches!(
+                distribution,
+                ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+            )
+        });
+
         // Hash the resolution by hashing the generated lockfile.
         let resolution_hash = {
             let mut distributions = resolution
@@ -268,10 +289,11 @@ impl CachedEnvironment {
                     Node::Dist { install: false, .. } | Node::Root => None,
                 })
                 .map(|(dist, hashes)| {
+                    let hashes = normalized_cached_environment_hashes(hashes);
                     Ok(CachedEnvironmentDist {
                         dist: dist.clone(),
-                        hashes: hashes.clone(),
-                        cache_info: Self::cache_info(dist).map_err(ProjectError::from)?,
+                        cache_info: Self::cache_info(dist, &hashes).map_err(ProjectError::from)?,
+                        hashes,
                     })
                 })
                 .collect::<Result<Vec<_>, ProjectError>>()?;
@@ -286,8 +308,9 @@ impl CachedEnvironment {
             let extra_build_requires = LoweredExtraBuildDependencies::from_non_lowered(
                 settings.resolver.extra_build_dependencies.clone(),
             )
-            .into_inner();
-            let mut locked_build_resolution_hashes = resolution
+            .into_inner()
+            .match_runtime(resolution)?;
+            let mut build_resolution_hashes = resolution
                 .distributions()
                 .filter_map(|distribution| {
                     let ResolvedDist::Installable { dist, .. } = distribution else {
@@ -326,27 +349,58 @@ impl CachedEnvironment {
                             .cloned(),
                     )
                     .cache_shard();
-                    locked_build_resolutions
-                        .cache_key(
-                            &package,
-                            &settings.resolver.config_setting,
-                            &settings.resolver.config_settings_package,
-                            &extra_build_requires,
-                            &settings.resolver.extra_build_variables,
-                        )
-                        .map(|cache_key| {
-                            cache_key.map(|cache_key| (package, cache_key, build_info))
-                        })
-                        .transpose()
+                    Some(
+                        locked_build_resolutions
+                            .cache_key(
+                                &package,
+                                &settings.resolver.config_setting,
+                                &settings.resolver.config_settings_package,
+                                &extra_build_requires,
+                                &settings.resolver.extra_build_variables,
+                            )
+                            .map(|cache_key| (package, cache_key, build_info)),
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(ProjectError::from)?;
-            locked_build_resolution_hashes.sort();
+            build_resolution_hashes.sort();
 
-            if locked_build_resolution_hashes.is_empty() {
+            let unlocked_build_cache_key = if has_source_distribution {
+                unlocked_build_cache_key(UnlockedBuildInputs {
+                    build_constraints: &build_constraints,
+                    index_locations: &settings.resolver.index_locations,
+                    index_strategy: settings.resolver.index_strategy,
+                    build_options: &settings.resolver.build_options,
+                    dependency_metadata: &settings.resolver.dependency_metadata,
+                    config_settings: &settings.resolver.config_setting,
+                    config_settings_package: &settings.resolver.config_settings_package,
+                    extra_build_requires: &extra_build_requires,
+                    extra_build_variables: &settings.resolver.extra_build_variables,
+                    build_hasher: &HashStrategy::default(),
+                    exclude_newer_global: settings.resolver.exclude_newer.global.as_ref(),
+                    exclude_newer_package: (&settings.resolver.exclude_newer.package)
+                        .into_iter()
+                        .collect(),
+                    sources: &settings.resolver.sources,
+                    source_tree_editable_policy,
+                    non_isolated: !matches!(
+                        settings.resolver.build_isolation,
+                        uv_configuration::BuildIsolation::Isolate
+                    ),
+                    invocation_timestamp: cache.timestamp(),
+                })
+            } else {
+                None
+            };
+
+            if build_resolution_hashes.is_empty() && unlocked_build_cache_key.is_none() {
                 resolution_hash
             } else {
-                hash_digest(&(resolution_hash, locked_build_resolution_hashes))
+                hash_digest(&(
+                    resolution_hash,
+                    build_resolution_hashes,
+                    unlocked_build_cache_key,
+                ))
             }
         };
 
@@ -370,7 +424,9 @@ impl CachedEnvironment {
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
 
-        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
+        if (!has_source_distribution || cache.freshness(&cache_entry, None, None)?.is_fresh())
+            && let Ok(root) = cache.resolve_link(cache_entry.path())
+        {
             if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
                 return Ok(Self(environment));
             }
@@ -396,6 +452,7 @@ impl CachedEnvironment {
             Modifications::Exact,
             locked_build_resolutions,
             build_constraints,
+            source_tree_editable_policy,
             settings.into(),
             client_builder,
             state,
@@ -417,13 +474,39 @@ impl CachedEnvironment {
 
     /// Return any mutable cache info that should invalidate a cached environment for a given
     /// distribution.
-    fn cache_info(dist: &ResolvedDist) -> Result<Option<CacheInfo>, uv_cache_info::CacheInfoError> {
+    fn cache_info(
+        dist: &ResolvedDist,
+        hashes: &HashDigests,
+    ) -> Result<Option<CacheInfo>, CacheInfoError> {
         let path = match dist {
             ResolvedDist::Installed { .. } => return Ok(None),
             ResolvedDist::Installable { dist, .. } => match dist.as_ref() {
                 Dist::Built(BuiltDist::Path(wheel)) => wheel.install_path.as_ref(),
                 Dist::Source(SourceDist::Path(sdist)) => sdist.install_path.as_ref(),
                 Dist::Source(SourceDist::Directory(directory)) => directory.install_path.as_ref(),
+                Dist::Built(BuiltDist::Registry(_)) | Dist::Source(SourceDist::Registry(_))
+                    if hashes.is_empty() =>
+                {
+                    let Some(file) = dist.file() else {
+                        return Ok(None);
+                    };
+                    let url = file.url.to_url().map_err(|err| {
+                        CacheInfoError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            err,
+                        ))
+                    })?;
+                    if url.scheme() != "file" {
+                        return Ok(None);
+                    }
+                    let path = url.to_file_path().map_err(|()| {
+                        CacheInfoError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            format!("Expected a file URL, but received: {url}"),
+                        ))
+                    })?;
+                    return Ok(Some(CacheInfo::from_file(path)?));
+                }
                 _ => return Ok(None),
             },
         };
@@ -466,9 +549,31 @@ impl CachedEnvironment {
 mod tests {
     use std::sync::Arc;
 
+    use uv_pypi_types::HashDigests;
     use uv_types::HashStrategy;
 
-    use super::{cached_environment_resolution_hash, hash_digest};
+    use super::{
+        cached_environment_resolution_hash, hash_digest, normalized_cached_environment_hashes,
+    };
+
+    #[test]
+    fn cached_environment_hashes_ignore_order() -> anyhow::Result<()> {
+        let first =
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111".parse()?;
+        let second =
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222".parse()?;
+        let forward = HashDigests::from(vec![first, second]);
+        let mut reverse = forward.iter().cloned().collect::<Vec<_>>();
+        reverse.reverse();
+        let reverse = HashDigests::from(reverse);
+
+        assert_eq!(
+            hash_digest(&normalized_cached_environment_hashes(&forward)),
+            hash_digest(&normalized_cached_environment_hashes(&reverse))
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn verified_cached_environment_uses_separate_resolution_hash() {

@@ -45,7 +45,9 @@ use uv_settings::{
 };
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_types::SourceTreeEditablePolicy;
+use uv_types::{
+    HashStrategy, SourceTreeEditablePolicy, UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceErrorKind};
 
@@ -949,20 +951,26 @@ pub(crate) async fn run(
 
     // If necessary, create an environment for the ephemeral requirements or command.
     let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
+    let build_constraints = base_lock
+        .as_ref()
+        .map(|(lock, path)| lock.build_constraints(path))
+        .unwrap_or_default();
     let requirements_env = match spec {
         None => None,
         Some(spec)
-            if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
+            if can_skip_ephemeral(
+                &spec,
+                &base_interpreter,
+                &base_site_packages,
+                &build_constraints,
+                &settings,
+                &cache,
+            ) =>
         {
             None
         }
         Some(spec) => {
             debug!("Syncing `--with` requirements to cached environment");
-
-            // Read the build constraints from the lock file.
-            let build_constraints = base_lock
-                .as_ref()
-                .map(|(lock, path)| lock.build_constraints(path));
 
             // Read the preferences.
             let spec = EnvironmentSpecification::from(spec).with_preferences(
@@ -980,14 +988,16 @@ pub(crate) async fn run(
                 },
             );
 
+            let with_state = lock_state.fork();
             let result = CachedEnvironment::from_spec(
                 spec,
-                build_constraints.unwrap_or_default(),
+                build_constraints,
                 &base_interpreter,
                 python_platform.as_ref(),
+                SourceTreeEditablePolicy::Project,
                 &settings,
                 &client_builder,
-                &sync_state,
+                &with_state,
                 if show_resolution {
                     Box::new(DefaultResolveLogger)
                 } else {
@@ -1309,16 +1319,25 @@ fn can_skip_ephemeral(
     spec: &RequirementsSpecification,
     interpreter: &Interpreter,
     site_packages: &SitePackages,
+    build_constraints: &Constraints,
     settings: &ResolverInstallerSettings,
+    cache: &Cache,
 ) -> bool {
     // Extract the build settings.
     let ResolverInstallerSettings {
         resolver:
             ResolverSettings {
+                build_options,
                 config_setting,
                 config_settings_package,
+                dependency_metadata,
+                exclude_newer,
+                index_locations,
+                index_strategy,
+                build_isolation,
                 extra_build_dependencies,
                 extra_build_variables,
+                sources,
                 ..
             },
         reinstall,
@@ -1341,6 +1360,38 @@ fn can_skip_ephemeral(
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
 
+    // Build metadata records resolved runtime requirements, which aren't available yet.
+    if extra_build_requires.iter().any(|(name, requirements)| {
+        site_packages
+            .get_packages(name)
+            .iter()
+            .any(|distribution| distribution.build_info().is_some())
+            && requirements
+                .iter()
+                .any(|requirement| requirement.match_runtime)
+    }) {
+        return false;
+    }
+
+    let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+        build_constraints,
+        index_locations,
+        index_strategy: *index_strategy,
+        build_options,
+        dependency_metadata,
+        config_settings: config_setting,
+        config_settings_package,
+        extra_build_requires: &extra_build_requires,
+        extra_build_variables,
+        build_hasher: &HashStrategy::default(),
+        exclude_newer_global: exclude_newer.global.as_ref(),
+        exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
+        sources,
+        source_tree_editable_policy: SourceTreeEditablePolicy::Project,
+        non_isolated: !matches!(build_isolation, uv_configuration::BuildIsolation::Isolate),
+        invocation_timestamp: cache.timestamp(),
+    });
+
     match site_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
@@ -1354,6 +1405,7 @@ fn can_skip_ephemeral(
         config_settings_package,
         &extra_build_requires,
         extra_build_variables,
+        unlocked_build_cache_key.as_deref(),
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {

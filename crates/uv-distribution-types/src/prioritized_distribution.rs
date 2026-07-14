@@ -6,8 +6,12 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
-use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+};
+use uv_platform_tags::{
+    AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
+};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
@@ -524,7 +528,15 @@ impl PrioritizedDist {
         let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
         let mut adjusted_best_index = 0;
         for (i, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
-            if compatibility.is_excluded() {
+            // Keep the chosen wheel available for metadata resolution. Installation falls back
+            // to the compatible source distribution and filters the yanked wheel there.
+            if compatibility.is_excluded()
+                || (i != best_wheel_index
+                    && matches!(
+                        compatibility,
+                        WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(_))
+                    ))
+            {
                 continue;
             }
             if i == best_wheel_index {
@@ -533,7 +545,19 @@ impl PrioritizedDist {
             adjusted_wheels.push(wheel.clone());
         }
 
-        let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
+        let sdist = self
+            .0
+            .source
+            .as_ref()
+            .filter(|(_, compatibility)| {
+                !matches!(
+                    compatibility,
+                    SourceDistCompatibility::Incompatible(
+                        IncompatibleSource::ExcludeNewer(_) | IncompatibleSource::Yanked(_)
+                    )
+                )
+            })
+            .map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
             wheels: adjusted_wheels,
             best_wheel_index: adjusted_best_index,
@@ -548,7 +572,14 @@ impl PrioritizedDist {
             .0
             .source
             .as_ref()
-            .filter(|(_, compatibility)| !compatibility.is_excluded())
+            .filter(|(_, compatibility)| {
+                !matches!(
+                    compatibility,
+                    SourceDistCompatibility::Incompatible(
+                        IncompatibleSource::ExcludeNewer(_) | IncompatibleSource::Yanked(_)
+                    )
+                )
+            })
             .map(|(sdist, _)| sdist.clone())?;
         assert!(
             sdist.wheels.is_empty(),
@@ -558,6 +589,13 @@ impl PrioritizedDist {
             .0
             .wheels
             .iter()
+            .filter(|(_, compatibility)| {
+                !compatibility.is_excluded()
+                    && !matches!(
+                        compatibility,
+                        WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(_))
+                    )
+            })
             .map(|(wheel, _)| wheel.clone())
             .collect();
         Some(sdist)
@@ -567,6 +605,121 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
+    }
+
+    /// Returns true if a compatible source or retained wheel is available for the executor.
+    pub fn has_compatible_artifact(&self, tags: &Tags, markers: &MarkerEnvironment) -> bool {
+        let is_eligible = |file: &File| {
+            file.requires_python.as_ref().is_none_or(|requires_python| {
+                requires_python.contains(&markers.python_full_version().version)
+            })
+        };
+        self.0
+            .source
+            .as_ref()
+            .is_some_and(|(sdist, compatibility)| {
+                compatibility.is_compatible() && is_eligible(&sdist.file)
+            })
+            || self.0.wheels.iter().any(|(wheel, compatibility)| {
+                compatibility.is_compatible()
+                    && is_eligible(&wheel.file)
+                    && wheel.filename.compatibility(tags).is_compatible()
+            })
+    }
+
+    /// Prefer an artifact that can be installed by the active executor when one is available.
+    ///
+    /// Leave the original choice intact when no compatible artifact exists so that universal
+    /// resolution can still fork on a foreign Python requirement.
+    pub fn prioritize_executor_artifacts(
+        &mut self,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        allows_yanked: bool,
+    ) {
+        let is_eligible = |file: &File| {
+            file.requires_python.as_ref().is_none_or(|requires_python| {
+                requires_python.contains(&markers.python_full_version().version)
+            }) && (allows_yanked
+                || file
+                    .yanked
+                    .as_deref()
+                    .is_none_or(|yanked| !yanked.is_yanked()))
+        };
+        let has_compatible_artifact =
+            self.0
+                .source
+                .as_ref()
+                .is_some_and(|(sdist, compatibility)| {
+                    compatibility.is_compatible() && is_eligible(&sdist.file)
+                })
+                || self.0.wheels.iter().any(|(wheel, compatibility)| {
+                    compatibility.is_compatible()
+                        && is_eligible(&wheel.file)
+                        && wheel.filename.compatibility(tags).is_compatible()
+                });
+
+        if let Some((sdist, compatibility)) = &mut self.0.source
+            && compatibility.is_compatible()
+        {
+            if !allows_yanked
+                && let Some(yanked) = sdist.file.yanked.as_deref()
+                && yanked.is_yanked()
+            {
+                *compatibility = SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
+                    yanked.clone(),
+                ));
+            } else if has_compatible_artifact
+                && let Some(requires_python) = sdist.file.requires_python.as_deref()
+                && !requires_python.contains(&markers.python_full_version().version)
+            {
+                *compatibility =
+                    SourceDistCompatibility::Incompatible(IncompatibleSource::RequiresPython(
+                        requires_python.clone(),
+                        PythonRequirementKind::Installed,
+                    ));
+            }
+        }
+
+        for (wheel, compatibility) in &mut self.0.wheels {
+            if !compatibility.is_compatible() {
+                continue;
+            }
+            if !allows_yanked
+                && let Some(yanked) = wheel.file.yanked.as_deref()
+                && yanked.is_yanked()
+            {
+                *compatibility =
+                    WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
+                continue;
+            }
+            if !has_compatible_artifact {
+                continue;
+            }
+            if let Some(requires_python) = wheel.file.requires_python.as_deref()
+                && !requires_python.contains(&markers.python_full_version().version)
+            {
+                *compatibility =
+                    WheelCompatibility::Incompatible(IncompatibleWheel::RequiresPython(
+                        requires_python.clone(),
+                        PythonRequirementKind::Installed,
+                    ));
+                continue;
+            }
+            if let TagCompatibility::Incompatible(tag) = wheel.filename.compatibility(tags) {
+                *compatibility = WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
+            }
+        }
+
+        let mut best_wheel_index: Option<usize> = None;
+        for (index, (_, compatibility)) in self.0.wheels.iter().enumerate() {
+            if best_wheel_index
+                .is_none_or(|best| compatibility.is_more_compatible(&self.0.wheels[best].1))
+            {
+                best_wheel_index = Some(index);
+            }
+        }
+        self.0.best_wheel_index = best_wheel_index;
     }
 
     /// Returns an iterator of all wheels and the source distribution, if any.

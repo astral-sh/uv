@@ -560,21 +560,33 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             lock_entry.lock().await.map_err(Error::CacheLock)?
         };
 
-        // If the wheel was unzipped previously, respect it. Source distributions are
-        // cached under a unique revision ID, so unzipped directories are never stale.
-        match self.build_context.cache().resolve_link(&built_wheel.target) {
-            Ok(archive) => {
-                return Ok(LocalWheel {
-                    dist: Dist::Source(dist.clone()),
-                    archive: archive.into_boxed_path(),
-                    filename: built_wheel.filename,
-                    hashes: built_wheel.hashes,
-                    cache: built_wheel.cache_info,
-                    build: Some(built_wheel.build_info),
-                });
+        // Reuse an unzipped wheel only when it is fresh. An explicitly refreshed build
+        // dependency can otherwise reinstall an archive produced by an older built wheel.
+        if self
+            .build_context
+            .cache()
+            .freshness(
+                &CacheEntry::from_path(built_wheel.target.as_ref()),
+                None,
+                None,
+            )
+            .map_err(Error::CacheRead)?
+            .is_fresh()
+        {
+            match self.build_context.cache().resolve_link(&built_wheel.target) {
+                Ok(archive) => {
+                    return Ok(LocalWheel {
+                        dist: Dist::Source(dist.clone()),
+                        archive: archive.into_boxed_path(),
+                        filename: built_wheel.filename,
+                        hashes: built_wheel.hashes,
+                        cache: built_wheel.cache_info,
+                        build: Some(built_wheel.build_info),
+                    });
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(Error::CacheRead(err)),
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-            Err(err) => return Err(Error::CacheRead(err)),
         }
 
         // Otherwise, unzip the wheel.

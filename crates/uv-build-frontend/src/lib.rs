@@ -265,6 +265,9 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             &no_sources,
+            build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             stop_discovery_at,
             build_context.cache(),
             workspace_cache,
@@ -555,6 +558,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         no_sources: &NoSources,
+        workspace_member_editable: bool,
         stop_discovery_at: Option<&Path>,
         cache: &Cache,
         workspace_cache: &WorkspaceCache,
@@ -648,7 +652,7 @@ impl SourceBuild {
                     install_path,
                     locations,
                     no_sources,
-                    true,
+                    workspace_member_editable,
                     stop_discovery_at,
                     cache,
                     workspace_cache,

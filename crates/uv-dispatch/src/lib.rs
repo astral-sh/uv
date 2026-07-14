@@ -41,14 +41,15 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_requirements::LookaheadResolver;
 use uv_resolver::{
-    ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder, Preference,
-    Preferences, PythonRequirement, Resolver, ResolverEnvironment,
+    AllowedYanks, ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
+    Preference, Preferences, PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences,
     BuildResolutionGraphKey, BuildResolutionStage, BuildResolutions, BuildStack,
     EmptyInstalledPackages, HashStrategy, InFlight, LockedBuildDependency, LockedBuildResolution,
-    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy, build_keys_match,
+    LockedBuildResolutions, ResolvedRequirements, SourceTreeEditablePolicy, UnlockedBuildInputs,
+    build_keys_match, unlocked_build_cache_key,
 };
 use uv_workspace::WorkspaceCache;
 
@@ -147,6 +148,8 @@ pub struct BuildDispatch<'a> {
         Mutex<BTreeMap<BuildPackageKey, BTreeMap<BuildResolutionStage, BuildResolutionGraphKey>>>,
     /// Complete build dependency resolutions reconstructed from the lock file.
     locked_build_resolutions: LockedBuildResolutions,
+    /// Stable digest for the inputs used by unlocked build environments.
+    unlocked_build_cache_key: Option<String>,
     build_preferences: BuildPreferences,
     /// Whether to use universal resolution for build dependencies (for lock files).
     universal_build_resolution: bool,
@@ -186,6 +189,25 @@ impl<'a> BuildDispatch<'a> {
         concurrency: Concurrency,
         preview: Preview,
     ) -> Self {
+        let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+            build_constraints: constraints,
+            index_locations,
+            index_strategy,
+            build_options,
+            dependency_metadata,
+            config_settings,
+            config_settings_package,
+            extra_build_requires,
+            extra_build_variables,
+            build_hasher: hasher,
+            exclude_newer_global: exclude_newer.global.as_ref(),
+            exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
+            sources: &sources,
+            source_tree_editable_policy,
+            non_isolated: !matches!(build_isolation, BuildIsolation::Isolated),
+            invocation_timestamp: cache.timestamp(),
+        });
+
         Self {
             client,
             cache,
@@ -215,6 +237,7 @@ impl<'a> BuildDispatch<'a> {
             build_resolutions: BuildResolutions::default(),
             build_resolution_contexts: Mutex::new(BTreeMap::new()),
             locked_build_resolutions: LockedBuildResolutions::default(),
+            unlocked_build_cache_key,
             build_preferences: BuildPreferences::default(),
             universal_build_resolution: false,
             universal_build_requires_python: None,
@@ -255,12 +278,19 @@ impl<'a> BuildDispatch<'a> {
         &self.locked_build_resolutions
     }
 
+    /// Return the cache key for inputs used by unlocked build environments.
+    pub fn unlocked_build_cache_key(&self) -> Option<&str> {
+        self.unlocked_build_cache_key.as_deref()
+    }
+
     /// Set the build dependency preferences from a previous lock file.
     ///
     /// Used during `uv lock` so the resolver prefers previously locked build dep
     /// versions but can deviate if needed.
     #[must_use]
     pub fn with_build_preferences(mut self, preferences: BuildPreferences) -> Self {
+        self.unlocked_build_cache_key =
+            preferences.cache_key(self.unlocked_build_cache_key.as_deref());
         self.build_preferences = preferences;
         self
     }
@@ -276,6 +306,25 @@ impl<'a> BuildDispatch<'a> {
         environments: SupportedEnvironments,
         artifact_environments: SupportedEnvironments,
     ) -> Self {
+        let mut environment_markers = environments
+            .iter()
+            .map(|marker| marker.try_to_string())
+            .collect::<Vec<_>>();
+        environment_markers.sort_unstable();
+        environment_markers.dedup();
+        let mut artifact_environment_markers = artifact_environments
+            .iter()
+            .map(|marker| marker.try_to_string())
+            .collect::<Vec<_>>();
+        artifact_environment_markers.sort_unstable();
+        artifact_environment_markers.dedup();
+        self.unlocked_build_cache_key = Some(uv_cache_key::hash_digest(&(
+            "universal-build-resolution",
+            self.unlocked_build_cache_key.as_deref(),
+            requires_python.to_string(),
+            environment_markers,
+            artifact_environment_markers,
+        )));
         self.universal_build_resolution = true;
         self.universal_build_requires_python = Some(requires_python);
         self.universal_build_environments = environments;
@@ -413,6 +462,17 @@ impl<'a> BuildDispatch<'a> {
             .bootstrap_direct_dependencies()
             .unwrap_or_else(|| resolution.direct_dependencies());
         let markers = self.interpreter.to_resolver_marker_environment();
+        if requirements
+            .iter()
+            .filter(|requirement| requirement.evaluate_markers(Some(&markers), &[]))
+            .any(|requirement| {
+                !direct_dependencies
+                    .iter()
+                    .any(|dependency| locked_dependency_satisfies(requirement, dependency))
+            })
+        {
+            return None;
+        }
         let initial_requirements = resolution.initial_requirements().unwrap_or(requirements);
         let mut selected = Resolution::default();
         for initial_requirement in initial_requirements
@@ -494,9 +554,99 @@ fn locked_dependency_satisfies(
                 .dist
                 .version()
                 .is_some_and(|version| specifier.contains(version))
-                && index
-                    .as_ref()
-                    .is_none_or(|index| selected_index.as_ref() == Some(index))
+                && index.as_ref().is_none_or(|index| {
+                    selected_index.as_ref().is_some_and(|selected_index| {
+                        selected_index.url().without_credentials()
+                            == index.url().without_credentials()
+                    })
+                })
+        }
+        (
+            RequirementSource::Url {
+                location,
+                subdirectory,
+                ext,
+                ..
+            },
+            RequirementSource::Url {
+                location: selected_location,
+                subdirectory: selected_subdirectory,
+                ext: selected_ext,
+                ..
+            },
+        ) => {
+            location == selected_location
+                && subdirectory == selected_subdirectory
+                && ext == selected_ext
+        }
+        (
+            RequirementSource::Path {
+                install_path, ext, ..
+            },
+            RequirementSource::Path {
+                install_path: selected_install_path,
+                ext: selected_ext,
+                ..
+            },
+        ) => install_path == selected_install_path && ext == selected_ext,
+        (
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                ..
+            },
+            RequirementSource::Directory {
+                install_path: selected_install_path,
+                editable: selected_editable,
+                r#virtual: selected_virtual,
+                ..
+            },
+        ) => {
+            install_path == selected_install_path
+                && editable.unwrap_or(false) == selected_editable.unwrap_or(false)
+                && r#virtual.unwrap_or(false) == selected_virtual.unwrap_or(false)
+        }
+        (
+            RequirementSource::GitDirectory {
+                git, subdirectory, ..
+            },
+            RequirementSource::GitDirectory {
+                git: selected_git,
+                subdirectory: selected_subdirectory,
+                ..
+            },
+        ) => {
+            git.repository() == selected_git.repository()
+                && git.reference() == selected_git.reference()
+                && git.lfs() == selected_git.lfs()
+                && subdirectory == selected_subdirectory
+                && git
+                    .precise()
+                    .is_none_or(|precise| selected_git.precise() == Some(precise))
+        }
+        (
+            RequirementSource::GitPath {
+                git,
+                install_path,
+                ext,
+                ..
+            },
+            RequirementSource::GitPath {
+                git: selected_git,
+                install_path: selected_install_path,
+                ext: selected_ext,
+                ..
+            },
+        ) => {
+            git.repository() == selected_git.repository()
+                && git.reference() == selected_git.reference()
+                && git.lfs() == selected_git.lfs()
+                && install_path == selected_install_path
+                && ext == selected_ext
+                && git
+                    .precise()
+                    .is_none_or(|precise| selected_git.precise() == Some(precise))
         }
         (source, selected_source) => source == selected_source,
     }
@@ -520,6 +670,10 @@ impl BuildContext for BuildDispatch<'_> {
 
     fn build_arena(&self) -> &BuildArena<SourceBuild> {
         &self.shared_state.build_arena
+    }
+
+    fn reuse_build_arena(&self) -> bool {
+        !self.universal_build_resolution
     }
 
     fn capabilities(&self) -> &IndexCapabilities {
@@ -587,6 +741,10 @@ impl BuildContext for BuildDispatch<'_> {
         )
     }
 
+    fn unlocked_build_cache_key(&self) -> Option<&str> {
+        self.unlocked_build_cache_key.as_deref()
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
@@ -600,9 +758,8 @@ impl BuildContext for BuildDispatch<'_> {
             BuildResolutionStage::Bootstrap
         };
 
-        // If we have a locked build resolution for this package, replay the appropriate stage
-        // without running the resolver. Backend hook requirements are validated separately from
-        // `build-system.requires`, which remains fixed by a frozen lock.
+        // If we have a locked build resolution for this package, replay the appropriate stage.
+        // Initial and hook requirements are validated separately without running the resolver.
         if let Some(package) = package
             && let Some(locked_resolution) = self.locked_build_resolutions.get(package)
         {
@@ -628,7 +785,9 @@ impl BuildContext for BuildDispatch<'_> {
                 package.name, package.version
             );
             let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
-                .map_err(anyhow::Error::from)?;
+                .map_err(anyhow::Error::from)?
+                .augment_with_requirements(requirements.iter())
+                .map_err(uv_requirements::Error::from)?;
             return Ok(ResolvedRequirements::new(resolution, hasher));
         }
 
@@ -691,13 +850,20 @@ impl BuildContext for BuildDispatch<'_> {
             .map_err(uv_requirements::Error::from)?;
         let overrides = Overrides::default();
         let excludes = Excludes::default();
+        // A version map contains the artifact eligibility for the build environment that
+        // produced it. Keep universal build resolutions from reusing a sibling build's yanked
+        // or Python-incompatible artifact decisions through the shared in-memory index.
+        let universal_build_index = self.universal_build_resolution.then(InMemoryIndex::default);
+        let index = universal_build_index
+            .as_ref()
+            .unwrap_or(&self.shared_state.index);
         let (lookaheads, hasher) = LookaheadResolver::new(
             requirements,
             self.constraints,
             &overrides,
             &excludes,
             &hasher,
-            &self.shared_state.index,
+            index,
             DistributionDatabase::new(
                 self.client,
                 self,
@@ -712,16 +878,19 @@ impl BuildContext for BuildDispatch<'_> {
             .with_constraints(self.constraints.clone())
             .with_preferences(preferences)
             .with_lookaheads(lookaheads);
+        let options = OptionsBuilder::new()
+            .exclude_newer(self.exclude_newer.clone())
+            .index_strategy(self.index_strategy)
+            .build_options(self.build_options.clone())
+            .artifact_environments(universal_build_artifact_environments)
+            .flexibility(Flexibility::Fixed)
+            .build();
+        let allowed_yanks =
+            AllowedYanks::from_manifest(&manifest, &resolver_env, options.dependency_mode);
 
         let resolver = Resolver::new(
             manifest,
-            OptionsBuilder::new()
-                .exclude_newer(self.exclude_newer.clone())
-                .index_strategy(self.index_strategy)
-                .build_options(self.build_options.clone())
-                .artifact_environments(universal_build_artifact_environments)
-                .flexibility(Flexibility::Fixed)
-                .build(),
+            options,
             &python_requirement,
             resolver_env,
             self.interpreter.markers(),
@@ -729,7 +898,7 @@ impl BuildContext for BuildDispatch<'_> {
             Conflicts::empty(),
             tags,
             self.flat_index,
-            &self.shared_state.index,
+            index,
             &hasher,
             self,
             EmptyInstalledPackages,
@@ -740,6 +909,11 @@ impl BuildContext for BuildDispatch<'_> {
             )
             .with_build_stack(build_stack),
         )?;
+        let resolver = if self.universal_build_resolution {
+            resolver.with_artifact_tags(self.interpreter.tags()?.clone())
+        } else {
+            resolver
+        };
         let resolver_output = resolver.resolve().boxed_local().await.with_context(|| {
             format!(
                 "No solution found when resolving: {}",
@@ -753,7 +927,11 @@ impl BuildContext for BuildDispatch<'_> {
         // If doing universal resolution, capture the build resolution graph
         // (direct requirements + all packages with their dependency edges).
         let build_resolution_graph = if self.universal_build_resolution {
-            Some(resolver_output.build_resolution_graph())
+            Some(resolver_output.build_resolution_graph(
+                self.interpreter.tags()?,
+                self.interpreter.markers(),
+                &allowed_yanks,
+            ))
         } else {
             None
         };
@@ -782,7 +960,12 @@ impl BuildContext for BuildDispatch<'_> {
             } else {
                 None
             };
-            resolver_output.into_build_resolution(markers)
+            resolver_output.into_build_resolution(
+                markers,
+                self.interpreter.tags()?,
+                self.interpreter.markers(),
+                &allowed_yanks,
+            )
         } else {
             Resolution::from(resolver_output)
         };
@@ -832,6 +1015,8 @@ impl BuildContext for BuildDispatch<'_> {
             extraneous: _,
         } = Planner::new(resolution)
             .with_locked_build_resolutions(&self.locked_build_resolutions)
+            .with_unlocked_build_cache_key(self.unlocked_build_cache_key())
+            .with_source_cache(matches!(self.build_isolation, BuildIsolation::Isolated))
             .build(
                 site_packages,
                 InstallationStrategy::Permissive,
@@ -1108,7 +1293,7 @@ pub struct SharedState {
 }
 
 impl SharedState {
-    /// Fork the [`SharedState`], creating a new in-memory index and in-flight cache.
+    /// Fork the [`SharedState`], creating a new in-memory index, in-flight cache, and build arena.
     ///
     /// State that is universally applicable (like the Git resolver and index capabilities)
     /// are retained.
@@ -1117,7 +1302,6 @@ impl SharedState {
         Self {
             git: self.git.clone(),
             capabilities: self.capabilities.clone(),
-            build_arena: self.build_arena.clone(),
             ..Default::default()
         }
     }

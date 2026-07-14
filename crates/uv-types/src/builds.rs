@@ -4,17 +4,24 @@ use std::sync::{Arc, Mutex};
 
 use papaya::{HashMap, ResizeMode};
 
-use uv_cache_info::{CacheInfo, CacheInfoError};
-use uv_configuration::{BuildKind, NoSources};
+use uv_cache_info::{CacheInfo, CacheInfoError, Timestamp};
+use uv_configuration::{
+    BuildKind, BuildOptions, Constraints, IndexStrategy, NoBinary, NoBuild, NoSources,
+};
 use uv_distribution_types::{
-    BuildInfo, BuiltDist, ConfigSettings, Dist, ExtraBuildRequires, ExtraBuildVariables, Name,
-    PackageConfigSettings, Requirement, Resolution, ResolvedDist, SourceDist,
+    BuildInfo, BuiltDist, ConfigSettings, DependencyMetadata, Dist, ExcludeNewerOverride,
+    ExcludeNewerValue, ExtraBuildRequires, ExtraBuildVariables, HashGeneration, IndexCacheControl,
+    IndexFormat, IndexLocations, Name, PackageConfigSettings, Requirement, RequirementSource,
+    Resolution, ResolvedDist, SourceDist,
 };
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 use uv_python::PythonEnvironment;
+use uv_redacted::DisplaySafeUrl;
+
+use crate::{HashStrategy, SourceTreeEditablePolicy};
 
 /// Whether to enforce build isolation when building source distributions.
 #[derive(Debug, Default, Copy, Clone)]
@@ -123,6 +130,8 @@ pub struct BuildDependencyEdge {
 pub struct BuildDependencyPackage {
     /// The resolved distribution.
     pub dist: ResolvedDist,
+    /// Whether yanked artifacts are permitted for this package version.
+    pub allows_yanked: bool,
     /// The hashes for verification.
     pub hashes: Vec<HashDigest>,
     /// The marker environments in which this package is reachable.
@@ -185,20 +194,41 @@ impl BuildPackageSource {
     /// Construct a source discriminator from a [`SourceDist`].
     fn from_source_dist(source: &SourceDist) -> Self {
         match source {
-            SourceDist::Registry(dist) => {
-                Self::Registry(dist.index.without_credentials().as_ref().to_string())
+            SourceDist::Registry(dist) => Self::Registry(
+                dist.index
+                    .without_credentials()
+                    .as_ref()
+                    .as_str()
+                    .trim_end_matches('/')
+                    .to_string(),
+            ),
+            SourceDist::DirectUrl(dist) => {
+                let url = DisplaySafeUrl::from(dist.to_parsed_url());
+                Self::DirectUrl(url.to_string())
             }
-            SourceDist::DirectUrl(dist) => Self::DirectUrl(dist.url.to_string()),
-            SourceDist::GitDirectory(dist) => Self::Git(dist.url.to_string()),
-            SourceDist::GitPath(dist) => Self::Git(dist.url.to_string()),
-            SourceDist::Path(dist) => Self::Path(dist.url.to_string()),
+            SourceDist::GitDirectory(dist) => {
+                let url = DisplaySafeUrl::from(dist.to_parsed_url());
+                Self::Git(sanitized_url(&url))
+            }
+            SourceDist::GitPath(dist) => {
+                let url = DisplaySafeUrl::from(dist.to_parsed_url());
+                Self::Git(sanitized_url(&url))
+            }
+            SourceDist::Path(dist) => {
+                let mut url = dist.url.to_url();
+                url.set_fragment(None);
+                Self::Path(url.to_string())
+            }
             SourceDist::Directory(dist) => {
+                let mut url = dist.url.to_url();
+                url.set_fragment(None);
+                let url = url.as_str().trim_end_matches('/').to_string();
                 if dist.editable.unwrap_or(false) {
-                    Self::Editable(dist.url.to_string())
+                    Self::Editable(url)
                 } else if dist.r#virtual.unwrap_or(false) {
-                    Self::Virtual(dist.url.to_string())
+                    Self::Virtual(url)
                 } else {
-                    Self::Directory(dist.url.to_string())
+                    Self::Directory(url)
                 }
             }
         }
@@ -301,7 +331,7 @@ impl BuildResolutionOperation {
 /// A captured build resolution graph key.
 ///
 /// A source package can have multiple independently resolved build graphs when
-/// it is built for different target, executor, or requirement-discovery stage
+/// it is built for different target or requirement-discovery stage
 /// contexts. The optional context distinguishes those captures while preserving
 /// the legacy package-only key for callers that have not been moved to
 /// first-class resolution contexts yet.
@@ -372,6 +402,431 @@ fn get_unambiguous_key<'a, T>(
 /// Locked build dependency resolutions, indexed by package key.
 #[derive(Debug, Default, Clone)]
 pub struct LockedBuildResolutions(BTreeMap<BuildPackageKey, LockedBuildResolution>);
+
+/// Inputs that can change an unlocked build environment without changing its source distribution.
+pub struct UnlockedBuildInputs<'a> {
+    pub build_constraints: &'a Constraints,
+    pub index_locations: &'a IndexLocations,
+    pub index_strategy: IndexStrategy,
+    pub build_options: &'a BuildOptions,
+    pub dependency_metadata: &'a DependencyMetadata,
+    pub config_settings: &'a ConfigSettings,
+    pub config_settings_package: &'a PackageConfigSettings,
+    pub extra_build_requires: &'a ExtraBuildRequires,
+    pub extra_build_variables: &'a ExtraBuildVariables,
+    pub build_hasher: &'a HashStrategy,
+    pub exclude_newer_global: Option<&'a ExcludeNewerValue>,
+    pub exclude_newer_package: Vec<(&'a PackageName, &'a ExcludeNewerOverride)>,
+    pub sources: &'a NoSources,
+    pub source_tree_editable_policy: SourceTreeEditablePolicy,
+    pub non_isolated: bool,
+    pub invocation_timestamp: Timestamp,
+}
+
+/// Return an invocation-stable, credential-safe digest for [`UnlockedBuildInputs`].
+///
+/// The default build inputs return `None`, preserving existing wheel-cache identities.
+pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<String> {
+    let UnlockedBuildInputs {
+        build_constraints,
+        index_locations,
+        index_strategy,
+        build_options,
+        dependency_metadata,
+        config_settings,
+        config_settings_package,
+        extra_build_requires,
+        extra_build_variables,
+        build_hasher,
+        exclude_newer_global,
+        mut exclude_newer_package,
+        sources,
+        source_tree_editable_policy,
+        non_isolated,
+        invocation_timestamp,
+    } = inputs;
+
+    let has_mutable_requirement = build_constraints
+        .requirements()
+        .any(is_mutable_unlocked_requirement)
+        || dependency_metadata
+            .values()
+            .flat_map(|metadata| metadata.requires_dist.iter().cloned())
+            .map(Requirement::from)
+            .any(|requirement| is_mutable_unlocked_requirement(&requirement))
+        || extra_build_requires
+            .values()
+            .flatten()
+            .any(|requirement| is_mutable_unlocked_requirement(&requirement.requirement));
+
+    let mut constraints = build_constraints
+        .requirements()
+        .map(normalized_unlocked_requirement)
+        .collect::<Vec<_>>();
+    constraints.sort_unstable();
+    constraints.dedup();
+
+    exclude_newer_package.sort_unstable();
+
+    let (no_binary, mut no_binary_packages) = match build_options.no_binary() {
+        NoBinary::None => ("none", Vec::new()),
+        NoBinary::All => ("all", Vec::new()),
+        NoBinary::Packages(packages) => ("packages", packages.iter().collect()),
+    };
+    no_binary_packages.sort_unstable();
+    no_binary_packages.dedup();
+    let (no_build, mut no_build_packages) = match build_options.no_build() {
+        NoBuild::None => ("none", Vec::new()),
+        NoBuild::All => ("all", Vec::new()),
+        NoBuild::Packages(packages) => ("packages", packages.iter().collect()),
+    };
+    no_build_packages.sort_unstable();
+    no_build_packages.dedup();
+    let (no_sources, mut no_sources_packages) = match sources {
+        NoSources::None => ("none", Vec::new()),
+        NoSources::All => ("all", Vec::new()),
+        NoSources::Packages(packages) => ("packages", packages.iter().collect()),
+    };
+    no_sources_packages.sort_unstable();
+    no_sources_packages.dedup();
+
+    let mut dependency_metadata = dependency_metadata
+        .values()
+        .map(|metadata| {
+            let mut requires_dist = metadata
+                .requires_dist
+                .iter()
+                .cloned()
+                .map(Requirement::from)
+                .map(|requirement| normalized_unlocked_requirement(&requirement))
+                .collect::<Vec<_>>();
+            requires_dist.sort_unstable();
+            requires_dist.dedup();
+            let mut provides_extra = metadata
+                .provides_extra
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            provides_extra.sort_unstable();
+            provides_extra.dedup();
+            (
+                metadata.name.as_str(),
+                metadata.version.as_ref().map(ToString::to_string),
+                requires_dist,
+                metadata.requires_python.as_ref().map(ToString::to_string),
+                provides_extra,
+            )
+        })
+        .collect::<Vec<_>>();
+    dependency_metadata
+        .sort_by(|left, right| left.0.cmp(right.0).then_with(|| left.1.cmp(&right.1)));
+
+    let mut extra_build_requires = extra_build_requires
+        .iter()
+        .filter(|(_, requirements)| !requirements.is_empty())
+        .map(|(package, requirements)| {
+            let mut requirements = requirements
+                .iter()
+                .map(|requirement| {
+                    (
+                        normalized_unlocked_requirement(&requirement.requirement),
+                        requirement.match_runtime,
+                    )
+                })
+                .collect::<Vec<_>>();
+            requirements.sort_unstable();
+            requirements.dedup();
+            (package.as_str(), requirements)
+        })
+        .collect::<Vec<_>>();
+    extra_build_requires.sort_unstable();
+
+    let (hash_strategy, mut build_hashes) = match build_hasher {
+        HashStrategy::None => ("none", Vec::new()),
+        HashStrategy::Generate(HashGeneration::Url) => ("generate-url", Vec::new()),
+        HashStrategy::Generate(HashGeneration::All) => ("generate-all", Vec::new()),
+        HashStrategy::Verify(hashes) if hashes.is_empty() => ("none", Vec::new()),
+        HashStrategy::Verify(hashes) | HashStrategy::Require(hashes) => {
+            let mode = if matches!(build_hasher, HashStrategy::Verify(_)) {
+                "verify"
+            } else {
+                "require"
+            };
+            let hashes = hashes
+                .iter()
+                .map(|(id, digests)| {
+                    let mut id = id.to_string();
+                    if let Ok(url) = DisplaySafeUrl::parse(&id) {
+                        id = sanitized_url(&url);
+                    }
+                    let mut digests = digests.iter().map(ToString::to_string).collect::<Vec<_>>();
+                    digests.sort_unstable();
+                    digests.dedup();
+                    (id, digests)
+                })
+                .collect();
+            (mode, hashes)
+        }
+    };
+    build_hashes.sort_unstable();
+
+    if constraints.is_empty()
+        && index_locations.is_none()
+        && index_strategy == IndexStrategy::default()
+        && build_options.no_binary().is_none()
+        && build_options.no_build().is_none()
+        && dependency_metadata.is_empty()
+        && config_settings.is_empty()
+        && *config_settings_package == PackageConfigSettings::default()
+        && extra_build_requires.is_empty()
+        && extra_build_variables.is_empty()
+        && hash_strategy == "none"
+        && exclude_newer_global.is_none()
+        && exclude_newer_package.is_empty()
+        && sources.is_none()
+        && source_tree_editable_policy == SourceTreeEditablePolicy::default()
+        && !non_isolated
+    {
+        return None;
+    }
+
+    let indexes = index_locations
+        .allowed_indexes()
+        .into_iter()
+        .map(|index| {
+            let mut ignore_error_codes = index
+                .ignore_error_codes
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|status| status.as_u16())
+                .collect::<Vec<_>>();
+            ignore_error_codes.sort_unstable();
+            ignore_error_codes.dedup();
+            (
+                index.name.as_ref(),
+                index.url().without_credentials().as_ref().to_string(),
+                index.explicit,
+                index.default,
+                index.format,
+                &index.authenticate,
+                ignore_error_codes,
+                &index.cache_control,
+                &index.exclude_newer,
+            )
+        })
+        .collect::<Vec<_>>();
+    let has_relative_cutoff = matches!(exclude_newer_global, Some(ExcludeNewerValue::Relative(_)))
+        || exclude_newer_package.iter().any(|(_, value)| {
+            matches!(
+                value,
+                ExcludeNewerOverride::Enabled(value)
+                    if matches!(value.as_ref(), ExcludeNewerValue::Relative(_))
+            )
+        })
+        || index_locations.allowed_indexes().into_iter().any(|index| {
+            matches!(
+                index.exclude_newer.as_ref(),
+                Some(ExcludeNewerOverride::Enabled(value))
+                    if matches!(value.as_ref(), ExcludeNewerValue::Relative(_))
+            )
+        });
+    let has_local_simple_index = index_locations
+        .allowed_indexes()
+        .into_iter()
+        .any(|index| index.format != IndexFormat::Flat && index.url().to_file_path().is_ok());
+    // An explicit cache-control policy can request revalidation of mutable API or artifact
+    // responses, so an outer source wheel must not outlive the invocation that resolved them.
+    let has_revalidating_cache_control =
+        index_locations.allowed_indexes().into_iter().any(|index| {
+            index
+                .cache_control
+                .as_ref()
+                .is_some_and(IndexCacheControl::requires_revalidation)
+        });
+    let invocation_sensitive = non_isolated
+        || has_mutable_requirement
+        || has_relative_cutoff
+        || has_local_simple_index
+        || has_revalidating_cache_control;
+
+    let index_strategy = match index_strategy {
+        IndexStrategy::FirstIndex => "first-index",
+        IndexStrategy::UnsafeFirstMatch => "unsafe-first-match",
+        IndexStrategy::UnsafeBestMatch => "unsafe-best-match",
+    };
+    let source_tree_editable_policy = match source_tree_editable_policy {
+        SourceTreeEditablePolicy::Project => "project",
+        SourceTreeEditablePolicy::Tool => "tool",
+    };
+
+    Some(uv_cache_key::hash_digest(&(
+        (
+            constraints,
+            indexes,
+            index_locations.no_index(),
+            index_strategy,
+        ),
+        (
+            no_binary,
+            no_binary_packages,
+            no_build,
+            no_build_packages,
+            no_sources,
+            no_sources_packages,
+            source_tree_editable_policy,
+        ),
+        (
+            dependency_metadata,
+            uv_cache_key::cache_digest(config_settings),
+            uv_cache_key::cache_digest(config_settings_package),
+            extra_build_requires,
+            uv_cache_key::cache_digest(extra_build_variables),
+        ),
+        (hash_strategy, build_hashes),
+        (
+            exclude_newer_global,
+            exclude_newer_package,
+            non_isolated,
+            invocation_sensitive.then_some(invocation_timestamp),
+        ),
+    )))
+}
+
+fn is_mutable_unlocked_requirement(requirement: &Requirement) -> bool {
+    match &requirement.source {
+        RequirementSource::Url { .. } => requirement.hashes().is_none(),
+        RequirementSource::GitDirectory { git, .. } | RequirementSource::GitPath { git, .. } => {
+            git.precise().is_none()
+        }
+        _ => false,
+    }
+}
+
+type NormalizedUnlockedRequirement = (
+    String,
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+    String,
+    Vec<HashDigest>,
+    Option<String>,
+);
+
+fn normalized_unlocked_requirement(requirement: &Requirement) -> NormalizedUnlockedRequirement {
+    let source = match &requirement.source {
+        RequirementSource::Registry {
+            specifier, index, ..
+        } => format!(
+            "registry:{specifier}:{}",
+            index
+                .as_ref()
+                .map(|index| index.url.without_credentials().as_ref().to_string())
+                .unwrap_or_default()
+        ),
+        RequirementSource::Url {
+            location,
+            subdirectory,
+            ext,
+            ..
+        } => format!(
+            "url:{}:{}:{}",
+            sanitized_url(location),
+            ext.name(),
+            subdirectory
+                .as_deref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default()
+        ),
+        RequirementSource::GitDirectory {
+            git, subdirectory, ..
+        } => format!(
+            "git-directory:{}:{}:{:?}:{}:{}",
+            sanitized_url(git.url()),
+            git.reference().as_rev(),
+            git.precise(),
+            git.lfs().enabled(),
+            subdirectory
+                .as_deref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default()
+        ),
+        RequirementSource::GitPath {
+            git,
+            install_path,
+            ext,
+            ..
+        } => format!(
+            "git-path:{}:{}:{:?}:{}:{}:{}",
+            sanitized_url(git.url()),
+            git.reference().as_rev(),
+            git.precise(),
+            git.lfs().enabled(),
+            ext.name(),
+            install_path.display()
+        ),
+        RequirementSource::Path { url, ext, .. } => {
+            format!("path:{}:{}", sanitized_url(url), ext.name())
+        }
+        RequirementSource::Directory {
+            url,
+            editable,
+            r#virtual,
+            ..
+        } => format!(
+            "directory:{}:{editable:?}:{:?}",
+            sanitized_url(url),
+            r#virtual
+        ),
+    };
+    let artifact_cache_info = match &requirement.source {
+        RequirementSource::Path { install_path, .. } => CacheInfo::from_file(install_path).ok(),
+        RequirementSource::Directory { install_path, .. } => {
+            CacheInfo::from_directory(install_path).ok()
+        }
+        _ => None,
+    }
+    .map(|cache_info| uv_cache_key::hash_digest(&cache_info));
+    let mut extras = requirement
+        .extras
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    extras.sort_unstable();
+    extras.dedup();
+    let mut groups = requirement
+        .groups
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    groups.sort_unstable();
+    groups.dedup();
+    let mut hashes = requirement
+        .hashes()
+        .map(HashDigests::from)
+        .map(|hashes| hashes.to_vec())
+        .unwrap_or_default();
+    hashes.sort_unstable();
+    hashes.dedup();
+    (
+        requirement.name.to_string(),
+        extras,
+        groups,
+        requirement
+            .marker
+            .contents()
+            .map(|contents| contents.to_string()),
+        source,
+        hashes,
+        artifact_cache_info,
+    )
+}
+
+fn sanitized_url(url: &DisplaySafeUrl) -> String {
+    let mut url = url.clone();
+    url.remove_credentials();
+    url.to_string()
+}
 
 /// A locked build dependency resolution and its direct requirements.
 #[derive(Debug, Clone)]
@@ -459,11 +914,6 @@ impl LockedBuildResolutions {
     /// Create locked build resolutions from a map keyed by [`BuildPackageKey`].
     pub fn new(map: BTreeMap<BuildPackageKey, LockedBuildResolution>) -> Self {
         Self(map)
-    }
-
-    /// Return whether there are no locked build resolutions.
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 
     /// Get the pre-built resolution for a package key.
@@ -682,6 +1132,51 @@ impl BuildPreferences {
     pub fn get(&self, package: &BuildPackageKey) -> Option<&[(PackageName, Version)]> {
         get_unambiguous_key(&self.0, package).map(Vec::as_slice)
     }
+
+    /// Include these preferences in an existing unlocked-build cache key.
+    pub fn cache_key(&self, cache_key: Option<&str>) -> Option<String> {
+        if self.0.is_empty() {
+            return cache_key.map(str::to_string);
+        }
+
+        let mut preferences = self
+            .0
+            .iter()
+            .map(|(package, dependencies)| {
+                let source = package.source.as_ref().map(|source| {
+                    let (kind, source) = match source {
+                        BuildPackageSource::Registry(source) => ("registry", source),
+                        BuildPackageSource::DirectUrl(source) => ("direct-url", source),
+                        BuildPackageSource::Git(source) => ("git", source),
+                        BuildPackageSource::Path(source) => ("path", source),
+                        BuildPackageSource::Directory(source) => ("directory", source),
+                        BuildPackageSource::Editable(source) => ("editable", source),
+                        BuildPackageSource::Virtual(source) => ("virtual", source),
+                    };
+                    let source = DisplaySafeUrl::parse(source)
+                        .map(|url| sanitized_url(&url))
+                        .unwrap_or_else(|_| source.clone());
+                    (kind, source)
+                });
+                let mut dependencies = dependencies
+                    .iter()
+                    .map(|(name, version)| (name.as_str(), version.to_string()))
+                    .collect::<Vec<_>>();
+                dependencies.sort_unstable();
+                dependencies.dedup();
+                (
+                    package.name.as_str(),
+                    package.version.as_ref().map(ToString::to_string),
+                    source,
+                    dependencies,
+                )
+            })
+            .collect::<Vec<_>>();
+        preferences.sort_unstable();
+        preferences.dedup();
+
+        Some(uv_cache_key::hash_digest(&(cache_key, preferences)))
+    }
 }
 
 /// Captured build dependency resolutions with markers.
@@ -715,13 +1210,16 @@ impl BuildResolutions {
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
+    use std::time::{Duration, SystemTime};
 
     use uv_distribution_filename::{SourceDistExtension, WheelFilename};
     use uv_distribution_types::{
-        BuiltDist, ConfigSettingPackageEntry, File, FileLocation, IndexUrl, Node,
-        RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+        BuiltDist, ConfigSettingPackageEntry, DirectorySourceDist, ExtraBuildRequirement, File,
+        FileLocation, Index, IndexUrl, Node, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+        RegistrySourceDist,
     };
-    use uv_pypi_types::HashDigests;
+    use uv_pep508::{Pep508Url, VerbatimUrl};
+    use uv_pypi_types::VerbatimParsedUrl;
 
     use super::*;
 
@@ -745,6 +1243,722 @@ mod tests {
             stage,
             target_marker,
         )
+    }
+
+    #[test]
+    fn unlocked_build_cache_key_preserves_default_and_ignores_credentials() {
+        fn cache_key<'a>(
+            build_constraints: &Constraints,
+            index_locations: &IndexLocations,
+            index_strategy: IndexStrategy,
+            build_options: &BuildOptions,
+            dependency_metadata: &DependencyMetadata,
+            exclude_newer_global: Option<&ExcludeNewerValue>,
+            exclude_newer_package: impl IntoIterator<Item = (&'a PackageName, &'a ExcludeNewerOverride)>,
+            sources: &NoSources,
+        ) -> Option<String> {
+            unlocked_build_cache_key(UnlockedBuildInputs {
+                build_constraints,
+                index_locations,
+                index_strategy,
+                build_options,
+                dependency_metadata,
+                config_settings: &ConfigSettings::default(),
+                config_settings_package: &PackageConfigSettings::default(),
+                extra_build_requires: &ExtraBuildRequires::default(),
+                extra_build_variables: &ExtraBuildVariables::default(),
+                build_hasher: &HashStrategy::default(),
+                exclude_newer_global,
+                exclude_newer_package: exclude_newer_package.into_iter().collect(),
+                sources,
+                source_tree_editable_policy: SourceTreeEditablePolicy::default(),
+                non_isolated: false,
+                invocation_timestamp: Timestamp::from(SystemTime::UNIX_EPOCH),
+            })
+        }
+
+        let defaults = IndexLocations::default();
+        let build_options = BuildOptions::default();
+        let dependency_metadata = DependencyMetadata::default();
+        let sources = NoSources::default();
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            None
+        );
+
+        let index = |url| {
+            IndexLocations::new(
+                vec![Index::from_index_url(
+                    IndexUrl::from_str(url).expect("valid index URL"),
+                )],
+                Vec::new(),
+                false,
+            )
+        };
+        let with_credentials = index("https://user:secret@example.com/simple");
+        let without_credentials = index("https://example.com/simple");
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &with_credentials,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &without_credentials,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let constraints = |url: &str| {
+            Constraints::from_requirements(std::iter::once(Requirement::from(
+                uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(&format!("helper @ {url}"))
+                    .expect("valid build constraint"),
+            )))
+        };
+        assert_eq!(
+            cache_key(
+                &constraints("https://user:secret@example.com/helper-1.0.0.whl"),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &constraints("https://example.com/helper-1.0.0.whl"),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let dependency_metadata = |url: &str| {
+            DependencyMetadata::from_entries([uv_distribution_types::StaticMetadata {
+                name: PackageName::from_str("helper").expect("valid package name"),
+                version: Some(Version::from_str("1.0.0").expect("valid version")),
+                requires_dist: vec![
+                    uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(&format!(
+                        "dependency @ {url}"
+                    ))
+                    .expect("valid dependency metadata"),
+                ]
+                .into_boxed_slice(),
+                requires_python: None,
+                provides_extra: Box::default(),
+            }])
+        };
+        let with_credentials =
+            dependency_metadata("https://user:secret@example.com/dependency-1.0.0.whl");
+        let without_credentials = dependency_metadata("https://example.com/dependency-1.0.0.whl");
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &with_credentials,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &without_credentials,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &DependencyMetadata::default(),
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &without_credentials,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let dependency_metadata = DependencyMetadata::default();
+
+        let first = PackageName::from_str("first").expect("valid package name");
+        let second = PackageName::from_str("second").expect("valid package name");
+        let older = ExcludeNewerValue::from_str("2024-03-15T00:00:00Z").expect("valid cutoff");
+        let newer = ExcludeNewerValue::from_str("2024-04-15T00:00:00Z").expect("valid cutoff");
+        let disabled = ExcludeNewerOverride::Disabled;
+        let enabled = ExcludeNewerOverride::from(older.clone());
+
+        let forward = [(&first, &enabled), (&second, &disabled)];
+        let reverse = [(&second, &disabled), (&first, &enabled)];
+        let changed = [(&first, &disabled), (&second, &disabled)];
+        let forward_build_options = BuildOptions::new(
+            NoBinary::Packages(vec![first.clone(), second.clone(), first.clone()]),
+            NoBuild::Packages(vec![second.clone(), first.clone(), second.clone()]),
+        );
+        let reverse_build_options = BuildOptions::new(
+            NoBinary::Packages(vec![second.clone(), first.clone()]),
+            NoBuild::Packages(vec![first.clone(), second.clone()]),
+        );
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&older),
+                forward,
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&older),
+                reverse,
+                &sources,
+            )
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&newer),
+                forward,
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&newer),
+                changed,
+                &sources,
+            )
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&older),
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                Some(&newer),
+                std::iter::empty(),
+                &sources,
+            )
+        );
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &forward_build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &reverse_build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &forward_build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let forward_sources =
+            NoSources::Packages(vec![first.clone(), second.clone(), first.clone()]);
+        let reverse_sources = NoSources::Packages(vec![second, first]);
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &forward_sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &reverse_sources,
+            )
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &forward_sources,
+            )
+        );
+    }
+
+    #[test]
+    fn unlocked_build_cache_key_invalidates_remote_requirement_hashes() {
+        let cache_key = |build_constraints: &Constraints,
+                         dependency_metadata: &DependencyMetadata,
+                         extra_build_requires: &ExtraBuildRequires| {
+            unlocked_build_cache_key(UnlockedBuildInputs {
+                build_constraints,
+                index_locations: &IndexLocations::default(),
+                index_strategy: IndexStrategy::default(),
+                build_options: &BuildOptions::default(),
+                dependency_metadata,
+                config_settings: &ConfigSettings::default(),
+                config_settings_package: &PackageConfigSettings::default(),
+                extra_build_requires,
+                extra_build_variables: &ExtraBuildVariables::default(),
+                build_hasher: &HashStrategy::default(),
+                exclude_newer_global: None,
+                exclude_newer_package: Vec::new(),
+                sources: &NoSources::default(),
+                source_tree_editable_policy: SourceTreeEditablePolicy::default(),
+                non_isolated: false,
+                invocation_timestamp: Timestamp::now(),
+            })
+        };
+        let requirement = |name: &str, credentials: &str, hash: &str| {
+            Requirement::from(
+                uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(&format!(
+                    "{name} @ https://{credentials}example.com/{name}-1.0.0.zip#subdirectory=python&sha256={hash}"
+                ))
+                .expect("valid URL requirement"),
+            )
+        };
+        let first = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let second = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        let build_constraints = |credentials, hash| {
+            Constraints::from_requirements(std::iter::once(requirement(
+                "helper",
+                credentials,
+                hash,
+            )))
+        };
+        assert_eq!(
+            cache_key(
+                &build_constraints("user:secret@", first),
+                &DependencyMetadata::default(),
+                &ExtraBuildRequires::default(),
+            ),
+            cache_key(
+                &build_constraints("", first),
+                &DependencyMetadata::default(),
+                &ExtraBuildRequires::default(),
+            ),
+        );
+        assert_ne!(
+            cache_key(
+                &build_constraints("", first),
+                &DependencyMetadata::default(),
+                &ExtraBuildRequires::default(),
+            ),
+            cache_key(
+                &build_constraints("", second),
+                &DependencyMetadata::default(),
+                &ExtraBuildRequires::default(),
+            ),
+        );
+
+        let dependency_metadata = |credentials, hash| {
+            DependencyMetadata::from_entries([uv_distribution_types::StaticMetadata {
+                name: PackageName::from_str("helper").expect("valid package name"),
+                version: Some(Version::from_str("1.0.0").expect("valid version")),
+                requires_dist: vec![
+                    uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(&format!(
+                        "nested @ https://{credentials}example.com/nested-1.0.0.zip#subdirectory=python&sha256={hash}"
+                    ))
+                    .expect("valid dependency metadata"),
+                ]
+                .into_boxed_slice(),
+                requires_python: None,
+                provides_extra: Box::default(),
+            }])
+        };
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &dependency_metadata("user:secret@", first),
+                &ExtraBuildRequires::default(),
+            ),
+            cache_key(
+                &Constraints::default(),
+                &dependency_metadata("", first),
+                &ExtraBuildRequires::default(),
+            ),
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &dependency_metadata("", first),
+                &ExtraBuildRequires::default(),
+            ),
+            cache_key(
+                &Constraints::default(),
+                &dependency_metadata("", second),
+                &ExtraBuildRequires::default(),
+            ),
+        );
+
+        let extra_build_requires = |credentials, hash| {
+            std::iter::once((
+                PackageName::from_str("outer").expect("valid package name"),
+                vec![ExtraBuildRequirement {
+                    requirement: requirement("helper", credentials, hash),
+                    match_runtime: false,
+                }],
+            ))
+            .collect::<ExtraBuildRequires>()
+        };
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &DependencyMetadata::default(),
+                &extra_build_requires("user:secret@", first),
+            ),
+            cache_key(
+                &Constraints::default(),
+                &DependencyMetadata::default(),
+                &extra_build_requires("", first),
+            ),
+        );
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &DependencyMetadata::default(),
+                &extra_build_requires("", first),
+            ),
+            cache_key(
+                &Constraints::default(),
+                &DependencyMetadata::default(),
+                &extra_build_requires("", second),
+            ),
+        );
+    }
+
+    #[test]
+    fn unlocked_build_cache_key_invalidates_mutable_remote_requirements() {
+        let cache_key = |build_constraints: &Constraints,
+                         dependency_metadata: &DependencyMetadata,
+                         extra_build_requires: &ExtraBuildRequires,
+                         invocation_timestamp| {
+            unlocked_build_cache_key(UnlockedBuildInputs {
+                build_constraints,
+                index_locations: &IndexLocations::default(),
+                index_strategy: IndexStrategy::default(),
+                build_options: &BuildOptions::default(),
+                dependency_metadata,
+                config_settings: &ConfigSettings::default(),
+                config_settings_package: &PackageConfigSettings::default(),
+                extra_build_requires,
+                extra_build_variables: &ExtraBuildVariables::default(),
+                build_hasher: &HashStrategy::default(),
+                exclude_newer_global: None,
+                exclude_newer_package: Vec::new(),
+                sources: &NoSources::default(),
+                source_tree_editable_policy: SourceTreeEditablePolicy::default(),
+                non_isolated: false,
+                invocation_timestamp,
+            })
+        };
+        let first = Timestamp::from(SystemTime::UNIX_EPOCH);
+        let second = Timestamp::from(SystemTime::UNIX_EPOCH + Duration::from_secs(1));
+
+        for (source, mutable) in [
+            ("https://example.com/helper-1.0.0.zip", true),
+            ("git+https://example.com/helper.git", true),
+            ("git+https://example.com/helper.git@main", true),
+            ("git+https://example.com/helper.git@1234567", true),
+            (
+                "git+https://example.com/helper.git@main#path=helper-1.0.0-py3-none-any.whl",
+                true,
+            ),
+            (
+                "https://example.com/helper-1.0.0.zip#sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                false,
+            ),
+            (
+                "git+https://example.com/helper.git@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                true,
+            ),
+            (
+                "git+https://example.com/helper.git@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#path=helper-1.0.0-py3-none-any.whl",
+                true,
+            ),
+        ] {
+            let pep_requirement = uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(&format!(
+                "helper @ {source}"
+            ))
+            .expect("valid requirement");
+            let requirement = Requirement::from(pep_requirement.clone());
+
+            let build_constraints =
+                Constraints::from_requirements(std::iter::once(requirement.clone()));
+            let dependency_metadata =
+                DependencyMetadata::from_entries([uv_distribution_types::StaticMetadata {
+                    name: PackageName::from_str("outer").expect("valid package name"),
+                    version: Some(Version::from_str("1.0.0").expect("valid version")),
+                    requires_dist: vec![pep_requirement].into_boxed_slice(),
+                    requires_python: None,
+                    provides_extra: Box::default(),
+                }]);
+            let extra_build_requires = std::iter::once((
+                PackageName::from_str("outer").expect("valid package name"),
+                vec![ExtraBuildRequirement {
+                    requirement,
+                    match_runtime: false,
+                }],
+            ))
+            .collect::<ExtraBuildRequires>();
+
+            let cases = [
+                (
+                    "build constraints",
+                    cache_key(
+                        &build_constraints,
+                        &DependencyMetadata::default(),
+                        &ExtraBuildRequires::default(),
+                        first,
+                    ),
+                    cache_key(
+                        &build_constraints,
+                        &DependencyMetadata::default(),
+                        &ExtraBuildRequires::default(),
+                        second,
+                    ),
+                ),
+                (
+                    "dependency metadata",
+                    cache_key(
+                        &Constraints::default(),
+                        &dependency_metadata,
+                        &ExtraBuildRequires::default(),
+                        first,
+                    ),
+                    cache_key(
+                        &Constraints::default(),
+                        &dependency_metadata,
+                        &ExtraBuildRequires::default(),
+                        second,
+                    ),
+                ),
+                (
+                    "extra build requirements",
+                    cache_key(
+                        &Constraints::default(),
+                        &DependencyMetadata::default(),
+                        &extra_build_requires,
+                        first,
+                    ),
+                    cache_key(
+                        &Constraints::default(),
+                        &DependencyMetadata::default(),
+                        &extra_build_requires,
+                        second,
+                    ),
+                ),
+            ];
+
+            for (channel, first, second) in cases {
+                if mutable {
+                    assert_ne!(first, second, "{channel}: {source}");
+                } else {
+                    assert_eq!(first, second, "{channel}: {source}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn build_preferences_cache_key_is_stable_and_credential_safe() {
+        let preferences = |source: &str, dependencies: &[(&str, &str)]| {
+            BuildPreferences::new(BTreeMap::from([(
+                BuildPackageKey::with_source(
+                    PackageName::from_str("outer").expect("valid package name"),
+                    Some(Version::from_str("1.0.0").expect("valid version")),
+                    Some(BuildPackageSource::DirectUrl(source.to_string())),
+                ),
+                dependencies
+                    .iter()
+                    .map(|(name, version)| {
+                        (
+                            PackageName::from_str(name).expect("valid package name"),
+                            Version::from_str(version).expect("valid version"),
+                        )
+                    })
+                    .collect(),
+            )]))
+        };
+
+        assert_eq!(
+            BuildPreferences::default().cache_key(Some("base")),
+            Some("base".to_string())
+        );
+        assert_eq!(BuildPreferences::default().cache_key(None), None);
+
+        let first = preferences(
+            "https://user:secret@example.com/outer-1.0.0.zip",
+            &[
+                ("helper", "1.0.0"),
+                ("nested", "1.0.0"),
+                ("helper", "1.0.0"),
+            ],
+        );
+        let reordered = preferences(
+            "https://example.com/outer-1.0.0.zip",
+            &[("nested", "1.0.0"), ("helper", "1.0.0")],
+        );
+        assert_eq!(
+            first.cache_key(Some("base")),
+            reordered.cache_key(Some("base"))
+        );
+
+        let changed = preferences(
+            "https://example.com/outer-1.0.0.zip",
+            &[("nested", "1.0.0"), ("helper", "2.0.0")],
+        );
+        assert_ne!(
+            first.cache_key(Some("base")),
+            changed.cache_key(Some("base"))
+        );
+        assert_ne!(first.cache_key(None), changed.cache_key(None));
+
+        let multiple = |first: &str, second: &str| {
+            let package = |source: &str| {
+                BuildPackageKey::with_source(
+                    PackageName::from_str("outer").expect("valid package name"),
+                    Some(Version::from_str("1.0.0").expect("valid version")),
+                    Some(BuildPackageSource::DirectUrl(source.to_string())),
+                )
+            };
+            let dependency = |name: &str| {
+                (
+                    PackageName::from_str(name).expect("valid package name"),
+                    Version::from_str("1.0.0").expect("valid version"),
+                )
+            };
+            BuildPreferences::new(BTreeMap::from([
+                (package(first), vec![dependency("first")]),
+                (package(second), vec![dependency("second")]),
+            ]))
+        };
+        assert_eq!(
+            multiple(
+                "https://z-user:secret@example.com/a.zip",
+                "https://a-user:secret@example.com/b.zip"
+            )
+            .cache_key(Some("base")),
+            multiple("https://example.com/a.zip", "https://example.com/b.zip")
+                .cache_key(Some("base"))
+        );
     }
 
     #[test]
@@ -879,6 +2093,143 @@ mod tests {
             )),
         );
         assert!(build_keys_match(&directory, &editable));
+    }
+
+    #[test]
+    fn build_resolution_lookup_normalizes_remote_source_identity() {
+        fn source_key(url: &str) -> Option<BuildPackageKey> {
+            let name = PackageName::from_str("backend").expect("valid package name");
+            let url = VerbatimParsedUrl::parse_url(url, None).ok()?;
+            let Dist::Source(source) = Dist::from_url(name.clone(), url).ok()? else {
+                return None;
+            };
+            Some(BuildPackageKey::from_source_dist(
+                name,
+                Some(Version::from_str("1.0.0").expect("valid version")),
+                Some(&source),
+            ))
+        }
+
+        let commit = "4a23745badf5bf5ef7928f1e346e9986bd696d82";
+        for (captured, reconstructed) in [
+            (
+                format!(
+                    "git+https://user:secret@example.com/backend.git@{commit}#egg=backend&subdirectory=python/backend"
+                ),
+                format!(
+                    "git+https://example.com/backend.git@{commit}#subdirectory=python/backend"
+                ),
+            ),
+            (
+                format!(
+                    "git+https://user:secret@example.com/backend.git@{commit}#egg=backend&path=dist/backend-1.0.0.tar.gz"
+                ),
+                format!(
+                    "git+https://example.com/backend.git@{commit}#path=dist/backend-1.0.0.tar.gz"
+                ),
+            ),
+            (
+                "https://user:secret@example.com/backend-1.0.0.tar.gz#egg=backend&subdirectory=python/backend&sha256=abc123".to_string(),
+                "https://user:secret@example.com/backend-1.0.0.tar.gz#subdirectory=python/backend".to_string(),
+            ),
+        ] {
+            assert_eq!(
+                source_key(&captured),
+                source_key(&reconstructed),
+                "{captured}"
+            );
+        }
+    }
+
+    #[test]
+    fn build_resolution_lookup_normalizes_path_source_identity() {
+        fn source_key(url: &str) -> BuildPackageKey {
+            let name = PackageName::from_str("backend").expect("valid package name");
+            let version = Version::from_str("1.0.0").expect("valid version");
+            let source = SourceDist::Path(PathSourceDist {
+                name: name.clone(),
+                version: Some(version.clone()),
+                install_path: Path::new("/workspace/backend-1.0.0.tar.gz").into(),
+                ext: SourceDistExtension::TarGz,
+                url: VerbatimUrl::parse_url(url).expect("valid archive URL"),
+            });
+
+            BuildPackageKey::from_source_dist(name, Some(version), Some(&source))
+        }
+
+        assert_eq!(
+            source_key("file:///workspace/backend-1.0.0.tar.gz#sha256=abc123"),
+            source_key("file:///workspace/backend-1.0.0.tar.gz")
+        );
+    }
+
+    #[test]
+    fn build_resolution_lookup_normalizes_local_registry_source_identity() {
+        fn source_key(index: &str) -> BuildPackageKey {
+            let name = PackageName::from_str("backend").expect("valid package name");
+            let version = Version::from_str("1.0.0").expect("valid version");
+            let filename = "backend-1.0.0.tar.gz";
+            let source = SourceDist::Registry(RegistrySourceDist {
+                name: name.clone(),
+                version: version.clone(),
+                file: Box::new(File {
+                    dist_info_metadata: false,
+                    filename: filename.into(),
+                    hashes: HashDigests::empty(),
+                    requires_python: None,
+                    size: None,
+                    upload_time_utc_ms: None,
+                    url: FileLocation::AbsoluteUrl(
+                        DisplaySafeUrl::parse("file:///workspace/files/backend-1.0.0.tar.gz")
+                            .expect("valid file URL")
+                            .into(),
+                    ),
+                    yanked: None,
+                    zstd: None,
+                }),
+                ext: SourceDistExtension::TarGz,
+                index: IndexUrl::from_str(index).expect("valid index"),
+                wheels: vec![],
+            });
+
+            BuildPackageKey::from_source_dist(name, Some(version), Some(&source))
+        }
+
+        assert_eq!(
+            source_key("file:///workspace/simple/"),
+            source_key("file:///workspace/simple")
+        );
+    }
+
+    #[test]
+    fn build_resolution_lookup_normalizes_directory_source_identity() {
+        fn source_key(url: &str, editable: bool, virtual_package: bool) -> BuildPackageKey {
+            let name = PackageName::from_str("backend").expect("valid package name");
+            let source = SourceDist::Directory(DirectorySourceDist {
+                name: name.clone(),
+                install_path: Path::new("/workspace/backend").into(),
+                editable: Some(editable),
+                r#virtual: Some(virtual_package),
+                url: VerbatimUrl::parse_url(url).expect("valid directory URL"),
+            });
+
+            BuildPackageKey::from_source_dist(
+                name,
+                Some(Version::from_str("1.0.0").expect("valid version")),
+                Some(&source),
+            )
+        }
+
+        for (editable, virtual_package) in [(false, false), (true, false), (false, true)] {
+            assert_eq!(
+                source_key(
+                    "file:///workspace/backend/#egg=backend",
+                    editable,
+                    virtual_package
+                ),
+                source_key("file:///workspace/backend", editable, virtual_package)
+            );
+        }
     }
 
     #[test]

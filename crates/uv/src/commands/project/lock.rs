@@ -15,27 +15,29 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildOptions, Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun,
-    ExcludeDependency, ExtrasSpecification, NoBinary, NoBuild, NoSources, Override,
+    ExcludeDependency, ExtrasSpecification, IndexStrategy, NoBinary, NoBuild, NoSources, Override,
     PackageOverride, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, LoweredExtraBuildDependencies};
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, Dist, ExtraBuildRequires, HashGeneration, Index, IndexLocations,
-    Name, NameRequirementSpecification, PackageConfigSettings, Requirement, RequiresPython,
-    ResolvedDist, SourceDist, UnresolvedRequirementSpecification, implied_markers,
+    BuiltDist, DependencyMetadata, Dist, ExcludeNewerOverride, ExtraBuildRequires, HashGeneration,
+    Index, IndexFormat, IndexLocations, IndexUrl, Name, NameRequirementSpecification,
+    PackageConfigSettings, Requirement, RequiresPython, ResolvedDist, SourceDist,
+    UnresolvedRequirementSpecification, implied_markers,
 };
+use uv_fs::{PortablePath, try_relative_to_if};
 use uv_git::ResolvedRepositoryReference;
 use uv_git_types::GitOid;
 use uv_normalize::{GroupName, PackageName};
-use uv_pep440::Version;
+use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
     MarkerValueVersion,
 };
-use uv_platform_tags::AbiTag;
+use uv_platform_tags::{AbiTag, PlatformTag};
 use uv_preview::{Preview, PreviewFeature};
-use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
+use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments, Yanked};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{ExtrasResolver, LockedRequirements, read_lock_requirements};
 use uv_resolver::{
@@ -45,9 +47,10 @@ use uv_resolver::{
 use uv_scripts::Pep723Script;
 use uv_settings::PythonInstallMirrors;
 use uv_types::{
-    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraphKey,
-    BuildResolutionGraphMap, BuildResolutionOperation, BuildResolutionStage, BuildStack,
-    EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy,
+    BuildContext, BuildIsolation, BuildPackageKey, BuildPreferences, BuildResolutionGraph,
+    BuildResolutionGraphKey, BuildResolutionGraphMap, BuildResolutionOperation,
+    BuildResolutionStage, BuildStack, EmptyInstalledPackages, HashStrategy,
+    SourceTreeEditablePolicy,
 };
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{
@@ -911,6 +914,117 @@ async fn do_lock(
     } else {
         build_settings
     };
+    let build_settings = if index_locations.is_none() && *index_strategy == IndexStrategy::default()
+    {
+        build_settings
+    } else {
+        // Preserve effective index precedence and policy in the build-lock fingerprint. Local
+        // paths use the same relative form as the lock, and remote URLs omit credentials.
+        let indexes = index_locations
+            .allowed_indexes()
+            .into_iter()
+            .map(|index| {
+                let format = match index.format {
+                    IndexFormat::Simple => "simple",
+                    IndexFormat::Flat => "flat",
+                };
+                let url = match index.url() {
+                    IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
+                        index.url().without_credentials().as_str().to_string()
+                    }
+                    IndexUrl::Path(url) => url
+                        .to_file_path()
+                        .ok()
+                        .and_then(|path| {
+                            try_relative_to_if(
+                                &path,
+                                target.install_path(),
+                                !url.was_given_absolute(),
+                            )
+                            .ok()
+                        })
+                        .map_or_else(
+                            || index.url().without_credentials().as_str().to_string(),
+                            |path| PortablePath::from(&path).to_string(),
+                        ),
+                };
+                let mut ignore_error_codes = index
+                    .ignore_error_codes
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|status| status.as_u16())
+                    .collect::<Vec<_>>();
+                ignore_error_codes.sort_unstable();
+                ignore_error_codes.dedup();
+                let exclude_newer =
+                    index
+                        .exclude_newer
+                        .as_ref()
+                        .map(|exclude_newer| match exclude_newer {
+                            ExcludeNewerOverride::Disabled => ("disabled", String::new()),
+                            ExcludeNewerOverride::Enabled(value) => value.span().map_or_else(
+                                || ("absolute", value.timestamp().to_string()),
+                                |span| ("relative", span.to_string()),
+                            ),
+                        });
+                let cache_control = index
+                    .cache_control
+                    .as_ref()
+                    .and_then(|cache_control| serde_json::to_string(cache_control).ok());
+                (
+                    format,
+                    url,
+                    index.name.as_ref().map(ToString::to_string),
+                    index.explicit,
+                    index.default,
+                    index.authenticate.to_string(),
+                    ignore_error_codes,
+                    exclude_newer,
+                    cache_control,
+                )
+            })
+            .collect::<Vec<_>>();
+        let index_strategy = match index_strategy {
+            IndexStrategy::FirstIndex => "first-index",
+            IndexStrategy::UnsafeFirstMatch => "unsafe-first-match",
+            IndexStrategy::UnsafeBestMatch => "unsafe-best-match",
+        };
+
+        Some(cache_digest(&(
+            build_settings.as_deref(),
+            index_locations.no_index(),
+            indexes,
+            index_strategy,
+        )))
+    };
+    let extra_build_settings = extra_build_requires
+        .iter()
+        .filter(|(_, requirements)| !requirements.is_empty())
+        .map(|(name, requirements)| {
+            let requirements = requirements
+                .iter()
+                .map(|requirement| {
+                    Ok::<_, std::io::Error>((
+                        requirement
+                            .requirement
+                            .clone()
+                            .relative_to(target.install_path())?,
+                        requirement.match_runtime,
+                    ))
+                })
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            Ok::<_, std::io::Error>((name.as_str(), requirements))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let build_settings = if extra_build_settings.is_empty() {
+        build_settings
+    } else {
+        Some(cache_digest(&(
+            build_settings.as_deref(),
+            extra_build_settings,
+        )))
+    };
 
     let make_build_dispatch = |build_preferences, extra_build_requires| {
         BuildDispatch::new(
@@ -1005,24 +1119,14 @@ async fn do_lock(
 
     let existing_lock = if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
         match existing_lock {
-            Some(ValidatedLock::Satisfies(lock))
-                if build_options.allows_package_builds() && !lock.supports_build_dependencies() =>
-            {
-                debug!(
-                    "Resolving despite existing lockfile because build-dependency locking is enabled and the lockfile revision does not support build dependencies"
-                );
-                Some(ValidatedLock::Preferable(lock))
-            }
             Some(ValidatedLock::Satisfies(lock)) => {
                 if lock_missing_build_dependencies(
                     &lock,
                     target.install_path(),
                     build_options,
                     &extra_build_requires,
-                    &database,
-                    &build_hasher,
+                    build_isolation,
                 )
-                .await
                 .map_err(ProjectError::from)?
                 {
                     debug!(
@@ -1178,7 +1282,7 @@ async fn do_lock(
             }
 
             let previous = existing_lock.map(ValidatedLock::into_lock);
-            let (lock, build_markers) = Lock::from_resolution_with_build_markers(
+            let (lock, mut build_markers) = Lock::from_resolution_with_build_markers(
                 &resolution,
                 target.install_path(),
                 lock_supported_environments.clone().into_markers(),
@@ -1187,6 +1291,15 @@ async fn do_lock(
                 .with_manifest(manifest)
                 .with_conflicts(conflicts)
                 .with_required_environments(lock_required_environments.into_markers());
+
+            // Workspace members are selectable runtime roots, so their source builds cannot be
+            // restricted to the marker of an incoming dependency edge.
+            let root = lock.root().map(Package::name);
+            for (package, marker) in &mut build_markers {
+                if lock.members().contains(&package.name) || root == Some(&package.name) {
+                    *marker = UniversalMarker::default();
+                }
+            }
 
             // Only record build dependencies in the lock file when the preview feature is enabled.
             if preview.is_enabled(PreviewFeature::LockBuildDependencies) {
@@ -1384,56 +1497,53 @@ fn source_dist_from_resolved_dist(resolved_dist: &ResolvedDist) -> Option<Source
             Some(SourceDist::Registry(source_dist))
         }
         Dist::Source(source_dist) => Some(source_dist.clone()),
-        Dist::Built(BuiltDist::Registry(built_dist)) => built_dist.sdist.as_ref().map(|sdist| {
+        Dist::Built(BuiltDist::Registry(built_dist)) => {
+            let sdist = built_dist.sdist.as_ref()?;
+            let index = &built_dist.best_wheel().index;
+            if sdist.index != *index {
+                return None;
+            }
+
             let mut sdist = sdist.clone();
-            // Only the selected wheel is known to be usable in this build resolution.
-            sdist.wheels.clear();
-            sdist.wheels.push(built_dist.best_wheel().clone());
-            SourceDist::Registry(sdist)
-        }),
+            // Keep only wheels that will be retained in the lock so target coverage cannot count
+            // artifacts from a different index.
+            sdist.wheels = built_dist
+                .wheels
+                .iter()
+                .filter(|wheel| wheel.index == *index)
+                .cloned()
+                .collect();
+            Some(SourceDist::Registry(sdist))
+        }
         Dist::Built(BuiltDist::DirectUrl(_) | BuiltDist::Path(_) | BuiltDist::GitPath(_)) => None,
     }
 }
 
-async fn lock_missing_build_dependencies(
+fn lock_missing_build_dependencies(
     lock: &Lock,
     workspace_root: &Path,
     build_options: &BuildOptions,
     extra_build_requires: &ExtraBuildRequires,
-    database: &DistributionDatabase<'_, BuildDispatch<'_>>,
-    build_hasher: &HashStrategy,
+    build_isolation: BuildIsolation<'_>,
 ) -> anyhow::Result<bool> {
     if !build_options.allows_package_builds() {
         return Ok(false);
     }
 
-    for (key, source_dist) in lock.source_distributions_missing_build_dependencies(
-        workspace_root,
-        build_options,
-        extra_build_requires,
-    )? {
-        let extra_build_dependencies = extra_build_requires
-            .get(&key.name)
-            .is_some_and(|requirements| !requirements.is_empty());
-        let dist = Dist::Source(source_dist.clone());
-        if !extra_build_dependencies
-            && database
-                .is_direct_build(&source_dist, build_hasher.get(&dist), uv_version::version())
-                .await?
-        {
-            continue;
-        }
-
-        return Ok(true);
-    }
-
-    Ok(false)
+    Ok(lock
+        .source_distributions_missing_build_dependencies(
+            workspace_root,
+            build_options,
+            extra_build_requires,
+        )?
+        .into_iter()
+        .any(|(key, _)| build_isolation.is_isolated(Some(&key.name))))
 }
 
 async fn resolve_all_possible_builds(
     lock: &Lock,
     workspace_root: &Path,
-    build_options: &uv_configuration::BuildOptions,
+    build_options: &BuildOptions,
     build_dispatch: &BuildDispatch<'_>,
     database: &DistributionDatabase<'_, BuildDispatch<'_>>,
     build_hasher: &HashStrategy,
@@ -1449,6 +1559,7 @@ async fn resolve_all_possible_builds(
         operation: BuildResolutionOperation,
         solve_marker: Option<MarkerTree>,
         context_marker: Option<MarkerTree>,
+        allows_yanked: bool,
     }
 
     fn build_resolution_requests(
@@ -1456,6 +1567,7 @@ async fn resolve_all_possible_builds(
         source_dist: SourceDist,
         solve_marker: Option<MarkerTree>,
         context_marker: Option<MarkerTree>,
+        allows_yanked: bool,
     ) -> Vec<BuildResolutionRequest> {
         if solve_marker.is_some_and(MarkerTree::is_false)
             || context_marker.is_some_and(MarkerTree::is_false)
@@ -1471,6 +1583,7 @@ async fn resolve_all_possible_builds(
                 operation: BuildResolutionOperation::Editable,
                 solve_marker,
                 context_marker,
+                allows_yanked,
             });
 
             let SourceDist::Directory(mut wheel_source_dist) = source_dist else {
@@ -1489,6 +1602,7 @@ async fn resolve_all_possible_builds(
                 operation: BuildResolutionOperation::Wheel,
                 solve_marker,
                 context_marker,
+                allows_yanked,
             });
         } else {
             requests.push(BuildResolutionRequest {
@@ -1498,9 +1612,81 @@ async fn resolve_all_possible_builds(
                 operation: BuildResolutionOperation::Wheel,
                 solve_marker,
                 context_marker,
+                allows_yanked,
             });
         }
         requests
+    }
+
+    fn should_resolve_backend_hook_requirements(
+        lock: &Lock,
+        build_options: &BuildOptions,
+        build_markers: &BTreeMap<BuildPackageKey, UniversalMarker>,
+        key: &BuildPackageKey,
+        source_dist: &SourceDist,
+        solve_marker: Option<MarkerTree>,
+        allows_yanked: bool,
+    ) -> bool {
+        let SourceDist::Registry(source_dist) = source_dist else {
+            return true;
+        };
+
+        let mut wheel_coverage = MarkerTree::FALSE;
+        for wheel in &source_dist.wheels {
+            if (allows_yanked
+                || wheel
+                    .file
+                    .yanked
+                    .as_deref()
+                    .is_none_or(|yanked| !yanked.is_yanked()))
+                && wheel.filename.abi_tags().contains(&AbiTag::None)
+                && lock.requires_python().matches_wheel_tag(&wheel.filename)
+                && wheel.filename.platform_tags().iter().all(|platform| {
+                    matches!(
+                        platform,
+                        PlatformTag::Any
+                            | PlatformTag::Linux { .. }
+                            | PlatformTag::Win32
+                            | PlatformTag::WinAmd64
+                            | PlatformTag::WinArm64
+                    )
+                })
+            {
+                let mut wheel_targets = implied_markers(&wheel.filename);
+                if let Some(requires_python) = &wheel.file.requires_python {
+                    for specifier in requires_python.iter() {
+                        wheel_targets.and(MarkerTree::expression(MarkerExpression::Version {
+                            key: MarkerValueVersion::PythonFullVersion,
+                            specifier: specifier.clone(),
+                        }));
+                    }
+                }
+                wheel_coverage.or(wheel_targets);
+            }
+        }
+
+        let mut uncovered = MarkerTree::TRUE;
+        for specifier in lock.requires_python().specifiers().iter() {
+            uncovered.and(MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: specifier.clone(),
+            }));
+        }
+        if let Some(solve_marker) = solve_marker {
+            uncovered.and(solve_marker);
+        }
+        if !lock.supported_environments().is_empty() {
+            let mut supported = MarkerTree::FALSE;
+            for environment in lock.supported_environments() {
+                supported.or(*environment);
+            }
+            uncovered.and(supported);
+        }
+        uncovered.and(wheel_coverage.negate());
+
+        build_options.no_binary_package(&source_dist.name)
+            || build_markers.contains_key(key)
+            || !uncovered.is_false()
     }
 
     let mut queue: VecDeque<BuildResolutionRequest> = lock
@@ -1509,6 +1695,9 @@ async fn resolve_all_possible_builds(
         .filter(|(key, _)| {
             !build_options.no_build_package(&key.name)
                 && !excluded_packages.contains(&key.name)
+                && build_dispatch
+                    .build_isolation()
+                    .is_isolated(Some(&key.name))
                 && included_root_packages.is_none_or(|packages| packages.contains(&key.name))
         })
         .flat_map(|(key, source_dist)| {
@@ -1532,11 +1721,13 @@ async fn resolve_all_possible_builds(
                 marker.and(runtime_marker.combined());
                 marker
             });
-            build_resolution_requests(key, source_dist, solve_marker, context_marker)
+            build_resolution_requests(key, source_dist, solve_marker, context_marker, true)
         })
         .collect();
 
     let mut seen: FxHashSet<BuildResolutionGraphKey> = FxHashSet::default();
+    let interpreter = build_dispatch.interpreter().await;
+    let build_python_version = &interpreter.python_full_version().version;
 
     while let Some(BuildResolutionRequest {
         key,
@@ -1545,39 +1736,33 @@ async fn resolve_all_possible_builds(
         operation,
         solve_marker,
         context_marker,
+        allows_yanked,
     }) = queue.pop_front()
     {
         // A registry source distribution can be selected as a fallback on a target where none of
         // the locked wheels are compatible, even if the runtime resolution selected a wheel in
         // every environment it considered.
-        let resolve_backend_hook_requirements = match &source_dist {
-            SourceDist::Registry(source_dist) => {
-                let mut wheel_coverage = MarkerTree::FALSE;
-                for wheel in &source_dist.wheels {
-                    if wheel.filename.abi_tags().contains(&AbiTag::None) {
-                        wheel_coverage.or(implied_markers(&wheel.filename));
-                    }
-                }
-
-                let mut uncovered = lock.requires_python().to_marker_tree();
-                if let Some(solve_marker) = solve_marker {
-                    uncovered.and(solve_marker);
-                }
-                if !lock.supported_environments().is_empty() {
-                    let mut supported = MarkerTree::FALSE;
-                    for environment in lock.supported_environments() {
-                        supported.or(*environment);
-                    }
-                    uncovered.and(supported);
-                }
-                uncovered.and(wheel_coverage.negate());
-
-                build_options.no_binary_package(&source_dist.name)
-                    || build_markers.contains_key(&key)
-                    || !uncovered.is_false()
+        let resolve_backend_hook_requirements = should_resolve_backend_hook_requirements(
+            lock,
+            build_options,
+            build_markers,
+            &key,
+            &source_dist,
+            solve_marker,
+            allows_yanked,
+        );
+        if resolve_backend_hook_requirements
+            && let SourceDist::Registry(source_dist) = &source_dist
+            && let Some(requires_python) = &source_dist.file.requires_python
+        {
+            if !requires_python.contains(build_python_version) {
+                anyhow::bail!(
+                    "Cannot lock build dependencies for `{}=={}`: the source distribution requires Python `{requires_python}`, but the build executor is Python {build_python_version}",
+                    source_dist.name,
+                    source_dist.version,
+                );
             }
-            _ => solve_marker.is_some(),
-        };
+        }
         let target_marker = context_marker.filter(|marker| !marker.is_true());
         let nested_context_marker = match (build_markers.get(&key).copied(), context_marker) {
             (Some(build_marker), Some(context_marker)) => {
@@ -1686,6 +1871,7 @@ async fn resolve_all_possible_builds(
                 .get(&build_graph_key)
                 .or_else(|| build_resolutions.get(&bootstrap_graph_key))
         };
+        let mut has_explicit_build_system = false;
         if graph.is_none() {
             let build_system = if direct_build {
                 None
@@ -1694,7 +1880,7 @@ async fn resolve_all_possible_builds(
                     .get_static_build_system(&source_dist, build_hasher.get(&dist))
                     .await?
             };
-            let has_explicit_build_system = build_system.is_some();
+            has_explicit_build_system = build_system.is_some();
             let build_requirements = build_system.map(|build_system| build_system.requires);
 
             if graph.is_none()
@@ -1736,35 +1922,98 @@ async fn resolve_all_possible_builds(
             }
         }
 
+        // Capture empty stages so a frozen source build cannot fall back to a live PEP 517 solve.
+        if (direct_build
+            || resolve_backend_hook_requirements
+            || !matches!(source_dist, SourceDist::Registry(_)) && has_explicit_build_system)
+            && graph.is_none()
+        {
+            build_resolutions
+                .insert_key(bootstrap_graph_key.clone(), BuildResolutionGraph::default());
+            build_resolutions.insert_key(build_graph_key.clone(), BuildResolutionGraph::default());
+        }
+
         let graphs = [
             build_resolutions.get(&bootstrap_graph_key),
             build_resolutions.get(&build_graph_key),
             graph,
         ];
+        for package in graphs
+            .into_iter()
+            .flatten()
+            .flat_map(|graph| graph.packages)
+        {
+            let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
+                continue;
+            };
 
-        for graph in graphs.into_iter().flatten() {
-            for package in &graph.packages {
-                let Some(source_dist) = source_dist_from_resolved_dist(&package.dist) else {
-                    continue;
-                };
-
-                let name = package.dist.name().clone();
-                if build_options.no_build_package(&name) || excluded_packages.contains(&name) {
-                    continue;
-                }
-
-                let dep_key = BuildPackageKey::from_source_dist(
-                    name,
-                    package.dist.version().cloned(),
-                    Some(&source_dist),
-                );
-                queue.extend(build_resolution_requests(
-                    dep_key,
-                    source_dist,
-                    resolve_backend_hook_requirements.then_some(package.marker),
-                    nested_context_marker,
-                ));
+            let name = package.dist.name().clone();
+            if build_options.no_build_package(&name)
+                || excluded_packages.contains(&name)
+                || !build_dispatch.build_isolation().is_isolated(Some(&name))
+            {
+                continue;
             }
+
+            let dep_key = BuildPackageKey::from_source_dist(
+                name,
+                package.dist.version().cloned(),
+                Some(&source_dist),
+            );
+            let nested_solve_marker = resolve_backend_hook_requirements.then_some(package.marker);
+
+            if let SourceDist::Registry(registry_source) = &source_dist {
+                let source_is_yanked = !package.allows_yanked
+                    && registry_source
+                        .file
+                        .yanked
+                        .as_deref()
+                        .is_some_and(Yanked::is_yanked);
+                let source_requires_python = registry_source
+                    .file
+                    .requires_python
+                    .as_ref()
+                    .filter(|requires_python| !requires_python.contains(build_python_version));
+                if source_is_yanked || source_requires_python.is_some() {
+                    if !should_resolve_backend_hook_requirements(
+                        lock,
+                        build_options,
+                        build_markers,
+                        &dep_key,
+                        &source_dist,
+                        nested_solve_marker,
+                        package.allows_yanked,
+                    ) {
+                        debug!(
+                            "Skipping ineligible source distribution for `{}` when capturing build dependencies",
+                            package.dist.name()
+                        );
+                        continue;
+                    }
+                    if source_is_yanked {
+                        anyhow::bail!(
+                            "Cannot lock build dependencies for `{}=={}`: the source distribution is yanked",
+                            registry_source.name,
+                            registry_source.version,
+                        );
+                    }
+                    if let Some(requires_python) = source_requires_python {
+                        anyhow::bail!(
+                            "Cannot lock build dependencies for `{}=={}`: the source distribution requires Python `{requires_python}`, but the build executor is Python {build_python_version}",
+                            registry_source.name,
+                            registry_source.version,
+                        );
+                    }
+                }
+            }
+
+            queue.extend(build_resolution_requests(
+                dep_key,
+                source_dist,
+                nested_solve_marker,
+                nested_context_marker,
+                package.allows_yanked,
+            ));
         }
     }
 
@@ -1818,6 +2067,15 @@ fn executor_artifact_environments(markers: &MarkerEnvironment) -> SupportedEnvir
             value: markers.platform_machine().into(),
         }));
     }
+    marker.and(MarkerTree::expression(MarkerExpression::String {
+        key: MarkerValueString::PlatformPythonImplementation,
+        operator: MarkerOperator::Equal,
+        value: markers.platform_python_implementation().into(),
+    }));
+    marker.and(MarkerTree::expression(MarkerExpression::Version {
+        key: MarkerValueVersion::PythonVersion,
+        specifier: VersionSpecifier::equals_version(markers.python_version().version.clone()),
+    }));
     SupportedEnvironments::from_markers(vec![marker])
 }
 
@@ -2250,7 +2508,7 @@ impl ValidatedLock {
             }
             SatisfiesResult::MismatchedBuildSettings => {
                 debug!(
-                    "Resolving despite existing lockfile due to changed build configuration settings, variables, or policies"
+                    "Resolving despite existing lockfile due to changed build configuration settings, variables, index locations, or policies"
                 );
                 Ok(Self::Preferable(lock))
             }

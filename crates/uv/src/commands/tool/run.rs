@@ -36,6 +36,9 @@ use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{InstalledTools, entrypoint_paths};
+use uv_types::{
+    HashStrategy, SourceTreeEditablePolicy, UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -695,7 +698,7 @@ async fn get_or_create_environment(
     let reporter = PythonDownloadReporter::single(printer);
 
     // Initialize any shared state.
-    let state = PlatformState::default();
+    let mut state = PlatformState::default();
 
     let unresolved_target_requirement = match request {
         ToolRequest::Package {
@@ -999,6 +1002,14 @@ async fn get_or_create_environment(
     )
     .await?;
 
+    // Read the `--build-constraints` requirements before checking an existing source build.
+    let build_constraints = Constraints::from_requirements(
+        operations::read_constraints(build_constraints, client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement),
+    );
+
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
@@ -1046,7 +1057,39 @@ async fn get_or_create_environment(
 
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(environment.environment())?;
-                    if matches!(
+                    let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+                        build_constraints: &build_constraints,
+                        index_locations: &settings.resolver.index_locations,
+                        index_strategy: settings.resolver.index_strategy,
+                        build_options: &settings.resolver.build_options,
+                        dependency_metadata: &settings.resolver.dependency_metadata,
+                        config_settings: config_setting,
+                        config_settings_package,
+                        extra_build_requires: &extra_build_requires,
+                        extra_build_variables,
+                        build_hasher: &HashStrategy::default(),
+                        exclude_newer_global: settings.resolver.exclude_newer.global.as_ref(),
+                        exclude_newer_package: (&settings.resolver.exclude_newer.package)
+                            .into_iter()
+                            .collect(),
+                        sources: &settings.resolver.sources,
+                        source_tree_editable_policy: SourceTreeEditablePolicy::Tool,
+                        non_isolated: !matches!(
+                            settings.resolver.build_isolation,
+                            uv_configuration::BuildIsolation::Isolate
+                        ),
+                        invocation_timestamp: cache.timestamp(),
+                    });
+                    // Build metadata records resolved runtime requirements, which aren't available yet.
+                    if !extra_build_requires.iter().any(|(name, requirements)| {
+                        site_packages
+                            .get_packages(name)
+                            .iter()
+                            .any(|distribution| distribution.build_info().is_some())
+                            && requirements
+                                .iter()
+                                .any(|requirement| requirement.match_runtime)
+                    }) && matches!(
                         site_packages.satisfies_requirements(
                             requirements.iter(),
                             constraints.iter().chain(latest.iter()),
@@ -1059,6 +1102,7 @@ async fn get_or_create_environment(
                             config_settings_package,
                             &extra_build_requires,
                             extra_build_variables,
+                            unlocked_build_cache_key.as_deref(),
                         ),
                         Ok(SatisfiesResult::Fresh { .. })
                     ) {
@@ -1088,14 +1132,6 @@ async fn get_or_create_environment(
         ..spec
     });
 
-    // Read the `--build-constraints` requirements.
-    let build_constraints = Constraints::from_requirements(
-        operations::read_constraints(build_constraints, client_builder)
-            .await?
-            .into_iter()
-            .map(|constraint| constraint.requirement),
-    );
-
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
@@ -1104,6 +1140,7 @@ async fn get_or_create_environment(
         build_constraints.clone(),
         &interpreter,
         python_platform.as_ref(),
+        SourceTreeEditablePolicy::Tool,
         settings,
         client_builder,
         &state,
@@ -1159,11 +1196,18 @@ async fn get_or_create_environment(
                     interpreter.sys_executable().display()
                 );
 
+                // Resolution and build state is interpreter-specific, so discard any in-flight
+                // distributions and refresh any cached wheels from the failed resolution before
+                // retrying.
+                state.reset();
+                let cache = cache.clone().with_refresh(Refresh::All(Timestamp::now()));
+
                 CachedEnvironment::from_spec(
                     spec,
                     build_constraints,
                     &interpreter,
                     python_platform.as_ref(),
+                    SourceTreeEditablePolicy::Tool,
                     settings,
                     client_builder,
                     &state,
@@ -1179,7 +1223,7 @@ async fn get_or_create_environment(
                     },
                     installer_metadata,
                     concurrency,
-                    cache,
+                    &cache,
                     workspace_cache,
                     printer,
                     preview,

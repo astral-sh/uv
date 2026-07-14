@@ -14,7 +14,7 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LowerBound, Version};
+use uv_pep440::{LowerBound, Version, release_specifiers_to_ranges};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ParsedUrl;
@@ -34,6 +34,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
+    UnavailableVersion,
 };
 use crate::{InMemoryIndex, Options};
 
@@ -648,6 +649,17 @@ impl NoSolutionError {
                                 minimum = lower;
                             }
                         }
+                    }
+                }
+                DerivationTree::External(External::Custom(
+                    _,
+                    _,
+                    UnavailableReason::Version(UnavailableVersion::RequiresPython(requires_python)),
+                )) => {
+                    if let Some((lower, ..)) =
+                        release_specifiers_to_ranges(requires_python.clone()).bounding_range()
+                    {
+                        minimum = minimum.max(LowerBound::new(lower.cloned()));
                     }
                 }
                 DerivationTree::External(_) => {}

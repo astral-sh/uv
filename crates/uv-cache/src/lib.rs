@@ -166,6 +166,8 @@ pub struct Cache {
     root: PathBuf,
     /// The refresh strategy to use when reading from the cache.
     refresh: Refresh,
+    /// The timestamp at which this cache invocation was initialized.
+    invocation_timestamp: Timestamp,
     /// A temporary cache directory, if the user requested `--no-cache`.
     ///
     /// Included to ensure that the temporary directory exists for the length of the operation, but
@@ -179,9 +181,11 @@ pub struct Cache {
 impl Cache {
     /// A persistent cache directory at `root`.
     pub fn from_path(root: impl Into<PathBuf>) -> Self {
+        let invocation_timestamp = Timestamp::now();
         Self {
             root: root.into(),
-            refresh: Refresh::None(Timestamp::now()),
+            refresh: Refresh::None(invocation_timestamp),
+            invocation_timestamp,
             temp_dir: None,
             lock_file: None,
         }
@@ -190,9 +194,11 @@ impl Cache {
     /// Create a temporary cache directory.
     pub fn temp() -> Result<Self, io::Error> {
         let temp_dir = tempfile::tempdir()?;
+        let invocation_timestamp = Timestamp::now();
         Ok(Self {
             root: temp_dir.path().to_path_buf(),
-            refresh: Refresh::None(Timestamp::now()),
+            refresh: Refresh::None(invocation_timestamp),
+            invocation_timestamp,
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
         })
@@ -209,6 +215,7 @@ impl Cache {
         let Self {
             root,
             refresh,
+            invocation_timestamp,
             temp_dir,
             lock_file,
         } = self;
@@ -231,6 +238,7 @@ impl Cache {
         Ok(Self {
             root,
             refresh,
+            invocation_timestamp,
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
         })
@@ -243,6 +251,7 @@ impl Cache {
         let Self {
             root,
             refresh,
+            invocation_timestamp,
             temp_dir,
             lock_file,
         } = self;
@@ -255,12 +264,14 @@ impl Cache {
             Some(lock_file) => Ok(Self {
                 root,
                 refresh,
+                invocation_timestamp,
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
             }),
             None => Err(Self {
                 root,
                 refresh,
+                invocation_timestamp,
                 temp_dir,
                 lock_file,
             }),
@@ -270,6 +281,11 @@ impl Cache {
     /// Return the root of the cache.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Return the timestamp at which this cache invocation was initialized.
+    pub fn timestamp(&self) -> Timestamp {
+        self.invocation_timestamp
     }
 
     /// The folder for a specific cache bucket
@@ -307,6 +323,11 @@ impl Cache {
     pub fn build_dir(&self) -> io::Result<tempfile::TempDir> {
         fs_err::create_dir_all(self.bucket(CacheBucket::Builds))?;
         tempfile::tempdir_in(self.bucket(CacheBucket::Builds))
+    }
+
+    /// Returns `true` if any cache entries must be revalidated given the [`Refresh`] policy.
+    pub fn must_revalidate_any(&self) -> bool {
+        !matches!(self.refresh, Refresh::None(_))
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
@@ -1440,7 +1461,20 @@ mod tests {
 
     use crate::ArchiveId;
 
-    use super::Link;
+    use super::{Cache, Link, Refresh};
+    use uv_cache_info::Timestamp;
+
+    #[test]
+    fn refresh_preserves_invocation_timestamp() {
+        let cache = Cache::from_path("cache");
+        let invocation_timestamp = cache.timestamp();
+        let refreshed = cache.clone().with_refresh(Refresh::All(Timestamp::from(
+            std::time::SystemTime::UNIX_EPOCH,
+        )));
+
+        assert_eq!(cache.timestamp(), invocation_timestamp);
+        assert_eq!(refreshed.timestamp(), invocation_timestamp);
+    }
 
     #[test]
     fn test_link_round_trip() {

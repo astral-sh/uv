@@ -12,16 +12,18 @@ use petgraph::{
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{Constraints, Overrides};
+use uv_configuration::{BuildOptions, Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionId, Edge, ExtraBuildRequires, ExtraBuildRequiresError, Identifier, IndexUrl,
-    Name, Node, Requirement, RequirementSource, RequiresPython, ResolutionDiagnostic, ResolvedDist,
+    BuiltDist, Dist, DistributionId, Edge, ExtraBuildRequires, ExtraBuildRequiresError, File,
+    Identifier, IndexUrl, Name, Node, Requirement, RequirementSource, RequiresPython,
+    ResolutionDiagnostic, ResolvedDist, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
+use uv_platform_tags::{TagCompatibility, Tags};
 use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
 use uv_types::{
     BuildDependencyEdge, BuildDependencyPackage, BuildResolutionGraph, ResolvedBuildDependency,
@@ -35,6 +37,7 @@ use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
+use crate::yanks::AllowedYanks;
 use crate::{InMemoryIndex, MetadataResponse, Options, ResolveError, VersionsResponse};
 
 /// The output of a successful resolution.
@@ -656,7 +659,12 @@ impl ResolverOutput {
     /// This preserves the dependency graph structure so that transitive build
     /// dependencies can be walked at sync time via
     /// [`Lock::all_build_resolutions`] with proper marker evaluation.
-    pub fn build_resolution_graph(&self) -> BuildResolutionGraph {
+    pub fn build_resolution_graph(
+        &self,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        allowed_yanks: &AllowedYanks,
+    ) -> BuildResolutionGraph {
         let mut direct_dependencies = Vec::new();
         let mut packages = BTreeMap::new();
 
@@ -692,7 +700,15 @@ impl ResolverOutput {
                 .entry(key_for(package_dist))
                 .and_modify(|package: &mut BuildDependencyPackage| package.marker.or(marker))
                 .or_insert_with(|| BuildDependencyPackage {
-                    dist: package_dist.dist.clone(),
+                    dist: Self::select_build_distribution(
+                        &package_dist.dist,
+                        tags,
+                        markers,
+                        allowed_yanks,
+                        &self.options.build_options,
+                    ),
+                    allows_yanked: allowed_yanks
+                        .contains(&package_dist.name, &package_dist.version),
                     hashes: package_dist.hashes.clone().into_iter().collect(),
                     marker,
                     dependencies: Vec::new(),
@@ -709,7 +725,13 @@ impl ResolverOutput {
                     .copied()
                     .unwrap_or(dep_dist);
                 let dependency = BuildDependencyEdge {
-                    dist: dep_dist.dist.clone(),
+                    dist: Self::select_build_distribution(
+                        &dep_dist.dist,
+                        tags,
+                        markers,
+                        allowed_yanks,
+                        &self.options.build_options,
+                    ),
                     marker: edge.weight().pep508(),
                     extras: dep_extras,
                 };
@@ -735,7 +757,13 @@ impl ResolverOutput {
                 let extras = dist.extra.iter().cloned().collect();
                 let dist = base_dists.get(&key_for(dist)).copied().unwrap_or(dist);
                 direct_dependencies.push(ResolvedBuildDependency {
-                    dist: dist.dist.clone(),
+                    dist: Self::select_build_distribution(
+                        &dist.dist,
+                        tags,
+                        markers,
+                        allowed_yanks,
+                        &self.options.build_options,
+                    ),
                     hashes: dist.hashes.clone().into_iter().collect(),
                     marker: edge.weight().pep508(),
                     extras,
@@ -759,9 +787,15 @@ impl ResolverOutput {
     pub fn into_build_resolution(
         self,
         markers: Option<&MarkerEnvironment>,
+        tags: &Tags,
+        executor: &MarkerEnvironment,
+        allowed_yanks: &AllowedYanks,
     ) -> uv_distribution_types::Resolution {
         let Self {
-            graph, diagnostics, ..
+            graph,
+            diagnostics,
+            options,
+            ..
         } = self;
 
         let mut transformed = Graph::with_capacity(graph.node_count(), graph.edge_count());
@@ -799,7 +833,13 @@ impl ResolverOutput {
             }
 
             let index = transformed.add_node(Node::Dist {
-                dist: dist.dist.clone(),
+                dist: Self::select_build_distribution(
+                    &dist.dist,
+                    tags,
+                    executor,
+                    allowed_yanks,
+                    &options.build_options,
+                ),
                 hashes: dist.hashes.clone(),
                 install: true,
             });
@@ -848,6 +888,82 @@ impl ResolverOutput {
         }
 
         uv_distribution_types::Resolution::new(transformed).with_diagnostics(diagnostics)
+    }
+
+    /// Select the artifact that can be installed in the active build environment.
+    fn select_build_distribution(
+        resolved: &ResolvedDist,
+        tags: &Tags,
+        markers: &MarkerEnvironment,
+        allowed_yanks: &AllowedYanks,
+        build_options: &BuildOptions,
+    ) -> ResolvedDist {
+        let ResolvedDist::Installable { dist, version } = resolved else {
+            return resolved.clone();
+        };
+        let Dist::Built(BuiltDist::Registry(wheels)) = dist.as_ref() else {
+            return resolved.clone();
+        };
+
+        let selected = wheels.best_wheel();
+        let allows_yanked = version
+            .as_ref()
+            .is_some_and(|version| allowed_yanks.contains(dist.name(), version));
+        let is_eligible = |file: &File| {
+            file.requires_python.as_ref().is_none_or(|requires_python| {
+                requires_python.contains(&markers.python_full_version().version)
+            }) && (allows_yanked
+                || file
+                    .yanked
+                    .as_deref()
+                    .is_none_or(|yanked| !yanked.is_yanked()))
+        };
+
+        let no_binary = build_options.no_binary_package(dist.name());
+        if !no_binary
+            && selected.filename.compatibility(tags).is_compatible()
+            && is_eligible(&selected.file)
+        {
+            return resolved.clone();
+        }
+
+        let best_wheel_index = if no_binary {
+            None
+        } else {
+            wheels
+                .wheels
+                .iter()
+                .enumerate()
+                .filter(|(_, wheel)| is_eligible(&wheel.file))
+                .filter_map(|(index, wheel)| {
+                    let TagCompatibility::Compatible(priority) = wheel.filename.compatibility(tags)
+                    else {
+                        return None;
+                    };
+                    Some(((priority, wheel.filename.build_tag()), index))
+                })
+                .max_by_key(|(priority, _)| *priority)
+                .map(|(_, index)| index)
+        };
+
+        let dist = if let Some(best_wheel_index) = best_wheel_index {
+            let mut wheels = wheels.clone();
+            wheels.best_wheel_index = best_wheel_index;
+            Arc::new(Dist::Built(BuiltDist::Registry(wheels)))
+        } else if let Some(sdist) = &wheels.sdist
+            && is_eligible(&sdist.file)
+        {
+            let mut sdist = sdist.clone();
+            sdist.wheels.clone_from(&wheels.wheels);
+            Arc::new(Dist::Source(SourceDist::Registry(sdist)))
+        } else {
+            return resolved.clone();
+        };
+
+        ResolvedDist::Installable {
+            dist,
+            version: version.clone(),
+        }
     }
 
     /// Returns an iterator over the base distributions in the graph.

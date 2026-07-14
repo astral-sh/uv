@@ -317,9 +317,17 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
-        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
-        // explicit, etc.
-        if self.indexes.no_index() {
+        // If `--no-index` is specified, avoid fetching Simple API indexes. An explicitly selected
+        // flat index is still available, like any other `--find-links` entry.
+        if self.indexes.no_index()
+            && index.is_none_or(|index| {
+                index.format != IndexFormat::Flat
+                    || !self
+                        .indexes
+                        .flat_indexes()
+                        .any(|flat_index| flat_index.url() == index.url)
+            })
+        {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 

@@ -504,9 +504,6 @@ fn metadata_reachability(
             MetadataNodeKind::Build => &[],
         };
         for dependency in dependencies {
-            if !dependency.is_runtime_edge() {
-                continue;
-            }
             let mut dependency_reachability =
                 dependency.simplified_marker.as_simplified_marker_tree();
             dependency_reachability.and(parent_reachability);
@@ -1157,9 +1154,6 @@ impl Metadata {
 
             // Direct dependencies go on the package node
             for dependency in &lock_package.dependencies {
-                if !dependency.is_runtime_edge() {
-                    continue;
-                }
                 meta_package.add_dependency(&workspace_root, dependency, package_reachability);
             }
 
@@ -1180,9 +1174,6 @@ impl Metadata {
                     marker: None,
                 });
                 for dependency in dependencies {
-                    if !dependency.is_runtime_edge() {
-                        continue;
-                    }
                     meta_extra.add_dependency(&workspace_root, dependency, extra_reachability);
                 }
 
@@ -1207,9 +1198,6 @@ impl Metadata {
                     .unwrap_or(MarkerTree::FALSE);
                 // Groups *do not* depend on the base package, so don't add that
                 for dependency in dependencies {
-                    if !dependency.is_runtime_edge() {
-                        continue;
-                    }
                     meta_group.add_dependency(&workspace_root, dependency, group_reachability);
                 }
 

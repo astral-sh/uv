@@ -44,7 +44,7 @@ impl RequirementSatisfaction {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
-        locked_build_resolution: Option<&str>,
+        build_resolution_cache_key: Option<&str>,
     ) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
@@ -52,7 +52,7 @@ impl RequirementSatisfaction {
         );
 
         // If the distribution was built with other settings, it is out of date.
-        if distribution.build_info().is_some() || locked_build_resolution.is_some() {
+        if distribution.build_info().is_some() || build_resolution_cache_key.is_some() {
             let config_settings =
                 config_settings_for(name, config_settings, config_settings_package);
             let extra_build_requires = extra_build_requires_for(name, extra_build_requires);
@@ -62,7 +62,7 @@ impl RequirementSatisfaction {
                 extra_build_requires.to_vec(),
                 extra_build_variables.cloned(),
             )
-            .with_locked_build_resolution(locked_build_resolution.map(str::to_owned));
+            .with_locked_build_resolution(build_resolution_cache_key.map(str::to_owned));
             if distribution.build_info() != Some(&build_info) {
                 debug!("Build info mismatch for {name}: {distribution}");
                 return Self::OutOfDate;

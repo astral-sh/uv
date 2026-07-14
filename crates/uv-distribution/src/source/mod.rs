@@ -49,7 +49,9 @@ use uv_pypi_types::{
     BuildSystem, HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata,
 };
 use uv_redacted::DisplaySafeUrl;
-use uv_types::{BuildContext, BuildKey, BuildPackageKey, BuildStack, SourceBuildTrait};
+use uv_types::{
+    BuildContext, BuildIsolation, BuildKey, BuildPackageKey, BuildStack, SourceBuildTrait,
+};
 use uv_workspace::pyproject::ToolUvSources;
 
 use crate::distribution_database::ManagedClient;
@@ -235,6 +237,9 @@ pub(crate) const HASHES: &str = "hashes.msgpack";
 
 /// The name of the file that contains the cached distribution metadata, encoded via `MsgPack`.
 const METADATA: &str = "metadata.msgpack";
+
+/// The directory used for wheels and metadata produced without build isolation.
+const NON_ISOLATED: &str = "no-build-isolation";
 
 /// The directory within each entry under which to store the unpacked source distribution.
 const SOURCE: &str = "src";
@@ -972,22 +977,70 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         name.and_then(|name| self.build_context.extra_build_variables().get(name))
     }
 
-    /// Return the cache shard for a locked build environment, if this source has one.
-    fn locked_build_cache_shard(
+    /// Return the cache shard for a separately keyed build environment, if this source has one.
+    fn build_resolution_cache_shard(
         &self,
         source: &BuildableSource<'_>,
     ) -> Result<Option<String>, Error> {
         let Some(name) = source.name() else {
-            return Ok(None);
+            return Ok(self
+                .build_context
+                .unlocked_build_cache_key()
+                .map(str::to_string));
         };
         let package = BuildPackageKey::from_source_dist(
             name.clone(),
             source.version().cloned(),
             source.as_dist(),
         );
-        Ok(self
+        let locked = self
             .build_context
-            .locked_build_resolution_cache_key(&package)?)
+            .locked_build_resolution_cache_key(&package)?;
+        Ok(locked.or_else(|| {
+            self.build_context
+                .unlocked_build_cache_key()
+                .map(str::to_string)
+        }))
+    }
+
+    /// Keep outputs produced in a shared environment separate from isolated builds.
+    fn non_isolated_cache_shard(&self, cache_shard: CacheShard) -> CacheShard {
+        if self.is_build_isolated() {
+            cache_shard
+        } else {
+            cache_shard.shard(NON_ISOLATED)
+        }
+    }
+
+    /// Return the metadata cache entry scoped to the same build inputs as a built wheel.
+    fn build_metadata_cache_entry(
+        &self,
+        source: &BuildableSource<'_>,
+        cache_shard: CacheShard,
+    ) -> Result<CacheEntry, Error> {
+        let config_settings = self.config_settings_for(source.name());
+        let extra_build_deps = self.extra_build_dependencies_for(source.name());
+        let extra_build_variables = self.extra_build_variables_for(source.name());
+        let build_info = BuildInfo::from_settings(
+            config_settings.into_owned(),
+            extra_build_deps.to_vec(),
+            extra_build_variables.cloned(),
+        )
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
+        let cache_shard = build_info
+            .cache_shard()
+            .map(|digest| cache_shard.shard(digest))
+            .unwrap_or(cache_shard);
+        Ok(cache_shard.entry(METADATA))
+    }
+
+    /// Return whether every source in the build graph is isolated.
+    fn is_build_isolated(&self) -> bool {
+        matches!(
+            self.build_context.build_isolation(),
+            BuildIsolation::Isolated
+        )
     }
 
     /// Build a source distribution from a remote URL.
@@ -1037,17 +1090,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
             .unwrap_or(cache_shard);
 
-        // If the cache contains a compatible wheel, return it.
-        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
-            .ok()
-            .flatten()
-            .filter(|file| file.matches(source.name(), source.version()))
+        // Outputs produced without build isolation depend on the shared environment and cannot be
+        // reused safely.
+        if self.is_build_isolated()
+            && let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+                .ok()
+                .flatten()
+                .filter(|file| file.matches(source.name(), source.version()))
+            && self
+                .build_context
+                .cache()
+                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
         {
             return Ok(BuiltWheelMetadata::from_file(
                 file,
@@ -1183,8 +1245,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it unless the caller needs to
         // execute build setup to resolve complete build requirements.
-        let metadata_entry = cache_shard.entry(METADATA);
-        if !resolve_static_build_requirements {
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
+        if !resolve_static_build_requirements
+            && self.is_build_isolated()
+            && self
+                .build_context
+                .cache()
+                .freshness(&metadata_entry, None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
+        {
             match CachedMetadata::read(&metadata_entry).await {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
@@ -1277,7 +1347,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1462,17 +1533,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
             .unwrap_or(cache_shard);
 
-        // If the cache contains a compatible wheel, return it.
-        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
-            .ok()
-            .flatten()
-            .filter(|file| file.matches(source.name(), source.version()))
+        // Outputs produced without build isolation depend on the shared environment and cannot be
+        // reused safely.
+        if self.is_build_isolated()
+            && let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+                .ok()
+                .flatten()
+                .filter(|file| file.matches(source.name(), source.version()))
+            && self
+                .build_context
+                .cache()
+                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
         {
             return Ok(BuiltWheelMetadata::from_file(
                 file,
@@ -1583,8 +1663,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it unless the caller needs to
         // execute build setup to resolve complete build requirements.
-        let metadata_entry = cache_shard.entry(METADATA);
-        if !resolve_static_build_requirements {
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
+        if !resolve_static_build_requirements
+            && self.is_build_isolated()
+            && self
+                .build_context
+                .cache()
+                .freshness(&metadata_entry, None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
+        {
             match CachedMetadata::read(&metadata_entry).await {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
@@ -1652,7 +1740,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -1981,7 +2070,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source_tree,
             self.build_context.locations(),
             self.build_context.sources(),
-            true,
+            self.build_context
+                .source_tree_editable_policy()
+                .workspace_member_editable(None),
             stop_discovery_at,
             self.build_context.cache(),
             self.build_context.workspace_cache(),
@@ -2210,17 +2301,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
             .unwrap_or(cache_shard);
 
-        // If the cache contains a compatible wheel, return it.
-        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
-            .ok()
-            .flatten()
-            .filter(|file| file.matches(source.name(), source.version()))
+        // Outputs produced without build isolation depend on the shared environment and cannot be
+        // reused safely.
+        if self.is_build_isolated()
+            && let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+                .ok()
+                .flatten()
+                .filter(|file| file.matches(source.name(), source.version()))
+            && self
+                .build_context
+                .cache()
+                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
         {
             return Ok(BuiltWheelMetadata::from_file(
                 file,
@@ -2348,8 +2448,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it unless the caller needs to
         // execute build setup to resolve complete build requirements.
-        let metadata_entry = cache_shard.entry(METADATA);
-        if !resolve_static_build_requirements {
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
+        if !resolve_static_build_requirements
+            && self.is_build_isolated()
+            && self
+                .build_context
+                .cache()
+                .freshness(&metadata_entry, None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
+        {
             match CachedMetadata::read(&metadata_entry).await {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
@@ -2444,7 +2552,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2707,17 +2816,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
             .unwrap_or(cache_shard);
 
-        // If the cache contains a compatible wheel, return it.
-        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
-            .ok()
-            .flatten()
-            .filter(|file| file.matches(source.name(), source.version()))
+        // Outputs produced without build isolation depend on the shared environment and cannot be
+        // reused safely.
+        if self.is_build_isolated()
+            && let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+                .ok()
+                .flatten()
+                .filter(|file| file.matches(source.name(), source.version()))
+            && self
+                .build_context
+                .cache()
+                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
         {
             return Ok(BuiltWheelMetadata::from_file(
                 file,
@@ -2832,8 +2950,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         };
 
         // If the cache contains compatible metadata, return it.
-        let metadata_entry = cache_shard.entry(METADATA);
-        if !resolve_static_build_requirements {
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
+        if !resolve_static_build_requirements
+            && self.is_build_isolated()
+            && self
+                .build_context
+                .cache()
+                .freshness(&metadata_entry, None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
+        {
             match CachedMetadata::read(&metadata_entry).await {
                 Ok(Some(metadata)) => {
                     if metadata.matches(source.name(), source.version()) {
@@ -2893,7 +3019,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -2974,7 +3101,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -2996,17 +3123,26 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
             .unwrap_or(cache_shard);
 
-        // If the cache contains a compatible wheel, return it.
-        if let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
-            .ok()
-            .flatten()
-            .filter(|file| file.matches(source.name(), source.version()))
+        // Outputs produced without build isolation depend on the shared environment and cannot be
+        // reused safely.
+        if self.is_build_isolated()
+            && let Some(file) = BuiltWheelFile::find_in_cache(tags, &cache_shard)
+                .ok()
+                .flatten()
+                .filter(|file| file.matches(source.name(), source.version()))
+            && self
+                .build_context
+                .cache()
+                .freshness(&CacheEntry::from_path(file.path()), None, None)
+                .map_err(Error::CacheRead)?
+                .is_fresh()
         {
             return Ok(BuiltWheelMetadata::from_file(
                 file, hashes, cache_info, build_info,
@@ -3170,7 +3306,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             CacheBucket::SourceDistributions,
             WheelCache::Git(resource.url, git_sha.as_short_str()).root(),
         );
-        let metadata_entry = cache_shard.entry(METADATA);
+        let metadata_entry = self.build_metadata_cache_entry(source, cache_shard.clone())?;
 
         // Acquire the advisory lock.
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -3222,10 +3358,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the cache contains compatible metadata, return it.
         if !resolve_static_build_requirements
+            && self.is_build_isolated()
             && self
                 .build_context
                 .cache()
-                .freshness(&metadata_entry, source.name(), source.source_tree())
+                .freshness(&metadata_entry, None, None)
                 .map_err(Error::CacheRead)?
                 .is_fresh()
         {
@@ -3322,7 +3459,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             extra_build_deps.to_vec(),
             extra_build_variables.cloned(),
         )
-        .with_locked_build_resolution(self.locked_build_cache_shard(source)?);
+        .with_locked_build_resolution(self.build_resolution_cache_shard(source)?);
+        let cache_shard = self.non_isolated_cache_shard(cache_shard);
         let cache_shard = build_info
             .cache_shard()
             .map(|digest| cache_shard.shard(digest))
@@ -3851,24 +3989,40 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .await
             .map_err(Error::CacheWrite)?;
 
-        // Try a direct build if that isn't disabled and the uv build backend is used.
-        let disk_filename = if let Some(name) = self
-            .build_context
-            .direct_build(
-                source_root,
-                subdirectory,
-                temp_dir.path(),
-                no_sources.clone(),
-                if source.is_editable() {
-                    BuildKind::Editable
-                } else {
-                    BuildKind::Wheel
-                },
-                Some(&source.to_string()),
-            )
-            .await
-            .map_err(|err| Error::Build(err.into()))?
-        {
+        // Applicable extra build dependencies require an isolated PEP 517 environment and must
+        // not be bypassed by the in-process `uv_build` fast path.
+        let extra_build_dependencies = self.extra_build_dependencies_for(source.name());
+        let has_active_extra_build_dependencies = if extra_build_dependencies.is_empty() {
+            false
+        } else {
+            let executor_markers = self.build_context.interpreter().await.markers();
+            extra_build_dependencies.iter().any(|requirement| {
+                requirement
+                    .requirement
+                    .evaluate_markers(Some(executor_markers), &[])
+            })
+        };
+        let direct_build = if has_active_extra_build_dependencies {
+            None
+        } else {
+            self.build_context
+                .direct_build(
+                    source_root,
+                    subdirectory,
+                    temp_dir.path(),
+                    no_sources.clone(),
+                    if source.is_editable() {
+                        BuildKind::Editable
+                    } else {
+                        BuildKind::Wheel
+                    },
+                    Some(&source.to_string()),
+                )
+                .await
+                .map_err(|err| Error::Build(err.into()))?
+        };
+
+        let disk_filename = if let Some(name) = direct_build {
             // In the uv build backend, the normalized filename and the disk filename are the same.
             name.to_string()
         } else {
@@ -3910,7 +4064,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 build_kind,
             };
 
-            if let Some(builder) = self.build_context.build_arena().remove(&build_key) {
+            if self.build_context.reuse_build_arena()
+                && let Some(builder) = self.build_context.build_arena().remove(&build_key)
+            {
                 debug!("Reusing existing build environment for: {source}");
                 let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
@@ -3950,7 +4106,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 let wheel = builder.wheel(temp_dir.path()).await.map_err(Error::Build)?;
 
                 // Store the build context.
-                self.build_context.build_arena().insert(build_key, builder);
+                if self.build_context.reuse_build_arena() {
+                    self.build_context.build_arena().insert(build_key, builder);
+                }
 
                 wheel
             }
@@ -4080,17 +4238,19 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let dist_info = builder.metadata().await.map_err(Error::Build)?;
 
         // Store the build context.
-        self.build_context.build_arena().insert(
-            BuildKey {
-                base_python: base_python.into_boxed_path(),
-                source_root: source_root.to_path_buf().into_boxed_path(),
-                subdirectory: subdirectory
-                    .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
-                no_sources,
-                build_kind,
-            },
-            builder,
-        );
+        if self.build_context.reuse_build_arena() {
+            self.build_context.build_arena().insert(
+                BuildKey {
+                    base_python: base_python.into_boxed_path(),
+                    source_root: source_root.to_path_buf().into_boxed_path(),
+                    subdirectory: subdirectory
+                        .map(|subdirectory| subdirectory.to_path_buf().into_boxed_path()),
+                    no_sources,
+                    build_kind,
+                },
+                builder,
+            );
+        }
 
         // Return the `.dist-info` directory, if it exists.
         let Some(dist_info) = dist_info else {

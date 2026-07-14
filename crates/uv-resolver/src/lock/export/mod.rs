@@ -124,10 +124,6 @@ impl<'lock> ExportableRequirements<'lock> {
                 })
                 .flatten()
             {
-                if !dep.is_runtime_edge() {
-                    continue;
-                }
-
                 // Track the activated group in the list of known conflicts.
                 activated_items.insert(
                     ConflictItem::from((dist.id.name.clone(), group.clone())),
@@ -265,9 +261,6 @@ impl<'lock> ExportableRequirements<'lock> {
             };
 
             for dep in deps {
-                if !dep.is_runtime_edge() {
-                    continue;
-                }
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }

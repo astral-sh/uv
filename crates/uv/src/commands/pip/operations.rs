@@ -20,10 +20,11 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::{DistributionDatabase, SourcedDependencyGroups};
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist, ExtraBuildRequires,
-    ExtraBuildVariables, IndexLocations, InstalledDist, InstalledVersion, LocalDist,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, ResolutionDiagnostic,
-    UnresolvedRequirement, UnresolvedRequirementSpecification, VersionOrUrlRef,
+    BuildInfo, CachedDist, ConfigSettings, DependencyMetadata, Diagnostic, Dist,
+    ExtraBuildRequires, ExtraBuildVariables, IndexLocations, InstalledDist, InstalledDistKind,
+    InstalledVersion, LocalDist, NameRequirementSpecification, PackageConfigSettings, Requirement,
+    ResolutionDiagnostic, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    VersionOrUrlRef,
 };
 use uv_distribution_types::{DistributionMetadata, InstalledMetadata, Name, Resolution};
 use uv_fs::{CWD, Simplified, normalize_path_under};
@@ -346,8 +347,47 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         DependencyMode::Direct => Vec::new(),
     };
 
-    // TODO(zanieb): Consider consuming these instead of cloning
-    let exclusions = Exclusions::new(reinstall.clone(), UpgradePackages::for_non_project(upgrade));
+    // Exclude stale source-built registry distributions so the resolver can select the source
+    // artifact needed to rebuild them. Downloaded wheels have no build metadata and remain usable.
+    let reinstall = installed_packages
+        .iter()
+        .fold(reinstall.clone(), |reinstall, dist| {
+            if !matches!(&dist.kind, InstalledDistKind::Registry(_)) || dist.build_info().is_none()
+            {
+                return reinstall;
+            }
+
+            let name = dist.name();
+            let config_settings = build_dispatch
+                .config_settings_package()
+                .get(name)
+                .map_or_else(
+                    || build_dispatch.config_settings().clone(),
+                    |settings| {
+                        settings
+                            .clone()
+                            .merge(build_dispatch.config_settings().clone())
+                    },
+                );
+            let expected = BuildInfo::from_settings(
+                config_settings,
+                build_dispatch
+                    .extra_build_requires()
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_default(),
+                build_dispatch.extra_build_variables().get(name).cloned(),
+            )
+            .with_locked_build_resolution(
+                build_dispatch.unlocked_build_cache_key().map(str::to_owned),
+            );
+            if dist.build_info() != Some(&expected) {
+                reinstall.with_package(name.clone())
+            } else {
+                reinstall
+            }
+        });
+    let exclusions = Exclusions::new(reinstall, UpgradePackages::for_non_project(upgrade));
 
     // Create a manifest of the requirements.
     let manifest = Manifest::new(
@@ -588,6 +628,8 @@ impl InstallationPlan {
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
         locked_build_resolutions: &LockedBuildResolutions,
+        unlocked_build_cache_key: Option<&str>,
+        allow_source_cache: bool,
         cache: &Cache,
         venv: &PythonEnvironment,
         tags: &Tags,
@@ -595,6 +637,8 @@ impl InstallationPlan {
         let start = Instant::now();
         let plan = Planner::new(resolution)
             .with_locked_build_resolutions(locked_build_resolutions)
+            .with_unlocked_build_cache_key(unlocked_build_cache_key)
+            .with_source_cache(allow_source_cache)
             .build(
                 site_packages,
                 installation,
@@ -708,6 +752,11 @@ pub(crate) async fn install(
         build_dispatch.extra_build_requires(),
         build_dispatch.extra_build_variables(),
         build_dispatch.locked_build_resolutions(),
+        build_dispatch.unlocked_build_cache_key(),
+        matches!(
+            build_dispatch.build_isolation(),
+            uv_types::BuildIsolation::Isolated
+        ),
         cache,
         venv,
         tags,

@@ -106,6 +106,11 @@ pub trait BuildContext {
     /// Return a reference to the build arena.
     fn build_arena(&self) -> &BuildArena<Self::SourceDistBuilder>;
 
+    /// Whether an in-process build environment can be reused for this build context.
+    fn reuse_build_arena(&self) -> bool {
+        true
+    }
+
     /// Return a reference to the discovered registry capabilities.
     fn capabilities(&self) -> &IndexCapabilities;
 
@@ -158,6 +163,11 @@ pub trait BuildContext {
         _package: &BuildPackageKey,
     ) -> Result<Option<String>, CacheInfoError> {
         Ok(None)
+    }
+
+    /// Return a stable cache key for the inputs to an unlocked build environment, if any.
+    fn unlocked_build_cache_key(&self) -> Option<&str> {
+        None
     }
 
     /// Resolve the given requirements into a ready-to-install set of package versions.

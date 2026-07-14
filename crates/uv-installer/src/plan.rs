@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_cache_info::Timestamp;
+use uv_cache_info::{CacheInfo, Timestamp};
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
@@ -15,8 +15,9 @@ use uv_distribution::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuildableSource, BuiltDist, CachedDirectUrlDist, CachedDist, ConfigSettings, Dist, Error,
-    ExtraBuildRequires, ExtraBuildVariables, Hashed, IndexLocations, InstalledDist, Name,
-    PackageConfigSettings, RequirementSource, Resolution, ResolvedDist, SourceDist,
+    ExtraBuildRequires, ExtraBuildVariables, Hashed, IndexLocations, InstalledDist,
+    InstalledDistKind, Name, PackageConfigSettings, RequirementSource, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
@@ -236,6 +237,8 @@ impl uv_errors::Hint for IncompatibleWheelError {
 pub struct Planner<'a> {
     resolution: &'a Resolution,
     locked_build_resolutions: Option<&'a LockedBuildResolutions>,
+    unlocked_build_cache_key: Option<&'a str>,
+    allow_source_cache: bool,
 }
 
 impl<'a> Planner<'a> {
@@ -244,6 +247,8 @@ impl<'a> Planner<'a> {
         Self {
             resolution,
             locked_build_resolutions: None,
+            unlocked_build_cache_key: None,
+            allow_source_cache: true,
         }
     }
 
@@ -254,6 +259,20 @@ impl<'a> Planner<'a> {
         resolutions: &'a LockedBuildResolutions,
     ) -> Self {
         self.locked_build_resolutions = Some(resolutions);
+        self
+    }
+
+    /// Set the cache key for inputs used by unlocked build environments.
+    #[must_use]
+    pub fn with_unlocked_build_cache_key(mut self, cache_key: Option<&'a str>) -> Self {
+        self.unlocked_build_cache_key = cache_key;
+        self
+    }
+
+    /// Set whether installed and cached source builds may be reused.
+    #[must_use]
+    pub fn with_source_cache(mut self, allow_source_cache: bool) -> Self {
+        self.allow_source_cache = allow_source_cache;
         self
     }
 
@@ -309,10 +328,6 @@ impl<'a> Planner<'a> {
         let mut remote = vec![];
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
-        let locked_build_install = self
-            .locked_build_resolutions
-            .is_some_and(|resolutions| !resolutions.is_empty());
-
         // TODO(charlie): There are a few assumptions here that are hard to spot:
         //
         // 1. Apparently, we never return direct URL distributions as [`ResolvedDist::Installed`].
@@ -325,7 +340,19 @@ impl<'a> Planner<'a> {
         //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
         //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
-            let locked_build_resolution = self
+            if !self.allow_source_cache
+                && let ResolvedDist::Installable {
+                    dist: distribution, ..
+                } = dist
+                && matches!(distribution.as_ref(), Dist::Source(_))
+            {
+                debug!("Must rebuild source distribution in a shared environment: {distribution}");
+                reinstalls.extend(site_packages.remove_packages(distribution.name()));
+                remote.push(distribution.clone());
+                continue;
+            }
+
+            let build_resolution_cache_key = self
                 .locked_build_resolutions
                 .and_then(|resolutions| {
                     let ResolvedDist::Installable {
@@ -353,6 +380,42 @@ impl<'a> Planner<'a> {
                         .transpose()
                 })
                 .transpose()?;
+            let build_resolution_cache_key = build_resolution_cache_key.or_else(|| {
+                let source_built = match dist {
+                    ResolvedDist::Installable { dist, .. } => {
+                        matches!(dist.as_ref(), Dist::Source(_))
+                    }
+                    ResolvedDist::Installed { dist } => dist.build_info().is_some(),
+                };
+                if source_built {
+                    self.unlocked_build_cache_key.map(str::to_string)
+                } else {
+                    None
+                }
+            });
+
+            // Hashless registry artifacts backed by local files are mutable. Check them before the
+            // installed-satisfaction fast path, since that path cannot observe file changes.
+            let local_cache_info = match dist {
+                ResolvedDist::Installable { dist, .. } if hasher.get(dist.as_ref()).is_none() => {
+                    let url = match dist.as_ref() {
+                        Dist::Built(BuiltDist::Registry(wheel)) => {
+                            Some(wheel.best_wheel().file.url.to_url()?)
+                        }
+                        Dist::Source(SourceDist::Registry(sdist)) => Some(sdist.file.url.to_url()?),
+                        _ => None,
+                    };
+                    if let Some(url) = url
+                        && url.scheme() == "file"
+                        && let Ok(path) = url.to_file_path()
+                    {
+                        Some(CacheInfo::from_path(&path)?)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
 
             // Check if the package should be reinstalled.
             let reinstall = reinstall.contains_package(dist.name())
@@ -384,7 +447,7 @@ impl<'a> Planner<'a> {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
-                            locked_build_resolution.as_deref(),
+                            build_resolution_cache_key.as_deref(),
                         ) {
                             RequirementSatisfaction::Mismatch => {
                                 debug!(
@@ -392,8 +455,20 @@ impl<'a> Planner<'a> {
                                 );
                             }
                             RequirementSatisfaction::Satisfied => {
-                                debug!("Requirement already installed: {installed}");
-                                continue;
+                                let installed_cache_info = match &installed.kind {
+                                    InstalledDistKind::Registry(installed) => {
+                                        installed.cache_info.as_ref()
+                                    }
+                                    _ => None,
+                                };
+                                if local_cache_info.as_ref().is_some_and(|cache_info| {
+                                    installed_cache_info != Some(cache_info)
+                                }) {
+                                    debug!("Local registry requirement is not fresh: {installed}");
+                                } else {
+                                    debug!("Requirement already installed: {installed}");
+                                    continue;
+                                }
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
@@ -444,10 +519,18 @@ impl<'a> Planner<'a> {
             }
 
             // The built-wheel indexes cannot distinguish legacy entries from entries built with
-            // a locked environment. Let the distribution database select the correctly sharded
-            // wheel instead.
-            if locked_build_resolution.is_some() {
-                debug!("Using locked build environment for source distribution: {dist}");
+            // a separately keyed build environment. Let the distribution database select the
+            // correctly sharded wheel, or revalidate any transitive build requirements, instead.
+            if build_resolution_cache_key.is_some()
+                || matches!(dist.as_ref(), Dist::Source(_)) && cache.must_revalidate_any()
+            {
+                debug!("Using distribution database for source distribution: {dist}");
+                remote.push(dist.clone());
+                continue;
+            }
+
+            if local_cache_info.is_some() {
+                debug!("Must revalidate local requirement: {dist}");
                 remote.push(dist.clone());
                 continue;
             }
@@ -455,16 +538,6 @@ impl<'a> Planner<'a> {
             // Identify any cached distributions that satisfy the requirement.
             match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
-                    // The registry index does not validate local revision pointers. During a
-                    // locked build, let the distribution database refresh mutable artifacts.
-                    if locked_build_install
-                        && hasher.get(dist.as_ref()).is_none()
-                        && wheel.best_wheel().file.url.to_url()?.scheme() == "file"
-                    {
-                        debug!("Must revalidate local build requirement: {dist}");
-                        remote.push(dist.clone());
-                        continue;
-                    }
                     if let Some(distribution) = registry_index.wheel(wheel, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
@@ -659,14 +732,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Source(SourceDist::Registry(sdist)) => {
-                    if locked_build_install
-                        && hasher.get(dist.as_ref()).is_none()
-                        && sdist.file.url.to_url()?.scheme() == "file"
-                    {
-                        debug!("Must revalidate local build requirement: {dist}");
-                        remote.push(dist.clone());
-                        continue;
-                    }
                     if let Some(distribution) = registry_index.source(sdist, no_build, no_binary) {
                         debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));

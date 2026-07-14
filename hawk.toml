@@ -90,14 +90,6 @@ level = "expect"
 reason = "used by Pixi to construct a custom resolver provider"
 
 [[override]]
-lint = "hawk::unnecessary_public"
-crate = "uv_resolver"
-item = "yanks::AllowedYanks::from_manifest"
-kind = "inherent_method"
-level = "expect"
-reason = "used by Pixi to build resolver policy from a manifest"
-
-[[override]]
 lint = "hawk::dead_public"
 crate = "uv_dispatch"
 item = "BuildDispatch::<'a>::with_build_extra_env_vars"

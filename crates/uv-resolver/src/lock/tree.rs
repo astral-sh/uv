@@ -139,9 +139,6 @@ impl<'env> TreeDisplay<'env> {
                 })
                 .flatten()
             {
-                if !dep.is_runtime_edge() {
-                    continue;
-                }
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }
@@ -321,9 +318,6 @@ impl<'env> TreeDisplay<'env> {
             };
 
             for dep in deps {
-                if !dep.is_runtime_edge() {
-                    continue;
-                }
                 if prune.contains(&dep.package_id.name) {
                     continue;
                 }

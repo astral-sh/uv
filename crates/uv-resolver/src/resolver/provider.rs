@@ -7,11 +7,12 @@ use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, InstalledDist,
-    RequestedDist, RequiresPython,
+    Dist, IndexCapabilities, IndexFormat, IndexLocations, IndexMetadata, IndexMetadataRef,
+    InstalledDist, RequestedDist, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 use uv_types::{BuildContext, HashStrategy};
@@ -109,6 +110,10 @@ pub trait ResolverProvider {
     /// Set the [`Reporter`] to use for this installer.
     #[must_use]
     fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self;
+
+    /// Set the concrete artifact context used to rank universal build dependencies.
+    #[must_use]
+    fn with_artifact_context(self, tags: Tags, markers: MarkerEnvironment) -> Self;
 }
 
 /// The main IO backend for the resolver, which does cached requests network requests using the
@@ -120,6 +125,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     flat_index: FlatIndex,
     tags: Option<Tags>,
     requires_python: RequiresPython,
+    artifact_context: Option<(Tags, MarkerEnvironment)>,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
     exclude_newer: ExcludeNewer,
@@ -148,6 +154,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             flat_index: flat_index.clone(),
             tags: tags.cloned(),
             requires_python: requires_python.clone(),
+            artifact_context: None,
             allowed_yanks,
             hasher: hasher.clone(),
             exclude_newer,
@@ -179,16 +186,21 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         package_name: &'io PackageName,
         index: Option<&'io IndexMetadata>,
     ) -> PackageVersionsResult {
+        let requested_index = index.map(|index| IndexMetadataRef {
+            url: index.url(),
+            format: if self.index_locations.known_indexes().any(|known_index| {
+                known_index.url() == index.url() && known_index.format == IndexFormat::Flat
+            }) {
+                IndexFormat::Flat
+            } else {
+                index.format
+            },
+        });
         let result = self
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple_detail(
-                    package_name,
-                    index.map(IndexMetadataRef::from),
-                    self.capabilities,
-                    semaphore,
-                )
+                client.simple_detail(package_name, requested_index, self.capabilities, semaphore)
             })
             .await;
 
@@ -214,6 +226,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 index.clone(),
                                 self.tags.clone(),
                                 self.requires_python.clone(),
+                                self.artifact_context.clone(),
                                 self.allowed_yanks.clone(),
                                 self.hasher.clone(),
                                 included_version_cutoff,
@@ -225,7 +238,10 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             ),
                             MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
                                 metadata,
+                                package_name,
                                 self.tags.as_ref(),
+                                self.artifact_context.as_ref(),
+                                &self.allowed_yanks,
                                 &self.hasher,
                                 self.build_options,
                             ),
@@ -239,7 +255,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         .and_then(|flat_index| flat_index.get(package_name))
                         .cloned()
                     {
-                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
+                        Ok(VersionsResponse::Found(vec![
+                            VersionMap::from_flat_distributions(
+                                flat_index,
+                                package_name,
+                                self.artifact_context.as_ref(),
+                                &self.allowed_yanks,
+                            ),
+                        ]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
@@ -249,7 +272,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         .and_then(|flat_index| flat_index.get(package_name))
                         .cloned()
                     {
-                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
+                        Ok(VersionsResponse::Found(vec![
+                            VersionMap::from_flat_distributions(
+                                flat_index,
+                                package_name,
+                                self.artifact_context.as_ref(),
+                                &self.allowed_yanks,
+                            ),
+                        ]))
                     } else if flat_index.is_some_and(FlatIndex::offline) {
                         Ok(VersionsResponse::Offline)
                     } else {
@@ -261,7 +291,14 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         .and_then(|flat_index| flat_index.get(package_name))
                         .cloned()
                     {
-                        Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
+                        Ok(VersionsResponse::Found(vec![
+                            VersionMap::from_flat_distributions(
+                                flat_index,
+                                package_name,
+                                self.artifact_context.as_ref(),
+                                &self.allowed_yanks,
+                            ),
+                        ]))
                     } else {
                         Ok(VersionsResponse::Offline)
                     }
@@ -366,5 +403,10 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             fetcher: self.fetcher.with_reporter(reporter),
             ..self
         }
+    }
+
+    fn with_artifact_context(mut self, tags: Tags, markers: MarkerEnvironment) -> Self {
+        self.artifact_context = Some((tags, markers));
+        self
     }
 }

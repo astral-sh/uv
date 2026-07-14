@@ -47,6 +47,10 @@ pub enum PylockTomlErrorKind {
     #[error("Package `{0}` requires Python {2}, but the target Python version is {1}")]
     IncompatibleRequiresPython(PackageName, Version, RequiresPython),
     #[error(
+        "Package `{0}` has artifacts with different `requires-python` values, which uv cannot yet export to pylock.toml"
+    )]
+    IncompatibleArtifactRequiresPython(PackageName),
+    #[error(
         "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
     )]
     WheelWithDirectory(PackageName),
@@ -937,11 +941,27 @@ impl<'lock> PylockToml {
                 .filter(|_| directory.is_none())
                 .cloned();
 
+            // PEP 751 only supports `requires-python` on each package record. This exporter
+            // emits one record per locked package, so every artifact must agree.
+            let mut artifact_requires_python = package
+                .wheels
+                .iter()
+                .map(|wheel| wheel.requires_python.as_ref())
+                .chain(package.sdist.as_ref().map(|sdist| sdist.requires_python()));
+            let requires_python = artifact_requires_python.next().flatten();
+            if artifact_requires_python.any(|candidate| candidate != requires_python) {
+                return Err(PylockTomlErrorKind::IncompatibleArtifactRequiresPython(
+                    package.id.name.clone(),
+                ));
+            }
+            let requires_python = requires_python
+                .map(|specifiers| RequiresPython::from_specifiers((**specifiers).clone()));
+
             let package = PylockTomlPackage {
                 name,
                 version,
                 marker: node.marker,
-                requires_python: None,
+                requires_python,
                 dependencies: vec![],
                 index,
                 vcs,

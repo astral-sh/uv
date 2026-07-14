@@ -92,11 +92,17 @@ impl Requirement {
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
     pub fn hashes(&self) -> Option<Hashes> {
-        let RequirementSource::Url { ref url, .. } = self.source else {
-            return None;
+        let url = match &self.source {
+            RequirementSource::Url { url, .. } | RequirementSource::Path { url, .. } => url,
+            RequirementSource::Registry { .. }
+            | RequirementSource::GitDirectory { .. }
+            | RequirementSource::GitPath { .. }
+            | RequirementSource::Directory { .. } => return None,
         };
         let fragment = url.fragment()?;
-        Hashes::parse_fragment(fragment).ok()
+        fragment
+            .split('&')
+            .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
     }
 
     /// Set the source file containing the requirement.
@@ -1210,8 +1216,10 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::str::FromStr;
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
+    use uv_pypi_types::{Hashes, VerbatimParsedUrl};
 
     use crate::{Requirement, RequirementSource};
 
@@ -1256,6 +1264,49 @@ mod tests {
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    #[test]
+    fn hashes_from_compound_archive_fragment() {
+        let requirement = Requirement::from(
+            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
+                "foo @ https://example.com/foo-1.0.0.tar.gz#subdirectory=packages/foo&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            )
+            .expect("valid archive requirement"),
+        );
+
+        assert!(matches!(&requirement.source, RequirementSource::Url { .. }));
+        assert_eq!(
+            requirement.hashes(),
+            Some(
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .parse::<Hashes>()
+                    .expect("valid archive hash")
+            )
+        );
+    }
+
+    #[test]
+    fn hashes_from_compound_path_fragment() {
+        let requirement = Requirement::from(
+            uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(
+                "foo @ file:///C:/home/ferris/foo-1.0.0.tar.gz#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&subdirectory=packages/foo",
+            )
+            .expect("valid path requirement"),
+        );
+
+        assert!(matches!(
+            &requirement.source,
+            RequirementSource::Path { .. }
+        ));
+        assert_eq!(
+            requirement.hashes(),
+            Some(
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    .parse::<Hashes>()
+                    .expect("valid path hash")
+            )
+        );
     }
 
     #[test]

@@ -28,6 +28,46 @@ pub struct IndexCacheControl {
 }
 
 impl IndexCacheControl {
+    /// Returns whether either configured cache-control header requires revalidation.
+    pub fn requires_revalidation(&self) -> bool {
+        [self.api.as_ref(), self.files.as_ref()]
+            .into_iter()
+            .flatten()
+            .any(|header| {
+                header
+                    .as_bytes()
+                    .split(|byte| *byte == b',')
+                    .any(|directive| {
+                        let mut parts = directive.splitn(2, |byte| *byte == b'=');
+                        let Some(name) = parts.next() else {
+                            return false;
+                        };
+                        let name = name.trim_ascii();
+
+                        if name.eq_ignore_ascii_case(b"no-cache")
+                            || name.eq_ignore_ascii_case(b"no-store")
+                        {
+                            return true;
+                        }
+
+                        (name.eq_ignore_ascii_case(b"max-age")
+                            || name.eq_ignore_ascii_case(b"s-maxage"))
+                            && parts
+                                .next()
+                                .and_then(|value| {
+                                    let value = value.trim_ascii();
+                                    let value = if let Some(value) = value.strip_prefix(b"\"") {
+                                        value.strip_suffix(b"\"")?
+                                    } else {
+                                        value
+                                    };
+                                    std::str::from_utf8(value).ok()?.parse::<u64>().ok()
+                                })
+                                .is_none_or(|max_age| max_age == 0)
+                    })
+            })
+    }
+
     /// Return the default Simple API cache control headers for the given index URL, if applicable.
     fn simple_api_cache_control(_url: &Url) -> Option<HeaderValue> {
         None
@@ -748,6 +788,33 @@ pub enum IndexSourceError {
 mod tests {
     use super::*;
     use http::HeaderValue;
+
+    #[test]
+    fn test_index_cache_control_revalidation() {
+        for (api, files, expected) in [
+            (Some("no-cache"), None, true),
+            (None, Some("no-store"), true),
+            (Some("NO-CACHE, private"), None, true),
+            (Some("max-age=0"), None, true),
+            (None, Some("s-maxage=000"), true),
+            (Some(r#"max-age="0""#), None, true),
+            (Some("max-age= 0"), None, true),
+            (Some("max-age="), None, true),
+            (Some("max-age=6a0"), None, true),
+            (Some("max-age=18446744073709551616"), None, true),
+            (Some("max-age=600"), Some("max-age=3600"), false),
+            (Some(r#"max-age="600""#), None, false),
+            (None, Some("max-age=3600, immutable, public"), false),
+            (Some("max-age=600, must-revalidate"), None, false),
+            (Some("x-no-cache, x-no-store"), None, false),
+        ] {
+            let cache_control = IndexCacheControl {
+                api: api.map(HeaderValue::from_static),
+                files: files.map(HeaderValue::from_static),
+            };
+            assert_eq!(cache_control.requires_revalidation(), expected);
+        }
+    }
 
     #[test]
     fn test_index_cache_control_headers() {

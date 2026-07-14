@@ -511,9 +511,6 @@ impl<'lock> InstallTarget<'lock> {
                             continue;
                         }
                         for dependency in dependencies {
-                            if !dependency.is_runtime_edge() {
-                                continue;
-                            }
                             let dep_name = dependency.package_name();
                             if seen.insert((dep_name, None)) {
                                 queue.push_back((dep_name, None));
@@ -549,9 +546,6 @@ impl<'lock> InstallTarget<'lock> {
                     };
 
                     for dependency in dependencies {
-                        if !dependency.is_runtime_edge() {
-                            continue;
-                        }
                         let name = dependency.package_name();
                         if seen.insert((name, None)) {
                             queue.push_back((name, None));

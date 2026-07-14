@@ -43,7 +43,8 @@ impl BuildInfo {
         }
     }
 
-    /// Attach the digest of the locked build environment used to build the distribution.
+    /// Attach the digest of the locked or unlocked build environment used to build the
+    /// distribution.
     #[must_use]
     pub fn with_locked_build_resolution(mut self, digest: Option<String>) -> Self {
         self.locked_build_resolution = digest;

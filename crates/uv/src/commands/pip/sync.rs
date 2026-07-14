@@ -376,7 +376,6 @@ pub(crate) async fn pip_sync(
     let extra_build_requires =
         LoweredExtraBuildDependencies::from_non_lowered(extra_build_dependencies.clone())
             .into_inner();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -452,6 +451,13 @@ pub(crate) async fn pip_sync(
             .build_options(build_options.clone())
             .build();
 
+        // Exclude installed distributions for non-isolated builds, since any source can depend
+        // transitively on the shared environment.
+        let resolution_reinstall = if matches!(&build_isolation, BuildIsolation::Isolate) {
+            reinstall.clone()
+        } else {
+            Reinstall::All
+        };
         let (resolution, hasher) = match operations::resolve(
             requirements,
             constraints,
@@ -466,7 +472,7 @@ pub(crate) async fn pip_sync(
             preferences,
             site_packages.clone(),
             &hasher,
-            &reinstall,
+            &resolution_reinstall,
             &upgrade,
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
@@ -496,8 +502,13 @@ pub(crate) async fn pip_sync(
     };
 
     // Constrain any build requirements marked as `match-runtime = true`.
+    let match_runtime = extra_build_requires.has_match_runtime_source(&resolution);
     let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
-
+    let install_state = if match_runtime {
+        state.fork()
+    } else {
+        state.clone()
+    };
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -507,7 +518,7 @@ pub(crate) async fn pip_sync(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        state.clone(),
+        install_state.clone(),
         index_strategy,
         config_settings,
         config_settings_package,
@@ -538,7 +549,7 @@ pub(crate) async fn pip_sync(
         &hasher,
         &tags,
         &client,
-        state.in_flight(),
+        install_state.in_flight(),
         &concurrency,
         &build_dispatch,
         &cache,

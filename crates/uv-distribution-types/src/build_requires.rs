@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,7 @@ use uv_cache_key::{CacheKey, CacheKeyHasher};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 
-use crate::{Name, Requirement, RequirementSource, Resolution};
+use crate::{Dist, Name, Requirement, RequirementSource, Resolution, ResolvedDist};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExtraBuildRequiresError {
@@ -81,8 +81,42 @@ impl CacheKey for ExtraBuildRequirement {
 }
 
 impl ExtraBuildRequires {
+    /// Return whether a resolved source distribution has a runtime-matched build requirement.
+    pub fn has_match_runtime_source(&self, resolution: &Resolution) -> bool {
+        resolution.distributions().any(|distribution| {
+            matches!(
+                distribution,
+                ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+            ) && self.get(distribution.name()).is_some_and(|requirements| {
+                requirements
+                    .iter()
+                    .any(|requirement| requirement.match_runtime)
+            })
+        })
+    }
+
     /// Apply runtime constraints from a resolution to the extra build requirements.
-    pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
+    pub fn match_runtime(
+        mut self,
+        resolution: &Resolution,
+    ) -> Result<Self, ExtraBuildRequiresError> {
+        let source_targets = resolution
+            .distributions()
+            .filter(|distribution| {
+                matches!(
+                    distribution,
+                    ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+                )
+            })
+            .map(|distribution| distribution.name().clone())
+            .collect::<BTreeSet<_>>();
+        self.0.retain(|name, requirements| {
+            if !source_targets.contains(name) {
+                requirements.retain(|requirement| !requirement.match_runtime);
+            }
+            !requirements.is_empty()
+        });
+
         let mut sources: BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>> =
             BTreeMap::new();
         for dist in resolution.distributions() {
@@ -100,8 +134,13 @@ impl ExtraBuildRequires {
         sources: &BTreeMap<PackageName, Vec<(RequirementSource, MarkerTree)>>,
     ) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
+            .map(|(name, mut requirements)| {
+                if !sources.contains_key(&name) {
+                    requirements.retain(|requirement| !requirement.match_runtime);
+                }
+                (name, requirements)
+            })
             .filter(|(_, requirements)| !requirements.is_empty())
-            .filter(|(name, _)| sources.contains_key(name))
             .map(|(name, requirements)| {
                 let mut matched_requirements = Vec::new();
                 for requirement in requirements {

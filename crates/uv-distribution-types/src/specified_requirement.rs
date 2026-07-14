@@ -202,7 +202,9 @@ impl UnresolvedRequirement {
             Self::Named(requirement) => requirement.hashes(),
             Self::Unnamed(requirement) => {
                 let fragment = requirement.url.verbatim.fragment()?;
-                Hashes::parse_fragment(fragment).ok()
+                fragment
+                    .split('&')
+                    .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
             }
         }
     }

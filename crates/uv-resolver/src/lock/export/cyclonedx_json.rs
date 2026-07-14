@@ -418,7 +418,6 @@ fn create_dependencies(
                 .iter()
                 .chain(optional_deps)
                 .chain(dep_groups)
-                .filter(|dep| dep.is_runtime_edge())
                 .filter_map(|dep| component_builder.get_component(&dep.package_id));
 
             let bom_refs = package_deps

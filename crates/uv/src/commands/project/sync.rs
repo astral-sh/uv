@@ -32,7 +32,10 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{FlatIndex, ForkStrategy, Installable, Lock, PrereleaseMode, ResolutionMode};
 use uv_scripts::Pep723Script;
 use uv_settings::{MalwareCheckSettings, PythonInstallMirrors};
-use uv_types::{BuildIsolation, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy};
+use uv_types::{
+    BuildIsolation, HashStrategy, LockedBuildResolutions, SourceTreeEditablePolicy,
+    UnlockedBuildInputs, unlocked_build_cache_key,
+};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
@@ -797,6 +800,29 @@ pub(crate) async fn do_sync(
         LockedBuildResolutions::new(map)
     };
 
+    // Read the build constraints from the lockfile before planning, so unlocked source builds use
+    // the same cache identity as the build dispatch.
+    let build_constraints = target.build_constraints();
+    let build_hasher = HashStrategy::default();
+    let unlocked_build_cache_key = unlocked_build_cache_key(UnlockedBuildInputs {
+        build_constraints: &build_constraints,
+        index_locations,
+        index_strategy,
+        build_options,
+        dependency_metadata,
+        config_settings: config_setting,
+        config_settings_package,
+        extra_build_requires: &extra_build_requires,
+        extra_build_variables,
+        build_hasher: &build_hasher,
+        exclude_newer_global: exclude_newer.global.as_ref(),
+        exclude_newer_package: (&exclude_newer.package).into_iter().collect(),
+        sources: &sources,
+        source_tree_editable_policy: SourceTreeEditablePolicy::Project,
+        non_isolated: !matches!(build_isolation, uv_configuration::BuildIsolation::Isolate),
+        invocation_timestamp: cache.timestamp(),
+    });
+
     let bytecode_compilation = compile_bytecode.then_some(operations::BytecodeCompilation::All);
     let site_packages = SitePackages::from_environment(venv)?;
     let installation_plan = operations::InstallationPlan::build(
@@ -812,6 +838,8 @@ pub(crate) async fn do_sync(
         &extra_build_requires,
         extra_build_variables,
         &locked_build_resolutions,
+        unlocked_build_cache_key.as_deref(),
+        matches!(build_isolation, uv_configuration::BuildIsolation::Isolate),
         cache,
         venv,
         &tags,
@@ -858,12 +886,8 @@ pub(crate) async fn do_sync(
         }
     };
 
-    // Read the build constraints from the lockfile.
-    let build_constraints = target.build_constraints();
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_hasher = HashStrategy::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

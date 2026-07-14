@@ -359,6 +359,14 @@ impl ToolLock {
                     );
                     None
                 }
+                Ok(lock) if lock.supports_build_dependencies() => {
+                    debug!(
+                        "Ignoring unsupported build-dependency tool lock schema v{} at `{}`",
+                        lock.version(),
+                        path.user_display()
+                    );
+                    None
+                }
                 Ok(lock) => Some(Self {
                     root: directory.to_path_buf(),
                     lock,

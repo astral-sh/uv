@@ -345,6 +345,7 @@ impl SitePackages {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        unlocked_build_cache_key: Option<&str>,
     ) -> Result<SatisfiesResult> {
         // First, map all unnamed requirements to named requirements.
         let requirements = {
@@ -452,6 +453,7 @@ impl SitePackages {
             config_settings_package,
             extra_build_requires,
             extra_build_variables,
+            unlocked_build_cache_key,
         )
     }
 
@@ -469,6 +471,7 @@ impl SitePackages {
         config_settings_package: &PackageConfigSettings,
         extra_build_requires: &ExtraBuildRequires,
         extra_build_variables: &ExtraBuildVariables,
+        unlocked_build_cache_key: Option<&str>,
     ) -> Result<SatisfiesResult> {
         // Collect the constraints by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
@@ -518,7 +521,7 @@ impl SitePackages {
                             config_settings_package,
                             extra_build_requires,
                             extra_build_variables,
-                            None,
+                            distribution.build_info().and(unlocked_build_cache_key),
                         ) {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
@@ -543,7 +546,7 @@ impl SitePackages {
                                 config_settings_package,
                                 extra_build_requires,
                                 extra_build_variables,
-                                None,
+                                distribution.build_info().and(unlocked_build_cache_key),
                             ) {
                                 RequirementSatisfaction::Mismatch
                                 | RequirementSatisfaction::OutOfDate
