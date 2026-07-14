@@ -807,6 +807,7 @@ fn tool_upgrade_pinned_hint() -> Result<()> {
         .arg("babel old;echo unsafe")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
+        .env(EnvVars::BASH_VERSION, "5")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -819,7 +820,7 @@ fn tool_upgrade_pinned_hint() -> Result<()> {
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel old;echo unsafe` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest --suffix=' old;echo unsafe'` to upgrade to a new version.
+    hint: `babel old;echo unsafe` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest '--suffix= old;echo unsafe'` to upgrade to a new version.
     ");
 
     let venv_path = uv_test::venv_bin_path(tool_dir.path().join("babel old;echo unsafe"));
@@ -827,6 +828,7 @@ fn tool_upgrade_pinned_hint() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel old;echo unsafe")
+        .env(EnvVars::BASH_VERSION, "5")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .env(EnvVars::PATH, bin_dir.as_os_str()), @"
@@ -836,7 +838,7 @@ fn tool_upgrade_pinned_hint() -> Result<()> {
 
     ----- stderr -----
     error: Failed to upgrade babel old;echo unsafe
-      Caused by: `babel old;echo unsafe` is missing a valid environment; run `uv tool install babel --suffix=' old;echo unsafe' --force` to reinstall
+      Caused by: `babel old;echo unsafe` is missing a valid environment; run `uv tool install babel '--suffix= old;echo unsafe' --force` to reinstall
     ");
 
     Ok(())

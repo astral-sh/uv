@@ -330,6 +330,7 @@ fn tool_list_bad_environment() -> Result<()> {
         context.filters(),
         context
             .tool_list()
+            .env(EnvVars::BASH_VERSION, "5")
             .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
             .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()),
         @"
@@ -340,7 +341,7 @@ fn tool_list_bad_environment() -> Result<()> {
     - ruff
 
     ----- stderr -----
-    warning: Invalid environment at `tools/black old;echo unsafe`: missing Python executable at `tools/black old;echo unsafe/[BIN]/[PYTHON]` (run `uv tool install black --suffix=' old;echo unsafe' --reinstall` to reinstall)
+    warning: Invalid environment at `tools/black old;echo unsafe`: missing Python executable at `tools/black old;echo unsafe/[BIN]/[PYTHON]` (run `uv tool install black '--suffix= old;echo unsafe' --reinstall` to reinstall)
     "
     );
 

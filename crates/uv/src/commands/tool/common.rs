@@ -723,7 +723,21 @@ pub(crate) async fn refine_interpreter(
 
 /// Format a suffix as a safely quoted command-line argument.
 pub(crate) fn format_tool_suffix_arg(suffix: &str) -> String {
-    format!("--suffix={}", shlex_posix(suffix))
+    format_tool_suffix_arg_for_shell(suffix, Shell::from_env())
+}
+
+fn format_tool_suffix_arg_for_shell(suffix: &str, shell: Option<Shell>) -> String {
+    let argument = format!("--suffix={suffix}");
+    let posix = shlex_posix(&argument);
+    if posix == argument {
+        return argument;
+    }
+
+    match shell {
+        Some(Shell::Cmd) => format!(r#""{argument}""#),
+        Some(Shell::Powershell) => format!("'{}'", argument.replace('\'', "''")),
+        _ => posix,
+    }
 }
 
 /// Finalizes a tool installation, after creation of an environment.
@@ -1009,5 +1023,30 @@ fn warn_out_of_path(executable_directory: &Path) {
                 executable_directory.simplified_display().cyan(),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Shell, format_tool_suffix_arg_for_shell};
+
+    #[test]
+    fn format_tool_suffix_arg() {
+        assert_eq!(
+            format_tool_suffix_arg_for_shell("-0.11", Some(Shell::Cmd)),
+            "--suffix=-0.11"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell(" old;echo unsafe", Some(Shell::Bash)),
+            "'--suffix= old;echo unsafe'"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell(" old'unsafe", Some(Shell::Powershell)),
+            "'--suffix= old''unsafe'"
+        );
+        assert_eq!(
+            format_tool_suffix_arg_for_shell(" old&echo unsafe", Some(Shell::Cmd)),
+            r#""--suffix= old&echo unsafe""#
+        );
     }
 }
