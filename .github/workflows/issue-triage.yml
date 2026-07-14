@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       issue:
-        description: "The issue URL or number to triage"
+        description: "An issue URL or number"
         required: true
         type: string
 
