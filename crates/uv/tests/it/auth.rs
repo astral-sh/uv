@@ -31,7 +31,8 @@ async fn invalid_cloud_endpoint_urls() {
 
             ----- stderr -----
             error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
-              Caused by: Invalid `UV_[CLOUD]_ENDPOINT_URL`: relative URL without a base
+              Caused by: Invalid `UV_[CLOUD]_ENDPOINT_URL`
+              Caused by: relative URL without a base
             ");
         }
     }
