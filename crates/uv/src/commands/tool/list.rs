@@ -22,6 +22,7 @@ use uv_warnings::warn_user;
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::reporters::LatestVersionReporter;
+use crate::commands::tool::common::format_tool_suffix_arg;
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
 
@@ -303,8 +304,9 @@ pub(crate) async fn list(
 fn reinstall_command(tool: &Tool) -> String {
     if let Some(suffix) = tool.suffix() {
         format!(
-            "uv tool install {} --suffix={suffix} --reinstall",
-            tool.package()
+            "uv tool install {} {} --reinstall",
+            tool.package(),
+            format_tool_suffix_arg(suffix)
         )
     } else {
         format!("uv tool install {} --reinstall", tool.package())

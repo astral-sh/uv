@@ -45,7 +45,7 @@ use uv_resolver::{
     FlatIndex, Installable, Lock, OptionsBuilder, Preference, ResolverManifest, ResolverOutput,
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
-use uv_shell::Shell;
+use uv_shell::{Shell, shlex_posix};
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, ToolName, entrypoint_paths};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::warn_user_once;
@@ -719,6 +719,11 @@ pub(crate) async fn refine_interpreter(
     }
 
     Ok(Some(interpreter))
+}
+
+/// Format a suffix as a safely quoted command-line argument.
+pub(crate) fn format_tool_suffix_arg(suffix: &str) -> String {
+    format!("--suffix={}", shlex_posix(suffix))
 }
 
 /// Finalizes a tool installation, after creation of an environment.

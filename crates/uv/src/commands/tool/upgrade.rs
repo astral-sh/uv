@@ -36,7 +36,9 @@ use crate::commands::project::{
     update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::common::{ToolLock, remove_entrypoints, tool_environment_spec};
+use crate::commands::tool::common::{
+    ToolLock, format_tool_suffix_arg, remove_entrypoints, tool_environment_spec,
+};
 use crate::commands::{ExitStatus, conjunction, tool::common::finalize_tool_install};
 use crate::printer::Printer;
 use crate::settings::ResolverInstallerSettings;
@@ -285,7 +287,12 @@ impl UpgradeConstraint {
             } => {
                 let reinstall_command = suffix.as_ref().map_or_else(
                     || format!("uv tool install {package}@latest"),
-                    |suffix| format!("uv tool install {package}@latest --suffix={suffix}"),
+                    |suffix| {
+                        format!(
+                            "uv tool install {package}@latest {}",
+                            format_tool_suffix_arg(suffix)
+                        )
+                    },
                 );
 
                 writeln!(
@@ -679,10 +686,16 @@ async fn upgrade_tool(
 }
 
 fn install_command(tool: &Tool, force: bool) -> String {
-    let mut command = format!("uv tool install {}", tool.package());
-    if let Some(suffix) = tool.suffix() {
-        let _ = write!(command, " --suffix={suffix}");
-    }
+    let mut command = tool.suffix().map_or_else(
+        || format!("uv tool install {}", tool.package()),
+        |suffix| {
+            format!(
+                "uv tool install {} {}",
+                tool.package(),
+                format_tool_suffix_arg(suffix)
+            )
+        },
+    );
     if force {
         command.push_str(" --force");
     }

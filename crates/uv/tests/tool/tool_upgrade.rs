@@ -771,7 +771,7 @@ fn tool_upgrade_multiple_names() {
 }
 
 #[test]
-fn tool_upgrade_pinned_hint() {
+fn tool_upgrade_pinned_hint() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -782,6 +782,8 @@ fn tool_upgrade_pinned_hint() {
     // Install a specific version of `babel` so the receipt records an exact pin.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("babel==2.6.0")
+        .arg("--suffix")
+        .arg(" old;echo unsafe")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -797,12 +799,12 @@ fn tool_upgrade_pinned_hint() {
     Installed [N] packages in [TIME]
      + babel==2.6.0
      + pytz==2018.5
-    Installed 1 executable: pybabel
+    Installed 1 executable: pybabel old;echo unsafe
     ");
 
     // Attempt to upgrade `babel`; it should remain pinned and emit a hint explaining why.
     uv_snapshot!(context.filters(), context.tool_upgrade()
-        .arg("babel")
+        .arg("babel old;echo unsafe")
         .arg("--index-url")
         .arg("https://pypi.org/simple/")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -817,8 +819,27 @@ fn tool_upgrade_pinned_hint() {
      - pytz==2018.5
      + pytz==2024.1
 
-    hint: `babel` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest` to upgrade to a new version.
+    hint: `babel old;echo unsafe` is pinned to `2.6.0` (installed with an exact version pin); reinstall with `uv tool install babel@latest --suffix=' old;echo unsafe'` to upgrade to a new version.
     ");
+
+    let venv_path = uv_test::venv_bin_path(tool_dir.path().join("babel old;echo unsafe"));
+    fs_err::remove_dir_all(venv_path)?;
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel old;echo unsafe")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to upgrade babel old;echo unsafe
+      Caused by: `babel old;echo unsafe` is missing a valid environment; run `uv tool install babel --suffix=' old;echo unsafe' --force` to reinstall
+    ");
+
+    Ok(())
 }
 
 #[test]
