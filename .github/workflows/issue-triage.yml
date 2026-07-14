@@ -10,6 +10,12 @@ on:
         description: "An issue URL or number"
         required: true
         type: string
+  workflow_call:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
 
 permissions: {}
 

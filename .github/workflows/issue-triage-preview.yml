@@ -31,65 +31,25 @@ jobs:
               --raw-field sort=created \
               --raw-field order=desc \
               --field per_page=5 \
-              --jq '[.items[].number]'
+              --jq '[.items[].number | tostring]'
           )"
           printf 'issues=%s\n' "$issues" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   triage:
+    name: "Triage issue ${{ matrix.issue }}"
     needs: collect
-    runs-on: ubuntu-latest
-    environment: automations
-    timeout-minutes: 15
     permissions:
       contents: read
       issues: read
-      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
         issue: ${{ fromJSON(needs.collect.outputs.issues) }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: "Collect issue context"
-        run: |
-          gh issue view "$ISSUE_NUMBER" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json number,title,body,author \
-            > .issue-triage-event.json
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ matrix.issue }}
-
-      - name: "Triage issue"
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-home: "agents/codex"
-          permission-profile: "issue-triage"
-          safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/triage-issue.md"
-          output-schema-file: "agents/schemas/issue-triage.json"
-          output-file: "${{ runner.temp }}/issue-triage-result.json"
-
-      - name: "Prepare triage result"
-        run: |
-          mkdir -p "$RUNNER_TEMP/issue-triage-preview"
-          cp .issue-triage-event.json "$RUNNER_TEMP/issue-triage-preview/event.json"
-          cp "$RUNNER_TEMP/issue-triage-result.json" "$RUNNER_TEMP/issue-triage-preview/result.json"
-
-      - name: "Upload triage result"
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: issue-triage-preview-${{ matrix.issue }}
-          path: ${{ runner.temp }}/issue-triage-preview
-          retention-days: 7
+    uses: ./.github/workflows/issue-triage.yml
+    with:
+      issue: ${{ matrix.issue }}
 
   report:
     needs: triage
@@ -97,49 +57,6 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: "Download triage results"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: issue-triage-preview-*
-          path: ${{ runner.temp }}/issue-triage-results
-
-      - name: "Summarize triage results"
-        run: |
-          comment="$RUNNER_TEMP/issue-triage-preview.md"
-          {
-            printf '%s\n\n' '<!-- issue-triage-preview -->'
-            printf '%s\n\n' '## Issue triage preview'
-            printf 'Ran the changed triage prompt against the five most recently created issues. [View workflow run](%s/%s/actions/runs/%s).\n\n' \
-              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-
-            for result in "$RUNNER_TEMP"/issue-triage-results/*/result.json; do
-              event="${result%/result.json}/event.json"
-              jq --null-input --raw-output \
-                --slurpfile event "$event" \
-                --slurpfile result "$result" \
-                --arg repository "$GITHUB_REPOSITORY" '
-                  def one_line: gsub("[\\r\\n]+"; " ") | gsub("@"; "&#64;");
-                  $event[0] as $issue |
-                  $result[0] as $triage |
-                  "### [#\($issue.number)](https://github.com/\($repository)/issues/\($issue.number)): \($issue.title | one_line)\n\n" +
-                  "\($triage.summary | one_line)\n\n" +
-                  "Search scope: \($triage.related.search_scope | one_line)\n\n" +
-                  (if ($triage.related.items | length) == 0 then
-                    "No related issues or pull requests found.\n"
-                  else
-                    ($triage.related.items | map(
-                      "- [\(.kind) #\(.number)](https://github.com/\($repository)/\(if .kind == "pull_request" then "pull" else "issues" end)/\(.number)) (\(.state)): \(.reason | one_line)"
-                    ) | join("\n")) + "\n"
-                  end)
-                '
-              printf '\n<details>\n<summary>Model JSON output</summary>\n\n```json\n'
-              jq . "$result"
-              printf '```\n</details>\n\n'
-            done
-          } > "$comment"
-
-          cp "$comment" "$GITHUB_STEP_SUMMARY"
-
       - name: "Create or update preview comment"
         run: |
           comments="repos/${GITHUB_REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments"
