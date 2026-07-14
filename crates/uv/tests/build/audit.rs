@@ -9,6 +9,25 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
+#[test]
+fn audit_invalid_service_url() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.audit()
+        .arg("--preview-features")
+        .arg("audit")
+        .arg("--service-url")
+        .arg("not-a-url"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid OSV service URL
+      Caused by: relative URL without a base
+    ");
+}
+
 /// The workspace discovered while resolving settings is reused by `uv audit`.
 #[test]
 fn audit_reuses_settings_workspace_discovery() -> Result<()> {
