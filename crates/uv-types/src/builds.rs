@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 use papaya::{HashMap, ResizeMode};
 
 use uv_cache_info::{CacheInfo, CacheInfoError, Timestamp};
-use uv_configuration::{BuildKind, BuildOptions, Constraints, IndexStrategy, NoBinary, NoSources};
+use uv_configuration::{
+    BuildKind, BuildOptions, Constraints, IndexStrategy, NoBinary, NoBuild, NoSources,
+};
 use uv_distribution_types::{
     BuildInfo, BuiltDist, ConfigSettings, DependencyMetadata, Dist, ExcludeNewerOverride,
     ExcludeNewerValue, ExtraBuildRequires, ExtraBuildVariables, HashGeneration, IndexCacheControl,
@@ -473,6 +475,16 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
     };
     no_binary_packages.sort_unstable();
     no_binary_packages.dedup();
+    // Global `--no-build` can reuse an existing wheel. If package builds remain possible, though,
+    // the policy can change which transitive build requirements are selected.
+    let (no_build, mut no_build_packages) = match build_options.no_build() {
+        NoBuild::None => ("none", Vec::new()),
+        NoBuild::All if !build_options.allows_package_builds() => ("none", Vec::new()),
+        NoBuild::All => ("all", Vec::new()),
+        NoBuild::Packages(packages) => ("packages", packages.iter().collect()),
+    };
+    no_build_packages.sort_unstable();
+    no_build_packages.dedup();
     let (no_sources, mut no_sources_packages) = match sources {
         NoSources::None => ("none", Vec::new()),
         NoSources::All => ("all", Vec::new()),
@@ -565,6 +577,7 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
         && index_locations.is_none()
         && index_strategy == IndexStrategy::default()
         && build_options.no_binary().is_none()
+        && no_build == "none"
         && dependency_metadata.is_empty()
         && config_settings.is_empty()
         && *config_settings_package == PackageConfigSettings::default()
@@ -660,6 +673,8 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
         (
             no_binary,
             no_binary_packages,
+            no_build,
+            no_build_packages,
             no_sources,
             no_sources_packages,
             source_tree_editable_policy,
@@ -1558,6 +1573,58 @@ mod tests {
                 &defaults,
                 IndexStrategy::default(),
                 &no_build,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let no_build_package =
+            BuildOptions::new(NoBinary::None, NoBuild::Packages(vec![first.clone()]));
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &no_build_package,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let no_binary_package =
+            BuildOptions::new(NoBinary::Packages(vec![first.clone()]), NoBuild::None);
+        let no_build_with_binary_package =
+            BuildOptions::new(NoBinary::Packages(vec![first.clone()]), NoBuild::All);
+        assert_ne!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &no_binary_package,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &no_build_with_binary_package,
                 &dependency_metadata,
                 None,
                 std::iter::empty(),
