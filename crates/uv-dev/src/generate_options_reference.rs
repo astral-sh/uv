@@ -208,9 +208,8 @@ impl Set {
 
 #[expect(clippy::format_push_string)]
 fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
-    let option_type = match &parents[0] {
-        Set::Global { option_type, .. } => option_type,
-        _ => unreachable!(),
+    let Set::Global { option_type, .. } = &parents[0] else {
+        unreachable!()
     };
 
     let header_level = if parents.len() > 1 { "####" } else { "###" };
