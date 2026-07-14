@@ -71,6 +71,8 @@ pub enum Error {
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
     #[error("`backend-path` entry `{0}` does not exist or is not a directory")]
     InvalidBackendPath(String),
+    #[error("`backend-path` entry `{0}` must be a relative path within the source tree")]
+    BackendPathOutsideSourceTree(String),
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -108,6 +110,7 @@ impl IsBuildBackendError for Error {
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
             | Self::InvalidBackendPath(_)
+            | Self::BackendPathOutsideSourceTree(_)
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)

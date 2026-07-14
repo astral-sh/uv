@@ -616,9 +616,24 @@ impl SourceBuild {
             .as_ref()
             .and_then(|build_system| build_system.backend_path.as_ref())
         {
+            let source_tree = fs_err::canonicalize(source_tree).map_err(Error::Io)?;
             for path in backend_path.iter() {
-                if !source_tree.join(path).is_dir() {
+                if Path::new(path).is_absolute() {
+                    return Err(Box::new(Error::BackendPathOutsideSourceTree(
+                        path.to_string(),
+                    )));
+                }
+                let backend_path = source_tree.join(path);
+                if !backend_path.is_dir() {
                     return Err(Box::new(Error::InvalidBackendPath(path.to_string())));
+                }
+                if !fs_err::canonicalize(backend_path)
+                    .map_err(Error::Io)?
+                    .starts_with(&source_tree)
+                {
+                    return Err(Box::new(Error::BackendPathOutsideSourceTree(
+                        path.to_string(),
+                    )));
                 }
             }
         }
