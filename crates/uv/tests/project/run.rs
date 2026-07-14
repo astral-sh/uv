@@ -3,7 +3,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::ChildPath, prelude::*};
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::{prelude::predicate, str::contains};
 use serde_json::json;
@@ -14,7 +14,7 @@ use uv_static::EnvVars;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use uv_test::{TestContext, uv_snapshot};
+use uv_test::{TestContext, packse::PackseServer, uv_snapshot};
 
 #[test]
 fn run_with_python_version() -> Result<()> {
@@ -838,6 +838,64 @@ fn run_pep723_script_index() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + idna==2.7
+    ");
+
+    Ok(())
+}
+
+/// Package-scoped source disabling must not discard unrelated script sources or indexes.
+#[test]
+fn run_pep723_script_no_sources_package() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let explicit = PackseServer::new("simple/single-package.toml");
+    let default = PackseServer::new("extras/missing-extra.toml");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(&formatdoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "a",
+        # ]
+        #
+        # [[tool.uv.index]]
+        # name = "test"
+        # url = "{index}"
+        # explicit = true
+        #
+        # [tool.uv.sources]
+        # a = {{ index = "test" }}
+        # ///
+
+        import a
+       "#,
+        index = explicit.index_url(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("unrelated").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==2.0.0
+    ");
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--default-index").arg(default.index_url()).arg("--no-sources-package").arg("a").arg("main.py"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + a==1.0.0
     ");
 
     Ok(())

@@ -3158,7 +3158,7 @@ pub(crate) fn script_specification(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
-                script_sources,
+                script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
                 credentials_cache,
@@ -3179,7 +3179,7 @@ pub(crate) fn script_specification(
             LoweredRequirement::from_non_workspace_requirement(
                 requirement,
                 script_dir.as_ref(),
-                script_sources,
+                script_sources.as_ref(),
                 script_indexes,
                 &settings.index_locations,
                 credentials_cache,
@@ -3205,7 +3205,7 @@ pub(crate) fn script_specification(
                         LoweredRequirement::from_non_workspace_requirement(
                             requirement,
                             script_dir.as_ref(),
-                            script_sources,
+                            script_sources.as_ref(),
                             script_indexes,
                             &settings.index_locations,
                             credentials_cache,
@@ -3224,7 +3224,7 @@ pub(crate) fn script_specification(
                             LoweredRequirement::from_non_workspace_requirement(
                                 requirement,
                                 script_dir.as_ref(),
-                                script_sources,
+                                script_sources.as_ref(),
                                 script_indexes,
                                 &settings.index_locations,
                                 credentials_cache,
@@ -3293,7 +3293,7 @@ pub(crate) fn script_extra_build_requires(
                     LoweredRequirement::from_non_workspace_requirement(
                         requirement,
                         script_dir.as_ref(),
-                        script_sources,
+                        script_sources.as_ref(),
                         script_indexes,
                         &settings.index_locations,
                         credentials_cache,
