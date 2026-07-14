@@ -381,7 +381,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             .with_locked_build_resolution(
                 build_dispatch.unlocked_build_cache_key().map(str::to_owned),
             );
-            if dist.build_info() != Some(&expected) {
+            if !build_dispatch.build_isolation().is_isolated(Some(name))
+                || dist.build_info() != Some(&expected)
+            {
                 reinstall.with_package(name.clone())
             } else {
                 reinstall

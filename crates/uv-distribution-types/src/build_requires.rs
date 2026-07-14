@@ -84,10 +84,13 @@ impl ExtraBuildRequires {
     /// Return whether a resolved source distribution has a runtime-matched build requirement.
     pub fn has_match_runtime_source(&self, resolution: &Resolution) -> bool {
         resolution.distributions().any(|distribution| {
-            matches!(
+            (matches!(
                 distribution,
                 ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
-            ) && self.get(distribution.name()).is_some_and(|requirements| {
+            ) || matches!(
+                distribution,
+                ResolvedDist::Installed { dist } if dist.build_info().is_some()
+            )) && self.get(distribution.name()).is_some_and(|requirements| {
                 requirements
                     .iter()
                     .any(|requirement| requirement.match_runtime)
@@ -106,6 +109,9 @@ impl ExtraBuildRequires {
                 matches!(
                     distribution,
                     ResolvedDist::Installable { dist, .. } if matches!(dist.as_ref(), Dist::Source(_))
+                ) || matches!(
+                    distribution,
+                    ResolvedDist::Installed { dist } if dist.build_info().is_some()
                 )
             })
             .map(|distribution| distribution.name().clone())

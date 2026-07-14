@@ -6288,7 +6288,8 @@ fn no_build_isolation_does_not_reuse_cached_source() -> Result<()> {
 
     let write_wheel = |path: &Path, name: &str, module: &str, value: &str| -> Result<()> {
         let mut zip = ZipFileWriter::new(Vec::new());
-        let entry = ZipEntryBuilder::new(format!("{module}.py").into(), Compression::Stored);
+        let entry =
+            ZipEntryBuilder::new(format!("{module}/__init__.py").into(), Compression::Stored);
         block_on(zip.write_entry_whole(entry, format!("VALUE = {value:?}\n").as_bytes()))?;
         let entry = ZipEntryBuilder::new(
             format!("{name}-1.0.0.dist-info/METADATA").into(),
@@ -6361,7 +6362,7 @@ fn no_build_isolation_does_not_reuse_cached_source() -> Result<()> {
                     def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
                         filename = "helper-1.0.0-py3-none-any.whl"
                         with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                            wheel.writestr("helper.py", 'VALUE = "sdist"\n')
+                            wheel.writestr("helper/__init__.py", 'VALUE = "sdist"\n')
                             wheel.writestr("helper-1.0.0.dist-info/METADATA", "Metadata-Version: 2.3\nName: helper\nVersion: 1.0.0\n")
                             wheel.writestr("helper-1.0.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
                             wheel.writestr("helper-1.0.0.dist-info/RECORD", "")
@@ -6410,7 +6411,7 @@ fn no_build_isolation_does_not_reuse_cached_source() -> Result<()> {
                     def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
                         filename = "dep-0.1.0-py3-none-any.whl"
                         with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                            wheel.writestr("dep.py", f"HELPER = {helper.VALUE!r}\n")
+                            wheel.writestr("dep/__init__.py", f"HELPER = {helper.VALUE!r}\n")
                             wheel.writestr("dep-0.1.0.dist-info/METADATA", metadata())
                             wheel.writestr("dep-0.1.0.dist-info/WHEEL", "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n")
                             wheel.writestr("dep-0.1.0.dist-info/RECORD", "")
@@ -6509,18 +6510,11 @@ fn no_build_isolation_does_not_reuse_cached_source() -> Result<()> {
     assert_snapshot!(String::from_utf8_lossy(&third.get_output().stdout), @"sdist marker-sdist");
 
     context
-        .pip_uninstall()
-        .arg("dep")
-        .arg("marker-wheel")
-        .arg("marker-sdist")
-        .assert()
-        .success();
-    context
         .pip_install()
         .arg("--no-index")
         .arg("--find-links")
         .arg(links.path())
-        .arg(source_dist.path())
+        .arg("dep==0.1.0")
         .assert()
         .success();
     let fourth = context
@@ -16472,6 +16466,7 @@ fn pip_install_no_sources_editable_to_registry_switch() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
     Checked 1 package in [TIME]
     "
     );

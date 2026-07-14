@@ -2397,7 +2397,7 @@ pub fn match_runtime_nested_sources(temp_dir: &Path) -> anyhow::Result<(PathBuf,
 
                 filename = "builder-0.1.0-py3-none-any.whl"
                 with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
-                    wheel.writestr("builder.py", f"BUILD_NUMBER = {build_number}\n")
+                    wheel.writestr("builder/__init__.py", f"BUILD_NUMBER = {build_number}\n")
                     wheel.writestr(
                         "builder-0.1.0.dist-info/METADATA",
                         "Metadata-Version: 2.3\nName: builder\nVersion: 0.1.0\n",
@@ -2451,7 +2451,7 @@ pub fn match_runtime_nested_sources(temp_dir: &Path) -> anyhow::Result<(PathBuf,
                 filename = "primer-0.1.0-py3-none-any.whl"
                 with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
                     wheel.writestr(
-                        "primer.py",
+                        "primer/__init__.py",
                         "def main():\n"
                         "    from importlib.metadata import requires\n"
                         "    import child\n"
@@ -2504,7 +2504,7 @@ pub fn match_runtime_nested_sources(temp_dir: &Path) -> anyhow::Result<(PathBuf,
                 filename = "child-0.1.0-py3-none-any.whl"
                 with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
                     wheel.writestr(
-                        "child.py",
+                        "child/__init__.py",
                         f'RUNTIME_VERSION = "{runtime_version}"\n'
                         f"BUILDER_BUILD_NUMBER = {builder.BUILD_NUMBER}\n",
                     )

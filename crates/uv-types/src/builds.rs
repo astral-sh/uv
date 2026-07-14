@@ -5,9 +5,7 @@ use std::sync::{Arc, Mutex};
 use papaya::{HashMap, ResizeMode};
 
 use uv_cache_info::{CacheInfo, CacheInfoError, Timestamp};
-use uv_configuration::{
-    BuildKind, BuildOptions, Constraints, IndexStrategy, NoBinary, NoBuild, NoSources,
-};
+use uv_configuration::{BuildKind, BuildOptions, Constraints, IndexStrategy, NoBinary, NoSources};
 use uv_distribution_types::{
     BuildInfo, BuiltDist, ConfigSettings, DependencyMetadata, Dist, ExcludeNewerOverride,
     ExcludeNewerValue, ExtraBuildRequires, ExtraBuildVariables, HashGeneration, IndexCacheControl,
@@ -475,13 +473,6 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
     };
     no_binary_packages.sort_unstable();
     no_binary_packages.dedup();
-    let (no_build, mut no_build_packages) = match build_options.no_build() {
-        NoBuild::None => ("none", Vec::new()),
-        NoBuild::All => ("all", Vec::new()),
-        NoBuild::Packages(packages) => ("packages", packages.iter().collect()),
-    };
-    no_build_packages.sort_unstable();
-    no_build_packages.dedup();
     let (no_sources, mut no_sources_packages) = match sources {
         NoSources::None => ("none", Vec::new()),
         NoSources::All => ("all", Vec::new()),
@@ -574,7 +565,6 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
         && index_locations.is_none()
         && index_strategy == IndexStrategy::default()
         && build_options.no_binary().is_none()
-        && build_options.no_build().is_none()
         && dependency_metadata.is_empty()
         && config_settings.is_empty()
         && *config_settings_package == PackageConfigSettings::default()
@@ -670,8 +660,6 @@ pub fn unlocked_build_cache_key(inputs: UnlockedBuildInputs<'_>) -> Option<Strin
         (
             no_binary,
             no_binary_packages,
-            no_build,
-            no_build_packages,
             no_sources,
             no_sources_packages,
             source_tree_editable_policy,
@@ -1212,6 +1200,7 @@ mod tests {
     use std::str::FromStr;
     use std::time::{Duration, SystemTime};
 
+    use uv_configuration::NoBuild;
     use uv_distribution_filename::{SourceDistExtension, WheelFilename};
     use uv_distribution_types::{
         BuiltDist, ConfigSettingPackageEntry, DirectorySourceDist, ExtraBuildRequirement, File,
@@ -1545,6 +1534,30 @@ mod tests {
                 &defaults,
                 IndexStrategy::default(),
                 &forward_build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            )
+        );
+
+        let no_build = BuildOptions::new(NoBinary::None, NoBuild::All);
+        assert_eq!(
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &build_options,
+                &dependency_metadata,
+                None,
+                std::iter::empty(),
+                &sources,
+            ),
+            cache_key(
+                &Constraints::default(),
+                &defaults,
+                IndexStrategy::default(),
+                &no_build,
                 &dependency_metadata,
                 None,
                 std::iter::empty(),
