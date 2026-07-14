@@ -13,6 +13,3 @@ hardened, please file an issue for a new feature.
 If you believe you have found a vulnerability that is in scope for the project, please contact us as
 described in the organization
 [Security Policy](https://github.com/astral-sh/.github/blob/main/SECURITY.md).
-
-See the [threat model](./docs/reference/policies/threat-model.md) for a detailed explanation of the
-conditions and assumptions used to assess security reports.
