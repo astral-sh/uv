@@ -6214,6 +6214,7 @@ fn tool_install_find_links() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + basic-app==0.1.0
     Installed 1 executable: basic-app

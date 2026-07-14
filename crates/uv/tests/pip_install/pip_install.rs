@@ -15218,6 +15218,7 @@ fn config_settings_package() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + setuptools-editable==0.1.0 (from file://[WORKSPACE]/test/packages/setuptools_editable)
     "

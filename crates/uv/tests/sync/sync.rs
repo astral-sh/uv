@@ -2246,10 +2246,14 @@ fn sync_build_isolation_extra() -> Result<()> {
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
     Installed [N] packages in [TIME]
+    Prepared [N] packages without build isolation in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      - hatchling==1.22.4
      - packaging==24.0
      - pathspec==0.12.1
      - pluggy==1.4.0
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
      + source-distribution==0.0.1 (from https://files.pythonhosted.org/packages/10/1f/57aa4cce1b1abf6b433106676e15f9fa2c92ed2bd4cf77c3b50a9e9ac773/source_distribution-0.0.1.tar.gz)
      - trove-classifiers==2024.3.3
     ");
@@ -15092,6 +15096,7 @@ fn sync_config_settings_package() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + dependency==0.1.0 (from file://[TEMP_DIR]/dependency)
     ");
@@ -17030,12 +17035,13 @@ fn sync_no_sources_editable_to_package_switch() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 4 packages in [TIME]
      - anyio==4.3.0 (from file://[TEMP_DIR]/local_dep)
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
+     ~ test-no-sources==0.0.1 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())

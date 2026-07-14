@@ -123,7 +123,7 @@ fn run_with_python_version() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 5 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Installed 4 packages in [TIME]
      + anyio==3.6.0
      + foo==1.0.0 (from file://[TEMP_DIR]/)
@@ -5103,7 +5103,7 @@ fn run_with_editable() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Prepared 2 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 3 packages in [TIME]
     Installed 2 packages in [TIME]
      - anyio==4.3.0
