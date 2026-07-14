@@ -5,8 +5,12 @@ description = "The user requires package `a` which has a dependency on a package
 requires = ["a"]
 
 [expected]
-satisfiable = false
-explanation = "Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user."
+satisfiable = true
+explanation = "Since no stable version of `b` matches the transitive requirement, the matching pre-release is selected."
+
+[expected.packages]
+a = "0.1.0"
+b = "1.0.0a1"
 
 [packages.a.versions."0.1.0"]
 requires = ["b>0.1"]
