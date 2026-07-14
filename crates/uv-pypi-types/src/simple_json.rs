@@ -618,7 +618,7 @@ pub enum HashAlgorithm {
 
 impl HashAlgorithm {
     /// Return the supported [`HashAlgorithm`] variants in order of preference.
-    pub fn preferred() -> impl Iterator<Item = Self> {
+    pub(crate) fn preferred() -> impl Iterator<Item = Self> {
         [
             Self::Sha512,
             Self::Sha384,
@@ -630,7 +630,7 @@ impl HashAlgorithm {
     }
 
     /// Return the string representation of the [`HashAlgorithm`].
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Md5 => "md5",
             Self::Sha256 => "sha256",
