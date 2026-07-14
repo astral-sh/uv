@@ -8,14 +8,32 @@ Markdown or a code fence.
 
 First, find existing issues and pull requests that are related to the new issue. Use the
 authenticated `gh` CLI to search this repository's open and closed issues and its open, closed, and
-merged pull requests. Choose and refine search queries based on the issue title and body, and
-inspect promising issues, pull requests, and their comments as needed. Compare the underlying
-symptoms, commands, conditions, expected behavior, actual behavior, and requested changes. Shared
-terminology alone is not enough to establish a meaningful relationship.
+merged pull requests.
+
+Before searching, decompose the report into distinct symptoms, requested capabilities, commands or
+subsystems, triggering conditions, and exact identifiers or error fragments. Search each distinct
+claim separately when an issue contains more than one.
+
+For each claim, use both literal searches based on the report and conceptual searches using
+alternative terminology and repository vocabulary learned from labels, existing issues, and
+maintainer comments. Search exact errors and identifiers, then try queries that remove incidental
+package names, versions, and platforms to look for the underlying behavior. Keep searches based on
+observable symptoms or requested capabilities separate from searches based on possible causes so an
+assumed cause does not displace a closer result. For version-specific reports, search closed issues
+and merged pull requests for related fixes.
+
+Do not stop at the first plausible result. Inspect the strongest candidates, their comments, and the
+issues or pull requests they reference; follow those chains when they identify the canonical
+discussion. Treat links suggested by the reporter as leads, not established relationships. Compare
+the underlying symptoms, requested capabilities, commands, subsystems, triggering conditions,
+expected behavior, actual behavior, confirmed mechanisms, and release timing. Prefer those matches
+over shared packages, platforms, or terminology. Include an adjacent result only when its reason
+clearly explains the important difference.
 
 Populate `related.items` with the closest existing issues and pull requests. Explain the important
 evidence for every item. Leave the array empty when no meaningful relationship was found, and
-summarize the searches performed in `related.search_scope`.
+summarize the literal, conceptual, and fix-oriented searches performed in `related.search_scope`.
+Mention any especially plausible candidate that was inspected but ruled out.
 
 Set `type` to exactly one of these repository label names and explain the choice in `type_reason`:
 
