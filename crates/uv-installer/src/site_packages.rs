@@ -71,8 +71,8 @@ impl SitePackages {
         package_names: Option<&FxHashSet<&PackageName>>,
     ) -> Result<Self> {
         let mut distributions: Vec<Option<InstalledDist>> = Vec::new();
-        let mut by_name = FxHashMap::default();
-        let mut by_url = FxHashMap::default();
+        let mut by_name: FxHashMap<PackageName, Vec<usize>> = FxHashMap::default();
+        let mut by_url: FxHashMap<DisplaySafeUrl, Vec<usize>> = FxHashMap::default();
 
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
@@ -84,12 +84,7 @@ impl SitePackages {
                     )
                 })?,
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(Self {
-                        interpreter: interpreter.clone(),
-                        distributions,
-                        by_name,
-                        by_url,
-                    });
+                    continue;
                 }
                 Err(err) => return Err(err).context("Failed to read site-packages directory"),
             };
@@ -804,8 +799,19 @@ impl InstalledPackagesProvider for SitePackages {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
+    use anyhow::Result;
+    #[cfg(unix)]
+    use uv_cache::Cache;
+    #[cfg(unix)]
+    use uv_distribution_types::Name;
+    #[cfg(unix)]
+    use uv_python::Interpreter;
+
+    #[cfg(unix)]
+    use super::SitePackages;
     use super::sorted_dist_like_paths;
 
     #[test]
@@ -832,6 +838,86 @@ mod tests {
                 "metadata.egg-info".to_string(),
                 "z_package-1.0.0.dist-info".to_string(),
             ]
+        );
+
+        Ok(())
+    }
+
+    /// A missing `purelib` directory must not prevent indexing an existing, distinct `platlib`.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn site_packages_scans_platlib_when_purelib_is_missing() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let purelib = temp_dir.path().join("purelib");
+        let platlib = temp_dir.path().join("platlib");
+        let dist_info = platlib.join("demo-1.0.dist-info");
+        fs_err::create_dir_all(&dist_info)?;
+        fs_err::write(
+            dist_info.join("METADATA"),
+            "Metadata-Version: 2.1\nName: demo\nVersion: 1.0\n",
+        )?;
+
+        let executable = temp_dir.path().join("python");
+        let json = r#"{
+            "result": "success",
+            "platform": {"os": {"name": "manylinux", "major": 2, "minor": 38}, "arch": "x86_64"},
+            "manylinux_compatible": true,
+            "standalone": false,
+            "markers": {
+                "implementation_name": "cpython",
+                "implementation_version": "3.12.0",
+                "os_name": "posix",
+                "platform_machine": "x86_64",
+                "platform_python_implementation": "CPython",
+                "platform_release": "6.5.0",
+                "platform_system": "Linux",
+                "platform_version": "test",
+                "python_full_version": "3.12.0",
+                "python_version": "3.12",
+                "sys_platform": "linux"
+            },
+            "sys_base_exec_prefix": "/python",
+            "sys_base_prefix": "/python",
+            "sys_prefix": "/python",
+            "sys_executable": "{EXECUTABLE}",
+            "sys_path": [],
+            "site_packages": [],
+            "stdlib": "/python/lib/python3.12",
+            "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
+            "scheme": {
+                "data": "/python",
+                "include": "/python/include",
+                "platlib": "{PLATLIB}",
+                "purelib": "{PURELIB}",
+                "scripts": "/python/bin"
+            },
+            "virtualenv": {
+                "data": "",
+                "include": "include",
+                "platlib": "lib64/python3.12/site-packages",
+                "purelib": "lib/python3.12/site-packages",
+                "scripts": "bin"
+            },
+            "pointer_size": "64",
+            "gil_disabled": false,
+            "debug_enabled": false
+        }"#
+        .replace("{EXECUTABLE}", &executable.to_string_lossy())
+        .replace("{PLATLIB}", &platlib.to_string_lossy())
+        .replace("{PURELIB}", &purelib.to_string_lossy());
+        fs_err::write(&executable, format!("#!/bin/sh\necho '{json}'\n"))?;
+        fs_err::set_permissions(&executable, PermissionsExt::from_mode(0o770))?;
+
+        let cache = Cache::temp()?.init().await?;
+        let interpreter = Interpreter::query(&executable, &cache)?;
+        let site_packages = SitePackages::from_interpreter(&interpreter)?;
+
+        assert_eq!(
+            site_packages
+                .iter()
+                .map(|distribution| distribution.name().as_ref())
+                .collect::<Vec<_>>(),
+            ["demo"]
         );
 
         Ok(())
