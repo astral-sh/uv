@@ -1341,8 +1341,8 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
-pub(crate) fn diagnose_environment(
-    resolution: &Resolution,
+pub(crate) fn diagnose_environment<'a>(
+    relevant_packages: impl Iterator<Item = &'a PackageName>,
     venv: &PythonEnvironment,
     markers: &ResolverMarkerEnvironment,
     tags: &Tags,
@@ -1350,11 +1350,12 @@ pub(crate) fn diagnose_environment(
     printer: Printer,
 ) -> Result<(), Error> {
     let site_packages = SitePackages::from_environment(venv)?;
+    let relevant_packages = relevant_packages.collect::<HashSet<_>>();
     for diagnostic in site_packages.diagnostics(markers, tags, dependency_metadata)? {
         // Only surface diagnostics that are "relevant" to the current resolution.
-        if resolution
-            .distributions()
-            .any(|dist| diagnostic.includes(dist.name()))
+        if relevant_packages
+            .iter()
+            .any(|name| diagnostic.includes(name))
         {
             writeln!(
                 printer.stderr(),
