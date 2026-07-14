@@ -5,7 +5,7 @@ use flate2::bufread::GzDecoder;
 use fs_err::File;
 use futures::io::AllowStdIo;
 use indoc::{formatdoc, indoc};
-use insta::{assert_json_snapshot, assert_snapshot};
+use insta::{allow_duplicates, assert_json_snapshot, assert_snapshot};
 use std::io::BufReader;
 use std::path::Path;
 use std::process::Command;
@@ -13,6 +13,28 @@ use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use uv_static::EnvVars;
 use uv_test::{uv_snapshot, venv_bin_path};
+
+#[test]
+fn get_requires_for_build_returns_error() {
+    let context = uv_test::test_context!("3.12");
+
+    allow_duplicates! {
+        for command in [
+            "get-requires-for-build-sdist",
+            "get-requires-for-build-wheel",
+            "get-requires-for-build-editable",
+        ] {
+            uv_snapshot!(context.build_backend().arg(command), @"
+            success: false
+            exit_code: 2
+            ----- stdout -----
+
+            ----- stderr -----
+            error: uv does not support extra requires
+            ");
+        }
+    }
+}
 
 const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
     from built_by_uv import greet

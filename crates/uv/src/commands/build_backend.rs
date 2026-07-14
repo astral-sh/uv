@@ -1,5 +1,5 @@
 use crate::commands::ExitStatus;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::env;
 use std::io::Write;
 use std::path::Path;
@@ -53,12 +53,12 @@ pub(crate) fn build_editable(
 
 /// Not used from Python code, exists for symmetry with PEP 517.
 pub(crate) fn get_requires_for_build_sdist() -> Result<ExitStatus> {
-    unimplemented!("uv does not support extra requires")
+    bail!("uv does not support extra requires")
 }
 
 /// Not used from Python code, exists for symmetry with PEP 517.
 pub(crate) fn get_requires_for_build_wheel() -> Result<ExitStatus> {
-    unimplemented!("uv does not support extra requires")
+    bail!("uv does not support extra requires")
 }
 
 /// PEP 517 hook to just emit metadata through `.dist-info`.
@@ -75,7 +75,7 @@ pub(crate) fn prepare_metadata_for_build_wheel(metadata_directory: &Path) -> Res
 
 /// Not used from Python code, exists for symmetry with PEP 660.
 pub(crate) fn get_requires_for_build_editable() -> Result<ExitStatus> {
-    unimplemented!("uv does not support extra requires")
+    bail!("uv does not support extra requires")
 }
 
 /// PEP 660 hook to just emit metadata through `.dist-info`.
