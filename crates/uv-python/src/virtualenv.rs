@@ -247,7 +247,7 @@ impl PyVenvConfiguration {
             let Some((key, value)) = line.split_once('=') else {
                 continue;
             };
-            match key.trim() {
+            match key.trim().to_ascii_lowercase().as_str() {
                 "home" => {
                     home = Some(PathBuf::from(value.trim()));
                 }
@@ -345,6 +345,34 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn parse_mixed_case_keys() {
+        let tempdir = tempdir().unwrap();
+        let pyvenv_cfg = tempdir.path().join("pyvenv.cfg");
+        fs::write(
+            &pyvenv_cfg,
+            indoc! {"
+                HoMe = /path/to/python
+                VirtualEnv = 20.0.0
+                UV = 1.0.0
+                ReLoCaTaBlE = true
+                Seed = true
+                Include-System-Site-Packages = false
+                Version_Info = 3.12.0
+            "},
+        )
+        .unwrap();
+
+        let result = PyVenvConfiguration::parse(pyvenv_cfg).unwrap();
+        assert_eq!(result.home.as_deref(), Some(Path::new("/path/to/python")));
+        assert!(result.virtualenv);
+        assert!(result.uv);
+        assert!(result.relocatable);
+        assert!(result.seed);
+        assert!(!result.include_system_site_packages);
+        assert_eq!(result.version.unwrap().to_string(), "3.12.0");
+    }
 
     #[test]
     fn pixi_environment_is_treated_as_child() {
