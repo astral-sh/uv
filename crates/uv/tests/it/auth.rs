@@ -1,6 +1,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
+use insta::allow_duplicates;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
@@ -9,28 +10,31 @@ use uv_test::uv_snapshot;
 async fn invalid_cloud_endpoint_urls() {
     let context = uv_test::test_context!("3.12");
     let proxy = crate::pypi_proxy::start().await;
+    let mut filters = context.filters();
+    filters.push((r"UV_(S3|GCS|AZURE)_ENDPOINT_URL", "UV_[CLOUD]_ENDPOINT_URL"));
 
-    uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--dry-run")
-        .arg("--default-index")
-        .arg(proxy.url("/basic-auth/simple"))
-        .arg("iniconfig")
-        .env(EnvVars::UV_S3_ENDPOINT_URL, "not-a-url")
-        .env(EnvVars::UV_GCS_ENDPOINT_URL, "not-a-url")
-        .env(EnvVars::UV_AZURE_ENDPOINT_URL, "not-a-url"), @"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+    allow_duplicates! {
+        for env_var in [
+            EnvVars::UV_S3_ENDPOINT_URL,
+            EnvVars::UV_GCS_ENDPOINT_URL,
+            EnvVars::UV_AZURE_ENDPOINT_URL,
+        ] {
+            uv_snapshot!(filters, context.pip_install()
+                .arg("--dry-run")
+                .arg("--default-index")
+                .arg(proxy.url("/basic-auth/simple"))
+                .arg("iniconfig")
+                .env(env_var, "not-a-url"), @"
+            success: false
+            exit_code: 2
+            ----- stdout -----
 
-    ----- stderr -----
-    warning: Ignoring invalid `UV_S3_ENDPOINT_URL`: relative URL without a base
-    warning: Ignoring invalid `UV_GCS_ENDPOINT_URL`: relative URL without a base
-    warning: Ignoring invalid `UV_AZURE_ENDPOINT_URL`: relative URL without a base
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
-
-    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
-    ");
+            ----- stderr -----
+            error: Failed to fetch: `http://[LOCALHOST]/basic-auth/simple/iniconfig/`
+              Caused by: Invalid `UV_[CLOUD]_ENDPOINT_URL`: relative URL without a base
+            ");
+        }
+    }
 }
 
 #[tokio::test]

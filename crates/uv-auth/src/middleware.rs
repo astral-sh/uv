@@ -15,6 +15,7 @@ use uv_warnings::owo_colors::OwoColorize;
 
 use crate::providers::{
     AzureEndpointProvider, GcsEndpointProvider, HuggingFaceProvider, S3EndpointProvider,
+    validate_endpoint_urls,
 };
 use crate::pyx::{DEFAULT_TOLERANCE_SECS, PyxTokenStore};
 use crate::{
@@ -371,6 +372,8 @@ impl Middleware for AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
+        validate_endpoint_urls().map_err(Error::Middleware)?;
+
         // Check for credentials attached to the request already
         let request_credentials = Credentials::from_request(&request)?.map(Authentication::from);
 
