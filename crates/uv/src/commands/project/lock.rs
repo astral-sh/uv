@@ -270,7 +270,7 @@ pub(crate) async fn lock(
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
         Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
         Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
+            .report(err, printer)?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }
@@ -353,6 +353,8 @@ impl<'env> LockOperation<'env> {
 
     /// Perform a [`LockOperation`].
     pub(crate) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+        target.validate_upgrade_groups(&self.settings.upgrade)?;
+
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.

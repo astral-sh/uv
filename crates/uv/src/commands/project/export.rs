@@ -236,7 +236,7 @@ pub(crate) async fn export(
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::default()
-                .report(err)
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),

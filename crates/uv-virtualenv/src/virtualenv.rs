@@ -25,7 +25,6 @@ use uv_python::managed::{
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
-use uv_warnings::warn_user_once;
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -144,16 +143,6 @@ pub(crate) fn create(
                     {
                         match clear_non_virtualenv {
                             ClearNonVirtualenv::Allow => {}
-                            ClearNonVirtualenv::Warn => {
-                                warn_user_once!(
-                                    "The `--clear` option will remove the existing directory at `{}` \
-                                    even though it is not a virtual environment. \
-                                    This will become an error in a future release. \
-                                    Use `--force` to suppress this warning, or \
-                                    `--preview-features venv-safe-clear` to error on this now.",
-                                    location.user_display()
-                                );
-                            }
                             ClearNonVirtualenv::Error => {
                                 return Err(Error::ClearNonVirtualenv {
                                     path: location.to_path_buf(),
@@ -632,8 +621,6 @@ fn confirm_clear(location: &Path, name: &'static str) -> Result<Option<bool>, io
 pub enum ClearNonVirtualenv {
     /// Allow clearing a non-virtual environment directory.
     Allow,
-    /// Warn before clearing a non-virtual environment directory.
-    Warn,
     /// Refuse to clear a non-virtual environment directory.
     Error,
 }

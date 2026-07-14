@@ -265,7 +265,7 @@ pub(crate) async fn run(
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::default()
                         .with_context("script")
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -311,7 +311,7 @@ pub(crate) async fn run(
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::default()
                         .with_context("script")
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -448,7 +448,7 @@ pub(crate) async fn run(
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::default()
                             .with_context("script")
-                            .report(err)
+                            .report(err, printer)?
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -772,7 +772,7 @@ pub(crate) async fn run(
                     Ok(result) => result,
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::default()
-                            .report(err)
+                            .report(err, printer)?
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -859,7 +859,7 @@ pub(crate) async fn run(
                     Ok(_) => {}
                     Err(ProjectError::Operation(err)) => {
                         return diagnostics::OperationDiagnostic::default()
-                            .report(err)
+                            .report(err, printer)?
                             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
@@ -1012,7 +1012,7 @@ pub(crate) async fn run(
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::default()
                         .with_context("`--with`")
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),

@@ -10105,6 +10105,53 @@ fn lock_resolution_mode() -> Result<()> {
     Ok(())
 }
 
+/// Accept the `explicit` pre-release mode in lockfiles, configuration, and CLI arguments.
+#[test]
+fn lock_explicit_prerelease_mode() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        prerelease = "explicit"
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.12"
+
+        [options]
+        prerelease-mode = "explicit"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--locked")
+        .arg("--prerelease=explicit"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Lock a requirement from PyPI, filtering out wheels that target an ABI that is non-overlapping
 /// with the `Requires-Python` constraint.
 #[cfg(feature = "test-universal")]
@@ -13016,6 +13063,97 @@ fn lock_upgrade_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Updated anyio v2.0.0 -> v4.3.0
+    ");
+
+    Ok(())
+}
+
+/// Error if `--upgrade-group` refers to a dependency group that does not exist.
+#[test]
+fn lock_upgrade_group_missing() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#,
+    )?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.lock().arg("--upgrade-group").arg("docs"),
+        @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Group `docs` is not defined in the project's `dependency-groups` table
+    "
+    );
+
+    Ok(())
+}
+
+/// `--upgrade-group dev` recognizes the legacy `tool.uv.dev-dependencies` field.
+#[test]
+fn lock_upgrade_group_legacy_dev_dependencies() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna<=3"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio<=2"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
+    Resolved 4 packages in [TIME]
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["idna"]
+
+        [tool.uv]
+        dev-dependencies = ["anyio"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-group").arg("dev"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 4 packages in [TIME]
     Updated anyio v2.0.0 -> v4.3.0
     ");
@@ -30221,6 +30359,28 @@ fn lock_self_incompatible() -> Result<()> {
       ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
 
     hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    ");
+
+    // Resolution errors are important and should still be shown in quiet mode.
+    uv_snapshot!(context.filters(), context.lock().arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because your project depends on itself at an incompatible version (project==0.2.0), we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The project `project` depends on itself at an incompatible version. This is likely a mistake. If you intended to depend on a third-party package named `project`, consider renaming the project `project` to avoid creating a conflict.
+    ");
+
+    // Silent mode should suppress even important diagnostics.
+    uv_snapshot!(context.filters(), context.lock().arg("--quiet").arg("--quiet"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
     ");
 
     Ok(())

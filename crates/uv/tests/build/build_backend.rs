@@ -1616,9 +1616,9 @@ fn warn_on_license_classifier() -> Result<()> {
     Ok(())
 }
 
-/// Auto-detect TOML 1.1 features in `pyproject.toml` and warn the user.
+/// Rewrite TOML 1.1 features in `pyproject.toml` without a preview flag.
 #[test]
-fn warn_on_toml_1_1_auto_detected() -> Result<()> {
+fn rewrite_toml_1_1_by_default() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
     context
@@ -1638,22 +1638,7 @@ fn warn_on_toml_1_1_auto_detected() -> Result<()> {
     "#})?;
     context.temp_dir.child("src/foo/__init__.py").touch()?;
 
-    // Without the preview flag: auto-detection fires and a warning is shown.
     uv_snapshot!(context.filters(), context.build(), @"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Building source distribution (uv build backend)...
-    warning: `pyproject.toml` uses TOML 1.1 features; rewriting to TOML 1.0 for compatibility with older build tools. Use `--preview-feature toml-backwards-compatibility` to suppress this warning.
-    Building wheel from source distribution (uv build backend)...
-    Successfully built dist/foo-1.0.0.tar.gz
-    Successfully built dist/foo-1.0.0-py3-none-any.whl
-    ");
-
-    // With the preview flag set explicitly: rewrite still happens, but no warning.
-    uv_snapshot!(context.filters(), context.build().arg("--preview-feature").arg("toml-backwards-compatibility"), @"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -237,7 +237,7 @@ pub(crate) async fn metadata(
         }
         Err(err @ ProjectError::LockMismatch(..)) => Err(UvError::user(err).into()),
         Err(ProjectError::Operation(err)) => diagnostics::OperationDiagnostic::default()
-            .report(err)
+            .report(err, printer)?
             .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
         Err(err) => Err(err.into()),
     }

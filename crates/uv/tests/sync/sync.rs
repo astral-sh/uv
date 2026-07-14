@@ -7895,7 +7895,10 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      - iniconfig==2.0.0
     ");
 
@@ -7944,6 +7947,8 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==0.1.0 (from file://[TEMP_DIR]/child)
      - iniconfig==2.0.0
     ");
 
@@ -7966,7 +7971,7 @@ fn sync_workspace_custom_environment_path() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    Checked in [TIME]
+    Checked 1 package in [TIME]
     ");
 
     context
@@ -9709,7 +9714,9 @@ fn sync_partial_environment_delete() -> Result<()> {
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Checked in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + temp==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     // Create a directory that's unreadable, erroring on trying to delete its children.
@@ -9754,7 +9761,8 @@ fn sync_partial_environment_delete() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
-    Checked in [TIME]
+    Installed 1 package in [TIME]
+     + temp==0.1.0 (from file://[TEMP_DIR]/)
     ");
 
     Ok(())

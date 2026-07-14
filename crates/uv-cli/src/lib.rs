@@ -1066,9 +1066,8 @@ pub enum ProjectCommand {
     /// or a parent directory, the command will be run in that environment. Otherwise, the command
     /// will be run in the environment of the discovered interpreter.
     ///
-    /// By default, the project or workspace is discovered from the current working directory.
-    /// However, when using `--preview-features target-workspace-discovery`, the project or
-    /// workspace is instead discovered from the target script's directory.
+    /// When running a script, the project or workspace is discovered from the script's directory.
+    /// Otherwise, the project or workspace is discovered from the current working directory.
     ///
     /// Arguments following the command (or script) are not interpreted as arguments to uv. All
     /// options to uv must be provided before the command, e.g., `uv run --verbose foo`. A `--` can
@@ -3423,32 +3422,21 @@ pub struct InitArgs {
     ///
     /// Defines a `[build-system]` for the project.
     ///
-    /// This is the default behavior when using `--lib` or `--build-backend`, or when the
-    /// `packaged-init` preview feature is enabled. It will become the default unconditionally in
-    /// the future.
-    ///
-    /// When using `--app`, this will include a `[project.scripts]` entrypoint and use a `src/`
-    /// project structure.
+    /// This is the default behavior.
     #[arg(long, overrides_with = "no_package")]
     pub r#package: bool,
 
     /// Do not set up the project to be built as a Python package.
     ///
-    /// Does not include a `[build-system]` for the project.
-    ///
-    /// This is the default behavior when using `--app`.
+    /// This option creates the project structure as a flat directory that is not importable as a
+    /// module and has no `[build-system]` entry. It can be used for applications that are not
+    /// expected to be distributed as a package.
     #[arg(long, overrides_with = "package", conflicts_with_all = ["lib", "build_backend"])]
     pub r#no_package: bool,
 
     /// Create a project for an application.
     ///
-    /// This is the default behavior if `--lib` is not requested.
-    ///
     /// This project kind is for web servers, scripts, and command-line interfaces.
-    ///
-    /// By default, an application is not intended to be built and distributed as a Python package.
-    /// The `--package` option can be used to create an application that is distributable, e.g., if
-    /// you want to distribute a command-line interface via PyPI.
     #[arg(long, alias = "application", conflicts_with_all = ["lib", "script"])]
     pub r#app: bool,
 
@@ -6308,9 +6296,9 @@ pub struct ToolUpgradeArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7632,9 +7620,9 @@ pub struct ResolverArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,
@@ -7877,9 +7865,9 @@ pub struct ResolverInstallerArgs {
 
     /// The strategy to use when considering pre-release versions.
     ///
-    /// By default, uv will accept pre-releases for packages that _only_ publish pre-releases, along
-    /// with first-party requirements that contain an explicit pre-release marker in the declared
-    /// specifiers (`if-necessary-or-explicit`).
+    /// By default, uv will prefer stable candidates, falling back to pre-releases only after every
+    /// stable candidate that satisfies the active constraints is rejected
+    /// (`if-necessary`).
     #[arg(
         long,
         value_enum,

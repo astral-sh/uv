@@ -2359,9 +2359,7 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--list"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2419,9 +2417,7 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel")
-        .arg("--preview-features")
-        .arg("toml-backwards-compatibility"), @"
+        .arg("--wheel"), @"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2795,7 +2791,7 @@ fn force_pep517() -> Result<()> {
 
     ----- stderr -----
     Building source distribution...
-    Error: Missing source directory at: `src`
+    Error: Missing module directory for `does_not_exist` in `src`. Found: `temp`
     error: Failed to build `[TEMP_DIR]/`
       Caused by: The build backend returned an error
       Caused by: Call to `uv_build.build_sdist` failed (exit status: 1)
@@ -2966,8 +2962,8 @@ fn build_clear() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution...
-    Building wheel from source distribution...
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -2995,8 +2991,8 @@ fn build_clear() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution...
-    Building wheel from source distribution...
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -3033,8 +3029,8 @@ fn build_no_gitignore() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution...
-    Building wheel from source distribution...
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");
@@ -3053,8 +3049,8 @@ fn build_no_gitignore() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Building source distribution...
-    Building wheel from source distribution...
+    Building source distribution (uv build backend)...
+    Building wheel from source distribution (uv build backend)...
     Successfully built project/dist/project-0.1.0.tar.gz
     Successfully built project/dist/project-0.1.0-py3-none-any.whl
     ");

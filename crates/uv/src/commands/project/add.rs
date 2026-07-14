@@ -793,7 +793,7 @@ pub(crate) async fn add(
                     };
                     diagnostic
                         .with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing", "--frozen".green()))
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
                 }
                 err => Err(err.into()),

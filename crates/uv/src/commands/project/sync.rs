@@ -312,12 +312,12 @@ pub(crate) async fn sync(
                         printer,
                     )?;
                     return diagnostics::OperationDiagnostic::default()
-                        .report(operations::Error::OutdatedEnvironment(changelog))
+                        .report(operations::Error::OutdatedEnvironment(changelog), printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::default()
-                        .report(err)
+                        .report(err, printer)?
                         .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
@@ -364,7 +364,7 @@ pub(crate) async fn sync(
         Ok(result) => Outcome::Success(result),
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::default()
-                .report(err)
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
@@ -445,12 +445,12 @@ pub(crate) async fn sync(
                 printer,
             )?;
             return diagnostics::OperationDiagnostic::default()
-                .report(operations::Error::OutdatedEnvironment(changelog))
+                .report(operations::Error::OutdatedEnvironment(changelog), printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::default()
-                .report(err)
+                .report(err, printer)?
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
