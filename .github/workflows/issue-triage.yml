@@ -4,6 +4,12 @@ name: "issue-triage"
 on:
   issues:
     types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "An issue URL or number"
+        required: true
+        type: string
 
 permissions: {}
 
@@ -25,13 +31,13 @@ jobs:
 
       - name: "Collect issue context"
         run: |
-          gh issue view "$ISSUE_NUMBER" \
+          gh issue view "$ISSUE" \
             --repo "$GITHUB_REPOSITORY" \
             --json number,title,body,author \
             > .issue-triage-event.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
 
       - name: "Triage issue"
         id: triage
