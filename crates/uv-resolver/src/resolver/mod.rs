@@ -514,12 +514,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         .expect("a package was chosen but we don't have a term");
                     let range = term_intersection.unwrap_positive();
 
-                    // In a specific environment, an implicit registry candidate is stable for a
-                    // given range. Avoid repeating candidate selection when PubGrub revisits an
-                    // identical decision after backtracking.
-                    let cache_selected_version = state.env.marker_environment().is_some()
-                        && url.is_none()
-                        && index.is_none();
+                    // Within a fixed resolver environment, an implicit registry candidate is
+                    // stable for a given range and pre-release policy. Avoid repeating candidate
+                    // selection when PubGrub revisits an identical decision after backtracking.
+                    let cache_selected_version = url.is_none() && index.is_none();
                     let decision = if cache_selected_version
                         && let Some((selected_range, version)) =
                             state.selected_versions.get(&next_id)
@@ -2665,8 +2663,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // We don't have access to the fork state when prefetching, so assume that
-                // pre-release versions are allowed.
+                // We don't have access to the fork state when prefetching.
                 let env = ResolverEnvironment::universal(vec![]);
 
                 // Try to find a compatible version. If there aren't any compatible versions,
@@ -3390,6 +3387,7 @@ impl ForkState {
     /// If the fork should be dropped (e.g., because its markers can never be true for its
     /// Python requirement), then this returns `None`.
     fn with_env(mut self, env: ResolverEnvironment) -> Self {
+        self.selected_versions.clear();
         self.env = env;
         // If the fork contains a narrowed Python requirement, apply it.
         if let Some(req) = self.env.narrow_python_requirement(&self.python_requirement) {

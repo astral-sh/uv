@@ -421,7 +421,7 @@
       ]
     },
     "prerelease": {
-      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+      "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
       "anyOf": [
         {
           "$ref": "#/definitions/PrereleaseMode"
@@ -1585,7 +1585,7 @@
           "type": ["string", "null"]
         },
         "prerelease": {
-          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will accept pre-releases for packages that _only_ publish pre-releases,\nalong with first-party requirements that contain an explicit pre-release marker in the\ndeclared specifiers (`if-necessary-or-explicit`).",
+          "description": "The strategy to use when considering pre-release versions.\n\nBy default, uv will prefer stable candidates, falling back to pre-releases only after every\nstable candidate that satisfies the active constraints is rejected\n(`if-necessary`).",
           "anyOf": [
             {
               "$ref": "#/definitions/PrereleaseMode"
@@ -1708,19 +1708,20 @@
           "const": "allow"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release.",
+          "description": "Prefer stable versions, falling back to pre-release versions when necessary.",
           "type": "string",
           "const": "if-necessary"
         },
         {
-          "description": "Allow pre-release versions for first-party packages with explicit pre-release markers in\ntheir version requirements.",
+          "description": "Prefer stable versions for first-party packages with explicit pre-release specifiers,\nfalling back to pre-release versions when necessary. Disallow pre-release versions for all\nother packages.",
           "type": "string",
           "const": "explicit"
         },
         {
-          "description": "Allow pre-release versions if all versions of a package are pre-release, or if the package\nhas an explicit pre-release marker in its version requirements.",
+          "description": "Deprecated alias for `if-necessary`.",
           "type": "string",
-          "const": "if-necessary-or-explicit"
+          "const": "if-necessary-or-explicit",
+          "deprecated": true
         }
       ]
     },
