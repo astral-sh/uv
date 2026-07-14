@@ -2666,6 +2666,46 @@ fn build_version_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// A backend must not return an sdist and wheel for different projects.
+#[test]
+fn build_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    project.child("backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+
+        def build_sdist(sdist_directory, config_settings=None):
+            filename = "alpha-1.0.0.tar.gz"
+            Path(sdist_directory, filename).touch()
+            return filename
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            filename = "beta-1.0.0-py3-none-any.whl"
+            Path(wheel_directory, filename).touch()
+            return filename
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--sdist").arg("--wheel").current_dir(&project), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel...
+    error: Failed to build `[TEMP_DIR]/project`
+      Caused by: The source distribution declares name alpha, but the wheel declares name beta
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)] // Symlinks aren't universally available on windows.
 #[test]
 fn build_with_symlink() -> Result<()> {
