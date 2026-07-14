@@ -1059,6 +1059,8 @@ impl Lock {
             .chain(manifest.dependency_groups.values().flatten())
             .filter(|requirement| !requirement.marker.is_disjoint(runtime_environment))
         {
+            let mut requirement_environment = runtime_environment;
+            requirement_environment.and(requirement.marker);
             let candidates = packages
                 .iter()
                 .filter(|package| runtime_requirement_matches_package(requirement, package));
@@ -1066,8 +1068,13 @@ impl Lock {
             let mut has_runtime_candidate = false;
             for candidate in candidates {
                 has_candidate = true;
-                has_runtime_candidate |=
-                    !candidate.build_only && candidate.id.resolution_id.is_none();
+                has_runtime_candidate |= !candidate.build_only
+                    && candidate.id.resolution_id.is_none()
+                    && (candidate.fork_markers.is_empty()
+                        || candidate
+                            .fork_markers
+                            .iter()
+                            .any(|marker| !marker.pep508().is_disjoint(requirement_environment)));
             }
             if has_candidate && !has_runtime_candidate {
                 return Err(LockErrorKind::BuildOnlyRuntimeRequirement {
@@ -11450,6 +11457,38 @@ name = "shared"
 version = "2.0.0"
 source = { registry = "https://example.com/simple" }
 build-only = true
+"#,
+        )
+        .unwrap_err();
+        assert_stripped_snapshot!(
+            result,
+            @"Runtime requirement `shared` only matches build-only packages"
+        );
+    }
+
+    #[test]
+    fn runtime_manifest_requirement_rejects_disjoint_runtime_candidate() {
+        let result = toml::from_str::<Lock>(
+            r#"
+version = 2
+revision = 4
+requires-python = ">=3.12"
+resolution-markers = ["sys_platform == 'darwin'", "sys_platform != 'darwin'"]
+
+[manifest.dependency-groups]
+dev = [{ name = "shared", specifier = ">=2", marker = "sys_platform == 'linux'" }]
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://build.example/simple" }
+build-only = true
+
+[[package]]
+name = "shared"
+version = "2.0.0"
+source = { registry = "https://runtime.example/simple" }
+resolution-markers = ["sys_platform == 'darwin'"]
 "#,
         )
         .unwrap_err();
