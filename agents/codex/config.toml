@@ -15,6 +15,7 @@ extends = ":read-only"
 
 [permissions.reproduce-bug.filesystem]
 ":tmpdir" = "write"
+":slash_tmp" = "write"
 
 [permissions.reproduce-bug.network]
 enabled = true
