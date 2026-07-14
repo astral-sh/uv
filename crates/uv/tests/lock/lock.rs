@@ -16329,6 +16329,72 @@ fn normalize_false_marker_requires_dist() -> Result<()> {
     Ok(())
 }
 
+/// Check that multiple markers with known-incompatible platform values are all normalized to
+/// `false`, independent of the order in which they are processed.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_impossible_platform_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "certifi ; os_name == 'nt' and sys_platform == 'linux'",
+            "idna ; os_name == 'posix' and sys_platform == 'win32'",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 3
+        requires-python = ">=3.9"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+
+        [package.metadata]
+        requires-dist = [
+            { name = "certifi", marker = "python_version < '0'" },
+            { name = "idna", marker = "python_version < '0'" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
