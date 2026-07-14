@@ -6020,6 +6020,19 @@ pub struct ToolInstallArgs {
     #[arg(long)]
     pub force: bool,
 
+    /// The suffix to append to the tool's executable names.
+    ///
+    /// The tool will be installed under a name formed by appending the suffix to the package name,
+    /// and can be referenced by that name in later commands. The unsuffixed executables will not
+    /// be installed.
+    #[arg(
+        long,
+        allow_hyphen_values = true,
+        value_hint = ValueHint::Other,
+        help_heading = "Installer options"
+    )]
+    pub suffix: Option<String>,
+
     /// Whether to use Git LFS when adding a dependency from Git.
     #[arg(long)]
     pub lfs: bool,
@@ -6154,7 +6167,7 @@ pub struct ToolDirArgs {
 pub struct ToolUninstallArgs {
     /// The name of the tool to uninstall.
     #[arg(required = true, value_hint = ValueHint::Other)]
-    pub name: Vec<PackageName>,
+    pub name: Vec<String>,
 
     /// Uninstall all tools.
     #[arg(long, conflicts_with("name"))]

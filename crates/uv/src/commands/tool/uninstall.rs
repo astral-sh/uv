@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use itertools::Itertools;
@@ -7,13 +8,13 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
-use uv_tool::{InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{InstalledTools, Tool, ToolEntrypoint, ToolName};
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// Uninstall a tool.
-pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Result<ExitStatus> {
+pub(crate) async fn uninstall(name: Vec<String>, printer: Printer) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = match installed_tools.lock().await {
         Ok(lock) => lock,
@@ -96,7 +97,7 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
 /// Perform the uninstallation.
 async fn do_uninstall(
     installed_tools: &InstalledTools,
-    names: Vec<PackageName>,
+    names: Vec<String>,
     printer: Printer,
 ) -> Result<()> {
     let mut dangling = false;
@@ -133,6 +134,7 @@ async fn do_uninstall(
     } else {
         let mut entrypoints = vec![];
         for name in names {
+            let name = resolve_tool_name(&name, installed_tools)?;
             let Some(receipt) = installed_tools.get_tool_receipt(&name)? else {
                 // If the tool is not installed properly, attempt to remove the environment anyway.
                 match installed_tools.remove_environment(&name) {
@@ -185,7 +187,7 @@ async fn do_uninstall(
 
 /// Uninstall a tool.
 async fn uninstall_tool(
-    name: &PackageName,
+    name: &ToolName,
     receipt: &Tool,
     tools: &InstalledTools,
 ) -> Result<Vec<ToolEntrypoint>> {
@@ -226,4 +228,19 @@ async fn uninstall_tool(
     }
 
     Ok(entrypoints.to_vec())
+}
+
+/// Resolve a user-provided tool name while preserving exact suffixed names.
+fn resolve_tool_name(name: &str, tools: &InstalledTools) -> Result<ToolName> {
+    let exact = ToolName::from_str(name)?;
+    if tools.tool_dir(&exact).exists() {
+        return Ok(exact);
+    }
+
+    // Preserve the historical normalization of unsuffixed package names.
+    if let Ok(package) = PackageName::from_str(name) {
+        return Ok(ToolName::from(package));
+    }
+
+    Ok(exact)
 }

@@ -16,7 +16,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_python::LenientImplementationName;
 use uv_settings::{Combine, ResolverInstallerOptions};
-use uv_tool::InstalledTools;
+use uv_tool::{InstalledTools, Tool, ToolName};
 use uv_warnings::warn_user;
 
 use crate::commands::ExitStatus;
@@ -76,19 +76,19 @@ pub(crate) async fn list(
         };
 
         // Get the tool environment
-        let tool_env = match installed_tools.get_environment(&name, cache) {
+        let tool_env = match installed_tools.get_environment(&name, tool.package(), cache) {
             Ok(Some(env)) => env,
             Ok(None) => {
                 warn_user!(
                     "Tool `{name}` environment not found (run `{}` to reinstall)",
-                    format!("uv tool install {name} --reinstall").green()
+                    reinstall_command(&tool).green()
                 );
                 continue;
             }
             Err(e) => {
                 warn_user!(
                     "{e} (run `{}` to reinstall)",
-                    format!("uv tool install {name} --reinstall").green()
+                    reinstall_command(&tool).green()
                 );
                 continue;
             }
@@ -101,7 +101,7 @@ pub(crate) async fn list(
                 if let uv_tool::Error::EnvironmentError(e) = e {
                     warn_user!(
                         "{e} (run `{}` to reinstall)",
-                        format!("uv tool install {name} --reinstall").green()
+                        reinstall_command(&tool).green()
                     );
                 } else {
                     writeln!(printer.stderr(), "{e}")?;
@@ -114,9 +114,7 @@ pub(crate) async fn list(
     }
 
     // Determine the latest version for each tool when `--outdated` is requested.
-    let latest: FxHashMap<PackageName, Option<DistFilename>> = if outdated
-        && !valid_tools.is_empty()
-    {
+    let latest: FxHashMap<ToolName, Option<DistFilename>> = if outdated && !valid_tools.is_empty() {
         let download_concurrency = concurrency.downloads_semaphore.clone();
 
         let reporter = LatestVersionReporter::from(printer).with_length(valid_tools.len() as u64);
@@ -161,17 +159,21 @@ pub(crate) async fn list(
                     };
 
                     let latest = latest_client
-                        .find_latest(name, None, &download_concurrency)
+                        .find_latest(tool.package(), None, &download_concurrency)
                         .await?;
-                    Ok::<(&PackageName, Option<DistFilename>), anyhow::Error>((name, latest))
+                    Ok::<(&ToolName, &PackageName, Option<DistFilename>), anyhow::Error>((
+                        name,
+                        tool.package(),
+                        latest,
+                    ))
                 }
             })
             .buffer_unordered(concurrency.downloads);
 
         let mut map = FxHashMap::default();
-        while let Some((name, version)) = fetches.next().await.transpose()? {
+        while let Some((name, package, version)) = fetches.next().await.transpose()? {
             if let Some(version) = version.as_ref() {
-                reporter.on_fetch_version(name, version.version());
+                reporter.on_fetch_version(package, version.version());
             } else {
                 reporter.on_fetch_progress();
             }
@@ -199,7 +201,7 @@ pub(crate) async fn list(
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name == name)
+                    .filter(|req| &req.name == tool.package())
                     .map(|req| req.source.to_string())
                     .filter(|s| !s.is_empty())
                     .peekable()
@@ -215,7 +217,7 @@ pub(crate) async fn list(
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name == name)
+                    .filter(|req| &req.name == tool.package())
                     .flat_map(|req| req.extras.iter()) // Flatten the extras from all matching requirements
                     .peekable()
             })
@@ -242,7 +244,7 @@ pub(crate) async fn list(
             .then(|| {
                 tool.requirements()
                     .iter()
-                    .filter(|req| req.name != name)
+                    .filter(|req| &req.name != tool.package())
                     .peekable()
             })
             .take_if(|requirements| requirements.peek().is_some())
@@ -296,4 +298,15 @@ pub(crate) async fn list(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn reinstall_command(tool: &Tool) -> String {
+    if let Some(suffix) = tool.suffix() {
+        format!(
+            "uv tool install {} --suffix={suffix} --reinstall",
+            tool.package()
+        )
+    } else {
+        format!("uv tool install {} --reinstall", tool.package())
+    }
 }

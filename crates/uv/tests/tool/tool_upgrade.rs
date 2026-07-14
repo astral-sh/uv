@@ -628,6 +628,74 @@ fn tool_upgrade_recomputes_relative_exclude_newer() {
 }
 
 #[test]
+fn tool_upgrade_suffix() {
+    let context = uv_test::test_context!("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    context
+        .tool_install()
+        .arg("black")
+        .arg("--suffix")
+        .arg("_preview")
+        .arg("--exclude-newer")
+        .arg("3 weeks")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-03-22T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("black_preview<=24.3.0")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, "2024-04-15T00:00:00Z")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated black v24.2.0 -> v24.3.0
+     - black==24.2.0
+     + black==24.3.0
+     - packaging==23.2
+     + packaging==24.0
+    Installed 2 executables: black_preview, blackd_preview
+    ");
+
+    bin_dir
+        .child(format!("black_preview{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::exists());
+    bin_dir
+        .child(format!("black{}", std::env::consts::EXE_SUFFIX))
+        .assert(predicate::path::missing());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black_preview").join("uv-receipt.toml")).unwrap(), @r#"
+        [tool]
+        package = "black"
+        suffix = "_preview"
+        requirements = [{ name = "black" }]
+        entrypoints = [
+            { name = "black_preview", install-path = "[TEMP_DIR]/bin/black_preview", from = "black" },
+            { name = "blackd_preview", install-path = "[TEMP_DIR]/bin/blackd_preview", from = "black" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+        exclude-newer-span = "P3W"
+        "#);
+    });
+}
+
+#[test]
 fn tool_upgrade_multiple_names() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_counts()

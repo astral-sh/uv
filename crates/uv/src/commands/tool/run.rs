@@ -35,7 +35,7 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_tool::{InstalledTools, entrypoint_paths};
+use uv_tool::{InstalledTools, ToolName, entrypoint_paths};
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
@@ -450,9 +450,9 @@ async fn show_help(
         .into_iter()
         // Skip invalid tools
         .filter_map(|(name, tool)| {
-            tool.ok().and_then(|_| {
+            tool.ok().and_then(|tool| {
                 installed_tools
-                    .get_environment(&name, cache)
+                    .get_environment(&name, tool.package(), cache)
                     .ok()
                     .flatten()
                     .and_then(|tool_env| tool_env.version().ok())
@@ -1005,8 +1005,9 @@ async fn get_or_create_environment(
         let _lock = installed_tools.lock().await?;
 
         if let ToolRequirement::Package { requirement, .. } = &from {
+            let tool_name = ToolName::from(&requirement.name);
             let existing_environment = installed_tools
-                .get_environment(&requirement.name, cache)?
+                .get_environment(&tool_name, &requirement.name, cache)?
                 .filter(|environment| {
                     python_request.as_ref().is_none_or(|python_request| {
                         python_request.satisfied(environment.environment().interpreter(), cache)
@@ -1016,7 +1017,7 @@ async fn get_or_create_environment(
             // Check if the installed packages meet the requirements.
             if let Some(environment) = existing_environment {
                 if installed_tools
-                    .get_tool_receipt(&requirement.name)
+                    .get_tool_receipt(&tool_name)
                     .ok()
                     .flatten()
                     .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())

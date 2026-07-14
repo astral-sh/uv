@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -13,7 +14,7 @@ use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
-use uv_normalize::{InvalidNameError, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
@@ -24,6 +25,112 @@ pub use tool::{Tool, ToolEntrypoint};
 
 mod receipt;
 mod tool;
+
+/// The name of an installed tool.
+///
+/// Unlike a [`PackageName`], a tool name includes any user-provided suffix and is not normalized.
+/// It is used as the name of the tool's environment directory and as the identifier accepted by
+/// commands such as `uv tool upgrade` and `uv tool uninstall`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ToolName(String);
+
+impl ToolName {
+    /// Create a tool name for a package and optional suffix.
+    pub fn from_package_name(
+        package: &PackageName,
+        suffix: Option<&str>,
+    ) -> Result<Self, InvalidToolNameError> {
+        if suffix.is_some_and(str::is_empty) {
+            return Err(InvalidToolNameError::empty_suffix());
+        }
+
+        let mut name = package.to_string();
+        if let Some(suffix) = suffix {
+            name.push_str(suffix);
+        }
+        Self::from_string(name)
+    }
+
+    /// Return the tool name as a string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn from_string(name: String) -> Result<Self, InvalidToolNameError> {
+        // Tool names are used as directory and executable names. Validate against the portable
+        // subset of filenames so a receipt created on one platform can be managed on another.
+        if name.is_empty()
+            || matches!(name.as_str(), "." | "..")
+            || name.ends_with(['.', ' '])
+            || name.bytes().any(|character| {
+                character.is_ascii_control()
+                    || matches!(
+                        character,
+                        b'/' | b'\\' | b'<' | b'>' | b':' | b'"' | b'|' | b'?' | b'*'
+                    )
+            })
+        {
+            return Err(InvalidToolNameError::invalid(&name));
+        }
+
+        Ok(Self(name))
+    }
+}
+
+impl From<&PackageName> for ToolName {
+    fn from(package: &PackageName) -> Self {
+        Self(package.to_string())
+    }
+}
+
+impl From<PackageName> for ToolName {
+    fn from(package: PackageName) -> Self {
+        Self(package.to_string())
+    }
+}
+
+impl FromStr for ToolName {
+    type Err = InvalidToolNameError;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        Self::from_string(name.to_string())
+    }
+}
+
+impl AsRef<str> for ToolName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Display for ToolName {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+/// An invalid [`ToolName`].
+#[derive(Debug, Clone, Error)]
+#[error("{message}")]
+pub struct InvalidToolNameError {
+    message: String,
+}
+
+impl InvalidToolNameError {
+    fn invalid(name: &str) -> Self {
+        Self {
+            message: format!(
+                "Invalid tool name `{name}`; tool names must be valid cross-platform filenames"
+            ),
+        }
+    }
+
+    fn empty_suffix() -> Self {
+        Self {
+            message: "Tool suffix cannot be empty".to_string(),
+        }
+    }
+}
 
 /// A wrapper around [`PythonEnvironment`] for tools that provides additional functionality.
 #[derive(Debug, Clone)]
@@ -77,7 +184,7 @@ pub enum Error {
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
-    ToolName(#[from] InvalidNameError),
+    ToolName(#[from] InvalidToolNameError),
     #[error(transparent)]
     EnvironmentError(#[from] uv_python::Error),
     #[error("Failed to find a receipt for tool `{0}` at {1}")]
@@ -141,9 +248,9 @@ impl InstalledTools {
         }
     }
 
-    /// Return the expected directory for a tool with the given [`PackageName`].
-    pub fn tool_dir(&self, name: &PackageName) -> PathBuf {
-        self.root.join(name.to_string())
+    /// Return the expected directory for a tool with the given [`ToolName`].
+    pub fn tool_dir(&self, name: &ToolName) -> PathBuf {
+        self.root.join(name.as_str())
     }
 
     /// Return the metadata for all installed tools.
@@ -153,7 +260,7 @@ impl InstalledTools {
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     #[expect(clippy::type_complexity)]
-    pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
+    pub fn tools(&self) -> Result<Vec<(ToolName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
         for directory in uv_fs::directories(self.root())? {
             let Some(name) = directory
@@ -162,7 +269,7 @@ impl InstalledTools {
             else {
                 continue;
             };
-            let name = PackageName::from_str(name)?;
+            let name = ToolName::from_str(name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
@@ -190,7 +297,7 @@ impl InstalledTools {
     /// error.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn get_tool_receipt(&self, name: &PackageName) -> Result<Option<Tool>, Error> {
+    pub fn get_tool_receipt(&self, name: &ToolName) -> Result<Option<Tool>, Error> {
         let path = self.tool_dir(name).join("uv-receipt.toml");
         match ToolReceipt::from_path(&path) {
             Ok(tool_receipt) => Ok(Some(tool_receipt.tool)),
@@ -214,7 +321,7 @@ impl InstalledTools {
     /// Any existing receipt will be replaced.
     ///
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
-    pub fn add_tool_receipt(&self, name: &PackageName, tool: Tool) -> Result<(), Error> {
+    pub fn add_tool_receipt(&self, name: &ToolName, tool: Tool) -> Result<(), Error> {
         let tool_receipt = ToolReceipt::from(tool);
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
@@ -242,7 +349,7 @@ impl InstalledTools {
     /// # Errors
     ///
     /// If no such environment exists for the tool.
-    pub fn remove_environment(&self, name: &PackageName) -> Result<(), Error> {
+    pub fn remove_environment(&self, name: &ToolName) -> Result<(), Error> {
         let environment_path = self.tool_dir(name);
 
         debug!(
@@ -263,7 +370,8 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn get_environment(
         &self,
-        name: &PackageName,
+        name: &ToolName,
+        package: &PackageName,
         cache: &Cache,
     ) -> Result<Option<ToolEnvironment>, Error> {
         let environment_path = self.tool_dir(name);
@@ -274,7 +382,7 @@ impl InstalledTools {
                     "Found existing environment for tool `{name}`: {}",
                     environment_path.user_display()
                 );
-                Ok(Some(ToolEnvironment::new(venv, name.clone())))
+                Ok(Some(ToolEnvironment::new(venv, package.clone())))
             }
             Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
@@ -317,7 +425,7 @@ impl InstalledTools {
     /// Note it is generally incorrect to use this without [`Self::acquire_lock`].
     pub fn create_environment(
         &self,
-        name: &PackageName,
+        name: &ToolName,
         interpreter: Interpreter,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);

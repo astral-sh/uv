@@ -219,6 +219,20 @@ Or package sources with [Git LFS](https://git-lfs.com):
 $ uv tool install --lfs git+https://github.com/astral-sh/lfs-cowsay
 ```
 
+### Installing multiple versions
+
+Use `--suffix` to install multiple versions of the same tool. The suffix is appended to every
+executable provided by the package:
+
+```console
+$ uv tool install 'ruff==0.11.0' --suffix '-0.11'
+$ uv tool install 'ruff==0.12.0' --suffix '-0.12'
+```
+
+These installations provide `ruff-0.11` and `ruff-0.12` without installing an unsuffixed `ruff`
+executable. The combined package name and suffix identifies the installation in later commands, for
+example, `uv tool upgrade ruff-0.11` or `uv tool uninstall ruff-0.11`.
+
 As with `uvx`, installations can include additional packages:
 
 ```console
