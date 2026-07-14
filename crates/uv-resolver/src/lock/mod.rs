@@ -13233,12 +13233,12 @@ name = "a"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 build-only = true
-build-prefered-wheel = "a-1.0.0-py3-none-any.whl"
+build-prioritized-wheel = "a-1.0.0-py3-none-any.whl"
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(
             result,
-            @"Lockfile schema v2 revision 4 contains unknown field `build-prefered-wheel` in package record"
+            @"Lockfile schema v2 revision 4 contains unknown field `build-prioritized-wheel` in package record"
         );
 
         let data = r#"
@@ -13251,12 +13251,12 @@ name = "a"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 build-only = true
-wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", requres-python = ">=3.12" }]
+wheels = [{ url = "https://example.com/a-1.0.0-py3-none-any.whl", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", runtime-python = ">=3.12" }]
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(
             result,
-            @"Lockfile schema v2 revision 4 contains unknown field `requres-python` in wheel artifact"
+            @"Lockfile schema v2 revision 4 contains unknown field `runtime-python` in wheel artifact"
         );
 
         let data = r#"
@@ -13400,12 +13400,12 @@ revision = 4
 requires-python = ">=3.12"
 
 [manifest]
-build-setings = "test"
+build-settings-extra = "test"
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(
             result,
-            @"Lockfile schema v2 revision 4 contains unknown field `build-setings` in lock manifest"
+            @"Lockfile schema v2 revision 4 contains unknown field `build-settings-extra` in lock manifest"
         );
 
         let data = r#"
@@ -13420,12 +13420,12 @@ source = { registry = "https://pypi.org/simple" }
 build-only = true
 
 [package.metadata]
-build-requieres = ["b"]
+build-inputs = ["b"]
 "#;
         let result = toml::from_str::<Lock>(data).unwrap_err();
         assert_stripped_snapshot!(
             result,
-            @"Lockfile schema v2 revision 4 contains unknown field `build-requieres` in package metadata"
+            @"Lockfile schema v2 revision 4 contains unknown field `build-inputs` in package metadata"
         );
 
         let data = r#"
