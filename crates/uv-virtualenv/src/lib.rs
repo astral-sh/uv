@@ -32,6 +32,11 @@ pub enum Error {
         /// The non-virtual environment directory that would have been cleared.
         path: PathBuf,
     },
+    #[error("Virtual environment path is not valid UTF-8: {}", path.user_display())]
+    NonUtf8Path {
+        /// The non-UTF-8 virtual environment path.
+        path: PathBuf,
+    },
 }
 
 impl uv_errors::Hint for Error {

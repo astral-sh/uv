@@ -101,6 +101,12 @@ pub(crate) fn create(
     };
     let absolute = std::path::absolute(location)?;
 
+    if absolute.to_str().is_none() {
+        return Err(Error::NonUtf8Path {
+            path: location.to_path_buf(),
+        });
+    }
+
     // Validate the existing location.
     match location.metadata() {
         Ok(metadata) if metadata.is_file() => {
