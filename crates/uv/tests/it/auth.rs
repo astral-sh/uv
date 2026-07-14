@@ -6,6 +6,34 @@ use uv_static::EnvVars;
 use uv_test::uv_snapshot;
 
 #[tokio::test]
+async fn invalid_cloud_endpoint_urls() {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--dry-run")
+        .arg("--default-index")
+        .arg(proxy.url("/basic-auth/simple"))
+        .arg("iniconfig")
+        .env(EnvVars::UV_S3_ENDPOINT_URL, "not-a-url")
+        .env(EnvVars::UV_GCS_ENDPOINT_URL, "not-a-url")
+        .env(EnvVars::UV_AZURE_ENDPOINT_URL, "not-a-url"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring invalid `UV_S3_ENDPOINT_URL`: relative URL without a base
+    warning: Ignoring invalid `UV_GCS_ENDPOINT_URL`: relative URL without a base
+    warning: Ignoring invalid `UV_AZURE_ENDPOINT_URL`: relative URL without a base
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
+
+    hint: An index URL (http://[LOCALHOST]/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized)
+    ");
+}
+
+#[tokio::test]
 #[cfg(feature = "native-auth")]
 async fn add_package_native_auth_realm() -> Result<()> {
     let context = uv_test::test_context!("3.12").with_real_home();

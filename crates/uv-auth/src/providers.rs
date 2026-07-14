@@ -58,11 +58,8 @@ impl HuggingFaceProvider {
 }
 
 /// The [`Url`] for the S3 endpoint, if set.
-static S3_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
-    let s3_endpoint_url = std::env::var(EnvVars::UV_S3_ENDPOINT_URL).ok()?;
-    let url = Url::parse(&s3_endpoint_url).expect("Failed to parse S3 endpoint URL");
-    Some(url)
-});
+static S3_ENDPOINT_URL: LazyLock<Option<Url>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_S3_ENDPOINT_URL));
 
 /// A provider for authentication credentials for S3 endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,11 +104,8 @@ impl S3EndpointProvider {
 }
 
 /// The [`Url`] for the GCS endpoint, if set.
-static GCS_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
-    let gcs_endpoint_url = std::env::var(EnvVars::UV_GCS_ENDPOINT_URL).ok()?;
-    let url = Url::parse(&gcs_endpoint_url).expect("Failed to parse GCS endpoint URL");
-    Some(url)
-});
+static GCS_ENDPOINT_URL: LazyLock<Option<Url>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_GCS_ENDPOINT_URL));
 
 /// A provider for authentication credentials for GCS endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,11 +141,20 @@ impl GcsEndpointProvider {
 }
 
 /// The [`Url`] for the Azure endpoint, if set.
-static AZURE_ENDPOINT_URL: LazyLock<Option<Url>> = LazyLock::new(|| {
-    let azure_endpoint_url = std::env::var(EnvVars::UV_AZURE_ENDPOINT_URL).ok()?;
-    let url = Url::parse(&azure_endpoint_url).expect("Failed to parse Azure endpoint URL");
-    Some(url)
-});
+static AZURE_ENDPOINT_URL: LazyLock<Option<Url>> =
+    LazyLock::new(|| endpoint_url(EnvVars::UV_AZURE_ENDPOINT_URL));
+
+/// Returns the configured endpoint [`Url`], if set and valid.
+fn endpoint_url(env_var: &str) -> Option<Url> {
+    let endpoint_url = std::env::var(env_var).ok()?;
+    match Url::parse(&endpoint_url) {
+        Ok(url) => Some(url),
+        Err(err) => {
+            warn_user_once!("Ignoring invalid `{env_var}`: {err}");
+            None
+        }
+    }
+}
 
 /// A provider for authentication credentials for Azure endpoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
