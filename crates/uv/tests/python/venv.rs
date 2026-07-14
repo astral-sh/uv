@@ -10,6 +10,10 @@ use uv_static::EnvVars;
 
 #[cfg(unix)]
 use fs_err::os::unix::fs::symlink;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+#[cfg(windows)]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
 use uv_test::{site_packages_path, uv_snapshot};
 
@@ -1487,6 +1491,31 @@ fn file_exists() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[test]
+fn non_utf8_path() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let path = cfg_select! {
+        unix => OsStr::from_bytes(b".venv-\xff"),
+        windows => OsString::from_wide(&[0x002e, 0x0076, 0x0065, 0x006e, 0x0076, 0x002d, 0xd800]),
+    };
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(path)
+        .arg("--python")
+        .arg("3.12"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv-�
+    error: Failed to create virtual environment
+      Caused by: Virtual environment path is not valid UTF-8: .venv-�
+    "
+    );
 }
 
 #[test]
