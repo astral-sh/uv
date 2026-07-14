@@ -228,6 +228,14 @@ impl DisplaySafeUrl {
     pub fn displayable_with_credentials(&self) -> impl Display {
         &self.0
     }
+
+    /// Redact all occurrences of this URL in a message.
+    ///
+    /// This is useful for errors from external tools, which may include the credentialed URL in
+    /// their command or output instead of using the URL's [`Display`] implementation.
+    pub fn redact_in(&self, message: &str) -> String {
+        message.replace(self.0.as_str(), &self.to_string())
+    }
 }
 
 impl Deref for DisplaySafeUrl {
@@ -492,6 +500,35 @@ mod tests {
         assert_eq!(
             log_safe_url.displayable_with_credentials().to_string(),
             url_str
+        );
+    }
+
+    #[test]
+    fn redact_url_in_message() {
+        let url = DisplaySafeUrl::parse("https://user:pass@example.com/org/repo.git").unwrap();
+        let message = format!(
+            "process didn't exit successfully: `git fetch '{}'`\n--- stderr\nfatal: Authentication failed for '{}'",
+            url.as_str(),
+            url.as_str()
+        );
+
+        assert_eq!(
+            url.redact_in(&message),
+            "process didn't exit successfully: `git fetch 'https://user:****@example.com/org/repo.git'`\n--- stderr\nfatal: Authentication failed for 'https://user:****@example.com/org/repo.git'"
+        );
+    }
+
+    #[test]
+    fn redact_presigned_url_in_message() {
+        let url = DisplaySafeUrl::parse(
+            "https://bucket.s3.amazonaws.com/dist.whl?X-Amz%2DSignature=signature&X-Amz-Credential=credential&X-Amz-Security-Token=token&safe=value",
+        )
+        .unwrap();
+        let message = format!("failed to fetch '{}'", url.as_str());
+
+        assert_eq!(
+            url.redact_in(&message),
+            "failed to fetch 'https://bucket.s3.amazonaws.com/dist.whl?X-Amz-Signature=****&X-Amz-Credential=****&X-Amz-Security-Token=****&safe=value'"
         );
     }
 
