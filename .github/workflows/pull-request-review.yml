@@ -1,0 +1,135 @@
+# Review pull requests and publish actionable findings as inline comments.
+name: "Pull request review"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    environment: automations
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      result: ${{ steps.review.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: "Collect pull request context"
+        id: context
+        run: |
+          gh pr view "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,title,body,author,baseRefName,baseRefOid,headRefName,headRefOid,isDraft,labels,files,additions,deletions,changedFiles \
+            > .pull-request-review-event.json
+
+          if [ "$(jq --raw-output '.headRefOid' .pull-request-review-event.json)" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; skipping this review."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          gh pr diff "$PULL_REQUEST_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            > .pull-request-review.diff
+          echo "current=true" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: "Review pull request"
+        id: review
+        if: steps.context.outputs.current == 'true'
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: "agents/codex"
+          permission-profile: "pull-request-review"
+          safety-strategy: drop-sudo
+          prompt-file: "agents/prompts/pull-request-review.md"
+          output-schema-file: "agents/schemas/pull-request-review.json"
+
+  prepare:
+    needs: review
+    if: needs.review.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.comments.outputs.result }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: "Prepare review findings"
+        id: comments
+        run: |
+          delimiter="review-$(openssl rand -hex 16)"
+          {
+            printf 'result<<%s\n' "$delimiter"
+            printf '%s\n' "$REVIEW_RESULT" \
+              | ./scripts/agent-review-to-github-comments.py --commit-id "$HEAD_SHA"
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+
+  report:
+    needs: prepare
+    if: needs.prepare.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: "Publish review findings"
+        run: |
+          printf '%s\n' "$REVIEW_RESULT" > "$RUNNER_TEMP/review.json"
+
+          if jq --exit-status '.comments | length == 0' "$RUNNER_TEMP/review.json" > /dev/null; then
+            echo "No actionable findings to publish."
+            exit 0
+          fi
+
+          current_head_sha="$(
+            gh pr view "$PULL_REQUEST_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json headRefOid \
+              --jq '.headRefOid'
+          )"
+          if [ "$current_head_sha" != "$HEAD_SHA" ]; then
+            echo "The pull request head changed; skipping stale review findings."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST_NUMBER/reviews" \
+            --input "$RUNNER_TEMP/review.json"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REVIEW_RESULT: ${{ needs.prepare.outputs.result }}
