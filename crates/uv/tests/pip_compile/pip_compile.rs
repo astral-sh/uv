@@ -6640,11 +6640,9 @@ fn resolver_legacy() -> Result<()> {
     Ok(())
 }
 
-/// `pip-compile`'s `--cert` is unsupported and must error, rather than being silently ignored,
-/// so users don't believe a custom CA bundle is in effect when it isn't.
-/// See <https://github.com/astral-sh/uv/issues/20350>.
+/// `--cert` is forwarded to the HTTP client rather than silently ignored.
 #[test]
-fn cert_unsupported() -> Result<()> {
+fn cert() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("werkzeug==3.0.1")?;
@@ -6658,7 +6656,8 @@ fn cert_unsupported() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: pip-compile's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)
+    error: Failed to read certificate file `ca-bundle.pem`
+      Caused by: No such file or directory (os error 2)
     "
     );
 

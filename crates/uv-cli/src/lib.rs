@@ -964,6 +964,12 @@ pub struct SizeArgs {
 pub struct PipNamespace {
     #[command(subcommand)]
     pub command: PipCommand,
+
+    /// Path to a PEM-encoded CA certificate bundle.
+    ///
+    /// If provided, this overrides the default certificate source.
+    #[arg(global = true, long, value_name = "FILE", value_hint = ValueHint::FilePath)]
+    pub cert: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]

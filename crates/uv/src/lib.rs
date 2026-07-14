@@ -624,6 +624,11 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     };
 
     // Configure the global network settings.
+    let cert = if let Commands::Pip(PipNamespace { cert, .. }) = &*cli.command {
+        cert.clone()
+    } else {
+        None
+    };
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
@@ -633,6 +638,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
+    .cert(cert)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());
@@ -717,6 +723,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         ),
         Commands::Pip(PipNamespace {
             command: PipCommand::Compile(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -836,6 +843,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Sync(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -925,6 +933,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Install(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1087,6 +1096,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Uninstall(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1124,6 +1134,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Freeze(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipFreezeSettings::resolve(args, filesystem, environment);
@@ -1148,6 +1159,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::List(args),
+            ..
         }) => {
             args.compat_args.validate()?;
 
@@ -1183,6 +1195,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Show(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipShowSettings::resolve(args, filesystem, environment);
@@ -1206,6 +1219,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Tree(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipTreeSettings::resolve(args, filesystem, environment);
@@ -1239,6 +1253,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Check(args),
+            ..
         }) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = PipCheckSettings::resolve(args, filesystem, environment);
@@ -1259,6 +1274,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         }
         Commands::Pip(PipNamespace {
             command: PipCommand::Debug(_),
+            ..
         }) => Err(anyhow!(
             "pip's `debug` is unsupported (consider using `uvx pip debug` instead)"
         )),

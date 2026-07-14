@@ -17,13 +17,15 @@ use uv_warnings::warn_user_once;
 
 #[derive(Debug, Clone)]
 enum CertificateSource {
+    CertFile(PathBuf),
     SslCertFile(PathBuf),
     SslCertDir(PathBuf),
 }
 
 impl CertificateSource {
-    const fn env_var(&self) -> &'static str {
+    const fn description(&self) -> &'static str {
         match self {
+            Self::CertFile(_) => "--cert",
             Self::SslCertFile(_) => EnvVars::SSL_CERT_FILE,
             Self::SslCertDir(_) => EnvVars::SSL_CERT_DIR,
         }
@@ -31,7 +33,7 @@ impl CertificateSource {
 
     fn path(&self) -> &Path {
         match self {
-            Self::SslCertFile(path) | Self::SslCertDir(path) => path,
+            Self::CertFile(path) | Self::SslCertFile(path) | Self::SslCertDir(path) => path,
         }
     }
 }
@@ -133,7 +135,7 @@ impl Display for InvalidCertificateWarning {
             f,
             "certificate in `{}` (from `{}`) ",
             self.source.path().simplified_display(),
-            self.source.env_var()
+            self.source.description()
         )?;
         match &self.reason {
             InvalidCertificateReason::UnsupportedCriticalExtension => {
@@ -208,6 +210,32 @@ impl Certificates {
         // Each [`CertificateDer`] in [`webpki_root_certs::TLS_SERVER_ROOT_CERTS`] borrows from static
         // data, so cloning into the [`Vec`] only copies the fat pointer, not the certificate bytes.
         Self(webpki_root_certs::TLS_SERVER_ROOT_CERTS.to_vec())
+    }
+
+    /// Load a custom CA certificate bundle from an explicit path.
+    pub(crate) fn from_file(file: &Path) -> Result<Self, CertificateFileError> {
+        let metadata = file
+            .metadata()
+            .map_err(|err| CertificateFileError::Io(file.to_path_buf(), err))?;
+        if !metadata.is_file() {
+            return Err(CertificateFileError::NotFile(file.to_path_buf()));
+        }
+
+        let result = Self::from_paths(Some(file), None);
+        for err in &result.errors {
+            warn!(
+                "Failed to load certificate file ({}): {err}",
+                file.simplified_display()
+            );
+        }
+        let certs =
+            Self::from(result).filter_invalid(&CertificateSource::CertFile(file.to_path_buf()));
+        if certs.0.is_empty() {
+            return Err(CertificateFileError::NoValidCertificates(
+                file.to_path_buf(),
+            ));
+        }
+        Ok(certs)
     }
 
     /// Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR` environment variables.
@@ -439,6 +467,16 @@ pub(crate) enum CertificateError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Reqwest(reqwest::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CertificateFileError {
+    #[error("Failed to read certificate file `{}`", .0.simplified_display())]
+    Io(PathBuf, #[source] io::Error),
+    #[error("Certificate path is not a file: `{}`", .0.simplified_display())]
+    NotFile(PathBuf),
+    #[error("No valid certificates found in: `{}`", .0.simplified_display())]
+    NoValidCertificates(PathBuf),
 }
 
 /// Return the `Identity` from the provided file.

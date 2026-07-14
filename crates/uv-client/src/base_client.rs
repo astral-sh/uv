@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTimeError};
 
@@ -71,6 +72,8 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
+    #[error(transparent)]
+    CertificateFile(#[from] crate::tls::CertificateFileError),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -93,6 +96,7 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
+    cert: Option<PathBuf>,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -165,6 +169,7 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
+            cert: None,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -255,6 +260,13 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn with_system_certs(mut self, system_certs: bool) -> Self {
         self.system_certs = system_certs;
+        self
+    }
+
+    /// Use a custom certificate authority bundle for TLS verification.
+    #[must_use]
+    pub fn cert(mut self, cert: Option<PathBuf>) -> Self {
+        self.cert = cert;
         self
     }
 
@@ -476,8 +488,12 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
-        let custom_certs = Certificates::from_env().map(|certs| certs.to_reqwest_certs());
+        // Like pip, an explicit certificate bundle overrides the default trust configuration.
+        let custom_certs = if let Some(cert) = self.cert.as_deref() {
+            Some(Certificates::from_file(cert)?.to_reqwest_certs())
+        } else {
+            Certificates::from_env().map(|certs| certs.to_reqwest_certs())
+        };
         let certificate_source = if custom_certs.is_some() {
             CertificateSource::Custom
         } else if self.system_certs {

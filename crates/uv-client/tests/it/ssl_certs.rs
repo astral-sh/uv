@@ -133,6 +133,7 @@ struct TestClient {
     overrides: Vec<(&'static str, String)>,
     system_certs: bool,
     custom_client: bool,
+    cert: Option<PathBuf>,
 }
 
 /// Create a [`TestClient`] with no environment overrides.
@@ -141,10 +142,17 @@ fn client() -> TestClient {
         overrides: Vec::new(),
         system_certs: false,
         custom_client: false,
+        cert: None,
     }
 }
 
 impl TestClient {
+    /// Set the explicit certificate file passed to [`BaseClientBuilder`].
+    fn cert(mut self, path: &Path) -> Self {
+        self.cert = Some(path.to_path_buf());
+        self
+    }
+
     /// Enable or disable system certificate loading.
     fn system_certs(mut self, enabled: bool) -> Self {
         self.system_certs = enabled;
@@ -370,7 +378,7 @@ impl TestClient {
         let system_certs = self.system_certs;
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -392,7 +400,7 @@ impl TestClient {
             let (server_task, addr) = start_https_mtls_user_agent_server(&cert.ca, &cert.server)
                 .await
                 .unwrap();
-            let response = send_request(addr, system_certs).await;
+            let response = send_request(addr, system_certs, self.cert.as_deref()).await;
             check(response, server_task).await;
         })
         .await;
@@ -403,20 +411,31 @@ impl TestClient {
 async fn send_request(
     addr: SocketAddr,
     system_certs: bool,
+    cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let url = DisplaySafeUrl::from_str(&format!("https://{addr}")).unwrap();
-    send_request_to(&url, system_certs).await
+    send_request_to_with_cert(&url, system_certs, cert).await
 }
 
 /// Send a GET request to an arbitrary URL using a fresh registry client.
+#[cfg(feature = "test-pypi")]
 async fn send_request_to(
     url: &DisplaySafeUrl,
     system_certs: bool,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
+    send_request_to_with_cert(url, system_certs, None).await
+}
+
+async fn send_request_to_with_cert(
+    url: &DisplaySafeUrl,
+    system_certs: bool,
+    cert: Option<&Path>,
+) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
-        .with_system_certs(system_certs);
+        .with_system_certs(system_certs)
+        .cert(cert.map(Path::to_path_buf));
     let client = RegistryClientBuilder::new(base, cache)
         .build()
         .expect("failed to build registry client");
@@ -526,6 +545,30 @@ async fn test_ssl_cert_file_valid() -> Result<()> {
     let cert = TestCertificate::new()?;
     client()
         .ssl_cert_file(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file pointing to the server's CA cert is trusted.
+#[tokio::test]
+async fn test_cli_cert_valid() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    client()
+        .cert(&cert.trust_path)
+        .expect_https_connect_succeeds(&cert)
+        .await;
+    Ok(())
+}
+
+/// An explicit certificate file overrides the environment certificate sources.
+#[tokio::test]
+async fn test_cli_cert_overrides_environment() -> Result<()> {
+    let cert = TestCertificate::new()?;
+    let wrong_cert = TestCertificate::new()?;
+    client()
+        .ssl_cert_file(&wrong_cert.trust_path)
+        .cert(&cert.trust_path)
         .expect_https_connect_succeeds(&cert)
         .await;
     Ok(())

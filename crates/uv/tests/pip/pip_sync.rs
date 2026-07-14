@@ -37,11 +37,9 @@ fn missing_requirements_txt() {
     requirements_txt.assert(predicates::path::missing());
 }
 
-/// `pip-sync`'s `--cert` is unsupported and must error, rather than being silently ignored,
-/// so users don't believe a custom CA bundle is in effect when it isn't.
-/// See <https://github.com/astral-sh/uv/issues/20350>.
+/// `--cert` is forwarded to the HTTP client rather than silently ignored.
 #[test]
-fn cert_unsupported() -> Result<()> {
+fn cert() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig==2.0.0")?;
@@ -55,7 +53,8 @@ fn cert_unsupported() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: pip-sync's `--cert` is unsupported (set the `SSL_CERT_FILE` environment variable to use a custom CA certificate bundle)
+    error: Failed to read certificate file `ca-bundle.pem`
+      Caused by: No such file or directory (os error 2)
     ");
 
     Ok(())
