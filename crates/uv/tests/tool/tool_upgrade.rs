@@ -1019,6 +1019,8 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     // Install `python-dotenv` from Test PyPI, to get an outdated version.
     uv_snapshot!(context.filters(), context.tool_install()
         .arg("python-dotenv")
+        .arg("--suffix")
+        .arg("_preview")
         .arg("--index-url")
         .arg("https://test.pypi.org/simple/")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -1033,8 +1035,21 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + python-dotenv==0.10.2.post2
-    Installed 1 executable: dotenv
+    Installed 1 executable: dotenv_preview
     ");
+
+    context
+        .tool_install()
+        .arg("python-dotenv")
+        .arg("--suffix")
+        .arg("_missing")
+        .arg("--index-url")
+        .arg("https://test.pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
 
     // Install `babel` from Test PyPI, to get an outdated version.
     uv_snapshot!(context.filters(), context.tool_install()
@@ -1057,9 +1072,14 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
     Installed 1 executable: pybabel
     ");
 
-    // Break the receipt for python-dotenv
+    // Remove one receipt and break the other.
+    fs_err::remove_file(
+        tool_dir
+            .child("python-dotenv_missing")
+            .child("uv-receipt.toml"),
+    )?;
     tool_dir
-        .child("python-dotenv")
+        .child("python-dotenv_preview")
         .child("uv-receipt.toml")
         .write_str("Invalid receipt")?;
 
@@ -1081,8 +1101,10 @@ fn tool_upgrade_not_stop_if_upgrade_fails() -> anyhow::Result<()> {
      + babel==2.14.0
      - pytz==2018.5
     Installed 1 executable: pybabel
-    error: Failed to upgrade python-dotenv
-      Caused by: `python-dotenv` is missing a valid receipt; run `uv tool install --force python-dotenv` to reinstall
+    error: Failed to upgrade python-dotenv_missing
+      Caused by: `python-dotenv_missing` is missing a receipt and cannot be upgraded
+    error: Failed to upgrade python-dotenv_preview
+      Caused by: `python-dotenv_preview` is missing a valid receipt and cannot be upgraded
     ");
 
     Ok(())

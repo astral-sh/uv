@@ -337,6 +337,12 @@ async fn upgrade_tool(
     let existing_tool_receipt = match installed_tools.get_tool_receipt(name) {
         Ok(Some(receipt)) => receipt,
         Ok(None) => {
+            if installed_tools.tool_dir(name).exists() {
+                return Err(anyhow::anyhow!(
+                    "`{}` is missing a receipt and cannot be upgraded",
+                    name.cyan()
+                ));
+            }
             let install_command = format!("uv tool install {name}");
             return Err(anyhow::anyhow!(
                 "`{}` is not installed; run `{}` to install",
@@ -345,11 +351,9 @@ async fn upgrade_tool(
             ));
         }
         Err(_) => {
-            let install_command = format!("uv tool install --force {name}");
             return Err(anyhow::anyhow!(
-                "`{}` is missing a valid receipt; run `{}` to reinstall",
-                name.cyan(),
-                install_command.green()
+                "`{}` is missing a valid receipt and cannot be upgraded",
+                name.cyan()
             ));
         }
     };
