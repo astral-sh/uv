@@ -17,7 +17,7 @@ use uv_warnings::warn_user_once;
 
 #[derive(Debug, Clone)]
 enum CertificateSource {
-    CertFile(PathBuf),
+    CertFileArg(PathBuf),
     SslCertFile(PathBuf),
     SslCertDir(PathBuf),
 }
@@ -25,7 +25,7 @@ enum CertificateSource {
 impl CertificateSource {
     const fn description(&self) -> &'static str {
         match self {
-            Self::CertFile(_) => "--cert",
+            Self::CertFileArg(_) => "--cert",
             Self::SslCertFile(_) => EnvVars::SSL_CERT_FILE,
             Self::SslCertDir(_) => EnvVars::SSL_CERT_DIR,
         }
@@ -33,7 +33,7 @@ impl CertificateSource {
 
     fn path(&self) -> &Path {
         match self {
-            Self::CertFile(path) | Self::SslCertFile(path) | Self::SslCertDir(path) => path,
+            Self::CertFileArg(path) | Self::SslCertFile(path) | Self::SslCertDir(path) => path,
         }
     }
 }
@@ -194,7 +194,7 @@ impl Display for InvalidCertificateWarning {
 
 /// A collection of TLS certificates in DER form.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Certificates(Vec<CertificateDer<'static>>);
+pub struct Certificates(Vec<CertificateDer<'static>>);
 
 impl Certificates {
     /// Load the bundled Mozilla root certificates.
@@ -213,7 +213,7 @@ impl Certificates {
     }
 
     /// Load a custom CA certificate bundle from an explicit path.
-    pub(crate) fn from_file(file: &Path) -> Result<Self, CertificateFileError> {
+    pub fn from_file(file: &Path) -> Result<Self, CertificateFileError> {
         let metadata = file
             .metadata()
             .map_err(|err| CertificateFileError::Io(file.to_path_buf(), err))?;
@@ -229,7 +229,7 @@ impl Certificates {
             );
         }
         let certs =
-            Self::from(result).filter_invalid(&CertificateSource::CertFile(file.to_path_buf()));
+            Self::from(result).filter_invalid(&CertificateSource::CertFileArg(file.to_path_buf()));
         if certs.0.is_empty() {
             return Err(CertificateFileError::NoValidCertificates(
                 file.to_path_buf(),
@@ -243,7 +243,7 @@ impl Certificates {
     /// Returns `None` if neither variable is set, if the referenced files or directories are
     /// missing or inaccessible, or if no valid certificates are found (with a warning in each
     /// case). Delegates path loading to [`rustls_native_certs::load_certs_from_paths`].
-    pub(crate) fn from_env() -> Option<Self> {
+    pub fn from_env() -> Option<Self> {
         let mut certs = Self::default();
         let mut has_source = false;
 

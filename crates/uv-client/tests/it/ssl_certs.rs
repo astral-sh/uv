@@ -10,8 +10,7 @@ use tempfile::{NamedTempFile, TempDir};
 use url::Url;
 
 use uv_cache::Cache;
-use uv_client::BaseClientBuilder;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, Certificates, RegistryClientBuilder};
 use uv_distribution_types::IndexUrl;
 use uv_errors::{ErrorOptions, Hint, write_error_chain_with_options};
 use uv_redacted::DisplaySafeUrl;
@@ -147,7 +146,7 @@ fn client() -> TestClient {
 }
 
 impl TestClient {
-    /// Set the explicit certificate file passed to [`BaseClientBuilder`].
+    /// Set the explicit certificate file used to construct [`Certificates`].
     fn cert(mut self, path: &Path) -> Self {
         self.cert = Some(path.to_path_buf());
         self
@@ -229,13 +228,16 @@ impl TestClient {
         async_with_vars(vars, async {
             let (server_task, addr) = start_https_user_agent_server(&cert.server).await.unwrap();
             let cache = Cache::temp().unwrap().init().await.unwrap();
-            let client = RegistryClientBuilder::new(
-                BaseClientBuilder::default()
-                    .retries(0)
-                    .no_retry_delay(true)
-                    .with_system_certs(system_certs),
-                cache,
-            );
+            let base = BaseClientBuilder::default()
+                .retries(0)
+                .no_retry_delay(true)
+                .with_system_certs(system_certs);
+            let base = if let Some(certificates) = Certificates::from_env() {
+                base.custom_certificates(certificates)
+            } else {
+                base
+            };
+            let client = RegistryClientBuilder::new(base, cache);
             let client = if custom_client {
                 client.with_reqwest_client(reqwest::Client::new())
             } else {
@@ -432,10 +434,19 @@ async fn send_request_to_with_cert(
     cert: Option<&Path>,
 ) -> Result<reqwest::Response, reqwest_middleware::Error> {
     let cache = Cache::temp().unwrap().init().await.unwrap();
+    let custom_certificates = if let Some(cert) = cert {
+        Some(Certificates::from_file(cert).expect("failed to load certificate file"))
+    } else {
+        Certificates::from_env()
+    };
     let base = BaseClientBuilder::default()
         .no_retry_delay(true)
-        .with_system_certs(system_certs)
-        .cert(cert.map(Path::to_path_buf));
+        .with_system_certs(system_certs);
+    let base = if let Some(certificates) = custom_certificates {
+        base.custom_certificates(certificates)
+    } else {
+        base
+    };
     let client = RegistryClientBuilder::new(base, cache)
         .build()
         .expect("failed to build registry client");

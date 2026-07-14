@@ -1,7 +1,6 @@
 use std::env;
 use std::fmt::{Debug, Write};
 use std::num::ParseIntError;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTimeError};
 
@@ -72,8 +71,6 @@ pub enum ClientBuildError {
     Credentials(#[from] CredentialsFromUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
-    #[error(transparent)]
-    CertificateFile(#[from] crate::tls::CertificateFileError),
 }
 
 /// Selectively skip parts or the entire auth middleware.
@@ -96,7 +93,7 @@ pub struct BaseClientBuilder<'a> {
     preview: Preview,
     allow_insecure_host: Vec<TrustedHost>,
     system_certs: bool,
-    cert: Option<PathBuf>,
+    custom_certificates: Option<Certificates>,
     retries: u32,
     pub connectivity: Connectivity,
     markers: Option<&'a MarkerEnvironment>,
@@ -169,7 +166,7 @@ impl Default for BaseClientBuilder<'_> {
             preview: Preview::default(),
             allow_insecure_host: vec![],
             system_certs: false,
-            cert: None,
+            custom_certificates: None,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
             markers: None,
@@ -263,10 +260,10 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
-    /// Use a custom certificate authority bundle for TLS verification.
+    /// Use custom certificate authorities for TLS verification.
     #[must_use]
-    pub fn cert(mut self, cert: Option<PathBuf>) -> Self {
-        self.cert = cert;
+    pub fn custom_certificates(mut self, certificates: Certificates) -> Self {
+        self.custom_certificates = Some(certificates);
         self
     }
 
@@ -488,12 +485,10 @@ impl<'a> BaseClientBuilder<'a> {
             let _ = write!(user_agent_string, " {output}");
         }
 
-        // Like pip, an explicit certificate bundle overrides the default trust configuration.
-        let custom_certs = if let Some(cert) = self.cert.as_deref() {
-            Some(Certificates::from_file(cert)?.to_reqwest_certs())
-        } else {
-            Certificates::from_env().map(|certs| certs.to_reqwest_certs())
-        };
+        let custom_certs = self
+            .custom_certificates
+            .as_ref()
+            .map(Certificates::to_reqwest_certs);
         let certificate_source = if custom_certs.is_some() {
             CertificateSource::Custom
         } else if self.system_certs {
@@ -553,8 +548,7 @@ impl<'a> BaseClientBuilder<'a> {
 
         // Configure the certificate source.
         //
-        // `SSL_CERT_FILE` and `SSL_CERT_DIR` override the default certificate source when they
-        // contain valid certificates.
+        // Explicit certificates override the default certificate source.
         let client_builder = if let Some(custom_certs) = custom_certs {
             client_builder.tls_certs_only(custom_certs)
         } else if self.system_certs {
@@ -725,7 +719,7 @@ pub(crate) enum CertificateSource {
     System,
     /// The bundled `WebPKI` certificate roots.
     WebPki,
-    /// Custom roots loaded from `SSL_CERT_FILE` or `SSL_CERT_DIR`.
+    /// Custom certificate roots.
     Custom,
     /// An externally constructed client whose certificate roots are unknown.
     Unknown,

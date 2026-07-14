@@ -32,7 +32,7 @@ use uv_cli::{
     PythonNamespace, SelfCommand, SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
     WorkspaceCommand, WorkspaceNamespace, compat::CompatArgs,
 };
-use uv_client::BaseClientBuilder;
+use uv_client::{BaseClientBuilder, Certificates};
 use uv_configuration::min_stack_size;
 use uv_flags::EnvironmentFlags;
 use uv_fs::{CWD, Simplified, normalize_path};
@@ -623,12 +623,18 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         WorkspaceCache::default()
     };
 
-    // Configure the global network settings.
-    let cert = if let Commands::Pip(PipNamespace { cert, .. }) = &*cli.command {
-        cert.clone()
+    // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+    // Like pip, an explicit certificate bundle overrides the environment certificate sources.
+    let custom_certificates = if let Commands::Pip(PipNamespace {
+        cert: Some(cert), ..
+    }) = &*cli.command
+    {
+        Some(Certificates::from_file(cert)?)
     } else {
-        None
+        Certificates::from_env()
     };
+
+    // Configure the global network settings.
     let client_builder = BaseClientBuilder::new(
         globals.network_settings.connectivity,
         globals.network_settings.system_certs,
@@ -638,10 +644,14 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         globals.network_settings.connect_timeout,
         globals.network_settings.retries,
     )
-    .cert(cert)
     .http_proxy(globals.network_settings.http_proxy.clone())
     .https_proxy(globals.network_settings.https_proxy.clone())
     .no_proxy(globals.network_settings.no_proxy.clone());
+    let client_builder = if let Some(certificates) = custom_certificates {
+        client_builder.custom_certificates(certificates)
+    } else {
+        client_builder
+    };
 
     match *cli.command {
         Commands::Auth(AuthNamespace {
