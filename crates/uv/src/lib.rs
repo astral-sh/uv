@@ -2761,6 +2761,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             ))
@@ -2810,6 +2811,7 @@ async fn run_project(
                 no_config,
                 globals.quiet > 0,
                 &cache,
+                workspace_cache,
                 printer,
                 globals.preview,
             )
@@ -2835,6 +2837,7 @@ async fn run_project(
                 args.show_version,
                 client_builder.subcommand(vec!["format".to_owned()]),
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.no_project,
@@ -2924,6 +2927,7 @@ async fn run_project(
                 globals.concurrency,
                 no_config,
                 cache,
+                workspace_cache,
                 printer,
                 globals.preview,
                 args.output_format,

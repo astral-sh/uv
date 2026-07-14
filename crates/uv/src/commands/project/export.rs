@@ -87,11 +87,11 @@ pub(crate) async fn export(
     no_config: bool,
     quiet: bool,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: Preview,
 ) -> Result<ExitStatus> {
     // Identify the target.
-    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         ExportTarget::Script(script)
     } else {
@@ -103,7 +103,7 @@ pub(crate) async fn export(
                     ..DiscoveryOptions::default()
                 },
                 cache,
-                &workspace_cache,
+                workspace_cache,
             )
             .await?
         } else if let [name] = package.as_slice() {
@@ -111,7 +111,7 @@ pub(crate) async fn export(
                 project_dir,
                 &DiscoveryOptions::default(),
                 cache,
-                &workspace_cache,
+                workspace_cache,
                 name.clone(),
             )
             .await?
@@ -120,7 +120,7 @@ pub(crate) async fn export(
                 project_dir,
                 &DiscoveryOptions::default(),
                 cache,
-                &workspace_cache,
+                workspace_cache,
             )
             .await?;
 
@@ -225,7 +225,7 @@ pub(crate) async fn export(
             Box::new(DefaultResolveLogger),
             &concurrency,
             cache,
-            &workspace_cache,
+            workspace_cache,
             printer,
             preview,
         )
