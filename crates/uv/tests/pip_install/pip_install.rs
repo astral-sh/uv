@@ -3275,12 +3275,7 @@ fn install_git_private_https_pat_not_authorized() {
     // A revoked token
     let token = "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";
 
-    // TODO(john): We need this filter because we are displaying the token when
-    // an underlying process error message is being displayed. We should actually
-    // mask it.
-    let context = context
-        .with_filter((token, "***"))
-        .with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
+    let context = context.with_filter(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
     // and hang the test
@@ -3295,7 +3290,7 @@ fn install_git_private_https_pat_not_authorized() {
       × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
-      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:****@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
           --- stderr
           remote: Invalid username or token. Password authentication is not supported for Git operations.
           fatal: Authentication failed for 'https://github.com/astral-test/uv-private-pypackage/'
