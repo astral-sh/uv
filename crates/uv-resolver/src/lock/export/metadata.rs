@@ -125,7 +125,7 @@ pub(crate) struct MetadataScript {
 }
 
 impl MetadataScript {
-    pub(in crate::lock) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
+    pub(crate) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
         Self { path, id }
     }
 }
@@ -140,7 +140,7 @@ pub(crate) struct MetadataWorkspace {
 }
 
 impl MetadataWorkspace {
-    pub(in crate::lock) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
+    pub(crate) fn new(path: PortablePathBuf, id: MetadataNodeIdFlat) -> Self {
         Self { path, id }
     }
 }
@@ -298,7 +298,7 @@ pub(crate) struct MetadataNode {
 }
 
 impl MetadataNode {
-    pub(in crate::lock) fn new(id: MetadataNodeId) -> Self {
+    pub(crate) fn new(id: MetadataNodeId) -> Self {
         Self {
             id,
             dependencies: Vec::new(),
@@ -311,7 +311,7 @@ impl MetadataNode {
         }
     }
 
-    pub(in crate::lock) fn from_package_id(
+    pub(crate) fn from_package_id(
         workspace_root: &PortablePathBuf,
         id: &PackageId,
         kind: MetadataNodeKind,
@@ -376,7 +376,7 @@ impl MetadataNode {
         }
     }
 
-    pub(in crate::lock) fn add_resolution_dependency(
+    pub(crate) fn add_resolution_dependency(
         &mut self,
         id: MetadataNodeIdFlat,
         marker: Option<MetadataMarker>,
@@ -384,38 +384,31 @@ impl MetadataNode {
         self.dependencies.push(MetadataDependency { id, marker });
     }
 
-    pub(in crate::lock) fn add_optional_dependency(
-        &mut self,
-        name: ExtraName,
-        id: MetadataNodeIdFlat,
-    ) {
+    pub(crate) fn add_optional_dependency(&mut self, name: ExtraName, id: MetadataNodeIdFlat) {
         self.optional_dependencies.push(MetadataExtra { name, id });
     }
 
-    pub(in crate::lock) fn add_dependency_group(
-        &mut self,
-        name: GroupName,
-        id: MetadataNodeIdFlat,
-    ) {
+    pub(crate) fn add_dependency_group(&mut self, name: GroupName, id: MetadataNodeIdFlat) {
         self.dependency_groups.push(MetadataGroup { name, id });
     }
 
-    pub(in crate::lock) fn set_latest_version(&mut self, version: Option<Version>) {
+    pub(crate) fn set_latest_version(&mut self, version: Option<Version>) {
         self.latest_version = version;
     }
 
-    pub(in crate::lock) fn set_wheels_from_lock(
+    pub(crate) fn set_wheels_from_package(
         &mut self,
         workspace_root: &PortablePathBuf,
-        wheels: &[Wheel],
+        package: &Package,
     ) {
-        self.wheels = wheels
+        self.wheels = package
+            .wheels
             .iter()
             .map(|wheel| MetadataWheel::from_wheel(workspace_root, wheel))
             .collect();
     }
 
-    pub(in crate::lock) fn normalize_resolution(&mut self) {
+    pub(crate) fn normalize_resolution(&mut self) {
         self.dependencies.sort();
         self.dependencies.dedup();
         self.optional_dependencies.sort();
@@ -1367,7 +1360,7 @@ impl Metadata {
                 meta_package.sdist = Some(MetadataSourceDist::from_sdist(&workspace_root, sdist));
             }
 
-            meta_package.set_wheels_from_lock(&workspace_root, &lock_package.wheels);
+            meta_package.set_wheels_from_package(&workspace_root, lock_package);
 
             resolve.insert(meta_package.id.to_flat(), meta_package);
         }

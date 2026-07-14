@@ -1105,7 +1105,7 @@ impl<'tree, 'env> JsonGraphBuilder<'tree, 'env> {
             let mut node = MetadataNode::from_package_id(&self.workspace_root, package_id, kind);
             if is_package {
                 node.set_latest_version(self.tree.latest.get(package_id).cloned());
-                node.set_wheels_from_lock(&self.workspace_root, &package.wheels);
+                node.set_wheels_from_package(&self.workspace_root, package);
             }
             node
         });
