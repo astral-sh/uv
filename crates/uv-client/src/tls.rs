@@ -213,6 +213,9 @@ impl Certificates {
     }
 
     /// Load a custom CA certificate bundle from an explicit path.
+    ///
+    /// Unlike [`Self::from_ssl_cert_file`], an invalid path or a bundle without any valid
+    /// certificates returns an error instead of being ignored with a warning.
     pub fn from_file(file: &Path) -> Result<Self, CertificateFileError> {
         let metadata = file
             .metadata()

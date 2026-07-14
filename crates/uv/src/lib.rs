@@ -623,7 +623,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
         WorkspaceCache::default()
     };
 
-    // Load custom CA certificates from `SSL_CERT_FILE` and `SSL_CERT_DIR`.
+    // Configure custom CA certificates from `--cert` or from the environment (`SSL_CERT_FILE` and
+    // `SSL_CERT_DIR`).
     // Like pip, an explicit certificate bundle overrides the environment certificate sources.
     let custom_certificates = if let Commands::Pip(PipNamespace {
         cert: Some(cert), ..
