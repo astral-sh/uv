@@ -5789,6 +5789,7 @@ dependencies = [
  "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
+ "async-compression",
  "axoupdater",
  "backon",
  "byteorder",
