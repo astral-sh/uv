@@ -8,3 +8,19 @@ enabled = true
 [permissions.issue-triage.network.domains]
 "api.github.com" = "allow"
 "github.com" = "allow"
+
+[permissions.reproduce-bug]
+description = "Bug reproduction with temporary filesystem and GitHub API access."
+extends = ":read-only"
+
+[permissions.reproduce-bug.filesystem]
+":tmpdir" = "write"
+
+[permissions.reproduce-bug.network]
+enabled = true
+
+[permissions.reproduce-bug.network.domains]
+"api.github.com" = "allow"
+"files.pythonhosted.org" = "allow"
+"github.com" = "allow"
+"pypi.org" = "allow"

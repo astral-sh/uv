@@ -53,6 +53,18 @@ jobs:
           prompt-file: "agents/prompts/triage-issue.md"
           output-schema-file: "agents/schemas/issue-triage.json"
 
+  reproduce-bug:
+    needs: triage
+    if: needs.triage.outputs.result != '' && fromJSON(needs.triage.outputs.result).type == 'bug'
+    uses: ./.github/workflows/reproduce-bug.yml
+    secrets: inherit # zizmor: ignore[secrets-inherit] required for the automations environment, as in release.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      runner: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+
   report:
     needs: triage
     if: needs.triage.outputs.result != ''
