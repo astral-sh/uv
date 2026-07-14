@@ -18,7 +18,8 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, Constraints, HashCheckingMode, TargetTriple};
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
-    BuildableSource, BuiltDist, Dist, Identifier, Name, Node, Resolution, ResolvedDist, SourceDist,
+    BuildInfo, BuildableSource, BuiltDist, Dist, Identifier, Name, Node, Resolution, ResolvedDist,
+    SourceDist,
 };
 use uv_fs::PythonExt;
 use uv_preview::Preview;
@@ -300,6 +301,31 @@ impl CachedEnvironment {
                         BuildableSource::Dist(source).version().cloned(),
                         Some(source),
                     );
+                    let config_settings = settings
+                        .resolver
+                        .config_settings_package
+                        .get(&package.name)
+                        .map_or_else(
+                            || settings.resolver.config_setting.clone(),
+                            |config_settings| {
+                                config_settings
+                                    .clone()
+                                    .merge(settings.resolver.config_setting.clone())
+                            },
+                        );
+                    let build_info = BuildInfo::from_settings(
+                        config_settings,
+                        extra_build_requires
+                            .get(&package.name)
+                            .cloned()
+                            .unwrap_or_default(),
+                        settings
+                            .resolver
+                            .extra_build_variables
+                            .get(&package.name)
+                            .cloned(),
+                    )
+                    .cache_shard();
                     locked_build_resolutions
                         .cache_key(
                             &package,
@@ -308,7 +334,9 @@ impl CachedEnvironment {
                             &extra_build_requires,
                             &settings.resolver.extra_build_variables,
                         )
-                        .map(|cache_key| cache_key.map(|cache_key| (package, cache_key)))
+                        .map(|cache_key| {
+                            cache_key.map(|cache_key| (package, cache_key, build_info))
+                        })
                         .transpose()
                 })
                 .collect::<Result<Vec<_>, _>>()

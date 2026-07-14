@@ -204,3 +204,152 @@ fn check_no_sync_replays_locked_build_dependencies() -> Result<()> {
 
     Ok(())
 }
+
+/// A cached source tool must be rebuilt when its hook-affecting build settings change, so frozen
+/// replay can reject build requirements that no longer match the lock.
+#[test]
+fn check_no_sync_rejects_changed_cached_build_settings() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let links = context.temp_dir.child("links");
+    links.create_dir_all()?;
+    write_builder_wheel(
+        &links.child("builder-0.1.0-py3-none-any.whl"),
+        "0.1.0",
+        "first",
+    )?;
+    write_builder_wheel(
+        &links.child("builder-0.2.0-py3-none-any.whl"),
+        "0.2.0",
+        "second",
+    )?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["ty"]
+
+        [tool.uv.sources]
+        ty = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["ty"]
+    "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    let ty = context.temp_dir.child("ty");
+    ty.create_dir_all()?;
+    ty.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "ty"
+        version = "1.2.3"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+    "#})?;
+    ty.child("build_backend.py").write_str(indoc! {r#"
+        from pathlib import Path
+        from zipfile import ZipFile
+
+        def get_requires_for_build_wheel(config_settings=None):
+            version = config_settings.get("builder-version", "0.1.0")
+            return [f"builder=={version}"]
+
+        def get_requires_for_build_editable(config_settings=None):
+            return get_requires_for_build_wheel(config_settings)
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            from builder import VALUE
+
+            filename = "ty-1.2.3-py3-none-any.whl"
+            with ZipFile(Path(wheel_directory) / filename, "w") as wheel:
+                wheel.writestr(
+                    "ty/__init__.py",
+                    f"def main():\n    print('All checks passed! (builder {VALUE})')\n",
+                )
+                wheel.writestr(
+                    "ty-1.2.3.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: ty\nVersion: 1.2.3\n",
+                )
+                wheel.writestr(
+                    "ty-1.2.3.dist-info/WHEEL",
+                    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+                )
+                wheel.writestr(
+                    "ty-1.2.3.dist-info/entry_points.txt",
+                    "[console_scripts]\nty = ty:main\n",
+                )
+                wheel.writestr("ty-1.2.3.dist-info/RECORD", "")
+            return filename
+
+        def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
+            return build_wheel(wheel_directory, config_settings, metadata_directory)
+    "#})?;
+
+    context
+        .lock()
+        .arg("--find-links")
+        .arg(links.path())
+        .arg("--no-index")
+        .arg("--config-settings")
+        .arg("builder-version=0.1.0")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--config-settings")
+        .arg("builder-version=0.1.0")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    All checks passed! (builder first)
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .check()
+        .arg("--no-sync")
+        .arg("--frozen")
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--config-settings")
+        .arg("builder-version=0.2.0")
+        .arg("--preview-features")
+        .arg("lock-build-dependencies"), @"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+      × Failed to build `ty @ file://[TEMP_DIR]/ty`
+      ├─▶ Failed to resolve requirements from `build-system.requires`
+      ╰─▶ The build requirements returned by the backend for `ty` do not match the locked build environment
+    ");
+
+    Ok(())
+}
