@@ -33,7 +33,7 @@ use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
     MarkerValueVersion,
 };
-use uv_platform_tags::{AbiTag, PlatformTag};
+use uv_platform_tags::AbiTag;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -1554,9 +1554,7 @@ async fn resolve_all_possible_builds(
             SourceDist::Registry(source_dist) => {
                 let mut wheel_coverage = MarkerTree::FALSE;
                 for wheel in &source_dist.wheels {
-                    if wheel.filename.abi_tags().contains(&AbiTag::None)
-                        && wheel.filename.platform_tags().contains(&PlatformTag::Any)
-                    {
+                    if wheel.filename.abi_tags().contains(&AbiTag::None) {
                         wheel_coverage.or(implied_markers(&wheel.filename));
                     }
                 }
@@ -1564,6 +1562,13 @@ async fn resolve_all_possible_builds(
                 let mut uncovered = lock.requires_python().to_marker_tree();
                 if let Some(solve_marker) = solve_marker {
                     uncovered.and(solve_marker);
+                }
+                if !lock.supported_environments().is_empty() {
+                    let mut supported = MarkerTree::FALSE;
+                    for environment in lock.supported_environments() {
+                        supported.or(*environment);
+                    }
+                    uncovered.and(supported);
                 }
                 uncovered.and(wheel_coverage.negate());
 

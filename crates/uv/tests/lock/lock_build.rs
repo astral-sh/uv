@@ -48,6 +48,16 @@ fn write_wheel_with_requires(
     version: &str,
     requires_dist: &[&str],
 ) -> Result<()> {
+    write_wheel_with_requires_and_tag(path, name, version, requires_dist, "py3-none-any")
+}
+
+fn write_wheel_with_requires_and_tag(
+    path: &ChildPath,
+    name: &str,
+    version: &str,
+    requires_dist: &[&str],
+    tag: &str,
+) -> Result<()> {
     let mut zip = ZipFileWriter::new(Vec::new());
     let dist_info = format!("{}-{version}.dist-info", name.replace('-', "_"));
 
@@ -65,7 +75,7 @@ fn write_wheel_with_requires(
     let entry = ZipEntryBuilder::new(format!("{dist_info}/WHEEL").into(), Compression::Stored);
     block_on(zip.write_entry_whole(
         entry,
-        b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        format!("Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: {tag}\n").as_bytes(),
     ))?;
     let entry = ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), Compression::Stored);
     block_on(zip.write_entry_whole(entry, b""))?;
@@ -11923,6 +11933,148 @@ def get_requires_for_build_wheel(config_settings=None):
         String::from_utf8_lossy(&output.stderr)
             .contains("unreachable source distribution hook was called")
     );
+
+    Ok(())
+}
+
+/// Verify that a platform-specific wheel covering the only supported environment makes the
+/// registry source distribution unreachable.
+#[tokio::test]
+async fn lock_build_dependencies_skip_unreachable_supported_platform_sdist_hooks() -> Result<()> {
+    assert_supported_wheel_skips_registry_sdist_hook(
+        "py3-none-macosx_11_0_arm64",
+        ">=3.12,<4",
+        "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    )
+    .await
+}
+
+/// Verify that an implementation-specific wheel covering the only supported Python environment
+/// makes the registry source distribution unreachable.
+#[tokio::test]
+async fn lock_build_dependencies_skip_unreachable_supported_python_sdist_hooks() -> Result<()> {
+    assert_supported_wheel_skips_registry_sdist_hook(
+        "cp312-none-any",
+        ">=3.12,<4",
+        "python_full_version == '3.12.*' and platform_python_implementation == 'CPython'",
+    )
+    .await
+}
+
+async fn assert_supported_wheel_skips_registry_sdist_hook(
+    wheel_tag: &str,
+    requires_python: &str,
+    supported_environment: &str,
+) -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let artifacts = context.temp_dir.child("artifacts");
+    artifacts.create_dir_all()?;
+    let wheel_filename = format!("dep-0.1.0-{wheel_tag}.whl");
+    write_wheel_with_requires_and_tag(
+        &artifacts.child(&wheel_filename),
+        "dep",
+        "0.1.0",
+        &[],
+        wheel_tag,
+    )?;
+
+    let source_dist = artifacts.child("dep-0.1.0.zip");
+    let mut zip = ZipFileWriter::new(Vec::new());
+    let entry = ZipEntryBuilder::new("dep-0.1.0/pyproject.toml".into(), Compression::Stored);
+    block_on(
+        zip.write_entry_whole(
+            entry,
+            format!(
+                r#"
+        [project]
+        name = "dep"
+        dynamic = ["version"]
+        requires-python = "{requires_python}"
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "build_backend"
+        "#
+            )
+            .as_bytes(),
+        ),
+    )?;
+    let entry = ZipEntryBuilder::new("dep-0.1.0/build_backend.py".into(), Compression::Stored);
+    block_on(zip.write_entry_whole(
+        entry,
+        br#"
+def get_requires_for_build_wheel(config_settings=None):
+    raise RuntimeError("unreachable source distribution hook was called")
+"#,
+    ))?;
+    fs_err::write(source_dist.path(), block_on(zip.close())?)?;
+
+    let server = MockServer::start().await;
+    let index_url = format!("{}/simple/", server.uri());
+    Mock::given(method("GET"))
+        .and(path("/simple/dep/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!(
+                r#"
+                <a href="{}/files/{wheel_filename}" data-upload-time="2024-03-01T00:00:00Z">{wheel_filename}</a>
+                <a href="{}/files/dep-0.1.0.zip" data-upload-time="2024-03-01T00:00:00Z">dep-0.1.0.zip</a>
+                "#,
+                server.uri(),
+                server.uri()
+            ),
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/files/{wheel_filename}")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(fs_err::read(artifacts.child(&wheel_filename).path())?),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/files/dep-0.1.0.zip"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(fs_err::read(source_dist.path())?))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&format!(
+            r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "{requires_python}"
+        dependencies = ["dep==0.1.0"]
+
+        [tool.uv]
+        environments = ["{supported_environment}"]
+        "#
+        ))?;
+
+    let mut filters = context.filters();
+    filters.push((r"(?m)^WARN Range requests not supported[^\n]*\n", ""));
+    insta::allow_duplicates! {
+        uv_snapshot!(filters, context
+            .lock()
+            .arg("--index-url")
+            .arg(index_url)
+            .arg("--preview-features")
+            .arg("lock-build-dependencies"), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    }
 
     Ok(())
 }
