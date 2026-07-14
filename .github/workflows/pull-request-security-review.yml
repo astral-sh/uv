@@ -1,5 +1,5 @@
-# Review pull requests and publish actionable findings as inline comments.
-name: "Pull request review"
+# Review pull requests for security and publish actionable findings as inline comments.
+name: "Pull request security review"
 
 on:
   pull_request:
@@ -75,8 +75,8 @@ jobs:
           codex-home: "agents/codex"
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
-          prompt-file: "agents/prompts/pull-request-review.md"
-          output-schema-file: "agents/schemas/pull-request-review.json"
+          prompt-file: "agents/prompts/pull-request-security-review.md"
+          output-schema-file: "agents/schemas/pull-request-security-review.json"
 
   prepare:
     needs: review

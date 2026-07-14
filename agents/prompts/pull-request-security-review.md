@@ -11,8 +11,8 @@ request to validate findings and suggested fixes, but do not commit, push, or ma
 GitHub. Never print, inspect, encode, or expose credentials. Do not include `@mentions` in review
 findings or the summary.
 
-Produce only a JSON object matching `agents/schemas/pull-request-review.json`. Do not wrap the JSON
-in Markdown or a code fence.
+Produce only a JSON object matching `agents/schemas/pull-request-security-review.json`. Do not wrap
+the JSON in Markdown or a code fence.
 
 Complete the security diff scan, including finding discovery, validation, and attack-path analysis,
 then translate the reportable findings into the review schema. Report only actionable security
