@@ -932,13 +932,8 @@ fn fetch_lfs(
 
 /// Redact a credentialed remote URL from a Git process error.
 fn redact_git_error(mut error: anyhow::Error, url: &DisplaySafeUrl) -> anyhow::Error {
-    let credentialed_root = remote_url_root((**url).clone());
-    let redacted_root = DisplaySafeUrl::from_url(credentialed_root.clone()).to_string();
-    let redact = |message: &str| {
-        message
-            .replace(url.as_str(), &url.to_string())
-            .replace(credentialed_root.as_str(), &redacted_root)
-    };
+    let credentialed_root = DisplaySafeUrl::from_url(remote_url_root((**url).clone()));
+    let redact = |message: &str| credentialed_root.redact_in(&url.redact_in(message));
 
     if let Some(process_error) = error.downcast_mut::<ProcessError>() {
         process_error.desc = redact(&process_error.desc);
