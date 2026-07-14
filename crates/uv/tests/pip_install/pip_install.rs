@@ -2274,6 +2274,58 @@ fn install_editable_compatible_constraint() -> Result<()> {
 }
 
 #[test]
+fn install_reject_nested_editable_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&formatdoc! {r"
+        -e black @ file://{workspace_root}/test/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Editable requirements are not allowed as constraints in `constraints.txt`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn install_reject_unnamed_nested_editable_constraint() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-c constraints.txt")?;
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str(&formatdoc! {r"
+        -e file://{workspace_root}/test/packages/black_editable
+        ",
+        workspace_root = context.workspace_root.simplified_display(),
+    })?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r")
+        .arg(requirements_txt.path()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Editable requirements are not allowed as constraints in `constraints.txt`
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn install_editable_incompatible_constraint_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
