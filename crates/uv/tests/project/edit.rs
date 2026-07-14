@@ -8538,6 +8538,34 @@ fn remove_script() -> Result<()> {
     Ok(())
 }
 
+/// `uv remove --dev` cannot be used with a PEP 723 script.
+#[test]
+fn remove_dev_script_conflict() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("script.py").write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = ["anyio"]
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.remove().arg("anyio").arg("--dev").arg("--script").arg("script.py"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--dev' cannot be used with '--script <SCRIPT>'
+
+    Usage: uv remove --cache-dir [CACHE_DIR] --dev --exclude-newer <EXCLUDE_NEWER> <PACKAGES>...
+
+    For more information, try '--help'.
+    ");
+
+    Ok(())
+}
+
 /// Remove last dependency PEP 723 script
 #[test]
 fn remove_last_dep_script() -> Result<()> {
