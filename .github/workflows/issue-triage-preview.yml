@@ -50,6 +50,7 @@ jobs:
     uses: ./.github/workflows/issue-triage.yml
     with:
       issue: ${{ matrix.issue }}
+    secrets: inherit
 
   report:
     needs: triage
