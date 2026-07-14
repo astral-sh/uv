@@ -1461,6 +1461,116 @@ fn build_with_all_metadata() -> Result<()> {
     Ok(())
 }
 
+/// Bare carriage returns in metadata fields must be folded instead of injecting new headers.
+#[test]
+fn build_metadata_header_injection() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        keywords = ["example\rRequires-Dist: keyword-injected"]
+        classifiers = ["Programming Language :: Python :: 3\rRequires-Dist: classifier-injected"]
+        authors = [{name = "Jane\rRequires-Dist: author-injected", email = "jane@example.com"}]
+        maintainers = [{email = "maintainer@example.com\rRequires-Dist: maintainer-injected"}]
+
+        [project.urls]
+        Homepage = "https://example.com\rRequires-Dist: url-injected"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(wheel_dir.path()), @"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    ");
+
+    context
+        .pip_install()
+        .arg(wheel_dir.path().join("foo-1.0.0-py3-none-any.whl"))
+        .assert()
+        .success();
+
+    let metadata = fs_err::read_to_string(
+        context
+            .site_packages()
+            .join("foo-1.0.0.dist-info")
+            .join("METADATA"),
+    )?;
+    assert_snapshot!(metadata, @"
+    Metadata-Version: 2.3
+    Name: foo
+    Version: 1.0.0
+    Keywords: example
+              Requires-Dist: keyword-injected
+    Author: Jane
+            Requires-Dist: author-injected
+    Author-email: Jane
+                  Requires-Dist: author-injected <jane@example.com>
+    Classifier: Programming Language :: Python :: 3
+                Requires-Dist: classifier-injected
+    Maintainer-email: maintainer@example.com
+                      Requires-Dist: maintainer-injected
+    Requires-Python: >=3.12
+    Project-URL: Homepage, https://example.com
+                 Requires-Dist: url-injected
+    ");
+
+    Ok(())
+}
+
+/// A carriage return in the summary is a newline and must be rejected before writing metadata.
+#[test]
+fn build_metadata_summary_carriage_return() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        description = "A package\rRequires-Dist: summary-injected"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+    "#})?;
+    context.temp_dir.child("src/foo/__init__.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.build().arg("--wheel"), @"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Building wheel (uv build backend)...
+    error: Failed to build `[TEMP_DIR]/`
+      Caused by: Invalid project metadata
+      Caused by: `project.description` must be a single line
+    ");
+
+    Ok(())
+}
+
 /// Warn for cases where `tool.uv.build-backend` is used without the corresponding build backend
 /// entry.
 #[test]
