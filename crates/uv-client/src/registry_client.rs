@@ -1088,6 +1088,7 @@ impl RegistryClient {
             filename,
             file,
             index,
+            ..
         } = wheel;
 
         // If the metadata file is available at its own url (PEP 658), download it from there.

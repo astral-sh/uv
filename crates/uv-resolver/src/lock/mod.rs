@@ -3386,6 +3386,7 @@ impl Package {
                             filename,
                             location: Box::new(url.clone()),
                             url: VerbatimUrl::from_url(url),
+                            size: None,
                         };
                         let built_dist = BuiltDist::DirectUrl(direct_dist);
                         Dist::Built(built_dist)
@@ -3676,6 +3677,7 @@ impl Package {
                     subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
+                    size: None,
                 };
                 uv_distribution_types::SourceDist::DirectUrl(direct_dist)
             }
@@ -3731,6 +3733,7 @@ impl Package {
                     ext,
                     index,
                     wheels: vec![],
+                    size_is_authoritative: false,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
@@ -3807,6 +3810,7 @@ impl Package {
                     ext,
                     index,
                     wheels: vec![],
+                    size_is_authoritative: false,
                 };
                 uv_distribution_types::SourceDist::Registry(reg_dist)
             }
@@ -5651,6 +5655,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
+                    size_is_authoritative: false,
                 })
             }
             RegistrySource::Path(index_path) => {
@@ -5702,6 +5707,7 @@ impl Wheel {
                     filename,
                     file,
                     index,
+                    size_is_authoritative: false,
                 })
             }
         }
