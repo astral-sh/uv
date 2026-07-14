@@ -63,7 +63,7 @@ include = [
 changelog-contributors = false  # We exclude contributors from the CHANGELOG file
 major-labels = []  # We do not use the major version number yet
 minor-labels = ["breaking"]
-ignore-labels = ["internal", "ci", "testing"]
+ignore-labels = ["internal", "ci", "testing", "automations"]
 version_files = [
   "README.md",
   "pyproject.toml",
