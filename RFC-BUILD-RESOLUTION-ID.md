@@ -11,7 +11,7 @@ metadata, or artifact selection for that package.
 This preserves the current package graph model for the common case:
 
 - packages remain `[[package]]` records;
-- staged `[[resolution]]` records provide build roots and target reachability;
+- `[[resolution]]` records provide staged build roots and target reachability;
 - dependency edges remain package-to-package edges;
 - package artifacts and hashes stay in package records;
 - runtime packages do not gain build-only edges unless those edges are compatible with the shared
@@ -175,7 +175,7 @@ resolution identity, including:
 - source package name and source artifact identity;
 - build operation, currently `wheel` or `editable` (and `sdist` if capture is extended to
   source-distribution builds);
-- requirement-discovery stage, either `bootstrap` or `build`;
+- build-stage identity when bootstrap and final closures differ;
 - target reachability for the source package;
 
 The exact digest input is a format detail, but the ID has to distinguish build dependency
@@ -185,7 +185,8 @@ not require an executor-specific namespace. Backend requirement metadata is assu
 across environments, apart from PEP 508 markers on the returned requirements.
 
 The examples below abbreviate some IDs as `build:<name>:<operation>:<digest>` for readability.
-Serialized staged IDs include `bootstrap` or `build` before the digest.
+Serialized staged IDs include `bootstrap` or `build` before the digest. Equivalent stages use one
+compact record and omit the `stage` field.
 
 ### When To Split A Package Node
 
@@ -242,25 +243,10 @@ this edge points to package node P in resolution namespace R
 
 ### Build Roots
 
-Build dependency roots must identify the package node to traverse. A staged `[[resolution]]` record
-owns the roots and records the source package, operation, stage, and target reachability.
+Build dependency roots must identify the package node to traverse. A `[[resolution]]` record owns
+the captured-stage roots and records the source package, operation, and target reachability.
 
-For an unscoped bootstrap root, the record can omit `resolution-id`:
-
-```toml
-[[resolution]]
-id = "build:dep-a:wheel:bootstrap:<digest>"
-kind = "build"
-operation = "wheel"
-mode = "isolated"
-stage = "bootstrap"
-name = "dep-a"
-roots = [
-    { name = "setuptools", version = "69.0.0" },
-]
-```
-
-If the final-stage root package is scoped, the root includes `resolution-id`:
+For an unscoped root, the record can omit `resolution-id`:
 
 ```toml
 [[resolution]]
@@ -268,17 +254,32 @@ id = "build:dep-a:wheel:build:<digest>"
 kind = "build"
 operation = "wheel"
 mode = "isolated"
-stage = "build"
+name = "dep-a"
+roots = [
+    { name = "setuptools", version = "69.0.0" },
+]
+```
+
+If the root package is scoped, the root includes `resolution-id`:
+
+```toml
+[[resolution]]
+id = "build:dep-a:wheel:build:<digest>"
+kind = "build"
+operation = "wheel"
+mode = "isolated"
 name = "dep-a"
 roots = [
     { name = "setuptools", version = "69.0.0", resolution-id = "build:dep-a:wheel:build:<digest>" },
 ]
 ```
 
-The two stages preserve the ordinary frontend sequence: install bootstrap requirements, run and
-validate the dependency-discovery hook, then install the final build closure. They remain distinct
-even when their roots happen to match. `resolution-id` only defines package identity when those
-roots enter a conflicting package graph.
+Lock generation resolves the bootstrap environment before running the dependency-discovery hook and
+captures the final closure after it. Frozen replay preserves that ordering, validates the initial
+and hook-returned requirements against the corresponding roots, and compacts equivalent stages to
+one record. A hook may inspect whether hook-only dependencies are installed, so the final closure
+cannot be installed before discovery. `resolution-id` only defines package identity when those roots
+enter a conflicting package graph.
 
 ### Artifact Reuse
 
@@ -553,6 +554,9 @@ This is the wrong semantic model. Runtime forks are mutually exclusive branches.
 resolutions are independent isolated closures that can coexist in one operation.
 
 ## Unresolved Questions
+
+The current `pylock.toml` exporter preserves uniform per-artifact `requires-python` metadata and
+rejects partitioned artifact sets; exporting distinct scoped closures remains an open question.
 
 1. Should `resolution-id` be allowed on runtime package references at all, or should scoped package
    nodes be build-only by construction?

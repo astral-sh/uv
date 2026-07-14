@@ -4,22 +4,25 @@
 
 Extend the uv lockfile so source builds replay their dependency selection from the lockfile.
 
-The design keeps uv's existing package graph as the unit of reuse and adds staged build-resolution
+The design keeps uv's existing package graph as the unit of reuse and adds named build-resolution
 roots:
 
 - `[[package]]` records continue to describe distributions, artifacts, hashes, and dependency edges.
 - `[[resolution]]` records identify the source package, build operation, target reachability, and
-  the roots for one build stage.
+  the roots for each distinct build environment.
 - An optional `resolution-id` extends package identity only when a build closure conflicts with the
   otherwise reusable package graph.
 
 Lock generation resolves a bootstrap environment, runs the applicable dependency-discovery hook, and
-resolves the final build environment. Frozen replay follows the same sequence using the locked roots
-and ordinary dependency traversal; it does not resolve build requirements again.
+resolves the final build environment. Frozen replay installs the locked bootstrap environment, runs
+and validates the dependency-discovery hook, installs the locked final environment, and never
+resolves build requirements again. Equivalent stages share one compact, unstaged record.
 
 Build requirement discovery is treated as stable metadata for a source artifact and its build
-inputs. Backends are assumed to return the same requirements across environments, apart from PEP 508
-markers on those requirements. The lockfile does not serialize an executor identity.
+inputs. Backends are assumed to return the same requirements across executors, apart from PEP 508
+markers on those requirements. This does not make the bootstrap and final stages interchangeable: a
+valid PEP 517 discovery hook can inspect which packages are installed. The lockfile does not
+serialize an executor identity.
 
 This guarantees that build-dependency selection comes from the lockfile. It does not claim that
 arbitrary backend execution is hermetic or that two builds produce byte-identical artifacts.
@@ -72,8 +75,8 @@ reuse the same locked package nodes.
 
 ## Guide-Level Explanation
 
-Consider a source package whose bootstrap requirement is `builder==1` and whose wheel-discovery hook
-adds `helper==1`. The lockfile records the two stages independently:
+Consider a source package whose initial requirement is `builder==1` and whose wheel-discovery hook
+adds `helper==1`. The stages differ, so the lockfile records both environments:
 
 ```toml
 [[resolution]]
@@ -125,7 +128,6 @@ id = "build:dep-b:wheel:build:<digest>"
 kind = "build"
 operation = "wheel"
 mode = "isolated"
-stage = "build"
 name = "dep-b"
 roots = [
     { name = "builder", version = "1.0.0", resolution-id = "build:dep-b:wheel:build:<digest>" },
@@ -149,14 +151,14 @@ The artifact is still reusable. `resolution-id` separates only the package node 
 closure that would otherwise conflict.
 
 During frozen replay, uv installs the locked bootstrap closure, runs and validates the applicable
-dependency-discovery hook, then installs the locked final closure before invoking the downstream
-metadata or build hook. Hook-only dependencies are not installed before discovery runs.
+dependency-discovery hook, installs the locked final closure, then invokes the downstream metadata
+or build hook. Hook-only dependencies are not installed before discovery.
 
 ## Reference-Level Explanation
 
-### Build Operations And Stages
+### Build Operations And Capture Stages
 
-A staged build resolution currently captures wheel and editable operations:
+A build resolution currently captures wheel and editable operations:
 
 | Operation  | Discovery hook                    | Downstream hooks                                        |
 | ---------- | --------------------------------- | ------------------------------------------------------- |
@@ -170,29 +172,32 @@ the current project-sync contract.
 Metadata preparation is not a separate operation. It uses the environment for the corresponding
 wheel or editable operation.
 
-An isolated operation has two stages:
+Lock generation uses two stages for an isolated operation:
 
 ```text
 bootstrap  [build-system].requires and configured extra build requirements
 build      bootstrap requirements plus the requirements returned by discovery
 ```
 
-The stages remain distinct even when their selected roots happen to be equal. A discovery hook can
-observe whether a hook-only dependency is already installed, so installing the final environment
-before running the hook is not equivalent to the ordinary frontend sequence.
+Both environments are captured. When their direct roots and complete closures agree, uv serializes
+one unstaged build resolution. When they differ, uv serializes a paired bootstrap and build
+resolution and replays each at the corresponding PEP 517 stage. In particular, a discovery hook may
+check whether a hook-only dependency is already installed; installing the final environment first
+would change valid backend behavior.
 
 ### Resolution Records
 
 A build `[[resolution]]` record identifies:
 
 - the source package being built;
-- the build operation and stage;
+- the build operation;
 - the isolated execution mode;
 - target-runtime reachability, when needed;
-- the locked direct roots for that stage.
+- the locked direct roots for the captured environment.
 
-The resolution ID is generated by uv and includes the source identity, operation, stage, and target
-context necessary to keep independent captures distinct. It is not an executor selector.
+The resolution ID is generated by uv and includes the source identity, operation, stage identity
+when stages differ, and target context necessary to keep independent captures distinct. The `stage`
+field is omitted only when bootstrap and final are equivalent. It is not an executor selector.
 
 The target context identifies runtime branches that can select the source package or affect
 `match-runtime` bindings. It includes ordinary markers and uv fork context such as extras, groups,
@@ -238,8 +243,8 @@ For each source package and operation requiring capture, lock generation:
 5. Runs the applicable dependency-discovery hook.
 6. Lowers hook-added requirements with the same source semantics.
 7. Resolves the final build environment.
-8. Records both stages and adds any build-only package nodes and dependency edges required for
-   replay.
+8. Records both environments, compacting equivalent stages, and adds any build-only package nodes
+   and dependency edges required for replay.
 
 Directory, archive, direct-URL, Git, and registry source distributions use the same capture
 contract. Static runtime metadata can avoid an unnecessary metadata build, but it cannot justify
@@ -279,21 +284,22 @@ not evaluated as a record of the host that captured it.
 
 When frozen replay needs to build a source package, it:
 
-1. Selects the applicable build and bootstrap resolution records for the source, operation, and
-   target context.
+1. Selects the applicable bootstrap and final build resolution records for the source, operation,
+   and target context, or the single unstaged record when they are equivalent.
 2. Validates the records, package references, and artifact data.
-3. Traverses both staged roots and recursively prepares any source-selected build dependencies.
-4. Installs the locked bootstrap closure into the isolated environment.
-5. Runs the dependency-discovery hook and validates its output against the locked final roots.
-6. Installs the locked final closure.
-7. Invokes the downstream metadata or artifact-production hook.
+3. Traverses both stages and recursively prepares any source-selected build dependencies.
+4. Validates the initial and configured extra build requirements against the locked bootstrap roots.
+5. Installs the locked bootstrap closure into the isolated environment.
+6. Runs the dependency-discovery hook and validates its output against the locked final roots.
+7. Installs the locked final closure and invokes the downstream metadata or artifact-production
+   hook.
 
 Frozen replay must not resolve build requirements outside the lockfile. New or incompatible hook
 requirements are rejected. Requirements omitted by a changed hook remain in the captured final
 environment; the hook cannot remove packages that the lock selected.
 
-Coverage is recursive across both stages. A source dependency selected only by the bootstrap stage
-still requires its own captured build resolution. A missing staged record is different from a
+Coverage is recursive across both environments. A source dependency selected only in the bootstrap
+closure still requires its own captured build resolution. A missing record is different from a
 captured-empty environment and must fail closed when the build is requested.
 
 Backend execution can still observe ambient environment variables, the network, filesystem state,
@@ -307,7 +313,7 @@ including:
 
 - source identity and mutable-source contents;
 - `[build-system].requires`, backend selection, and backend path;
-- operation and stage;
+- operation;
 - configured extra build dependencies and `match-runtime` bindings;
 - constraints, config settings, and build variables;
 - source mappings, indexes, index strategy, `--find-links`, and `--no-sources`;
@@ -322,7 +328,7 @@ Structural and coverage validation reject:
 - missing artifact hashes where hashes are required;
 - duplicate or overlapping resolution records that select different closures;
 - incompatible runtime and build edges accidentally merged into one package node;
-- missing bootstrap or final stages for a requested build;
+- a missing bootstrap or final resolution for a requested build;
 - missing recursive records for source-selected build dependencies;
 - build cycles and artifact incompatibility during replay.
 
@@ -338,7 +344,9 @@ The build-lock representation is written under the newer lock schema and revisio
 unsupported schema versions and malformed records rather than degrading frozen replay; later
 revisions remain readable when their additions are backwards-compatible. Changes to selector
 semantics require a schema-version fence. Legacy preview locks can be rewritten when the feature is
-enabled; disabling the feature does not make an incomplete frozen build graph valid.
+enabled; disabling the feature does not make an incomplete frozen build graph valid. Previously
+staged preview locks remain readable and preserve their bootstrap semantics. Equivalent stages can
+be compacted when the lock is rewritten.
 
 ## Rationale And Alternatives
 
@@ -369,7 +377,7 @@ The lockfile could store each build environment as a list of selected package me
 that list without dependency traversal. This directly records the closure, but creates a separate
 replay model and loses dependency-edge provenance unless another graph is stored for diagnostics.
 
-Staged roots plus ordinary dependency traversal retain uv's existing graph semantics. Optional
+Captured roots plus ordinary dependency traversal retain uv's existing graph semantics. Optional
 `resolution-id` splits only the package nodes that cannot safely be shared.
 
 ### Add Resolution Selectors To Every Dependency Edge
@@ -382,14 +390,12 @@ transitive closure.
 `resolution-id` is the narrower choice: compatible nodes remain shared, conflicting nodes are
 duplicated, and dependency traversal stays ordinary.
 
-### Capture Only Static Build Requirements Or Collapse Stages
+### Capture Only Static Build Requirements
 
 Locking only `[build-system].requires` is incomplete because PEP 517 and PEP 660 hooks can add
-requirements. Installing the final closure before invoking discovery is also incorrect because the
-hook can observe which packages are already installed.
-
-The two-stage model preserves the ordinary frontend sequence while ensuring that both stages replay
-only locked selections.
+requirements. Lock generation must therefore resolve the bootstrap environment, run discovery, and
+resolve the final environment. Frozen replay repeats that stage ordering while ensuring that every
+installed package is locked.
 
 ### Serialize Executor Variants
 
@@ -414,6 +420,10 @@ PEP 660 defines editable build hooks and their dependency-discovery hook:
 <https://peps.python.org/pep-0660/>.
 
 ## Unresolved Questions
+
+The current `pylock.toml` exporter emits one record per locked package. It preserves uniform
+per-artifact `requires-python` metadata at package scope and rejects partitioned artifact sets
+instead of producing a lossy export.
 
 1. What mutable-directory freshness policy balances correctness and relock cost?
 2. Should the initial contract cover project sync only, or also reproducible `uv build` operations

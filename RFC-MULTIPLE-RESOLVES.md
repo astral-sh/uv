@@ -1,8 +1,8 @@
 # RFC: Multiple Resolutions In One Lockfile Graph
 
-This document explores the generalized edge-selector alternative. The narrower staged build-lock
-design uses ordinary package traversal and `resolution-id` only for conflicting package closures;
-see `RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`.
+This document explores the generalized edge-selector alternative. The narrower build-lock design
+uses ordinary package traversal and `resolution-id` only for conflicting package closures; see
+`RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`.
 
 ## Summary
 
@@ -429,7 +429,7 @@ match the selected target.
 For a named resolution `R`, uv:
 
 1. Loads `R.roots`.
-2. Selects artifacts compatible with `R`'s target context.
+2. Selects artifacts compatible with the concrete executor.
 3. Traverses dependency edges active in `R`.
 4. Installs the resulting closure.
 
@@ -492,9 +492,7 @@ backend has distinct dependency-discovery hooks:
 Metadata preparation is not a separate operation. It uses the corresponding `wheel` or `editable`
 resolution.
 
-### Build Requirement Stages
-
-Build resolution identity also includes the requirement-discovery stage.
+### Build Requirement Capture Stages
 
 PEP 517 build setup has two dependency environments for a given operation:
 
@@ -503,27 +501,14 @@ PEP 517 build setup has two dependency environments for a given operation:
 - `build`: the environment installed after adding requirements returned by the backend's
   `get_requires_for_build_*` hook.
 
-These stages can have different roots and can legitimately resolve the same package differently.
-They therefore cannot share a resolution identity. If uv serializes both stages, each stage is its
-own named build resolution:
+Lock generation uses both environments so discovery follows the ordinary frontend sequence. When
+their roots and complete closures agree, uv writes one compact, unstaged resolution:
 
 ```toml
-[[resolution]]
-id = "build:dep:wheel:bootstrap:<digest>"
-kind = "build"
-operation = "wheel"
-stage = "bootstrap"
-mode = "isolated"
-name = "dep"
-roots = [
-    { name = "setuptools", version = "69.2.0" },
-]
-
 [[resolution]]
 id = "build:dep:wheel:build:<digest>"
 kind = "build"
 operation = "wheel"
-stage = "build"
 mode = "isolated"
 name = "dep"
 roots = [
@@ -532,10 +517,11 @@ roots = [
 ]
 ```
 
-Frozen replay uses the `bootstrap` resolution to run `get_requires_for_build_*`, validates the hook
-output against the `build` resolution roots, then installs the `build` resolution before invoking
-the actual build hook. This preserves the environment ordering used when the lock was captured;
-installing all hook-expanded requirements before running the hook is not equivalent.
+When the stages differ, uv writes paired bootstrap and build records. Frozen replay validates and
+installs the bootstrap resolution, runs `get_requires_for_build_*`, validates and installs the final
+resolution, and invokes the actual build hook. A valid PEP 517 hook can inspect whether a hook-only
+dependency is already installed, so installing the final environment before discovery would change
+backend behavior.
 
 ### Target Context And Backend Metadata
 
@@ -819,10 +805,10 @@ The target context is part of the resolution identity because it determines the 
 
 ## Relationship To The Build-Lock Implementation
 
-This RFC describes the generalized edge-selector alternative, not the build-lock implementation.
-The implementation takes the narrower approach in `RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`:
+This RFC describes the generalized edge-selector alternative, not the build-lock implementation. The
+implementation takes the narrower approach in `RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`:
 
-- build-resolution records identify the direct final requirements;
+- build-resolution records identify the direct staged requirements;
 - ordinary dependency edges describe each selected closure;
 - an optional `resolution-id` extends package identity only when two closures need different edges
   for the same package artifact.
