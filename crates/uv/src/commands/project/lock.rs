@@ -408,6 +408,7 @@ impl<'env> LockOperation<'env> {
                         prev.map(Box::new),
                         Box::new(cur),
                         lock_source,
+                        target.into(),
                     ));
                 }
 

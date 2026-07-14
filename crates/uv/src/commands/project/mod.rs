@@ -48,6 +48,7 @@ use uv_resolver::{
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
+use uv_shell::shlex_posix;
 use uv_static::EnvVars;
 use uv_torch::{TorchSource, TorchStrategy};
 use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy, SourceTreeEditablePolicy};
@@ -59,6 +60,7 @@ use uv_workspace::{ProjectEnvironmentSelection, RequiresPythonSources, Workspace
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
 use crate::commands::project::install_target::InstallTarget;
+use crate::commands::project::lock_target::LockTargetKind;
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
@@ -141,8 +143,13 @@ impl From<FrozenSource> for MissingLockfileSource {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
-    #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+    #[error("The lockfile at `{lockfile}` needs to be updated, but `{2}` was provided.", lockfile = .3.lock_filename.display())]
+    LockMismatch(
+        Option<Box<Lock>>,
+        Box<Lock>,
+        LockCheckSource,
+        LockTargetKind,
+    ),
 
     #[error(
         "Unable to find lockfile at `{1}`, but {0} was provided. To create a lockfile, run `uv lock` or `uv sync` without the flag."
@@ -400,6 +407,20 @@ impl std::fmt::Display for MalwareFindings {
 impl uv_errors::Hint for ProjectError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
+            Self::LockMismatch(
+                _,
+                _,
+                _,
+                LockTargetKind {
+                    script: Some(script),
+                    ..
+                },
+            ) => {
+                let script = shlex_posix(script);
+                uv_errors::Hints::from(format!(
+                    "To update the lockfile, run `uv lock --script {script}`."
+                ))
+            }
             Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
                 uv_errors::Hints::from("To update the lockfile, run `uv lock`.")
             }

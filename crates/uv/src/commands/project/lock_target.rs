@@ -25,6 +25,26 @@ pub(crate) enum LockTarget<'lock> {
     Script(&'lock Pep723Script),
 }
 
+/// The owned subset of [`LockTarget`] needed by lock-mismatch diagnostics, which cannot retain
+/// the borrowed target.
+#[derive(Debug, Clone)]
+pub(crate) struct LockTargetKind {
+    pub(crate) lock_filename: PathBuf,
+    pub(crate) script: Option<PathBuf>,
+}
+
+impl From<LockTarget<'_>> for LockTargetKind {
+    fn from(target: LockTarget<'_>) -> Self {
+        Self {
+            lock_filename: target.lock_filename(),
+            script: match target {
+                LockTarget::Workspace(_) => None,
+                LockTarget::Script(script) => Some(script.path.clone()),
+            },
+        }
+    }
+}
+
 impl<'lock> From<&'lock Workspace> for LockTarget<'lock> {
     fn from(workspace: &'lock Workspace) -> Self {
         Self::Workspace(workspace)

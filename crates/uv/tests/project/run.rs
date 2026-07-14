@@ -1205,9 +1205,9 @@ fn run_pep723_script_lock() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `main.py.lock` needs to be updated, but `--locked` was provided.
 
-    hint: To update the lockfile, run `uv lock`.
+    hint: To update the lockfile, run `uv lock --script main.py`.
     ");
 
     // Re-running the script with `--frozen` should also error, but at runtime.

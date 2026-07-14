@@ -44,7 +44,7 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::pip::{operations, resolution_tags};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
-use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::lock_target::{LockTarget, LockTargetKind};
 use crate::commands::project::{
     EnvironmentUpdate, LinkErrorReporting, MalwareFindings, PlatformState, ProjectEnvironment,
     ProjectError, ScriptEnvironment, UniversalState, default_dependency_groups, detect_conflicts,
@@ -367,15 +367,19 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
-        Err(ProjectError::LockMismatch(prev, cur, lock_source)) => {
+        Err(ProjectError::LockMismatch(prev, cur, lock_source, target_kind)) => {
             if dry_run.enabled() {
                 // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
                 // sync operation, but exit with a non-zero status.
-                Outcome::LockMismatch(prev, cur, lock_source)
+                Outcome::LockMismatch(prev, cur, lock_source, target_kind)
             } else {
-                return Err(
-                    UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into(),
-                );
+                return Err(UvError::user(ProjectError::LockMismatch(
+                    prev,
+                    cur,
+                    lock_source,
+                    target_kind,
+                ))
+                .into());
             }
         }
         Err(err) => return Err(err.into()),
@@ -468,9 +472,10 @@ pub(crate) async fn sync(
 
     match outcome {
         Outcome::Success(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur, lock_source) => {
-            Err(UvError::user(ProjectError::LockMismatch(prev, cur, lock_source)).into())
-        }
+        Outcome::LockMismatch(prev, cur, lock_source, target_kind) => Err(UvError::user(
+            ProjectError::LockMismatch(prev, cur, lock_source, target_kind),
+        )
+        .into()),
     }
 }
 
@@ -481,7 +486,12 @@ enum Outcome {
     /// The `lock` operation was successful.
     Success(LockResult),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(Option<Box<Lock>>, Box<Lock>, LockCheckSource),
+    LockMismatch(
+        Option<Box<Lock>>,
+        Box<Lock>,
+        LockCheckSource,
+        LockTargetKind,
+    ),
 }
 
 impl Outcome {
@@ -492,7 +502,7 @@ impl Outcome {
                 LockResult::Changed(_, lock) => lock,
                 LockResult::Unchanged(lock) => lock,
             },
-            Self::LockMismatch(_prev, cur, _lock_source) => cur,
+            Self::LockMismatch(_prev, cur, _lock_source, _target_kind) => cur,
         }
     }
 }
