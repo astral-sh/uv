@@ -32,7 +32,12 @@
       },
       "required": ["items", "search_scope"]
     },
+    "type": {
+      "type": "string",
+      "enum": ["bug", "enhancement", "duplicate", "question"]
+    },
+    "type_reason": { "type": "string" },
     "summary": { "type": "string" }
   },
-  "required": ["related", "summary"]
+  "required": ["related", "type", "type_reason", "summary"]
 }
