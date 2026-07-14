@@ -1,5 +1,9 @@
 # RFC: Multiple Resolutions In One Lockfile Graph
 
+This document explores the generalized edge-selector alternative. The narrower staged build-lock
+design uses ordinary package traversal and `resolution-id` only for conflicting package closures;
+see `RFC.md` and `RFC-BUILD-RESOLUTION-ID.md`.
+
 ## Summary
 
 Generalize the uv lockfile so it can represent many distinct resolutions in one shared package
